@@ -30,6 +30,7 @@
 - CLI: add remote gateway client config (gateway.remote.*) with Bonjour-assisted discovery.
 - Skills: allow `bun` as a node manager for skill installs.
 - Skills: add `things-mac` (Things 3 CLI) for read/search plus add/update via URL scheme.
+- Skills: add `bear-notes` (Bear) skill via grizzly CLI (#120) — thanks @tylerwince.
 - Tests: add a Docker-based onboarding E2E harness.
 - Tests: harden wizard E2E flows for reset, providers, skills, and remote non-interactive runs.
 - Browser tools: add remote CDP URL support, Linux launcher options (`executablePath`, `noSandbox`), and surface `cdpUrl` in status.
