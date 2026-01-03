@@ -921,6 +921,7 @@ export async function monitorWebProvider(
     let heartbeat: NodeJS.Timeout | null = null;
     let watchdogTimer: NodeJS.Timeout | null = null;
     let lastMessageAt: number | null = null;
+    let connectionEstablishedAt: number | null = null;
     let handledMessages = 0;
     let _lastInboundMsg: WebInboundMsg | null = null;
 
@@ -1388,7 +1389,8 @@ export async function monitorWebProvider(
     });
 
     status.connected = true;
-    status.lastConnectedAt = Date.now();
+    connectionEstablishedAt = Date.now();
+    status.lastConnectedAt = connectionEstablishedAt;
     status.lastEventAt = status.lastConnectedAt;
     status.lastError = null;
     emitStatus();
@@ -1448,33 +1450,39 @@ export async function monitorWebProvider(
 
       // Watchdog: Auto-restart if no messages received for MESSAGE_TIMEOUT_MS
       watchdogTimer = setInterval(() => {
-        if (lastMessageAt) {
-          const timeSinceLastMessage = Date.now() - lastMessageAt;
-          if (timeSinceLastMessage > MESSAGE_TIMEOUT_MS) {
-            const minutesSinceLastMessage = Math.floor(
-              timeSinceLastMessage / 60000,
-            );
-            heartbeatLogger.warn(
-              {
-                connectionId,
-                minutesSinceLastMessage,
-                lastMessageAt: new Date(lastMessageAt),
-                messagesHandled: handledMessages,
-              },
-              "Message timeout detected - forcing reconnect",
-            );
-            whatsappHeartbeatLog.warn(
-              `No messages received in ${minutesSinceLastMessage}m - restarting connection`,
-            );
-            void closeListener().catch((err) => {
-              logVerbose(`Close listener failed: ${formatError(err)}`);
-            }); // Trigger reconnect
-            listener.signalClose?.({
-              status: 499,
-              isLoggedOut: false,
-              error: "watchdog-timeout",
-            });
-          }
+        const lastActivityAt = Math.max(
+          connectionEstablishedAt ?? 0,
+          lastMessageAt ?? 0,
+        );
+        if (!lastActivityAt) return;
+        const timeSinceLastActivity = Date.now() - lastActivityAt;
+        if (timeSinceLastActivity > MESSAGE_TIMEOUT_MS) {
+          const minutesSinceLastActivity = Math.floor(
+            timeSinceLastActivity / 60000,
+          );
+          heartbeatLogger.warn(
+            {
+              connectionId,
+              minutesSinceLastActivity,
+              connectionEstablishedAt: connectionEstablishedAt
+                ? new Date(connectionEstablishedAt)
+                : null,
+              lastMessageAt: lastMessageAt ? new Date(lastMessageAt) : null,
+              messagesHandled: handledMessages,
+            },
+            "Message timeout detected - forcing reconnect",
+          );
+          whatsappHeartbeatLog.warn(
+            `No messages received in ${minutesSinceLastActivity}m - restarting connection`,
+          );
+          void closeListener().catch((err) => {
+            logVerbose(`Close listener failed: ${formatError(err)}`);
+          }); // Trigger reconnect
+          listener.signalClose?.({
+            status: 499,
+            isLoggedOut: false,
+            error: "watchdog-timeout",
+          });
         }
       }, WATCHDOG_CHECK_MS);
     }
