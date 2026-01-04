@@ -23,6 +23,7 @@
 - Nodes: add `location.get` with Always/Precise settings on macOS/iOS/Android plus CLI/tool support.
 
 ### Fixes
+- Docs: add remote gateway SSH tunnel setup guide (#171) — thanks @jeffersonwarrior.
 - CI: fix lint ordering after merge cleanup (#156) — thanks @steipete.
 - CI: consolidate checks to avoid redundant installs (#144) — thanks @thewilloftheshadow.
 - WhatsApp: support `gifPlayback` for MP4 GIF sends via CLI/gateway.
