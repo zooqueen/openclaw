@@ -55,8 +55,8 @@ final class ControlChannel {
     private(set) var state: ConnectionState = .disconnected {
         didSet {
             CanvasManager.shared.refreshDebugStatus()
-            guard oldValue != state else { return }
-            switch state {
+            guard oldValue != self.state else { return }
+            switch self.state {
             case .connected:
                 self.logger.info("control channel state -> connected")
             case .connecting:
@@ -71,6 +71,7 @@ final class ControlChannel {
             }
         }
     }
+
     private(set) var lastPingMs: Double?
 
     private let logger = Logger(subsystem: "com.clawdis", category: "control")

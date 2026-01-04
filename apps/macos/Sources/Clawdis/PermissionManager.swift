@@ -140,12 +140,12 @@ enum PermissionManager {
     private static func ensureLocation(interactive: Bool) async -> Bool {
         let status = CLLocationManager.authorizationStatus()
         switch status {
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways, .authorized:
             return true
         case .notDetermined:
             guard interactive else { return false }
             let updated = await LocationPermissionRequester.shared.request(always: false)
-            return updated == .authorizedAlways || updated == .authorizedWhenInUse
+            return updated == .authorizedAlways || updated == .authorized
         case .denied, .restricted:
             if interactive {
                 LocationPermissionHelper.openSettings()
@@ -198,9 +198,10 @@ enum PermissionManager {
 
             case .camera:
                 results[cap] = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+
             case .location:
                 let status = CLLocationManager.authorizationStatus()
-                results[cap] = status == .authorizedAlways || status == .authorizedWhenInUse
+                results[cap] = status == .authorizedAlways || status == .authorized
             }
         }
         return results
@@ -268,7 +269,7 @@ enum LocationPermissionHelper {
 }
 
 @MainActor
-final class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
+final class LocationPermissionRequester: NSObject {
     static let shared = LocationPermissionRequester()
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLAuthorizationStatus, Never>?
@@ -295,6 +296,9 @@ final class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
         cont.resume(returning: manager.authorizationStatus)
     }
 }
+
+@MainActor
+extension LocationPermissionRequester: @preconcurrency CLLocationManagerDelegate {}
 
 enum AppleScriptPermission {
     private static let logger = Logger(subsystem: "com.clawdis", category: "AppleScriptPermission")

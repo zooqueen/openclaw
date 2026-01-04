@@ -3,7 +3,7 @@ import CoreLocation
 import Foundation
 
 @MainActor
-final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
+final class MacNodeLocationService: NSObject {
     enum Error: Swift.Error {
         case timeout
         case unavailable
@@ -47,10 +47,8 @@ final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
         }
 
         self.manager.desiredAccuracy = Self.accuracyValue(desiredAccuracy)
-        let timeout = max(0, timeoutMs ?? 10_000)
-        return try await self.withTimeout(timeoutMs: timeout) {
-            try await self.requestLocation()
-        }
+        let timeout = max(0, timeoutMs ?? 10000)
+        return try await self.requestLocationWithTimeout(timeoutMs: timeout)
     }
 
     private func requestLocation() async throws -> CLLocation {
@@ -60,34 +58,50 @@ final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    private func withTimeout<T>(
-        timeoutMs: Int,
-        operation: @escaping () async throws -> T) async throws -> T
-    {
+    private func requestLocationWithTimeout(timeoutMs: Int) async throws -> CLLocation {
         if timeoutMs == 0 {
-            return try await operation()
+            return try await self.requestLocation()
         }
 
-        return try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeoutMs) * 1_000_000)
-                throw Error.timeout
+        let timeoutNs = UInt64(timeoutMs) * 1_000_000
+        return try await withCheckedThrowingContinuation { continuation in
+            let lock = NSLock()
+            var didResume = false
+
+            func resume(_ result: Result<CLLocation, Swift.Error>) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(with: result)
             }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+
+            let timeoutTask = Task {
+                try await Task.sleep(nanoseconds: timeoutNs)
+                resume(.failure(Error.timeout))
+            }
+
+            Task { @MainActor in
+                do {
+                    let location = try await self.requestLocation()
+                    timeoutTask.cancel()
+                    resume(.success(location))
+                } catch {
+                    timeoutTask.cancel()
+                    resume(.failure(error))
+                }
+            }
         }
     }
 
     private static func accuracyValue(_ accuracy: ClawdisLocationAccuracy) -> CLLocationAccuracy {
         switch accuracy {
         case .coarse:
-            return kCLLocationAccuracyKilometer
+            kCLLocationAccuracyKilometer
         case .balanced:
-            return kCLLocationAccuracyHundredMeters
+            kCLLocationAccuracyHundredMeters
         case .precise:
-            return kCLLocationAccuracyBest
+            kCLLocationAccuracyBest
         }
     }
 
@@ -107,3 +121,6 @@ final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
         cont.resume(throwing: error)
     }
 }
+
+@MainActor
+extension MacNodeLocationService: @preconcurrency CLLocationManagerDelegate {}

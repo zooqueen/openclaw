@@ -492,7 +492,7 @@ struct ConnectionsSettings: View {
 
             GroupBox("Guilds") {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach($store.discordGuilds) { $guild in
+                    ForEach(self.$store.discordGuilds) { $guild in
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 TextField("guild id or slug", text: $guild.key)

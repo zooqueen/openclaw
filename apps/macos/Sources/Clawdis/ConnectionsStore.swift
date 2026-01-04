@@ -172,8 +172,8 @@ struct DiscordGuildForm: Identifiable {
         requireMention: Bool = false,
         reactionNotifications: String = "own",
         users: String = "",
-        channels: [DiscordGuildChannelForm] = []
-    ) {
+        channels: [DiscordGuildChannelForm] = [])
+    {
         self.key = key
         self.slug = slug
         self.requireMention = requireMention
@@ -473,12 +473,16 @@ final class ConnectionsStore {
             } else {
                 self.discordMediaMaxMb = ""
             }
-            if let history = discord?["historyLimit"]?.doubleValue ?? discord?["historyLimit"]?.intValue.map(Double.init) {
+            if let history = discord?["historyLimit"]?.doubleValue ?? discord?["historyLimit"]?.intValue
+                .map(Double.init)
+            {
                 self.discordHistoryLimit = String(Int(history))
             } else {
                 self.discordHistoryLimit = ""
             }
-            if let limit = discord?["textChunkLimit"]?.doubleValue ?? discord?["textChunkLimit"]?.intValue.map(Double.init) {
+            if let limit = discord?["textChunkLimit"]?.doubleValue ?? discord?["textChunkLimit"]?.intValue
+                .map(Double.init)
+            {
                 self.discordTextChunkLimit = String(Int(limit))
             } else {
                 self.discordTextChunkLimit = ""
@@ -506,9 +510,10 @@ final class ConnectionsStore {
                                 return nil
                             }
                             .joined(separator: ", ") ?? ""
-                        let channels: [DiscordGuildChannelForm]
-                        if let channelMap = entry["channels"]?.dictionaryValue {
-                            channels = channelMap.map { channelKey, channelValue in
+                        let channels: [DiscordGuildChannelForm] = if let channelMap = entry["channels"]?
+                            .dictionaryValue
+                        {
+                            channelMap.map { channelKey, channelValue in
                                 let channelEntry = channelValue.dictionaryValue ?? [:]
                                 let allow = channelEntry["allow"]?.boolValue ?? true
                                 let channelRequireMention =
@@ -519,7 +524,7 @@ final class ConnectionsStore {
                                     requireMention: channelRequireMention)
                             }
                         } else {
-                            channels = []
+                            []
                         }
                         return DiscordGuildForm(
                             key: key,

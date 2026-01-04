@@ -254,41 +254,41 @@ final class AppState {
         let configRoot = ClawdisConfigFile.loadDict()
         let configGateway = configRoot["gateway"] as? [String: Any]
         let configModeRaw = (configGateway?["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let configMode: ConnectionMode? = {
-            switch configModeRaw {
-            case "local":
-                return .local
-            case "remote":
-                return .remote
-            default:
-                return nil
-            }
-        }()
+        let configMode: ConnectionMode? = switch configModeRaw {
+        case "local":
+            .local
+        case "remote":
+            .remote
+        default:
+            nil
+        }
         let configRemoteUrl = (configGateway?["remote"] as? [String: Any])?["url"] as? String
         let configHasRemoteUrl = !(configRemoteUrl?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty ?? true)
 
         let storedMode = UserDefaults.standard.string(forKey: connectionModeKey)
-        if let configMode {
-            self.connectionMode = configMode
+        let resolvedConnectionMode: ConnectionMode = if let configMode {
+            configMode
         } else if configHasRemoteUrl {
-            self.connectionMode = .remote
+            .remote
         } else if let storedMode {
-            self.connectionMode = ConnectionMode(rawValue: storedMode) ?? .local
+            ConnectionMode(rawValue: storedMode) ?? .local
         } else {
-            self.connectionMode = onboardingSeen ? .local : .unconfigured
+            onboardingSeen ? .local : .unconfigured
         }
+        self.connectionMode = resolvedConnectionMode
 
         let storedRemoteTarget = UserDefaults.standard.string(forKey: remoteTargetKey) ?? ""
-        if self.connectionMode == .remote,
-           storedRemoteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let host = AppState.remoteHost(from: configRemoteUrl)
+        let resolvedRemoteTarget = if resolvedConnectionMode == .remote,
+                                      storedRemoteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                      let host = AppState.remoteHost(from: configRemoteUrl)
         {
-            self.remoteTarget = "\(NSUserName())@\(host)"
+            "\(NSUserName())@\(host)"
         } else {
-            self.remoteTarget = storedRemoteTarget
+            storedRemoteTarget
         }
+        self.remoteTarget = resolvedRemoteTarget
         self.remoteIdentity = UserDefaults.standard.string(forKey: remoteIdentityKey) ?? ""
         self.remoteProjectRoot = UserDefaults.standard.string(forKey: remoteProjectRootKey) ?? ""
         self.remoteCliPath = UserDefaults.standard.string(forKey: remoteCliPathKey) ?? ""
@@ -320,10 +320,6 @@ final class AppState {
         if !self.isPreview {
             self.startConfigWatcher()
         }
-    }
-
-    deinit {
-        self.configWatcher?.stop()
     }
 
     private static func remoteHost(from urlString: String?) -> String? {
@@ -361,18 +357,16 @@ final class AppState {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty ?? true)
 
-        let desiredMode: ConnectionMode? = {
-            switch modeRaw {
-            case "local":
-                return .local
-            case "remote":
-                return .remote
-            case "unconfigured":
-                return .unconfigured
-            default:
-                return nil
-            }
-        }()
+        let desiredMode: ConnectionMode? = switch modeRaw {
+        case "local":
+            .local
+        case "remote":
+            .remote
+        case "unconfigured":
+            .unconfigured
+        default:
+            nil
+        }
 
         if let desiredMode {
             if desiredMode != self.connectionMode {
@@ -407,14 +401,13 @@ final class AppState {
         var gateway = root["gateway"] as? [String: Any] ?? [:]
         var changed = false
 
-        let desiredMode: String?
-        switch self.connectionMode {
+        let desiredMode: String? = switch self.connectionMode {
         case .local:
-            desiredMode = "local"
+            "local"
         case .remote:
-            desiredMode = "remote"
+            "remote"
         case .unconfigured:
-            desiredMode = nil
+            nil
         }
 
         let currentMode = (gateway["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)

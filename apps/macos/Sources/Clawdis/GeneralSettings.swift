@@ -151,16 +151,16 @@ struct GeneralSettings: View {
     private func requestLocationAuthorization(mode: ClawdisLocationMode) async -> Bool {
         guard mode != .off else { return true }
         let status = CLLocationManager.authorizationStatus()
-        if status == .authorizedAlways || status == .authorizedWhenInUse {
-            if mode == .always && status != .authorizedAlways {
+        if status == .authorizedAlways || status == .authorized {
+            if mode == .always, status != .authorizedAlways {
                 let updated = await LocationPermissionRequester.shared.request(always: true)
-                return updated == .authorizedAlways || updated == .authorizedWhenInUse
+                return updated == .authorizedAlways || updated == .authorized
             }
             return true
         }
         let updated = await LocationPermissionRequester.shared.request(always: mode == .always)
         switch updated {
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways, .authorized:
             return true
         default:
             return false

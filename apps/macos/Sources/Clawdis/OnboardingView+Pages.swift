@@ -444,7 +444,7 @@ extension OnboardingView {
     }
 
     func permissionsPage() -> some View {
-        return self.onboardingPage {
+        self.onboardingPage {
             Text("Grant permissions")
                 .font(.largeTitle.weight(.semibold))
             Text("These macOS permissions let Clawdis automate apps and capture context on this Mac.")

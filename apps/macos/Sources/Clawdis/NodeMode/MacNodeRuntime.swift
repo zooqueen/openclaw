@@ -104,7 +104,7 @@ actor MacNodeRuntime {
                 }
                 let params = (try? Self.decodeParams(ClawdisCameraSnapParams.self, from: req.paramsJSON)) ??
                     ClawdisCameraSnapParams()
-                let delayMs = min(10_000, max(0, params.delayMs ?? 2000))
+                let delayMs = min(10000, max(0, params.delayMs ?? 2000))
                 let res = try await self.cameraCapture.snap(
                     facing: CameraFacing(rawValue: params.facing?.rawValue ?? "") ?? .front,
                     maxWidth: params.maxWidth,
@@ -184,7 +184,7 @@ actor MacNodeRuntime {
                 let desired = params.desiredAccuracy ??
                     (Self.locationPreciseEnabled() ? .precise : .balanced)
                 let status = await self.locationService.authorizationStatus()
-                if status != .authorizedAlways && status != .authorizedWhenInUse {
+                if status != .authorizedAlways, status != .authorized {
                     return BridgeInvokeResponse(
                         id: req.id,
                         ok: false,
