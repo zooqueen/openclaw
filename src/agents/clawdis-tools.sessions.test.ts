@@ -125,7 +125,7 @@ describe("sessions tools", () => {
     callGatewayMock.mockReset();
     const calls: Array<{ method?: string; params?: unknown }> = [];
     let agentCallCount = 0;
-    let historyCallCount = 0;
+    let _historyCallCount = 0;
     let sendCallCount = 0;
     let waitRunId: string | undefined;
     let nextHistoryIsWaitReply = false;
@@ -153,7 +153,7 @@ describe("sessions tools", () => {
         return { runId: params?.runId ?? "run-1", status: "ok" };
       }
       if (request.method === "chat.history") {
-        historyCallCount += 1;
+        _historyCallCount += 1;
         const text = nextHistoryIsWaitReply ? "done" : "ANNOUNCE_SKIP";
         nextHistoryIsWaitReply = false;
         return {
@@ -219,8 +219,9 @@ describe("sessions tools", () => {
         (call) =>
           typeof (call.params as { extraSystemPrompt?: string })
             ?.extraSystemPrompt === "string" &&
-          (call.params as { extraSystemPrompt?: string })
-            ?.extraSystemPrompt?.includes("Agent-to-agent message context"),
+          (
+            call.params as { extraSystemPrompt?: string }
+          )?.extraSystemPrompt?.includes("Agent-to-agent message context"),
       ),
     ).toBe(true);
     expect(
@@ -228,8 +229,9 @@ describe("sessions tools", () => {
         (call) =>
           typeof (call.params as { extraSystemPrompt?: string })
             ?.extraSystemPrompt === "string" &&
-          (call.params as { extraSystemPrompt?: string })
-            ?.extraSystemPrompt?.includes("Agent-to-agent post step"),
+          (
+            call.params as { extraSystemPrompt?: string }
+          )?.extraSystemPrompt?.includes("Agent-to-agent post step"),
       ),
     ).toBe(true);
     expect(waitCalls).toHaveLength(3);

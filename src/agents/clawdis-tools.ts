@@ -2774,7 +2774,9 @@ function buildAgentToAgentPostContext(params: {
       ? `Requester surface: ${params.requesterSurface}.`
       : undefined,
     `Target session: ${params.targetSessionKey}.`,
-    params.targetChannel ? `Target surface: ${params.targetChannel}.` : undefined,
+    params.targetChannel
+      ? `Target surface: ${params.targetChannel}.`
+      : undefined,
     `Original request: ${params.originalMessage}`,
     params.roundOneReply
       ? `Round 1 reply: ${params.roundOneReply}`
@@ -2840,34 +2842,35 @@ function createSessionsSendTool(opts?: {
         extraSystemPrompt: agentMessageContext,
       };
 
-      const resolveAnnounceTarget = async (): Promise<AnnounceTarget | null> => {
-        const parsed = resolveAnnounceTargetFromKey(resolvedKey);
-        if (parsed) return parsed;
-        try {
-          const list = (await callGateway({
-            method: "sessions.list",
-            params: {
-              includeGlobal: true,
-              includeUnknown: true,
-              limit: 200,
-            },
-          })) as { sessions?: Array<Record<string, unknown>> };
-          const sessions = Array.isArray(list?.sessions) ? list.sessions : [];
-          const match =
-            sessions.find((entry) => entry?.key === resolvedKey) ??
-            sessions.find((entry) => entry?.key === displayKey);
-          const channel =
-            typeof match?.lastChannel === "string"
-              ? match.lastChannel
-              : undefined;
-          const to =
-            typeof match?.lastTo === "string" ? match.lastTo : undefined;
-          if (channel && to) return { channel, to };
-        } catch {
-          // ignore; fall through to null
-        }
-        return null;
-      };
+      const resolveAnnounceTarget =
+        async (): Promise<AnnounceTarget | null> => {
+          const parsed = resolveAnnounceTargetFromKey(resolvedKey);
+          if (parsed) return parsed;
+          try {
+            const list = (await callGateway({
+              method: "sessions.list",
+              params: {
+                includeGlobal: true,
+                includeUnknown: true,
+                limit: 200,
+              },
+            })) as { sessions?: Array<Record<string, unknown>> };
+            const sessions = Array.isArray(list?.sessions) ? list.sessions : [];
+            const match =
+              sessions.find((entry) => entry?.key === resolvedKey) ??
+              sessions.find((entry) => entry?.key === displayKey);
+            const channel =
+              typeof match?.lastChannel === "string"
+                ? match.lastChannel
+                : undefined;
+            const to =
+              typeof match?.lastTo === "string" ? match.lastTo : undefined;
+            if (channel && to) return { channel, to };
+          } catch {
+            // ignore; fall through to null
+          }
+          return null;
+        };
 
       const runAgentToAgentPost = async (roundOneReply?: string) => {
         const announceTarget = await resolveAnnounceTarget();
@@ -2917,9 +2920,7 @@ function createSessionsSendTool(opts?: {
               params: { sessionKey: resolvedKey, limit: 50 },
             })) as { messages?: unknown[] };
             const postFiltered = stripToolMessages(
-              Array.isArray(postHistory?.messages)
-                ? postHistory.messages
-                : [],
+              Array.isArray(postHistory?.messages) ? postHistory.messages : [],
             );
             const postLast =
               postFiltered.length > 0
