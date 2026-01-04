@@ -23,6 +23,7 @@
 - Sessions: add agent‑to‑agent post step with `ANNOUNCE_SKIP` to suppress channel announcements.
 
 ### Fixes
+- macOS: improve Swift 6 strict concurrency compatibility (#166) — thanks @Nachx639.
 - CI: fix lint ordering after merge cleanup (#156) — thanks @steipete.
 - CI: consolidate checks to avoid redundant installs (#144) — thanks @thewilloftheshadow.
 - WhatsApp: support `gifPlayback` for MP4 GIF sends via CLI/gateway.
