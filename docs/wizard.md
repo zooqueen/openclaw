@@ -52,7 +52,7 @@ It does **not** install or change anything on the remote host.
    - **API key**: stores the key for you.
    - **Minimax M2.1 (LM Studio)**: config is auto‑written for the LM Studio endpoint.
    - **Skip**: no auth configured yet.
-   - OAuth + API keys are stored in `~/.clawdbot/agent/auth.json`.
+   - OAuth credentials live in `~/.clawdbot/credentials/oauth.json`; API keys live in `~/.clawdbot/agent/auth.json`.
 
 3) **Workspace**
    - Default `~/clawd` (configurable).
@@ -74,8 +74,8 @@ It does **not** install or change anything on the remote host.
    - macOS: LaunchAgent
      - Requires a logged-in user session; for headless, use a custom LaunchDaemon (not shipped).
    - Linux: systemd user unit
-     - Wizard enables lingering via `loginctl enable-linger <user>` so the Gateway stays up after logout.
-     - Requires sudo (writes `/var/lib/systemd/linger`).
+     - Wizard attempts to enable lingering via `loginctl enable-linger <user>` so the Gateway stays up after logout.
+     - May prompt for sudo (writes `/var/lib/systemd/linger`); it tries without sudo first.
    - Windows: Scheduled Task
      - Runs on user logon; headless/system services are not configured by default.
 

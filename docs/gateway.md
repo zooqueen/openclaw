@@ -182,10 +182,19 @@ Enable lingering (required so the user service survives logout/idle):
 ```
 sudo loginctl enable-linger youruser
 ```
-Requires sudo (writes `/var/lib/systemd/linger`).
+Onboarding runs this on Linux (may prompt for sudo; writes `/var/lib/systemd/linger`).
 Then enable the service:
 ```
 systemctl --user enable --now clawdbot-gateway.service
+```
+
+**Alternative (system service)** - for always-on or multi-user servers, you can
+install a systemd **system** unit instead of a user unit (no lingering needed).
+Create `/etc/systemd/system/clawdbot-gateway.service` (copy the unit above,
+switch `WantedBy=multi-user.target`, set `User=` + `WorkingDirectory=`), then:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable --now clawdbot-gateway.service
 ```
 
 ## Supervision (Windows scheduled task)

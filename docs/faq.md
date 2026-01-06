@@ -14,9 +14,9 @@ Everything lives under `~/.clawdbot/`:
 | Path | Purpose |
 |------|---------|
 | `~/.clawdbot/clawdbot.json` | Main config (JSON5) |
-| `~/.clawdbot/agent/auth.json` | OAuth + API key store (Anthropic/OpenAI, etc.) |
+| `~/.clawdbot/credentials/oauth.json` | OAuth credentials (Anthropic/OpenAI, etc.) |
+| `~/.clawdbot/agent/auth.json` | API key store |
 | `~/.clawdbot/credentials/` | WhatsApp/Telegram auth tokens |
-| `~/.clawdbot/credentials/oauth.json` | Legacy OAuth store (auto‑migrated) |
 | `~/.clawdbot/sessions/` | Conversation history & state |
 | `~/.clawdbot/sessions/sessions.json` | Session metadata |
 
@@ -42,10 +42,10 @@ Some features are platform-specific:
 - **CPU:** 1 core is fine for personal use
 - **Disk:** ~500MB for Clawdbot + deps, plus space for logs/media
 
-The gateway is just shuffling messages around. A Raspberry Pi 4 can run it. You can also use **Bun** instead of Node for even lower memory footprint:
+The gateway is just shuffling messages around. A Raspberry Pi 4 can run it. For the CLI, prefer the Node runtime (most stable):
 
 ```bash
-bun clawdbot gateway
+pnpm clawdbot gateway
 ```
 
 ### How do I install on Linux without Homebrew?
@@ -78,7 +78,7 @@ This creates `~/.clawdbot/clawdbot.json` with your API keys, workspace path, and
 cp -r ~/.clawdbot ~/.clawdbot-backup
 
 # Remove config and credentials
-rm -rf ~/.clawdbot
+trash ~/.clawdbot
 
 # Re-run onboarding
 pnpm clawdbot onboard
@@ -118,7 +118,7 @@ They're **separate billing**! An API key does NOT use your subscription.
 pnpm clawdbot login
 ```
 
-**If OAuth fails** (headless/container): Do OAuth on a normal machine, then copy `~/.clawdbot/agent/auth.json` to your server. The auth is just a JSON file.
+**If OAuth fails** (headless/container): Do OAuth on a normal machine, then copy `~/.clawdbot/credentials/oauth.json` to your server. The auth is just a JSON file.
 
 ### How are env vars loaded?
 
@@ -148,7 +148,7 @@ Or set `CLAWDBOT_LOAD_SHELL_ENV=1` (timeout: `CLAWDBOT_SHELL_ENV_TIMEOUT_MS=1500
 
 OAuth needs the callback to reach the machine running the CLI. Options:
 
-1. **Copy auth manually** — Run OAuth on your laptop, copy `~/.clawdbot/agent/auth.json` to the container.
+1. **Copy auth manually** — Run OAuth on your laptop, copy `~/.clawdbot/credentials/oauth.json` to the container.
 2. **SSH tunnel** — `ssh -L 18789:localhost:18789 user@server`
 3. **Tailscale** — Put both machines on your tailnet.
 
@@ -229,7 +229,7 @@ Yes! The terminal QR code login works fine over SSH. For long-running operation:
 ### bun binary vs Node runtime?
 
 Clawdbot can run as:
-- **bun binary** — Single executable, easy distribution, auto-restarts via launchd
+- **bun binary (macOS app)** — Single executable, easy distribution, auto-restarts via launchd
 - **Node runtime** (`pnpm clawdbot gateway`) — More stable for WhatsApp
 
 If you see WebSocket errors like `ws.WebSocket 'upgrade' event is not implemented`, use Node instead of the bun binary. Bun's WebSocket implementation has edge cases that can break WhatsApp (Baileys).
@@ -471,7 +471,7 @@ codex --full-auto "debug why clawdbot gateway won't start"
 Linux installs use a systemd **user** service. By default, systemd stops user
 services on logout/idle, which kills the Gateway.
 
-Fix:
+Onboarding attempts to enable lingering; if it’s still off, run:
 ```bash
 sudo loginctl enable-linger $USER
 ```
@@ -531,10 +531,10 @@ sudo systemctl disable --now clawdbot
 pkill -f "clawdbot"
 
 # Remove data
-rm -rf ~/.clawdbot
+trash ~/.clawdbot
 
 # Remove repo and re-clone
-rm -rf ~/clawdbot
+trash ~/clawdbot
 git clone https://github.com/clawdbot/clawdbot.git
 cd clawdbot && pnpm install && pnpm build
 pnpm clawdbot onboard
