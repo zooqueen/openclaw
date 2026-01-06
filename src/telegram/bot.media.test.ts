@@ -4,15 +4,18 @@ const useSpy = vi.fn();
 const onSpy = vi.fn();
 const stopSpy = vi.fn();
 const sendChatActionSpy = vi.fn();
+const sendMessageSpy = vi.fn().mockResolvedValue({});
 
 type ApiStub = {
   config: { use: (arg: unknown) => void };
   sendChatAction: typeof sendChatActionSpy;
+  sendMessage: typeof sendMessageSpy;
 };
 
 const apiStub: ApiStub = {
   config: { use: useSpy },
   sendChatAction: sendChatActionSpy,
+  sendMessage: sendMessageSpy,
 };
 
 vi.mock("grammy", () => ({
@@ -30,6 +33,16 @@ const throttlerSpy = vi.fn(() => "throttler");
 vi.mock("@grammyjs/transformer-throttler", () => ({
   apiThrottler: () => throttlerSpy(),
 }));
+
+const saveMediaBufferSpy = vi.fn();
+vi.mock("../media/store.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../media/store.js")>();
+  saveMediaBufferSpy.mockImplementation(actual.saveMediaBuffer);
+  return {
+    ...actual,
+    saveMediaBuffer: saveMediaBufferSpy,
+  };
+});
 
 vi.mock("../config/config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../config/config.js")>();
@@ -104,6 +117,71 @@ describe("telegram inbound media", () => {
     expect(replySpy).toHaveBeenCalledTimes(1);
     const payload = replySpy.mock.calls[0][0];
     expect(payload.Body).toContain("<media:image>");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("notifies when media exceeds size limit", async () => {
+    const { createTelegramBot } = await import("./bot.js");
+    const replyModule = await import("../auto-reply/reply.js");
+    const storeModule = await import("../media/store.js");
+    const replySpy = replyModule.__replySpy as unknown as ReturnType<
+      typeof vi.fn
+    >;
+
+    onSpy.mockReset();
+    replySpy.mockReset();
+    sendChatActionSpy.mockReset();
+    sendMessageSpy.mockClear();
+    saveMediaBufferSpy.mockClear();
+
+    saveMediaBufferSpy.mockRejectedValueOnce(
+      new storeModule.MediaTooLargeError(5 * 1024 * 1024),
+    );
+
+    const runtimeError = vi.fn();
+    createTelegramBot({
+      token: "tok",
+      runtime: {
+        log: vi.fn(),
+        error: runtimeError,
+        exit: () => {
+          throw new Error("exit");
+        },
+      },
+    });
+    const handler = onSpy.mock.calls[0]?.[1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch" as never)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: { get: () => "image/jpeg" },
+        arrayBuffer: async () =>
+          new Uint8Array([0xff, 0xd8, 0xff, 0x00]).buffer,
+      } as Response);
+
+    await handler({
+      message: {
+        message_id: 4,
+        chat: { id: 1234, type: "private" },
+        photo: [{ file_id: "fid" }],
+      },
+      me: { username: "clawdbot_bot" },
+      getFile: async () => ({ file_path: "photos/too-big.jpg" }),
+    });
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "⚠️ File too large. Maximum size is 5MB.",
+      { reply_to_message_id: 4 },
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(runtimeError).not.toHaveBeenCalled();
 
     fetchSpy.mockRestore();
   });

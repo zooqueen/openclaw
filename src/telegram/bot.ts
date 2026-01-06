@@ -27,7 +27,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { getChildLogger } from "../logging.js";
 import { mediaKindFromMime } from "../media/constants.js";
 import { detectMime, isGifMedia } from "../media/mime.js";
-import { saveMediaBuffer } from "../media/store.js";
+import { MediaTooLargeError, saveMediaBuffer } from "../media/store.js";
 import {
   formatLocationText,
   type NormalizedLocation,
@@ -42,6 +42,8 @@ const PARSE_ERR_RE =
 // Media group aggregation - Telegram sends multi-image messages as separate updates
 // with a shared media_group_id. We buffer them and process as a single message after a short delay.
 const MEDIA_GROUP_TIMEOUT_MS = 500;
+
+const TELEGRAM_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 
 type TelegramMessage = Message.CommonMessage;
 
@@ -87,7 +89,6 @@ export type TelegramBotOptions = {
   requireMention?: boolean;
   allowFrom?: Array<string | number>;
   groupAllowFrom?: Array<string | number>;
-  mediaMaxMb?: number;
   replyToMode?: ReplyToMode;
   proxyFetch?: typeof fetch;
 };
@@ -155,8 +156,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   const replyToMode = opts.replyToMode ?? cfg.telegram?.replyToMode ?? "off";
   const ackReaction = (cfg.messages?.ackReaction ?? "").trim();
   const ackReactionScope = cfg.messages?.ackReactionScope ?? "group-mentions";
-  const mediaMaxBytes =
-    (opts.mediaMaxMb ?? cfg.telegram?.mediaMaxMb ?? 5) * 1024 * 1024;
+  const mediaMaxBytes = TELEGRAM_MEDIA_MAX_BYTES;
   const logger = getChildLogger({ module: "telegram-auto-reply" });
   const mentionRegexes = buildMentionRegexes(cfg);
   const resolveGroupPolicy = (chatId: string | number) =>
@@ -173,6 +173,22 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       requireMentionOverride: opts.requireMention,
       overrideOrder: "after-config",
     });
+
+  const notifyMediaTooLarge = async (
+    chatId: string | number,
+    messageId: number | undefined,
+    err: MediaTooLargeError,
+  ) => {
+    const limitMb = Math.max(1, Math.floor(err.maxBytes / (1024 * 1024)));
+    await bot.api
+      .sendMessage(
+        chatId,
+        `⚠️ File too large. Maximum size is ${limitMb}MB.`,
+        messageId ? { reply_to_message_id: messageId } : undefined,
+      )
+      .catch(() => {});
+    logger.warn({ chatId, error: err.message }, "media exceeds size limit");
+  };
 
   const processMessage = async (
     primaryCtx: TelegramContext,
@@ -492,17 +508,8 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           opts.proxyFetch,
         );
       } catch (mediaErr) {
-        const errMsg = String(mediaErr);
-        if (errMsg.includes("exceeds") && errMsg.includes("MB limit")) {
-          const limitMb = Math.round(mediaMaxBytes / (1024 * 1024));
-          await bot.api
-            .sendMessage(
-              chatId,
-              `⚠️ File too large. Maximum size is ${limitMb}MB.`,
-              { reply_to_message_id: msg.message_id },
-            )
-            .catch(() => {});
-          logger.warn({ chatId, error: errMsg }, "media exceeds size limit");
+        if (mediaErr instanceof MediaTooLargeError) {
+          await notifyMediaTooLarge(chatId, msg.message_id, mediaErr);
           return;
         }
         throw mediaErr;
@@ -527,12 +534,25 @@ export function createTelegramBot(opts: TelegramBotOptions) {
 
       const allMedia: Array<{ path: string; contentType?: string }> = [];
       for (const { ctx } of entry.messages) {
-        const media = await resolveMedia(
-          ctx,
-          mediaMaxBytes,
-          opts.token,
-          opts.proxyFetch,
-        );
+        let media: Awaited<ReturnType<typeof resolveMedia>> = null;
+        try {
+          media = await resolveMedia(
+            ctx,
+            mediaMaxBytes,
+            opts.token,
+            opts.proxyFetch,
+          );
+        } catch (mediaErr) {
+          if (mediaErr instanceof MediaTooLargeError) {
+            await notifyMediaTooLarge(
+              ctx.message.chat.id,
+              ctx.message.message_id,
+              mediaErr,
+            );
+            return;
+          }
+          throw mediaErr;
+        }
         if (media) {
           allMedia.push({ path: media.path, contentType: media.contentType });
         }

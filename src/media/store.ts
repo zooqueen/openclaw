@@ -9,6 +9,18 @@ import { detectMime, extensionForMime } from "./mime.js";
 
 const MEDIA_DIR = path.join(CONFIG_DIR, "media");
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB default
+
+export class MediaTooLargeError extends Error {
+  maxBytes: number;
+
+  constructor(maxBytes: number) {
+    const limitMb = (maxBytes / (1024 * 1024)).toFixed(0);
+    super(`Media exceeds ${limitMb}MB limit`);
+    this.name = "MediaTooLargeError";
+    this.maxBytes = maxBytes;
+  }
+}
+
 const DEFAULT_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 export function getMediaDir() {
@@ -144,7 +156,7 @@ export async function saveMediaSource(
     throw new Error("Media path is not a file");
   }
   if (stat.size > MAX_BYTES) {
-    throw new Error("Media exceeds 5MB limit");
+    throw new MediaTooLargeError(MAX_BYTES);
   }
   const buffer = await fs.readFile(source);
   const mime = await detectMime({ buffer, filePath: source });
@@ -162,9 +174,7 @@ export async function saveMediaBuffer(
   maxBytes = MAX_BYTES,
 ): Promise<SavedMedia> {
   if (buffer.byteLength > maxBytes) {
-    throw new Error(
-      `Media exceeds ${(maxBytes / (1024 * 1024)).toFixed(0)}MB limit`,
-    );
+    throw new MediaTooLargeError(maxBytes);
   }
   const dir = path.join(MEDIA_DIR, subdir);
   await fs.mkdir(dir, { recursive: true });

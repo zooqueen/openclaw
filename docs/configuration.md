@@ -340,7 +340,6 @@ Set `telegram.enabled: false` to disable automatic startup.
     botToken: "your-bot-token",
     requireMention: true,
     allowFrom: ["123456789"],
-    mediaMaxMb: 5,
     proxy: "socks5://localhost:9050",
     webhookUrl: "https://example.com/telegram-webhook",
     webhookSecret: "secret",
@@ -615,7 +614,6 @@ If you configure the same alias name (case-insensitive) yourself, your value win
     verboseDefault: "off",
     elevatedDefault: "on",
     timeoutSeconds: 600,
-    mediaMaxMb: 5,
     heartbeat: {
       every: "30m",
       target: "last"

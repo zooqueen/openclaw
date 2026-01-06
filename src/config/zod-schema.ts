@@ -516,7 +516,6 @@ export const ClawdbotSchema = z.object({
         })
         .optional(),
       timeoutSeconds: z.number().int().positive().optional(),
-      mediaMaxMb: z.number().positive().optional(),
       typingIntervalSeconds: z.number().int().positive().optional(),
       heartbeat: HeartbeatSchema,
       maxConcurrent: z.number().int().positive().optional(),
@@ -728,7 +727,6 @@ export const ClawdbotSchema = z.object({
       groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
       groupPolicy: GroupPolicySchema.optional().default("open"),
       textChunkLimit: z.number().int().positive().optional(),
-      mediaMaxMb: z.number().positive().optional(),
       proxy: z.string().optional(),
       webhookUrl: z.string().optional(),
       webhookSecret: z.string().optional(),
@@ -749,7 +747,6 @@ export const ClawdbotSchema = z.object({
           ephemeral: z.boolean().optional(),
         })
         .optional(),
-      mediaMaxMb: z.number().positive().optional(),
       historyLimit: z.number().int().min(0).optional(),
       actions: z
         .object({
@@ -814,7 +811,6 @@ export const ClawdbotSchema = z.object({
       appToken: z.string().optional(),
       groupPolicy: GroupPolicySchema.optional().default("open"),
       textChunkLimit: z.number().int().positive().optional(),
-      mediaMaxMb: z.number().positive().optional(),
       reactionNotifications: z
         .enum(["off", "own", "all", "allowlist"])
         .optional(),
@@ -879,7 +875,6 @@ export const ClawdbotSchema = z.object({
       groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
       groupPolicy: GroupPolicySchema.optional().default("open"),
       textChunkLimit: z.number().int().positive().optional(),
-      mediaMaxMb: z.number().positive().optional(),
     })
     .optional(),
   imessage: z
@@ -895,7 +890,6 @@ export const ClawdbotSchema = z.object({
       groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
       groupPolicy: GroupPolicySchema.optional().default("open"),
       includeAttachments: z.boolean().optional(),
-      mediaMaxMb: z.number().positive().optional(),
       textChunkLimit: z.number().int().positive().optional(),
       groups: z
         .record(

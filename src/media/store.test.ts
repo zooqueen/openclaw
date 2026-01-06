@@ -52,6 +52,9 @@ describe("media store", () => {
     await expect(store.saveMediaBuffer(huge)).rejects.toThrow(
       "Media exceeds 5MB limit",
     );
+    await expect(store.saveMediaBuffer(huge)).rejects.toBeInstanceOf(
+      store.MediaTooLargeError,
+    );
   });
 
   it("copies local files and cleans old media", async () => {
