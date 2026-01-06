@@ -219,8 +219,13 @@ sudo systemctl enable --now clawdbot-gateway.service
 - `clawdbot gateway send --to <num> --message "hi" [--media-url ...]` — send via Gateway (idempotent).
 - `clawdbot gateway agent --message "hi" [--to ...]` — run an agent turn (waits for final by default).
 - `clawdbot gateway call <method> --params '{"k":"v"}'` — raw method invoker for debugging.
+- `clawdbot gateway install|uninstall` — install/remove the supervised gateway service (launchd/systemd/schtasks).
+- `clawdbot gateway service-status` — report supervised gateway service status.
 - `clawdbot gateway stop|restart` — stop/restart the supervised gateway service (launchd/systemd/schtasks).
 - Gateway helper subcommands assume a running gateway on `--url`; they no longer auto-spawn one.
+- Service aliases:
+  - `clawdbot service ...` — service controls (install/uninstall/status/stop/restart)
+  - `clawdbot daemon ...` — alias for `clawdbot service ...`
 
 ## Migration guidance
 - Retire uses of `clawdbot gateway` and the legacy TCP control port.

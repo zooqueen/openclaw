@@ -167,6 +167,12 @@ clawdbot gateway stop
 # Or: launchctl bootout gui/$UID/com.clawdbot.gateway
 ```
 
+If no supervisor is installed yet:
+```bash
+clawdbot gateway install
+clawdbot gateway service-status
+```
+
 **Fix 2: Check embedded gateway**
 Ensure the gateway relay was properly bundled. Run [`./scripts/package-mac-app.sh`](https://github.com/clawdbot/clawdbot/blob/main/scripts/package-mac-app.sh) and ensure `bun` is installed.
 

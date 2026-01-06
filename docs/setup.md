@@ -105,6 +105,20 @@ pnpm clawdbot health
   - Sessions: `~/.clawdbot/agents/<agentId>/sessions/`
   - Logs: `/tmp/clawdbot/`
 
+## Gateway service (optional)
+
+If you want the Gateway supervised outside the macOS app (CLI-only, headless, or remote setups). The macOS app already manages the Gateway via launchd.
+
+```bash
+clawdbot gateway install
+clawdbot gateway service-status
+clawdbot gateway uninstall
+```
+
+Aliases:
+- `clawdbot service ...`
+- `clawdbot daemon ...`
+
 ## Updating (without wrecking your setup)
 
 - Keep `~/clawd` and `~/.clawdbot/` as “your stuff”; don’t put personal prompts/config into the `clawdbot` repo.

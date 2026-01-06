@@ -138,6 +138,17 @@ Run `clawdbot doctor` to surface risky/misconfigured DM policies.
 - [Nix mode](https://docs.clawd.bot/nix) for declarative config; [Docker](https://docs.clawd.bot/docker)-based installs.
 - [Doctor](https://docs.clawd.bot/doctor) migrations, [logging](https://docs.clawd.bot/logging).
 
+#### Gateway service (optional)
+
+Install a supervised service (launchd/systemd/Scheduled Task):
+
+```bash
+clawdbot gateway install
+clawdbot gateway service-status
+```
+
+Aliases: `clawdbot service ...` or `clawdbot daemon ...`.
+
 ## How it works (short)
 
 ```

@@ -13,9 +13,16 @@ const forceFreePortAndWait = vi.fn(async () => ({
   waitedMs: 0,
   escalatedToSigkill: false,
 }));
+const resolveGatewayProgramArguments = vi.fn(async () => ({
+  programArguments: ["node", "cli", "gateway-daemon", "--port", "18789"],
+  workingDirectory: "/tmp",
+}));
+const serviceInstall = vi.fn().mockResolvedValue(undefined);
 const serviceStop = vi.fn().mockResolvedValue(undefined);
+const serviceUninstall = vi.fn().mockResolvedValue(undefined);
 const serviceRestart = vi.fn().mockResolvedValue(undefined);
 const serviceIsLoaded = vi.fn().mockResolvedValue(true);
+const serviceReadCommand = vi.fn().mockResolvedValue(null);
 
 const runtimeLogs: string[] = [];
 const runtimeErrors: string[] = [];
@@ -77,17 +84,22 @@ vi.mock("./ports.js", () => ({
   forceFreePortAndWait: (port: number) => forceFreePortAndWait(port),
 }));
 
+vi.mock("../daemon/program-args.js", () => ({
+  resolveGatewayProgramArguments: (params: unknown) =>
+    resolveGatewayProgramArguments(params),
+}));
+
 vi.mock("../daemon/service.js", () => ({
   resolveGatewayService: () => ({
     label: "LaunchAgent",
     loadedText: "loaded",
     notLoadedText: "not loaded",
-    install: vi.fn(),
-    uninstall: vi.fn(),
+    install: serviceInstall,
+    uninstall: serviceUninstall,
     stop: serviceStop,
     restart: serviceRestart,
     isLoaded: serviceIsLoaded,
-    readCommand: vi.fn(),
+    readCommand: serviceReadCommand,
   }),
 }));
 
@@ -262,6 +274,66 @@ describe("gateway-cli coverage", () => {
 
     expect(serviceStop).toHaveBeenCalledTimes(1);
     expect(serviceRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports gateway install/uninstall for service setup", async () => {
+    runtimeLogs.length = 0;
+    runtimeErrors.length = 0;
+    serviceInstall.mockClear();
+    serviceUninstall.mockClear();
+    serviceIsLoaded.mockResolvedValue(false);
+
+    const { registerGatewayCli } = await import("./gateway-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerGatewayCli(program);
+
+    await program.parseAsync(["gateway", "install"], { from: "user" });
+    await program.parseAsync(["gateway", "uninstall"], { from: "user" });
+
+    expect(serviceInstall).toHaveBeenCalledTimes(1);
+    expect(serviceUninstall).toHaveBeenCalledTimes(1);
+    expect(resolveGatewayProgramArguments).toHaveBeenCalled();
+  });
+
+  it("supports service alias commands", async () => {
+    runtimeLogs.length = 0;
+    runtimeErrors.length = 0;
+    serviceStop.mockClear();
+    serviceRestart.mockClear();
+    serviceIsLoaded.mockResolvedValue(true);
+
+    const { registerGatewayCli } = await import("./gateway-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerGatewayCli(program);
+
+    await program.parseAsync(["service", "stop"], { from: "user" });
+    await program.parseAsync(["daemon", "restart"], { from: "user" });
+
+    expect(serviceStop).toHaveBeenCalledTimes(1);
+    expect(serviceRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("prints gateway service status details when available", async () => {
+    runtimeLogs.length = 0;
+    runtimeErrors.length = 0;
+    serviceReadCommand.mockResolvedValueOnce({
+      programArguments: ["node", "cli", "gateway-daemon", "--port", "18789"],
+      workingDirectory: "/tmp",
+    });
+    serviceIsLoaded.mockResolvedValue(true);
+
+    const { registerGatewayCli } = await import("./gateway-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerGatewayCli(program);
+
+    await program.parseAsync(["gateway", "service-status"], { from: "user" });
+
+    expect(runtimeLogs.join("\n")).toContain("Gateway service loaded.");
+    expect(runtimeLogs.join("\n")).toContain("Command:");
+    expect(runtimeLogs.join("\n")).toContain("Working directory:");
   });
 
   it("prints stop hints on GatewayLockError when service is loaded", async () => {

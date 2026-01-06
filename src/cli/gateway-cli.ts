@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 import type { Command } from "commander";
 import {
@@ -11,6 +12,7 @@ import {
   GATEWAY_SYSTEMD_SERVICE_NAME,
   GATEWAY_WINDOWS_TASK_NAME,
 } from "../daemon/constants.js";
+import { resolveGatewayProgramArguments } from "../daemon/program-args.js";
 import { resolveGatewayService } from "../daemon/service.js";
 import { callGateway, randomIdempotencyKey } from "../gateway/call.js";
 import { startGatewayServer } from "../gateway/server.js";
@@ -36,6 +38,12 @@ type GatewayRpcOpts = {
 const gatewayLog = createSubsystemLogger("gateway");
 
 type GatewayRunSignalAction = "stop" | "restart";
+type GatewayServiceInstallOpts = {
+  port?: unknown;
+  token?: unknown;
+  password?: unknown;
+  reinstall?: boolean;
+};
 
 function parsePort(raw: unknown): number | null {
   if (raw === undefined || raw === null) return null;
@@ -106,6 +114,14 @@ function renderGatewayServiceStartHints(): string[] {
   }
 }
 
+function renderGatewayServiceInstallHints(): string[] {
+  return [
+    "Install with: clawdbot gateway install",
+    "Or: clawdbot onboard --install-daemon",
+    "Or: clawdbot configure",
+  ];
+}
+
 async function maybeExplainGatewayServiceStop() {
   const service = resolveGatewayService();
   let loaded: boolean | null = null;
@@ -122,6 +138,151 @@ async function maybeExplainGatewayServiceStop() {
   );
   for (const hint of renderGatewayServiceStopHints()) {
     defaultRuntime.error(hint);
+  }
+}
+
+async function stopGatewayService() {
+  const service = resolveGatewayService();
+  let loaded = false;
+  try {
+    loaded = await service.isLoaded({ env: process.env });
+  } catch (err) {
+    defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+    return;
+  }
+  if (!loaded) {
+    defaultRuntime.log(`Gateway service ${service.notLoadedText}.`);
+    return;
+  }
+  try {
+    await service.stop({ stdout: process.stdout });
+  } catch (err) {
+    defaultRuntime.error(`Gateway stop failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+  }
+}
+
+async function restartGatewayService() {
+  const service = resolveGatewayService();
+  let loaded = false;
+  try {
+    loaded = await service.isLoaded({ env: process.env });
+  } catch (err) {
+    defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+    return;
+  }
+  if (!loaded) {
+    defaultRuntime.log(`Gateway service ${service.notLoadedText}.`);
+    for (const hint of renderGatewayServiceStartHints()) {
+      defaultRuntime.log(`Start with: ${hint}`);
+    }
+    for (const hint of renderGatewayServiceInstallHints()) {
+      defaultRuntime.log(hint);
+    }
+    return;
+  }
+  try {
+    await service.restart({ stdout: process.stdout });
+  } catch (err) {
+    defaultRuntime.error(`Gateway restart failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+  }
+}
+
+async function installGatewayService(opts: GatewayServiceInstallOpts) {
+  const cfg = loadConfig();
+  const portOverride = parsePort(opts.port);
+  if (opts.port !== undefined && portOverride === null) {
+    defaultRuntime.error("Invalid port");
+    defaultRuntime.exit(1);
+    return;
+  }
+  const port = portOverride ?? resolveGatewayPort(cfg);
+  if (!Number.isFinite(port) || port <= 0) {
+    defaultRuntime.error("Invalid port");
+    defaultRuntime.exit(1);
+    return;
+  }
+
+  const service = resolveGatewayService();
+  let loaded = false;
+  try {
+    loaded = await service.isLoaded({ env: process.env });
+  } catch (err) {
+    defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+    return;
+  }
+  if (loaded && !opts.reinstall) {
+    defaultRuntime.log(`Gateway service already ${service.loadedText}.`);
+    defaultRuntime.log("Use: clawdbot gateway uninstall (or --reinstall)");
+    return;
+  }
+  if (loaded && opts.reinstall) {
+    await service.uninstall({ env: process.env, stdout: process.stdout });
+  }
+
+  const devMode =
+    process.argv[1]?.includes(`${path.sep}src${path.sep}`) &&
+    process.argv[1]?.endsWith(".ts");
+  const { programArguments, workingDirectory } =
+    await resolveGatewayProgramArguments({ port, dev: devMode });
+  const environment: Record<string, string | undefined> = {
+    PATH: process.env.PATH,
+    CLAWDBOT_GATEWAY_TOKEN: opts.token ? String(opts.token) : undefined,
+    CLAWDBOT_GATEWAY_PASSWORD: opts.password ? String(opts.password) : undefined,
+    CLAWDBOT_LAUNCHD_LABEL:
+      process.platform === "darwin" ? GATEWAY_LAUNCH_AGENT_LABEL : undefined,
+  };
+  try {
+    await service.install({
+      env: process.env,
+      stdout: process.stdout,
+      programArguments,
+      workingDirectory,
+      environment,
+    });
+  } catch (err) {
+    defaultRuntime.error(`Gateway install failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+  }
+}
+
+async function uninstallGatewayService() {
+  const service = resolveGatewayService();
+  try {
+    await service.uninstall({ env: process.env, stdout: process.stdout });
+  } catch (err) {
+    defaultRuntime.error(`Gateway uninstall failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+  }
+}
+
+async function statusGatewayService() {
+  const service = resolveGatewayService();
+  let loaded = false;
+  try {
+    loaded = await service.isLoaded({ env: process.env });
+  } catch (err) {
+    defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
+    defaultRuntime.exit(1);
+    return;
+  }
+  defaultRuntime.log(
+    `Gateway service ${loaded ? service.loadedText : service.notLoadedText}.`,
+  );
+  try {
+    const command = await service.readCommand(process.env);
+    if (command?.programArguments?.length) {
+      defaultRuntime.log(`Command: ${command.programArguments.join(" ")}`);
+    }
+    if (command?.workingDirectory) {
+      defaultRuntime.log(`Working directory: ${command.workingDirectory}`);
+    }
+  } catch (err) {
+    defaultRuntime.error(`Gateway service status failed: ${String(err)}`);
   }
 }
 
@@ -228,6 +389,51 @@ const callGatewayCli = async (
     clientName: "cli",
     mode: "cli",
   });
+
+function registerGatewayServiceCli(
+  command: Command,
+  opts: { statusName?: string } = {},
+) {
+  const statusName = opts.statusName ?? "status";
+  command
+    .command("install")
+    .description("Install the Gateway service (launchd/systemd/schtasks)")
+    .option("--port <port>", "Gateway port for the service")
+    .option("--token <token>", "Gateway token (optional)")
+    .option("--password <password>", "Gateway password (optional)")
+    .option("--reinstall", "Uninstall + reinstall if already present", false)
+    .action(async (options) => {
+      await installGatewayService(options);
+    });
+
+  command
+    .command("uninstall")
+    .description("Remove the Gateway service (launchd/systemd/schtasks)")
+    .action(async () => {
+      await uninstallGatewayService();
+    });
+
+  command
+    .command(statusName)
+    .description("Show Gateway service status")
+    .action(async () => {
+      await statusGatewayService();
+    });
+
+  command
+    .command("stop")
+    .description("Stop the Gateway service (launchd/systemd/schtasks)")
+    .action(async () => {
+      await stopGatewayService();
+    });
+
+  command
+    .command("restart")
+    .description("Restart the Gateway service (launchd/systemd/schtasks)")
+    .action(async () => {
+      await restartGatewayService();
+    });
+}
 
 export function registerGatewayCli(program: Command) {
   program
@@ -733,58 +939,17 @@ export function registerGatewayCli(program: Command) {
       }),
   );
 
-  gateway
-    .command("stop")
-    .description("Stop the Gateway service (launchd/systemd/schtasks)")
-    .action(async () => {
-      const service = resolveGatewayService();
-      let loaded = false;
-      try {
-        loaded = await service.isLoaded({ env: process.env });
-      } catch (err) {
-        defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
-        defaultRuntime.exit(1);
-        return;
-      }
-      if (!loaded) {
-        defaultRuntime.log(`Gateway service ${service.notLoadedText}.`);
-        return;
-      }
-      try {
-        await service.stop({ stdout: process.stdout });
-      } catch (err) {
-        defaultRuntime.error(`Gateway stop failed: ${String(err)}`);
-        defaultRuntime.exit(1);
-      }
-    });
+  registerGatewayServiceCli(gateway, { statusName: "service-status" });
 
-  gateway
-    .command("restart")
-    .description("Restart the Gateway service (launchd/systemd/schtasks)")
-    .action(async () => {
-      const service = resolveGatewayService();
-      let loaded = false;
-      try {
-        loaded = await service.isLoaded({ env: process.env });
-      } catch (err) {
-        defaultRuntime.error(`Gateway service check failed: ${String(err)}`);
-        defaultRuntime.exit(1);
-        return;
-      }
-      if (!loaded) {
-        defaultRuntime.log(`Gateway service ${service.notLoadedText}.`);
-        for (const hint of renderGatewayServiceStartHints()) {
-          defaultRuntime.log(`Start with: ${hint}`);
-        }
-        return;
-      }
-      try {
-        await service.restart({ stdout: process.stdout });
-      } catch (err) {
-        defaultRuntime.error(`Gateway restart failed: ${String(err)}`);
-        defaultRuntime.exit(1);
-      }
-    });
+  const service = program
+    .command("service")
+    .description("Gateway service controls (launchd/systemd/schtasks)");
+  registerGatewayServiceCli(service);
+
+  const daemon = program
+    .command("daemon")
+    .description("Alias for gateway service controls");
+  registerGatewayServiceCli(daemon);
 
   // Build default deps (keeps parity with other commands; future-proofing).
   void createDefaultDeps();

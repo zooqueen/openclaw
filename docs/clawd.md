@@ -69,6 +69,11 @@ clawdbot login
 clawdbot gateway --port 18789
 ```
 
+Optional (supervised, always-on):
+```bash
+clawdbot gateway install
+```
+
 3) Put a minimal config in `~/.clawdbot/clawdbot.json`:
 
 ```json5

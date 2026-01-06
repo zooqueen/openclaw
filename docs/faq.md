@@ -504,6 +504,11 @@ The gateway runs under a supervisor that auto-restarts it. You need to stop the 
 - To inspect launchd state: `launchctl print gui/$UID | grep clawdbot`
 
 **macOS (CLI launchd service, if installed)**
+If you haven’t installed a supervisor yet, install one first:
+```bash
+clawdbot gateway install
+# Or: clawdbot service install
+```
 
 ```bash
 clawdbot gateway stop

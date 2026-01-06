@@ -74,13 +74,14 @@ It does **not** install or change anything on the remote host.
    - DM security: default is pairing (unknown DMs get a pairing code). Approve via `clawdbot pairing approve --provider <provider> <code>`.
 
 6) **Daemon install**
-   - macOS: LaunchAgent
-     - Requires a logged-in user session; for headless, use a custom LaunchDaemon (not shipped).
-   - Linux: systemd user unit
-     - Wizard attempts to enable lingering via `loginctl enable-linger <user>` so the Gateway stays up after logout.
-     - May prompt for sudo (writes `/var/lib/systemd/linger`); it tries without sudo first.
-   - Windows: Scheduled Task
-     - Runs on user logon; headless/system services are not configured by default.
+  - macOS: LaunchAgent
+    - Requires a logged-in user session; for headless, use a custom LaunchDaemon (not shipped).
+  - Linux: systemd user unit
+    - Wizard attempts to enable lingering via `loginctl enable-linger <user>` so the Gateway stays up after logout.
+    - May prompt for sudo (writes `/var/lib/systemd/linger`); it tries without sudo first.
+  - Windows: Scheduled Task
+    - Runs on user logon; headless/system services are not configured by default.
+  - Manual alternative: `clawdbot gateway install` (or `clawdbot service install`).
 
 7) **Health check**
    - Starts the Gateway (if needed) and runs `clawdbot health`.
