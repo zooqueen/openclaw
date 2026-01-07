@@ -12,7 +12,7 @@ process.stdout.on('error', (error) => {
 
 const DOCS_DIR = join(process.cwd(), 'docs');
 
-const EXCLUDED_DIRS = new Set(['archive', 'research']);
+const EXCLUDED_DIRS = new Set(['archive', 'research', 'slash-commands']);
 
 function compactStrings(values: unknown[]): string[] {
   const result: string[] = [];
