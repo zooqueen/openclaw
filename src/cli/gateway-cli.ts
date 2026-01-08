@@ -232,7 +232,9 @@ async function installGatewayService(opts: GatewayServiceInstallOpts) {
   const environment: Record<string, string | undefined> = {
     PATH: process.env.PATH,
     CLAWDBOT_GATEWAY_TOKEN: opts.token ? String(opts.token) : undefined,
-    CLAWDBOT_GATEWAY_PASSWORD: opts.password ? String(opts.password) : undefined,
+    CLAWDBOT_GATEWAY_PASSWORD: opts.password
+      ? String(opts.password)
+      : undefined,
     CLAWDBOT_LAUNCHD_LABEL:
       process.platform === "darwin" ? GATEWAY_LAUNCH_AGENT_LABEL : undefined,
   };
