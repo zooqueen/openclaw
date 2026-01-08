@@ -27,6 +27,7 @@ export type SkillInstallResult = {
   stdout: string;
   stderr: string;
   code: number | null;
+  command?: string;
 };
 
 function summarizeInstallOutput(text: string): string | undefined {
@@ -55,7 +56,22 @@ function formatInstallFailureMessage(result: {
   code: number | null;
   stdout: string;
   stderr: string;
+  signal?: NodeJS.Signals | null;
+  killed?: boolean;
+  timedOut?: boolean;
+  timeoutMs?: number;
 }): string {
+  const isTimeout =
+    result.timedOut || result.signal === "SIGKILL" || result.killed === true;
+  if (isTimeout) {
+    const seconds =
+      typeof result.timeoutMs === "number"
+        ? Math.max(1, Math.round(result.timeoutMs / 1000))
+        : undefined;
+    return seconds
+      ? `Install timed out after ${seconds}s`
+      : "Install timed out";
+  }
   const code =
     typeof result.code === "number" ? `exit ${result.code}` : "unknown exit";
   const summary =
@@ -127,6 +143,15 @@ function buildInstallCommand(
   }
 }
 
+function formatCommand(argv: string[]): string {
+  return argv
+    .map((arg) => {
+      if (/^[A-Za-z0-9_./:=+-]+$/.test(arg)) return arg;
+      return `'${arg.replace(/'/g, `'\\''`)}'`;
+    })
+    .join(" ");
+}
+
 async function resolveBrewBinDir(
   timeoutMs: number,
 ): Promise<string | undefined> {
@@ -194,6 +219,16 @@ export async function installSkill(
       code: null,
     };
   }
+  if (!command.argv || command.argv.length === 0) {
+    return {
+      ok: false,
+      message: "invalid install command",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
+  const commandLine = formatCommand(command.argv);
   if (spec.kind === "brew" && !hasBinary("brew")) {
     return {
       ok: false,
@@ -201,6 +236,7 @@ export async function installSkill(
       stdout: "",
       stderr: "",
       code: null,
+      command: commandLine,
     };
   }
   if (spec.kind === "uv" && !hasBinary("uv")) {
@@ -218,6 +254,7 @@ export async function installSkill(
           stdout: brewResult.stdout.trim(),
           stderr: brewResult.stderr.trim(),
           code: brewResult.code,
+          command: formatCommand(["brew", "install", "uv"]),
         };
       }
     } else {
@@ -227,17 +264,9 @@ export async function installSkill(
         stdout: "",
         stderr: "",
         code: null,
+        command: commandLine,
       };
     }
-  }
-  if (!command.argv || command.argv.length === 0) {
-    return {
-      ok: false,
-      message: "invalid install command",
-      stdout: "",
-      stderr: "",
-      code: null,
-    };
   }
 
   if (spec.kind === "go" && !hasBinary("go")) {
@@ -255,6 +284,7 @@ export async function installSkill(
           stdout: brewResult.stdout.trim(),
           stderr: brewResult.stderr.trim(),
           code: brewResult.code,
+          command: formatCommand(["brew", "install", "go"]),
         };
       }
     } else {
@@ -264,6 +294,7 @@ export async function installSkill(
         stdout: "",
         stderr: "",
         code: null,
+        command: commandLine,
       };
     }
   }
@@ -277,7 +308,14 @@ export async function installSkill(
   const result = await (async () => {
     const argv = command.argv;
     if (!argv || argv.length === 0) {
-      return { code: null, stdout: "", stderr: "invalid install command" };
+      return {
+        code: null,
+        stdout: "",
+        stderr: "invalid install command",
+        signal: null,
+        killed: false,
+        timedOut: false,
+      };
     }
     try {
       return await runCommandWithTimeout(argv, {
@@ -286,16 +324,26 @@ export async function installSkill(
       });
     } catch (err) {
       const stderr = err instanceof Error ? err.message : String(err);
-      return { code: null, stdout: "", stderr };
+      return {
+        code: null,
+        stdout: "",
+        stderr,
+        signal: null,
+        killed: false,
+        timedOut: false,
+      };
     }
   })();
 
-  const success = result.code === 0;
+  const success = result.code === 0 && !result.timedOut;
   return {
     ok: success,
-    message: success ? "Installed" : formatInstallFailureMessage(result),
+    message: success
+      ? "Installed"
+      : formatInstallFailureMessage({ ...result, timeoutMs }),
     stdout: result.stdout.trim(),
     stderr: result.stderr.trim(),
     code: result.code,
+    command: commandLine,
   };
 }

@@ -41,6 +41,7 @@ export type SpawnResult = {
   code: number | null;
   signal: NodeJS.Signals | null;
   killed: boolean;
+  timedOut: boolean;
 };
 
 export type CommandOptions = {
@@ -60,18 +61,42 @@ export async function runCommandWithTimeout(
       : optionsOrTimeout;
   const { timeoutMs, cwd, input, env } = options;
 
+  const supportsGroupKill = process.platform !== "win32";
+  const killGraceMs = 5_000;
+
   // Spawn with inherited stdin (TTY) so tools like `pi` stay interactive when needed.
   return await new Promise((resolve, reject) => {
     const child = spawn(argv[0], argv.slice(1), {
       stdio: [input ? "pipe" : "inherit", "pipe", "pipe"],
       cwd,
       env: env ? { ...process.env, ...env } : process.env,
+      detached: supportsGroupKill,
     });
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      if (settled) return;
+      timedOut = true;
+      const pid = child.pid;
+      if (pid) {
+        try {
+          if (supportsGroupKill) process.kill(-pid, "SIGTERM");
+          else child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        killTimer = setTimeout(() => {
+          try {
+            if (supportsGroupKill) process.kill(-pid, "SIGKILL");
+            else child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }, killGraceMs);
+      }
     }, timeoutMs);
 
     if (input && child.stdin) {
@@ -89,13 +114,22 @@ export async function runCommandWithTimeout(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       reject(err);
     });
     child.on("close", (code, signal) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr, code, signal, killed: child.killed });
+      if (killTimer) clearTimeout(killTimer);
+      resolve({
+        stdout,
+        stderr,
+        code,
+        signal,
+        killed: child.killed,
+        timedOut,
+      });
     });
   });
 }

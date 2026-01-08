@@ -18,5 +18,16 @@ describe("runCommandWithTimeout", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("ok");
+    expect(result.timedOut).toBe(false);
+  });
+
+  it("marks timed out processes", async () => {
+    if (process.platform === "win32") return;
+    const result = await runCommandWithTimeout(
+      [process.execPath, "-e", "setTimeout(() => {}, 1000)"],
+      { timeoutMs: 50 },
+    );
+
+    expect(result.timedOut).toBe(true);
   });
 });

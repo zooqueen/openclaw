@@ -16,6 +16,7 @@
 - Groups: `whatsapp.groups`, `telegram.groups`, and `imessage.groups` now act as allowlists when set. Add `"*"` to keep allow-all behavior.
 
 ### Fixes
+- Skills: harden skill installs with process-group timeouts, clearer timeout messaging, and logged rerun commands when installs fail.
 - Heartbeat: default interval now 30m with a new default prompt + HEARTBEAT.md template.
 - Onboarding: write auth profiles to the multi-agent path (`~/.clawdbot/agents/main/agent/`) so the gateway finds credentials on first startup. Thanks @minghinmatthewlam for PR #327.
 - Docs: add missing `ui:install` setup step in the README. Thanks @hugobarauna for PR #300.

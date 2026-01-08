@@ -163,6 +163,9 @@ export async function setupSkills(
         spin.stop(
           `Install failed: ${name}${code}${detail ? ` — ${detail}` : ""}`,
         );
+        if (result.command) {
+          runtime.log(`Command: ${result.command}`);
+        }
         if (result.stderr) runtime.log(result.stderr.trim());
         else if (result.stdout) runtime.log(result.stdout.trim());
         runtime.log(
