@@ -6,8 +6,22 @@ const shouldSanitizeConsoleOutput =
   process.platform === "win32" && process.env.GITHUB_ACTIONS === "true";
 
 if (shouldSanitizeConsoleOutput) {
-  const sanitize = (value: string) =>
-    value.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?");
+  const sanitize = (value: string) => {
+    let out = "";
+    for (const ch of value) {
+      const code = ch.charCodeAt(0);
+      if (code === 9 || code === 10 || code === 13) {
+        out += ch;
+        continue;
+      }
+      if (code >= 32 && code <= 126) {
+        out += ch;
+        continue;
+      }
+      out += "?";
+    }
+    return out;
+  };
 
   const patchStream = (stream: NodeJS.WriteStream) => {
     const originalWrite = stream.write.bind(stream);
