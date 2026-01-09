@@ -94,7 +94,7 @@ jobs:
     runs-on: windows-2022
     defaults:
       run:
-        shell: bash
+        shell: pwsh
     strategy:
       fail-fast: false
       matrix:
@@ -119,20 +119,20 @@ jobs:
 
       - name: Force UTF-8 output (Windows)
         run: |
-          echo "LANG=en_US.UTF-8" >> "$GITHUB_ENV"
-          echo "LC_ALL=en_US.UTF-8" >> "$GITHUB_ENV"
+          chcp.com 65001
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          "LANG=en_US.UTF-8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LC_ALL=en_US.UTF-8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Checkout submodules (retry)
         run: |
-          set -euo pipefail
           git submodule sync --recursive
-          for attempt in 1 2 3 4 5; do
-            if git -c protocol.version=2 submodule update --init --force --depth=1 --recursive; then
-              exit 0
-            fi
-            echo "Submodule update failed (attempt $attempt/5). Retrying…"
-            sleep $((attempt * 10))
-          done
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Submodule update failed (attempt $attempt/5). Retrying..."
+            Start-Sleep -Seconds ($attempt * 10)
+          }
           exit 1
 
       - name: Setup Node.js
@@ -148,19 +148,17 @@ jobs:
 
       - name: Runtime versions
         run: |
-          chcp.com 65001
           node -v
           npm -v
           bun -v
 
       - name: Capture node path
         run: |
-          chcp.com 65001
-          echo "NODE_BIN=$(dirname \"$(node -p \"process.execPath\")\")" >> "$GITHUB_ENV"
+          $nodeBin = Split-Path -Parent (node -p "process.execPath")
+          "NODE_BIN=$nodeBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Enable corepack and pin pnpm
         run: |
-          chcp.com 65001
           corepack enable
           corepack prepare pnpm@10.23.0 --activate
           pnpm -v
@@ -169,16 +167,14 @@ jobs:
         env:
           CI: true
         run: |
-          chcp.com 65001
-          export PATH="$NODE_BIN:$PATH"
-          which node
+          $env:PATH = "$env:NODE_BIN;$env:PATH"
+          Get-Command node | Format-List
           node -v
           pnpm -v
           pnpm install --ignore-scripts=false --config.engine-strict=false --config.enable-pre-post-scripts=true || pnpm install --ignore-scripts=false --config.engine-strict=false --config.enable-pre-post-scripts=true
 
       - name: Run ${{ matrix.task }} (${{ matrix.runtime }})
         run: |
-          chcp.com 65001
           ${{ matrix.command }}
 
   macos-app:
