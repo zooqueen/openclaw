@@ -14,9 +14,16 @@ const runtime = {
 describe("web logout", () => {
   const origHomedir = os.homedir;
   let tmpDir: string;
+  let prevStateDir: string | undefined;
+  let prevClawdisStateDir: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prevStateDir = process.env.CLAWDBOT_STATE_DIR;
+    prevClawdisStateDir = process.env.CLAWDIS_STATE_DIR;
+    delete process.env.CLAWDBOT_STATE_DIR;
+    delete process.env.CLAWDIS_STATE_DIR;
+
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawdbot-logout-"));
     vi.spyOn(os, "homedir").mockReturnValue(tmpDir);
     vi.resetModules();
@@ -36,6 +43,14 @@ describe("web logout", () => {
     await fsPromises
       .rm(tmpDir, { recursive: true, force: true })
       .catch(() => {});
+
+    if (prevStateDir !== undefined) process.env.CLAWDBOT_STATE_DIR = prevStateDir;
+    else delete process.env.CLAWDBOT_STATE_DIR;
+
+    if (prevClawdisStateDir !== undefined)
+      process.env.CLAWDIS_STATE_DIR = prevClawdisStateDir;
+    else delete process.env.CLAWDIS_STATE_DIR;
+
     // restore for safety
     // eslint-disable-next-line @typescript-eslint/unbound-method
     (os.homedir as unknown as typeof origHomedir) = origHomedir;
@@ -47,7 +62,8 @@ describe("web logout", () => {
     async () => {
       const { logoutWeb, WA_WEB_AUTH_DIR } = await import("./session.js");
 
-      expect(WA_WEB_AUTH_DIR.startsWith(tmpDir)).toBe(true);
+      const rel = path.relative(tmpDir, WA_WEB_AUTH_DIR);
+      expect(rel && !rel.startsWith("..") && !path.isAbsolute(rel)).toBe(true);
       fs.mkdirSync(WA_WEB_AUTH_DIR, { recursive: true });
       fs.writeFileSync(path.join(WA_WEB_AUTH_DIR, "creds.json"), "{}");
       const result = await logoutWeb({ runtime: runtime as never });

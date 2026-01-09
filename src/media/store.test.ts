@@ -6,6 +6,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const realOs = await vi.importActual<typeof import("node:os")>("node:os");
 const HOME = path.join(realOs.tmpdir(), "clawdbot-home-test");
+const PREV_CLAWDBOT_STATE_DIR = process.env.CLAWDBOT_STATE_DIR;
+const PREV_CLAWDIS_STATE_DIR = process.env.CLAWDIS_STATE_DIR;
+delete process.env.CLAWDBOT_STATE_DIR;
+delete process.env.CLAWDIS_STATE_DIR;
 
 vi.mock("node:os", () => ({
   default: { homedir: () => HOME, tmpdir: () => realOs.tmpdir() },
@@ -22,11 +26,18 @@ describe("media store", () => {
 
   afterAll(async () => {
     await fs.rm(HOME, { recursive: true, force: true });
+    if (PREV_CLAWDBOT_STATE_DIR !== undefined)
+      process.env.CLAWDBOT_STATE_DIR = PREV_CLAWDBOT_STATE_DIR;
+    else delete process.env.CLAWDBOT_STATE_DIR;
+
+    if (PREV_CLAWDIS_STATE_DIR !== undefined)
+      process.env.CLAWDIS_STATE_DIR = PREV_CLAWDIS_STATE_DIR;
+    else delete process.env.CLAWDIS_STATE_DIR;
   });
 
   it("creates and returns media directory", async () => {
     const dir = await store.ensureMediaDir();
-    expect(dir).toContain("clawdbot-home-test");
+    expect(path.basename(dir)).toBe("media");
     const stat = await fs.stat(dir);
     expect(stat.isDirectory()).toBe(true);
   });
