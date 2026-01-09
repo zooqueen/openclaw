@@ -2,6 +2,34 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+const shouldSanitizeConsoleOutput =
+  process.platform === "win32" && process.env.GITHUB_ACTIONS === "true";
+
+if (shouldSanitizeConsoleOutput) {
+  const sanitize = (value: string) =>
+    value.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?");
+
+  const patchStream = (stream: NodeJS.WriteStream) => {
+    const originalWrite = stream.write.bind(stream);
+    stream.write = ((chunk: unknown, encoding?: unknown, cb?: unknown) => {
+      if (typeof chunk === "string") {
+        return originalWrite(sanitize(chunk), encoding as never, cb as never);
+      }
+      if (Buffer.isBuffer(chunk)) {
+        return originalWrite(
+          sanitize(chunk.toString("utf8")),
+          encoding as never,
+          cb as never,
+        );
+      }
+      return originalWrite(chunk as never, encoding as never, cb as never);
+    }) as typeof stream.write;
+  };
+
+  patchStream(process.stdout);
+  patchStream(process.stderr);
+}
+
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
