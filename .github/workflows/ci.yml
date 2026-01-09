@@ -38,12 +38,6 @@ jobs:
         with:
           submodules: false
 
-      - name: Force UTF-8 output (Windows)
-        run: |
-          chcp.com 65001
-          echo "LANG=en_US.UTF-8" >> "$GITHUB_ENV"
-          echo "LC_ALL=en_US.UTF-8" >> "$GITHUB_ENV"
-
       - name: Checkout submodules (retry)
         run: |
           set -euo pipefail
@@ -122,6 +116,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
+
+      - name: Force UTF-8 output (Windows)
+        run: |
+          chcp.com 65001
+          echo "LANG=en_US.UTF-8" >> "$GITHUB_ENV"
+          echo "LC_ALL=en_US.UTF-8" >> "$GITHUB_ENV"
 
       - name: Checkout submodules (retry)
         run: |
