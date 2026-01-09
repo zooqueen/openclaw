@@ -46,6 +46,7 @@
 - Control UI: show/patch per-session reasoning level and render extracted reasoning in chat.
 - Control UI: queue outgoing chat messages, add Enter-to-send, and show queued items. (#527) — thanks @YuriNachos
 - Control UI: drop explicit `ui:install` step; `ui:build` now auto-installs UI deps (docs + update flow).
+- Control UI: default control UI asset base to relative paths for subpath hosting. (#569) — thanks @bjesuiter
 - Telegram: retry long-polling conflicts with backoff to avoid fatal exits.
 - Telegram: fix grammY fetch type mismatch when injecting `fetch`. (#512) — thanks @YuriNachos
 - WhatsApp: resolve @lid JIDs via Baileys mapping to unblock inbound messages. (#415)

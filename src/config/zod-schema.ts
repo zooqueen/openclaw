@@ -603,6 +603,7 @@ const HeartbeatSchema = z
         z.literal("slack"),
         z.literal("signal"),
         z.literal("imessage"),
+        z.literal("msteams"),
         z.literal("none"),
       ])
       .optional(),

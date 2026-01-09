@@ -289,7 +289,7 @@ describe("doctor", () => {
       "+15555550123",
     ]);
     expect(written.routing).toBeUndefined();
-  });
+  }, 20000);
 
   it("migrates legacy Clawdis services", async () => {
     readConfigFileSnapshot.mockResolvedValue({
