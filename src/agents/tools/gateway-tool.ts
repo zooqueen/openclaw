@@ -30,12 +30,27 @@ const GatewayToolSchema = Type.Object({
   gatewayUrl: Type.Optional(Type.String()),
   gatewayToken: Type.Optional(Type.String()),
   timeoutMs: Type.Optional(Type.Number()),
-  // config.apply, update.run
+  // config.apply
   raw: Type.Optional(Type.String()),
+  // config.apply, update.run
   sessionKey: Type.Optional(Type.String()),
   note: Type.Optional(Type.String()),
   restartDelayMs: Type.Optional(Type.Number()),
 });
+// Keep top-level object schemas while enforcing conditional requirements.
+(GatewayToolSchema as typeof GatewayToolSchema & { allOf?: unknown[] }).allOf =
+  [
+    {
+      if: {
+        properties: {
+          action: { const: "config.apply" },
+        },
+        required: ["action"],
+      },
+      // biome-ignore lint/suspicious/noThenProperty: JSON Schema keyword.
+      then: { required: ["raw"] },
+    },
+  ];
 
 export function createGatewayTool(opts?: {
   agentSessionKey?: string;
