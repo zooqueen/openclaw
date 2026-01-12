@@ -849,7 +849,8 @@ export async function getReplyFromConfig(
       formatModelSwitchEvent,
       agentCfg,
       modelState: {
-        resolveDefaultThinkingLevel: modelState.resolveDefaultThinkingLevel,
+        resolveDefaultThinkingLevel: async () =>
+          (await modelState.resolveDefaultThinkingLevel()) ?? "off",
         allowedModelKeys: modelState.allowedModelKeys,
         allowedModelCatalog: modelState.allowedModelCatalog,
         resetModelOverride: modelState.resetModelOverride,

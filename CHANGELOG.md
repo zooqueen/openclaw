@@ -34,6 +34,7 @@
 
 ### Fixes
 - Auto-reply: inline `/status` now honors allowlists (authorized stripped + replied inline; unauthorized leaves text for the agent) to match command gating tests.
+- Auto-reply: enforce `<final>` tag for all reasoning-tag providers (Gemini Antigravity, MiniMax, etc.), not just Ollama. (#801 — thanks @mcinteerj)
 - Models: normalize `${ENV_VAR}` apiKey config values and auto-fill missing provider `apiKey` from env/auth when custom provider models are configured (fixes MiniMax “Unknown model” on fresh installs).
 - Models/Tools: include `MiniMax-VL-01` in implicit MiniMax provider so image pairing uses a real vision model.
 - Telegram: show typing indicator in General forum topics. (#779) — thanks @azade-c.
