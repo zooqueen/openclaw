@@ -41,7 +41,7 @@ const modelCatalogMocks = vi.hoisted(() => ({
       name: "Claude Opus 4.5 (OpenRouter)",
       contextWindow: 200000,
     },
-    { provider: "openai", id: "gpt-4.1-mini", name: "GPT-4.1 mini" },
+    { provider: "openai", id: "gpt-5-nano", name: "GPT-5 Nano" },
     { provider: "openai", id: "gpt-5.2", name: "GPT-5.2" },
     { provider: "openai-codex", id: "gpt-5.2", name: "GPT-5.2 (Codex)" },
     { provider: "minimax", id: "MiniMax-M2.1", name: "MiniMax M2.1" },
@@ -320,7 +320,7 @@ describe("trigger handling", () => {
 
       const res = await getReplyFromConfig(
         {
-          Body: "/model openai/gpt-4.1-mini",
+          Body: "/model openai/gpt-5-nano",
           From: "telegram:111",
           To: "telegram:111",
           ChatType: "direct",
@@ -336,11 +336,11 @@ describe("trigger handling", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("Model set to openai/gpt-4.1-mini");
+      expect(text).toContain("Model set to openai/gpt-5-nano");
 
       const store = loadSessionStore(cfg.session.store);
       expect(store[targetSessionKey]?.providerOverride).toBe("openai");
-      expect(store[targetSessionKey]?.modelOverride).toBe("gpt-4.1-mini");
+      expect(store[targetSessionKey]?.modelOverride).toBe("gpt-5-nano");
       expect(store[slashSessionKey]).toBeUndefined();
 
       vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
@@ -368,7 +368,7 @@ describe("trigger handling", () => {
       expect(vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
           provider: "openai",
-          model: "gpt-4.1-mini",
+          model: "gpt-5-nano",
         }),
       );
     });

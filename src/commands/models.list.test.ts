@@ -157,8 +157,8 @@ describe("models list/status", () => {
       },
       {
         provider: "openai",
-        id: "gpt-4.1-mini",
-        name: "GPT-4.1 mini",
+        id: "gpt-5-nano",
+        name: "GPT-5 Nano",
         input: ["text"],
         baseUrl: "https://api.openai.com/v1",
         contextWindow: 128000,
@@ -199,8 +199,8 @@ describe("models list/status", () => {
       },
       {
         provider: "openai",
-        id: "gpt-4.1-mini",
-        name: "GPT-4.1 mini",
+        id: "gpt-5-nano",
+        name: "GPT-5 Nano",
         input: ["text"],
         baseUrl: "https://api.openai.com/v1",
         contextWindow: 128000,
@@ -241,8 +241,8 @@ describe("models list/status", () => {
       },
       {
         provider: "openai",
-        id: "gpt-4.1-mini",
-        name: "GPT-4.1 mini",
+        id: "gpt-5-nano",
+        name: "GPT-5 Nano",
         input: ["text"],
         baseUrl: "https://api.openai.com/v1",
         contextWindow: 128000,

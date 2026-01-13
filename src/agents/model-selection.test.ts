@@ -13,8 +13,8 @@ import {
 const catalog = [
   {
     provider: "openai",
-    id: "gpt-4",
-    name: "GPT-4",
+    id: "gpt-5-nano",
+    name: "GPT-5 Nano",
   },
 ];
 
@@ -24,7 +24,7 @@ describe("buildAllowedModelSet", () => {
       agents: {
         defaults: {
           models: {
-            "openai/gpt-4": { alias: "gpt4" },
+            "openai/gpt-5-nano": { alias: "gpt5nano" },
           },
         },
       },
@@ -38,7 +38,9 @@ describe("buildAllowedModelSet", () => {
     });
 
     expect(allowed.allowAny).toBe(false);
-    expect(allowed.allowedKeys.has(modelKey("openai", "gpt-4"))).toBe(true);
+    expect(allowed.allowedKeys.has(modelKey("openai", "gpt-5-nano"))).toBe(
+      true,
+    );
     expect(allowed.allowedKeys.has(modelKey("claude-cli", "opus-4.5"))).toBe(
       true,
     );
@@ -57,7 +59,9 @@ describe("buildAllowedModelSet", () => {
     });
 
     expect(allowed.allowAny).toBe(true);
-    expect(allowed.allowedKeys.has(modelKey("openai", "gpt-4"))).toBe(true);
+    expect(allowed.allowedKeys.has(modelKey("openai", "gpt-5-nano"))).toBe(
+      true,
+    );
     expect(allowed.allowedKeys.has(modelKey("claude-cli", "opus-4.5"))).toBe(
       true,
     );
@@ -236,7 +240,7 @@ describe("resolveAllowedModelRef", () => {
       agents: {
         defaults: {
           models: {
-            "openai/gpt-4": { alias: "GPT4" },
+            "openai/gpt-5-nano": { alias: "GPT5NANO" },
           },
         },
       },
@@ -244,12 +248,12 @@ describe("resolveAllowedModelRef", () => {
     const resolved = resolveAllowedModelRef({
       cfg,
       catalog: [
-        { provider: "openai", id: "gpt-4", name: "GPT-4" },
+        { provider: "openai", id: "gpt-5-nano", name: "GPT-5 Nano" },
         { provider: "anthropic", id: "claude-sonnet-4-1", name: "Sonnet" },
       ],
       raw: "anthropic/claude-sonnet-4-1",
       defaultProvider: "openai",
-      defaultModel: "gpt-4",
+      defaultModel: "gpt-5-nano",
     });
     expect(resolved).toEqual({
       error: "model not allowed: anthropic/claude-sonnet-4-1",

@@ -1603,10 +1603,10 @@ describe("legacy config detection", () => {
     const res = migrateLegacyConfig({
       agent: {
         model: "anthropic/claude-opus-4-5",
-        modelFallbacks: ["openai/gpt-4.1-mini"],
-        imageModel: "openai/gpt-4.1-mini",
+        modelFallbacks: ["openai/gpt-5-nano"],
+        imageModel: "openai/gpt-5-nano",
         imageModelFallbacks: ["anthropic/claude-opus-4-5"],
-        allowedModels: ["anthropic/claude-opus-4-5", "openai/gpt-4.1-mini"],
+        allowedModels: ["anthropic/claude-opus-4-5", "openai/gpt-5-nano"],
         modelAliases: { Opus: "anthropic/claude-opus-4-5" },
       },
     });
@@ -1615,10 +1615,10 @@ describe("legacy config detection", () => {
       "anthropic/claude-opus-4-5",
     );
     expect(res.config?.agents?.defaults?.model?.fallbacks).toEqual([
-      "openai/gpt-4.1-mini",
+      "openai/gpt-5-nano",
     ]);
     expect(res.config?.agents?.defaults?.imageModel?.primary).toBe(
-      "openai/gpt-4.1-mini",
+      "openai/gpt-5-nano",
     );
     expect(res.config?.agents?.defaults?.imageModel?.fallbacks).toEqual([
       "anthropic/claude-opus-4-5",
@@ -1627,7 +1627,7 @@ describe("legacy config detection", () => {
       res.config?.agents?.defaults?.models?.["anthropic/claude-opus-4-5"],
     ).toMatchObject({ alias: "Opus" });
     expect(
-      res.config?.agents?.defaults?.models?.["openai/gpt-4.1-mini"],
+      res.config?.agents?.defaults?.models?.["openai/gpt-5-nano"],
     ).toBeTruthy();
     expect(res.config?.agent).toBeUndefined();
   });

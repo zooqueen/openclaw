@@ -8,7 +8,7 @@ function makeCfg(overrides: Partial<ClawdbotConfig> = {}): ClawdbotConfig {
     agents: {
       defaults: {
         model: {
-          primary: "openai/gpt-4.1-mini",
+          primary: "openai/gpt-5-nano",
           fallbacks: ["anthropic/claude-haiku-3-5"],
         },
       },
@@ -29,7 +29,7 @@ describe("runWithModelFallback", () => {
       runWithModelFallback({
         cfg,
         provider: "openai",
-        model: "gpt-4.1-mini",
+        model: "gpt-5-nano",
         run,
       }),
     ).rejects.toThrow("bad request");
@@ -46,7 +46,7 @@ describe("runWithModelFallback", () => {
     const result = await runWithModelFallback({
       cfg,
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "gpt-5-nano",
       run,
     });
 
@@ -68,7 +68,7 @@ describe("runWithModelFallback", () => {
     const result = await runWithModelFallback({
       cfg,
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "gpt-5-nano",
       run,
     });
 
@@ -92,7 +92,7 @@ describe("runWithModelFallback", () => {
     const result = await runWithModelFallback({
       cfg,
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "gpt-5-nano",
       run,
     });
 
@@ -129,7 +129,7 @@ describe("runWithModelFallback", () => {
       agents: {
         defaults: {
           model: {
-            primary: "openai/gpt-4.1-mini",
+            primary: "openai/gpt-5-nano",
           },
         },
       },
@@ -173,13 +173,13 @@ describe("runWithModelFallback", () => {
       cfg,
       provider: "anthropic",
       model: "claude-opus-4-5",
-      fallbacksOverride: ["openai/gpt-4.1"],
+      fallbacksOverride: ["openai/gpt-5-nano"],
       run: async (provider, model) => {
         calls.push({ provider, model });
         if (provider === "anthropic") {
           throw Object.assign(new Error("nope"), { status: 401 });
         }
-        if (provider === "openai" && model === "gpt-4.1") {
+        if (provider === "openai" && model === "gpt-5-nano") {
           return "ok";
         }
         throw new Error(`unexpected candidate: ${provider}/${model}`);
@@ -189,7 +189,7 @@ describe("runWithModelFallback", () => {
     expect(res.result).toBe("ok");
     expect(calls).toEqual([
       { provider: "anthropic", model: "claude-opus-4-5" },
-      { provider: "openai", model: "gpt-4.1" },
+      { provider: "openai", model: "gpt-5-nano" },
     ]);
   });
 
@@ -234,7 +234,7 @@ describe("runWithModelFallback", () => {
     const result = await runWithModelFallback({
       cfg,
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "gpt-5-nano",
       run,
     });
 
@@ -254,7 +254,7 @@ describe("runWithModelFallback", () => {
     const result = await runWithModelFallback({
       cfg,
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "gpt-5-nano",
       run,
     });
 
@@ -269,7 +269,7 @@ describe("runWithModelFallback", () => {
       agents: {
         defaults: {
           model: {
-            primary: "openai/gpt-4.1-mini",
+            primary: "openai/gpt-5-nano",
             fallbacks: [],
           },
         },
@@ -292,6 +292,6 @@ describe("runWithModelFallback", () => {
     expect(result.result).toBe("ok");
     expect(run).toHaveBeenCalledTimes(2);
     expect(result.provider).toBe("openai");
-    expect(result.model).toBe("gpt-4.1-mini");
+    expect(result.model).toBe("gpt-5-nano");
   });
 });

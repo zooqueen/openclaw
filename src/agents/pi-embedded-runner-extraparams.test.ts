@@ -207,11 +207,11 @@ describe("resolveExtraParams", () => {
       expect(result).toBeUndefined();
     });
 
-    it("returns undefined for openai/gpt-4 with no config", () => {
+    it("returns undefined for openai/gpt-5-nano with no config", () => {
       const result = resolveExtraParams({
         cfg: undefined,
         provider: "openai",
-        modelId: "gpt-4",
+        modelId: "gpt-5-nano",
       });
 
       expect(result).toBeUndefined();
@@ -223,7 +223,7 @@ describe("resolveExtraParams", () => {
           agents: {
             defaults: {
               models: {
-                "openai/gpt-4": {
+                "openai/gpt-5-nano": {
                   params: {
                     logprobs: true,
                     top_logprobs: 5,
@@ -234,7 +234,7 @@ describe("resolveExtraParams", () => {
           },
         },
         provider: "openai",
-        modelId: "gpt-4",
+        modelId: "gpt-5-nano",
       });
 
       expect(result).toEqual({

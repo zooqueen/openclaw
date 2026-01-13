@@ -42,7 +42,7 @@ describe("block streaming", () => {
     piEmbeddedMock.runEmbeddedPiAgent.mockReset();
     vi.mocked(loadModelCatalog).mockResolvedValue([
       { id: "claude-opus-4-5", name: "Opus 4.5", provider: "anthropic" },
-      { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai" },
+      { id: "gpt-5-nano", name: "GPT-5 Nano", provider: "openai" },
     ]);
   });
 

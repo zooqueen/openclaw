@@ -61,7 +61,7 @@ describe("directive behavior", () => {
     vi.mocked(loadModelCatalog).mockResolvedValue([
       { id: "claude-opus-4-5", name: "Opus 4.5", provider: "anthropic" },
       { id: "claude-sonnet-4-1", name: "Sonnet 4.1", provider: "anthropic" },
-      { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai" },
+      { id: "gpt-5-nano", name: "GPT-5 Nano", provider: "openai" },
     ]);
   });
 
@@ -143,7 +143,7 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: "openai/gpt-4.1-mini",
+              model: "openai/gpt-5-nano",
               workspace: path.join(home, "clawd"),
             },
           },
@@ -1655,7 +1655,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },
@@ -1666,7 +1666,7 @@ describe("directive behavior", () => {
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("anthropic/claude-opus-4-5");
       expect(text).toContain("Pick: /model <#> or /model <provider/model>");
-      expect(text).toContain("gpt-4.1-mini — openai");
+      expect(text).toContain("gpt-5-nano — openai");
       expect(text).not.toContain("claude-sonnet-4-1");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
@@ -1687,7 +1687,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },
@@ -1697,7 +1697,7 @@ describe("directive behavior", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("openai/gpt-4.1-mini");
+      expect(text).toContain("openai/gpt-5-nano");
       expect(text).not.toContain("claude-sonnet-4-1");
       expect(text).toContain("auth:");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
@@ -1719,7 +1719,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },
@@ -1730,7 +1730,7 @@ describe("directive behavior", () => {
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("Pick: /model <#> or /model <provider/model>");
       expect(text).toContain("claude-opus-4-5 — anthropic");
-      expect(text).toContain("gpt-4.1-mini — openai");
+      expect(text).toContain("gpt-5-nano — openai");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -1751,7 +1751,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },
@@ -1762,7 +1762,7 @@ describe("directive behavior", () => {
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("Pick: /model <#> or /model <provider/model>");
       expect(text).toContain("claude-opus-4-5 — anthropic");
-      expect(text).toContain("gpt-4.1-mini — openai");
+      expect(text).toContain("gpt-5-nano — openai");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -1778,7 +1778,7 @@ describe("directive behavior", () => {
           id: "claude-opus-4-5",
           name: "Claude Opus 4.5",
         },
-        { provider: "openai", id: "gpt-4.1-mini", name: "GPT-4.1 mini" },
+        { provider: "openai", id: "gpt-5-nano", name: "GPT-5 Nano" },
       ]);
       const storePath = path.join(home, "sessions.json");
 
@@ -1792,7 +1792,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
                 "minimax/MiniMax-M2.1": { alias: "minimax" },
               },
             },
@@ -1813,7 +1813,7 @@ describe("directive behavior", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("claude-opus-4-5 — anthropic");
-      expect(text).toContain("gpt-4.1-mini — openai");
+      expect(text).toContain("gpt-5-nano — openai");
       expect(text).toContain("MiniMax-M2.1 — minimax");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
@@ -1853,7 +1853,7 @@ describe("directive behavior", () => {
       const storePath = path.join(home, "sessions.json");
 
       await getReplyFromConfig(
-        { Body: "/model openai/gpt-4.1-mini", From: "+1222", To: "+1222" },
+        { Body: "/model openai/gpt-5-nano", From: "+1222", To: "+1222" },
         {},
         {
           agents: {
@@ -1862,7 +1862,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },
@@ -1871,7 +1871,7 @@ describe("directive behavior", () => {
       );
 
       assertModelSelection(storePath, {
-        model: "gpt-4.1-mini",
+        model: "gpt-5-nano",
         provider: "openai",
       });
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
@@ -1889,10 +1889,10 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: { primary: "openai/gpt-4.1-mini" },
+              model: { primary: "openai/gpt-5-nano" },
               workspace: path.join(home, "clawd"),
               models: {
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
                 "anthropic/claude-opus-4-5": { alias: "Opus" },
               },
             },
@@ -2209,10 +2209,10 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: { primary: "openai/gpt-4.1-mini" },
+              model: { primary: "openai/gpt-5-nano" },
               workspace: path.join(home, "clawd"),
               models: {
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
                 "anthropic/claude-opus-4-5": { alias: "Opus" },
               },
             },
@@ -2242,10 +2242,10 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: { primary: "openai/gpt-4.1-mini" },
+              model: { primary: "openai/gpt-5-nano" },
               workspace: path.join(home, "clawd"),
               models: {
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
                 "anthropic/claude-opus-4-5": { alias: "Opus" },
               },
             },
@@ -2278,7 +2278,7 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: { primary: "openai/gpt-4.1-mini" },
+              model: { primary: "openai/gpt-5-nano" },
               workspace: path.join(home, "clawd"),
             },
           },
@@ -2309,7 +2309,7 @@ describe("directive behavior", () => {
         {
           agents: {
             defaults: {
-              model: { primary: "openai/gpt-4.1-mini" },
+              model: { primary: "openai/gpt-5-nano" },
               workspace: path.join(home, "clawd"),
             },
           },
@@ -2336,7 +2336,7 @@ describe("directive behavior", () => {
 
       const res = await getReplyFromConfig(
         {
-          Body: "please sync /model openai/gpt-4.1-mini now",
+          Body: "please sync /model openai/gpt-5-nano now",
           From: "+1004",
           To: "+2000",
         },
@@ -2348,7 +2348,7 @@ describe("directive behavior", () => {
               workspace: path.join(home, "clawd"),
               models: {
                 "anthropic/claude-opus-4-5": {},
-                "openai/gpt-4.1-mini": {},
+                "openai/gpt-5-nano": {},
               },
             },
           },

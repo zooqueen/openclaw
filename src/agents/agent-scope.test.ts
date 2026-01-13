@@ -57,7 +57,7 @@ describe("resolveAgentConfig", () => {
         defaults: {
           model: {
             primary: "anthropic/claude-sonnet-4",
-            fallbacks: ["openai/gpt-4.1"],
+            fallbacks: ["openai/gpt-5-nano"],
           },
         },
         list: [

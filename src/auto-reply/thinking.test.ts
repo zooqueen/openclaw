@@ -25,9 +25,7 @@ describe("listThinkingLevels", () => {
   });
 
   it("excludes xhigh for non-codex models", () => {
-    expect(listThinkingLevels(undefined, "gpt-4.1-mini")).not.toContain(
-      "xhigh",
-    );
+    expect(listThinkingLevels(undefined, "gpt-5-nano")).not.toContain("xhigh");
   });
 });
 

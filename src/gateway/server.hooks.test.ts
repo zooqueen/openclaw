@@ -88,7 +88,7 @@ describe("gateway server hooks", () => {
       body: JSON.stringify({
         message: "Do it",
         name: "Email",
-        model: "openai/gpt-4.1-mini",
+        model: "openai/gpt-5-nano",
       }),
     });
     expect(res.status).toBe(202);
@@ -96,7 +96,7 @@ describe("gateway server hooks", () => {
     const call = cronIsolatedRun.mock.calls[0]?.[0] as {
       job?: { payload?: { model?: string } };
     };
-    expect(call?.job?.payload?.model).toBe("openai/gpt-4.1-mini");
+    expect(call?.job?.payload?.model).toBe("openai/gpt-5-nano");
     drainSystemEvents(resolveMainKey());
     await server.close();
   });

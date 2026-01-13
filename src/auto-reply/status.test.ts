@@ -122,7 +122,7 @@ describe("buildStatusMessage", () => {
         sessionId: "override-1",
         updatedAt: 0,
         providerOverride: "openai",
-        modelOverride: "gpt-4.1-mini",
+        modelOverride: "gpt-5-nano",
         modelProvider: "anthropic",
         model: "claude-haiku-4-5",
         contextTokens: 32_000,
@@ -133,7 +133,7 @@ describe("buildStatusMessage", () => {
       modelAuth: "api-key",
     });
 
-    expect(normalizeTestText(text)).toContain("Model: openai/gpt-4.1-mini");
+    expect(normalizeTestText(text)).toContain("Model: openai/gpt-5-nano");
   });
 
   it("keeps provider prefix from configured model", () => {

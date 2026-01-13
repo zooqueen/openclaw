@@ -27,7 +27,7 @@ describe("agents helpers", () => {
             name: "Work",
             workspace: "/work-ws",
             agentDir: "/state/agents/work/agent",
-            model: "openai/gpt-4.1",
+            model: "openai/gpt-5-nano",
           },
         ],
       },

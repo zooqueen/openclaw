@@ -213,7 +213,7 @@ describe("runCronIsolatedAgentTurn", () => {
         job: makeJob({
           kind: "agentTurn",
           message: "do it",
-          model: "openai/gpt-4.1-mini",
+          model: "openai/gpt-5-nano",
         }),
         message: "do it",
         sessionKey: "cron:job-1",
@@ -226,7 +226,7 @@ describe("runCronIsolatedAgentTurn", () => {
         model?: string;
       };
       expect(call?.provider).toBe("openai");
-      expect(call?.model).toBe("gpt-4.1-mini");
+      expect(call?.model).toBe("gpt-5-nano");
     });
   });
 

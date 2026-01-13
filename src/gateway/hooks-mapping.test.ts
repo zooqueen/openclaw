@@ -46,7 +46,7 @@ describe("hooks mapping", () => {
           match: { path: "gmail" },
           action: "agent",
           messageTemplate: "Subject: {{messages[0].subject}}",
-          model: "openai/gpt-4.1-mini",
+          model: "openai/gpt-5-nano",
         },
       ],
     });
@@ -58,7 +58,7 @@ describe("hooks mapping", () => {
     });
     expect(result?.ok).toBe(true);
     if (result?.ok && result.action.kind === "agent") {
-      expect(result.action.model).toBe("openai/gpt-4.1-mini");
+      expect(result.action.model).toBe("openai/gpt-5-nano");
     }
   });
 

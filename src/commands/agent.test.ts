@@ -152,10 +152,10 @@ describe("agentCommand", () => {
     await withTempHome(async (home) => {
       const store = path.join(home, "sessions.json");
       mockConfig(home, store, {
-        model: { primary: "openai/gpt-4.1-mini" },
+        model: { primary: "openai/gpt-5-nano" },
         models: {
           "anthropic/claude-opus-4-5": {},
-          "openai/gpt-4.1-mini": {},
+          "openai/gpt-5-nano": {},
         },
       });
 
@@ -163,7 +163,7 @@ describe("agentCommand", () => {
 
       const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.provider).toBe("openai");
-      expect(callArgs?.model).toBe("gpt-4.1-mini");
+      expect(callArgs?.model).toBe("gpt-5-nano");
     });
   });
 
