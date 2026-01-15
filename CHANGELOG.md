@@ -2,7 +2,7 @@
 
 ## 2026.1.15 (unreleased)
 
-- TBD
+- Agents: add CLI quick reference to the system prompt to avoid invented commands. (#953) — thanks @roshanasingh4.
 
 ## 2026.1.14-1
 
