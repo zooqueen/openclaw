@@ -4,8 +4,8 @@ import {
   resolveIdentityName,
 } from "../../agents/identity.js";
 import {
-  extractShortModelName,
-  type ResponsePrefixContext,
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
 } from "../../auto-reply/reply/response-prefix-template.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import { hasControlCommand } from "../../auto-reply/command-detection.js";
@@ -350,10 +350,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
 
     let didSendReply = false;
 
-    // Create mutable context for response prefix template interpolation
-    let prefixContext: ResponsePrefixContext = {
-      identityName: resolveIdentityName(cfg, route.agentId),
-    };
+    const prefixContext = createResponsePrefixContext(resolveIdentityName(cfg, route.agentId));
 
     const dispatcher = createReplyDispatcher({
       responsePrefix: resolveEffectiveMessagesConfig(cfg, route.agentId).responsePrefix,
@@ -386,11 +383,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             ? !accountInfo.config.blockStreaming
             : undefined,
         onModelSelected: (ctx) => {
-          // Mutate the object directly instead of reassigning to ensure the closure sees updates
-          prefixContext.provider = ctx.provider;
-          prefixContext.model = extractShortModelName(ctx.model);
-          prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-          prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+          applyModelSelectionToResponsePrefixContext(prefixContext, ctx);
         },
       },
     });

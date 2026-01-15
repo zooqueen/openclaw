@@ -15,6 +15,7 @@ import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import type { OriginatingChannelType } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
 import { normalizeReplyPayload } from "./normalize-reply.js";
+import type { ResponsePrefixContext } from "./response-prefix-template.js";
 
 export type RouteReplyParams = {
   /** The reply payload to send. */
@@ -31,6 +32,8 @@ export type RouteReplyParams = {
   threadId?: number;
   /** Config for provider-specific settings. */
   cfg: ClawdbotConfig;
+  /** Optional response prefix template context (model/provider/identity). */
+  responsePrefixContext?: ResponsePrefixContext;
   /** Optional abort signal for cooperative cancellation. */
   abortSignal?: AbortSignal;
 };
@@ -69,6 +72,7 @@ export async function routeReply(params: RouteReplyParams): Promise<RouteReplyRe
       : cfg.messages?.responsePrefix;
   const normalized = normalizeReplyPayload(payload, {
     responsePrefix,
+    responsePrefixContext: params.responsePrefixContext,
   });
   if (!normalized) return { ok: true };
 

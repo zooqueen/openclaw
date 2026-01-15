@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { resolveEffectiveMessagesConfig, resolveIdentityName } from "../agents/identity.js";
 import {
-  extractShortModelName,
-  type ResponsePrefixContext,
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
 } from "../auto-reply/reply/response-prefix-template.js";
 import { EmbeddedBlockChunker } from "../agents/pi-embedded-block-chunker.js";
 import { clearHistoryEntries } from "../auto-reply/reply/history.js";
@@ -118,10 +118,7 @@ export const dispatchTelegramMessage = async ({
     Boolean(draftStream) ||
     (typeof telegramCfg.blockStreaming === "boolean" ? !telegramCfg.blockStreaming : undefined);
 
-  // Create mutable context for response prefix template interpolation
-  let prefixContext: ResponsePrefixContext = {
-    identityName: resolveIdentityName(cfg, route.agentId),
-  };
+  const prefixContext = createResponsePrefixContext(resolveIdentityName(cfg, route.agentId));
 
   let didSendReply = false;
   const { queuedFinal } = await dispatchReplyWithBufferedBlockDispatcher({
@@ -162,11 +159,7 @@ export const dispatchTelegramMessage = async ({
         : undefined,
       disableBlockStreaming,
       onModelSelected: (ctx) => {
-        // Mutate the object directly instead of reassigning to ensure the closure sees updates
-        prefixContext.provider = ctx.provider;
-        prefixContext.model = extractShortModelName(ctx.model);
-        prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-        prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+        applyModelSelectionToResponsePrefixContext(prefixContext, ctx);
       },
     },
   });

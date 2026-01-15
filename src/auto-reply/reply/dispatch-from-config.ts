@@ -1,12 +1,18 @@
+import { resolveSessionAgentId } from "../../agents/agent-scope.js";
+import { resolveIdentityName } from "../../agents/identity.js";
 import type { ClawdbotConfig } from "../../config/config.js";
 import { logVerbose } from "../../globals.js";
 import { getReplyFromConfig } from "../reply.js";
 import type { MsgContext } from "../templating.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import type { GetReplyOptions, ModelSelectedContext, ReplyPayload } from "../types.js";
 import { tryFastAbortFromMessage } from "./abort.js";
 import { shouldSkipDuplicateInbound } from "./inbound-dedupe.js";
 import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
 import { isRoutableChannel, routeReply } from "./route-reply.js";
+import {
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
+} from "./response-prefix-template.js";
 
 export type DispatchFromConfigResult = {
   queuedFinal: boolean;
@@ -39,6 +45,23 @@ export async function dispatchReplyFromConfig(params: {
   const shouldRouteToOriginating =
     isRoutableChannel(originatingChannel) && originatingTo && originatingChannel !== currentSurface;
 
+  const sessionAgentId = resolveSessionAgentId({
+    sessionKey: ctx.SessionKey,
+    config: cfg,
+  });
+  const responsePrefixContext = shouldRouteToOriginating
+    ? createResponsePrefixContext(resolveIdentityName(cfg, sessionAgentId))
+    : undefined;
+  const onModelSelected =
+    responsePrefixContext || params.replyOptions?.onModelSelected
+      ? (selection: ModelSelectedContext) => {
+          if (responsePrefixContext) {
+            applyModelSelectionToResponsePrefixContext(responsePrefixContext, selection);
+          }
+          params.replyOptions?.onModelSelected?.(selection);
+        }
+      : undefined;
+
   /**
    * Helper to send a payload via route-reply (async).
    * Only used when actually routing to a different provider.
@@ -61,6 +84,7 @@ export async function dispatchReplyFromConfig(params: {
       accountId: ctx.AccountId,
       threadId: ctx.MessageThreadId,
       cfg,
+      responsePrefixContext,
       abortSignal,
     });
     if (!result.ok) {
@@ -82,6 +106,7 @@ export async function dispatchReplyFromConfig(params: {
         accountId: ctx.AccountId,
         threadId: ctx.MessageThreadId,
         cfg,
+        responsePrefixContext,
       });
       queuedFinal = result.ok;
       if (result.ok) routedFinalCount += 1;
@@ -103,6 +128,7 @@ export async function dispatchReplyFromConfig(params: {
     ctx,
     {
       ...params.replyOptions,
+      onModelSelected,
       onToolResult: (payload: ReplyPayload) => {
         if (shouldRouteToOriginating) {
           // Fire-and-forget for streaming tool results when routing.
@@ -140,6 +166,7 @@ export async function dispatchReplyFromConfig(params: {
         accountId: ctx.AccountId,
         threadId: ctx.MessageThreadId,
         cfg,
+        responsePrefixContext,
       });
       if (!result.ok) {
         logVerbose(

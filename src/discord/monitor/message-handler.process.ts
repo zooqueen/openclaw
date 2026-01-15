@@ -5,8 +5,8 @@ import {
   resolveIdentityName,
 } from "../../agents/identity.js";
 import {
-  extractShortModelName,
-  type ResponsePrefixContext,
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
 } from "../../auto-reply/reply/response-prefix-template.js";
 import { formatAgentEnvelope, formatThreadStarterEnvelope } from "../../auto-reply/envelope.js";
 import { dispatchReplyFromConfig } from "../../auto-reply/reply/dispatch-from-config.js";
@@ -286,10 +286,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     ? deliverTarget.slice("channel:".length)
     : message.channelId;
 
-  // Create mutable context for response prefix template interpolation
-  let prefixContext: ResponsePrefixContext = {
-    identityName: resolveIdentityName(cfg, route.agentId),
-  };
+  const prefixContext = createResponsePrefixContext(resolveIdentityName(cfg, route.agentId));
 
   const { dispatcher, replyOptions, markDispatchIdle } = createReplyDispatcherWithTyping({
     responsePrefix: resolveEffectiveMessagesConfig(cfg, route.agentId).responsePrefix,
@@ -329,11 +326,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
           ? !discordConfig.blockStreaming
           : undefined,
       onModelSelected: (ctx) => {
-        // Mutate the object directly instead of reassigning to ensure the closure sees updates
-        prefixContext.provider = ctx.provider;
-        prefixContext.model = extractShortModelName(ctx.model);
-        prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-        prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+        applyModelSelectionToResponsePrefixContext(prefixContext, ctx);
       },
     },
   });

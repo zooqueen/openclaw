@@ -18,6 +18,16 @@ export type ResponsePrefixContext = {
   identityName?: string;
 };
 
+export type ModelSelectionInfo = {
+  provider: string;
+  model: string;
+  thinkLevel?: string;
+};
+
+export function createResponsePrefixContext(identityName?: string): ResponsePrefixContext {
+  return identityName ? { identityName } : {};
+}
+
 // Regex pattern for template variables: {variableName} or {variable.name}
 const TEMPLATE_VAR_PATTERN = /\{([a-zA-Z][a-zA-Z0-9.]*)\}/g;
 
@@ -84,6 +94,16 @@ export function extractShortModelName(fullModel: string): string {
 
   // Strip date suffixes (YYYYMMDD format)
   return modelPart.replace(/-\d{8}$/, "").replace(/-latest$/, "");
+}
+
+export function applyModelSelectionToResponsePrefixContext(
+  context: ResponsePrefixContext,
+  selection: ModelSelectionInfo,
+): void {
+  context.provider = selection.provider;
+  context.model = extractShortModelName(selection.model);
+  context.modelFull = `${selection.provider}/${selection.model}`;
+  context.thinkingLevel = selection.thinkLevel ?? "off";
 }
 
 /**

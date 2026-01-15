@@ -1,7 +1,7 @@
 import { resolveEffectiveMessagesConfig, resolveIdentityName } from "../../../agents/identity.js";
 import {
-  extractShortModelName,
-  type ResponsePrefixContext,
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
 } from "../../../auto-reply/reply/response-prefix-template.js";
 import { resolveTextChunkLimit } from "../../../auto-reply/chunk.js";
 import { formatAgentEnvelope } from "../../../auto-reply/envelope.js";
@@ -177,10 +177,9 @@ export async function processMessage(params: {
     params.route.agentId,
   ).responsePrefix;
 
-  // Create mutable context for response prefix template interpolation
-  let prefixContext: ResponsePrefixContext = {
-    identityName: resolveIdentityName(params.cfg, params.route.agentId),
-  };
+  const prefixContext = createResponsePrefixContext(
+    resolveIdentityName(params.cfg, params.route.agentId),
+  );
 
   const { queuedFinal } = await dispatchReplyWithBufferedBlockDispatcher({
     ctx: {
@@ -278,11 +277,7 @@ export async function processMessage(params: {
           ? !params.cfg.channels.whatsapp.blockStreaming
           : undefined,
       onModelSelected: (ctx) => {
-        // Mutate the object directly instead of reassigning to ensure the closure sees updates
-        prefixContext.provider = ctx.provider;
-        prefixContext.model = extractShortModelName(ctx.model);
-        prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-        prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+        applyModelSelectionToResponsePrefixContext(prefixContext, ctx);
       },
     },
   });

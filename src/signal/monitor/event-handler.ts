@@ -4,8 +4,8 @@ import {
   resolveIdentityName,
 } from "../../agents/identity.js";
 import {
-  extractShortModelName,
-  type ResponsePrefixContext,
+  applyModelSelectionToResponsePrefixContext,
+  createResponsePrefixContext,
 } from "../../auto-reply/reply/response-prefix-template.js";
 import { formatAgentEnvelope } from "../../auto-reply/envelope.js";
 import { dispatchReplyFromConfig } from "../../auto-reply/reply/dispatch-from-config.js";
@@ -319,10 +319,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
 
     let didSendReply = false;
 
-    // Create mutable context for response prefix template interpolation
-    let prefixContext: ResponsePrefixContext = {
-      identityName: resolveIdentityName(deps.cfg, route.agentId),
-    };
+    const prefixContext = createResponsePrefixContext(
+      resolveIdentityName(deps.cfg, route.agentId),
+    );
 
     const dispatcher = createReplyDispatcher({
       responsePrefix: resolveEffectiveMessagesConfig(deps.cfg, route.agentId).responsePrefix,
@@ -354,11 +353,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         disableBlockStreaming:
           typeof deps.blockStreaming === "boolean" ? !deps.blockStreaming : undefined,
         onModelSelected: (ctx) => {
-          // Mutate the object directly instead of reassigning to ensure the closure sees updates
-          prefixContext.provider = ctx.provider;
-          prefixContext.model = extractShortModelName(ctx.model);
-          prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-          prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+          applyModelSelectionToResponsePrefixContext(prefixContext, ctx);
         },
       },
     });
