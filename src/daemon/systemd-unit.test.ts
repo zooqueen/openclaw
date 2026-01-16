@@ -25,14 +25,14 @@ describe("parseSystemdExecStart", () => {
     ]);
   });
 
-  it("supports backslash-escaped characters", () => {
-    const execStart = "/usr/bin/clawdbot gateway start --path \/tmp\/clawdbot";
+  it("preserves backslashes in arguments", () => {
+    const execStart = String.raw`/usr/bin/clawdbot gateway start --path \/tmp\/clawdbot`;
     expect(parseSystemdExecStart(execStart)).toEqual([
       "/usr/bin/clawdbot",
       "gateway",
       "start",
       "--path",
-      "/tmp/clawdbot",
+      "\\/tmp\\/clawdbot",
     ]);
   });
 });
