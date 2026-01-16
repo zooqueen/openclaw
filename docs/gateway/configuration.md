@@ -1052,6 +1052,8 @@ Slack runs in Socket Mode and requires both a bot token and app token:
       enabled: true,
       botToken: "xoxb-...",
       appToken: "xapp-...",
+      userToken: "xoxp-...",     // optional (read-only by default)
+      userTokenReadOnly: true,   // default: true
       dm: {
         enabled: true,
         policy: "pairing", // pairing | allowlist | open | disabled
@@ -1102,6 +1104,7 @@ Slack runs in Socket Mode and requires both a bot token and app token:
 Multi-account support lives under `channels.slack.accounts` (see the multi-account section above). Env tokens only apply to the default account.
 
 Clawdbot starts Slack when the provider is enabled and both tokens are set (via config or `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN`). Use `user:<id>` (DM) or `channel:<id>` when specifying delivery targets for cron/CLI commands.
+Optional user tokens (`xoxp-...`) are configured in the config file (no env var support). Reads prefer the user token when present; writes use the bot token unless you set `channels.slack.userTokenReadOnly: false` and no bot token is available.
 Set `channels.slack.configWrites: false` to block Slack-initiated config writes (including channel ID migrations and `/config set|unset`).
 
 Bot-authored messages are ignored by default. Enable with `channels.slack.allowBots` or `channels.slack.channels.<id>.allowBots`.

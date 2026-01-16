@@ -2,6 +2,7 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 
 import type { ClawdbotConfig } from "../../config/config.js";
 import { resolveSlackAccount } from "../../slack/accounts.js";
+import { resolveSlackTokenOverride } from "../../slack/token.js";
 import {
   deleteSlackMessage,
   editSlackMessage,
@@ -81,20 +82,14 @@ export async function handleSlackAction(
   const account = resolveSlackAccount({ cfg, accountId });
   const actionConfig = account.actions ?? cfg.channels?.slack?.actions;
   const isActionEnabled = createActionGate(actionConfig);
-  const userToken = account.config.userToken?.trim() || undefined;
-  const botToken = account.botToken?.trim();
-  const allowUserWrites = account.config.userTokenReadOnly === false;
-
-  // Choose the most appropriate token for Slack read/write operations.
-  const getTokenForOperation = (operation: "read" | "write") => {
-    if (operation === "read") return userToken ?? botToken;
-    if (!allowUserWrites) return botToken;
-    return botToken ?? userToken;
-  };
 
   const buildActionOpts = (operation: "read" | "write") => {
-    const token = getTokenForOperation(operation);
-    const tokenOverride = token && token !== botToken ? token : undefined;
+    const tokenOverride = resolveSlackTokenOverride({
+      botToken: account.botToken,
+      userToken: account.userToken,
+      userTokenReadOnly: account.config.userTokenReadOnly,
+      operation,
+    });
     if (!accountId && !tokenOverride) return undefined;
     return {
       ...(accountId ? { accountId } : {}),
@@ -260,7 +255,7 @@ export async function handleSlackAction(
       }
       return jsonResult({ ok: true });
     }
-    const pins = writeOpts
+    const pins = readOpts
       ? await listSlackPins(channelId, readOpts)
       : await listSlackPins(channelId);
     const normalizedPins = pins.map((pin) => {
@@ -280,7 +275,7 @@ export async function handleSlackAction(
       throw new Error("Slack member info is disabled.");
     }
     const userId = readStringParam(params, "userId", { required: true });
-    const info = writeOpts
+    const info = readOpts
       ? await getSlackMemberInfo(userId, readOpts)
       : await getSlackMemberInfo(userId);
     return jsonResult({ ok: true, info });

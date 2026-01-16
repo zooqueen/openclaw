@@ -1,4 +1,6 @@
+import { resolveSlackAccount } from "../../../slack/accounts.js";
 import { sendMessageSlack } from "../../../slack/send.js";
+import { resolveSlackTokenOverride } from "../../../slack/token.js";
 import type { ChannelOutboundAdapter } from "../types.js";
 
 export const slackOutbound: ChannelOutboundAdapter = {
@@ -15,20 +17,36 @@ export const slackOutbound: ChannelOutboundAdapter = {
     }
     return { ok: true, to: trimmed };
   },
-  sendText: async ({ to, text, accountId, deps, replyToId }) => {
+  sendText: async ({ cfg, to, text, accountId, deps, replyToId }) => {
     const send = deps?.sendSlack ?? sendMessageSlack;
+    const account = resolveSlackAccount({ cfg, accountId });
+    const tokenOverride = resolveSlackTokenOverride({
+      botToken: account.botToken,
+      userToken: account.userToken,
+      userTokenReadOnly: account.config.userTokenReadOnly,
+      operation: "write",
+    });
     const result = await send(to, text, {
       threadTs: replyToId ?? undefined,
       accountId: accountId ?? undefined,
+      ...(tokenOverride ? { token: tokenOverride } : {}),
     });
     return { channel: "slack", ...result };
   },
-  sendMedia: async ({ to, text, mediaUrl, accountId, deps, replyToId }) => {
+  sendMedia: async ({ cfg, to, text, mediaUrl, accountId, deps, replyToId }) => {
     const send = deps?.sendSlack ?? sendMessageSlack;
+    const account = resolveSlackAccount({ cfg, accountId });
+    const tokenOverride = resolveSlackTokenOverride({
+      botToken: account.botToken,
+      userToken: account.userToken,
+      userTokenReadOnly: account.config.userTokenReadOnly,
+      operation: "write",
+    });
     const result = await send(to, text, {
       mediaUrl,
       threadTs: replyToId ?? undefined,
       accountId: accountId ?? undefined,
+      ...(tokenOverride ? { token: tokenOverride } : {}),
     });
     return { channel: "slack", ...result };
   },

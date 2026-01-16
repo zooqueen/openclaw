@@ -373,6 +373,28 @@ describe("handleSlackAction", () => {
     expect(opts?.token).toBe("xoxp-1");
   });
 
+  it("uses user token for pin reads when available", async () => {
+    const cfg = {
+      channels: { slack: { botToken: "xoxb-1", userToken: "xoxp-1" } },
+    } as ClawdbotConfig;
+    listSlackPins.mockClear();
+    listSlackPins.mockResolvedValueOnce([]);
+    await handleSlackAction({ action: "listPins", channelId: "C1" }, cfg);
+    const [, opts] = listSlackPins.mock.calls[0] ?? [];
+    expect(opts?.token).toBe("xoxp-1");
+  });
+
+  it("uses user token for member info reads when available", async () => {
+    const cfg = {
+      channels: { slack: { botToken: "xoxb-1", userToken: "xoxp-1" } },
+    } as ClawdbotConfig;
+    getSlackMemberInfo.mockClear();
+    getSlackMemberInfo.mockResolvedValueOnce({});
+    await handleSlackAction({ action: "memberInfo", userId: "U1" }, cfg);
+    const [, opts] = getSlackMemberInfo.mock.calls[0] ?? [];
+    expect(opts?.token).toBe("xoxp-1");
+  });
+
   it("falls back to bot token for reads when user token missing", async () => {
     const cfg = {
       channels: { slack: { botToken: "xoxb-1" } },
@@ -404,5 +426,17 @@ describe("handleSlackAction", () => {
     await handleSlackAction({ action: "sendMessage", to: "channel:C1", content: "Hello" }, cfg);
     const [, , opts] = sendSlackMessage.mock.calls[0] ?? [];
     expect(opts?.token).toBe("xoxp-1");
+  });
+
+  it("prefers bot token for writes when both tokens are available", async () => {
+    const cfg = {
+      channels: {
+        slack: { botToken: "xoxb-1", userToken: "xoxp-1", userTokenReadOnly: false },
+      },
+    } as ClawdbotConfig;
+    sendSlackMessage.mockClear();
+    await handleSlackAction({ action: "sendMessage", to: "channel:C1", content: "Hello" }, cfg);
+    const [, , opts] = sendSlackMessage.mock.calls[0] ?? [];
+    expect(opts?.token).toBeUndefined();
   });
 });

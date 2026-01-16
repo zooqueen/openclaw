@@ -2,6 +2,7 @@
 
 ## 2026.1.15 (unreleased)
 
+- Slack: add optional user token routing for read access with safe write fallback. (#981) — thanks @jalehman.
 - Fix: list model picker entries as provider/model pairs for explicit selection. (#970) — thanks @mcinteerj.
 - Daemon: fix profile-aware service label resolution (env-driven) and add coverage for launchd/systemd/schtasks. (#969) — thanks @bjesuiter.
 - Daemon: share profile/state-dir resolution across service helpers and honor `CLAWDBOT_STATE_DIR` for Windows task scripts.

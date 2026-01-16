@@ -33,6 +33,7 @@ Minimal config:
    - `app_mention`
    - `reaction_added`, `reaction_removed`
    - `member_joined_channel`, `member_left_channel`
+   - `channel_id_changed`
    - `channel_rename`
    - `pin_added`, `pin_removed`
 6) Invite the bot to channels you want it to read.
@@ -112,6 +113,21 @@ Example with userTokenReadOnly explicitly set (allow user token writes):
 ## History context
 - `channels.slack.historyLimit` (or `channels.slack.accounts.*.historyLimit`) controls how many recent channel/group messages are wrapped into the prompt.
 - Falls back to `messages.groupChat.historyLimit`. Set `0` to disable (default 50).
+- DM history can be limited with `channels.slack.dmHistoryLimit` (user turns). Per-user overrides: `channels.slack.dms["<user_id>"].historyLimit`.
+
+## Config writes
+By default, Slack is allowed to write config updates triggered by channel events or `/config set|unset`.
+
+This happens when:
+- Slack emits `channel_id_changed` (e.g. Slack Connect channel ID changes). Clawdbot can migrate `channels.slack.channels` automatically.
+- You run `/config set` or `/config unset` in Slack (requires `commands.config: true`).
+
+Disable with:
+```json5
+{
+  channels: { slack: { configWrites: false } }
+}
+```
 
 ## Manifest (optional)
 Use this Slack app manifest to create the app quickly (adjust the name/command if you want). Include the
@@ -196,6 +212,7 @@ user scopes if you plan to configure a user token.
         "reaction_removed",
         "member_joined_channel",
         "member_left_channel",
+        "channel_id_changed",
         "channel_rename",
         "pin_added",
         "pin_removed"
@@ -326,6 +343,11 @@ By default, Clawdbot replies in the main channel. Use `channels.slack.replyToMod
 
 The mode applies to both auto-replies and agent tool calls (`slack sendMessage`).
 
+### Thread session isolation
+Slack thread sessions are isolated by default. Configure with:
+- `channels.slack.thread.historyScope`: `thread` (default) keeps per-thread history; `channel` shares history across the channel.
+- `channels.slack.thread.inheritParent`: `false` (default) starts a clean thread session; `true` copies the parent channel transcript into the thread session.
+
 ### Manual threading tags
 For fine-grained control, use these tags in agent responses:
 - `[[reply_to_current]]` — reply to the triggering message (start/continue thread).
@@ -390,4 +412,5 @@ Slack tool actions can be gated with `channels.slack.actions.*`:
 - Bot-authored messages are ignored by default; enable via `channels.slack.allowBots` or `channels.slack.channels.<id>.allowBots`.
 - Warning: If you allow replies to other bots (`channels.slack.allowBots=true` or `channels.slack.channels.<id>.allowBots=true`), prevent bot-to-bot reply loops with `requireMention`, `channels.slack.channels.<id>.users` allowlists, and/or clear guardrails in `AGENTS.md` and `SOUL.md`.
 - For the Slack tool, reaction removal semantics are in [/tools/reactions](/tools/reactions).
+- Read/pin tool payloads include normalized `timestampMs` (UTC epoch ms) and `timestampUtc` alongside raw Slack `ts`.
 - Attachments are downloaded to the media store when permitted and under the size limit.
