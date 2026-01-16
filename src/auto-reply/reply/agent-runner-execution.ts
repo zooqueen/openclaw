@@ -322,8 +322,12 @@ export async function runAgentTurnWithFallback(params: {
                   } else {
                     // Send directly when flushing before tool execution (no streaming).
                     // Track sent key to avoid duplicate in final payloads.
-                    directlySentBlockKeys.add(createBlockReplyPayloadKey(blockPayload));
-                    await params.opts?.onBlockReply?.(blockPayload);
+                    try {
+                      await params.opts?.onBlockReply?.(blockPayload);
+                      directlySentBlockKeys.add(createBlockReplyPayloadKey(blockPayload));
+                    } catch (err) {
+                      logVerbose(`block reply direct delivery failed: ${String(err)}`);
+                    }
                   }
                 }
               : undefined,

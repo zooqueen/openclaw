@@ -39,6 +39,7 @@
 - Discord: allow emoji/sticker uploads + channel actions in config defaults. (#870) — thanks @JDIVE.
 - Fix: sanitize user-facing error text + strip `<final>` tags across reply pipelines. (#975) — thanks @ThomsenDrake.
 - Fix: normalize pairing CLI aliases, allow extension channels, and harden Zalo webhook payload parsing. (#991) — thanks @longmaba.
+- Fix: stream block replies between tool calls when block streaming is off. (#992) — thanks @tyler6204.
 
 ## 2026.1.14-1
 
