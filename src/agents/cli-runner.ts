@@ -13,6 +13,7 @@ import {
   buildCliArgs,
   buildSystemPrompt,
   cleanupResumeProcesses,
+  cleanupSuspendedCliProcesses,
   enqueueCliRun,
   normalizeCliModel,
   parseCliJson,
@@ -206,6 +207,7 @@ export async function runCliAgent(params: {
         return next;
       })();
 
+      await cleanupSuspendedCliProcesses(backend);
       if (useResume && cliSessionIdToSend) {
         await cleanupResumeProcesses(backend, cliSessionIdToSend);
       }
