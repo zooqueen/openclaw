@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { normalizeCronJobCreate, normalizeCronJobPatch } from "../../cron/normalize.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, type ClawdbotConfig } from "../../config/config.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, jsonResult, readStringParam } from "./common.js";
@@ -38,6 +38,7 @@ const CronToolSchema = Type.Object({
 
 type CronToolOptions = {
   agentSessionKey?: string;
+  config?: ClawdbotConfig;
 };
 
 type ChatMessage = {
@@ -86,10 +87,11 @@ function extractMessageText(message: ChatMessage): { role: string; text: string 
 async function buildReminderContextLines(params: {
   agentSessionKey?: string;
   gatewayOpts: GatewayCallOptions;
+  config?: ClawdbotConfig;
 }) {
   const sessionKey = params.agentSessionKey?.trim();
   if (!sessionKey) return [];
-  const cfg = loadConfig();
+  const cfg = params.config ?? loadConfig();
   const { mainKey, alias } = resolveMainSessionAlias(cfg);
   const resolvedKey = resolveInternalSessionKey({ key: sessionKey, alias, mainKey });
   try {
@@ -160,6 +162,7 @@ export function createCronTool(opts?: CronToolOptions): AnyAgentTool {
               const contextLines = await buildReminderContextLines({
                 agentSessionKey: opts?.agentSessionKey,
                 gatewayOpts,
+                config: opts?.config,
               });
               if (contextLines.length > 0) {
                 const baseText = stripExistingContext(payload.text);

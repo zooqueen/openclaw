@@ -99,7 +99,7 @@ describe("cron tool", () => {
       })
       .mockResolvedValueOnce({ ok: true });
 
-    const tool = createCronTool({ agentSessionKey: "main" });
+    const tool = createCronTool({ agentSessionKey: "main", config: {} });
     await tool.execute("call3", {
       action: "add",
       job: {

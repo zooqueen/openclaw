@@ -77,6 +77,7 @@ export function createClawdbotTools(options?: {
     createNodesTool(),
     createCronTool({
       agentSessionKey: options?.agentSessionKey,
+      config: options?.config,
     }),
     createMessageTool({
       agentAccountId: options?.agentAccountId,
