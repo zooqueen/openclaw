@@ -53,13 +53,6 @@ export function registerGatewayCli(program: Command) {
       ),
   );
 
-  // Back-compat: legacy launchd plists used gateway-daemon; keep hidden alias.
-  addGatewayRunCommand(
-    program
-      .command("gateway-daemon", { hidden: true })
-      .description("Run the WebSocket Gateway as a long-lived daemon"),
-  );
-
   gatewayCallOpts(
     gateway
       .command("call")

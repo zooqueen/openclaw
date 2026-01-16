@@ -7,7 +7,7 @@ import Testing
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("clawdbot-launchd-\(UUID().uuidString).plist")
         let plist: [String: Any] = [
-            "ProgramArguments": ["clawdbot", "gateway-daemon", "--port", "18789", "--bind", "loopback"],
+            "ProgramArguments": ["clawdbot", "gateway", "--port", "18789", "--bind", "loopback"],
             "EnvironmentVariables": [
                 "CLAWDBOT_GATEWAY_TOKEN": " secret ",
                 "CLAWDBOT_GATEWAY_PASSWORD": "pw",
@@ -28,7 +28,7 @@ import Testing
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("clawdbot-launchd-\(UUID().uuidString).plist")
         let plist: [String: Any] = [
-            "ProgramArguments": ["clawdbot", "gateway-daemon", "--port", "18789"],
+            "ProgramArguments": ["clawdbot", "gateway", "--port", "18789"],
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try data.write(to: url, options: [.atomic])
