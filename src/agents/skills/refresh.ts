@@ -128,7 +128,7 @@ export function ensureSkillsWatcher(params: { workspaceDir: string; config?: Cla
     // Avoid FD exhaustion on macOS when a workspace contains huge trees.
     // This watcher only needs to react to skill changes.
     ignored: [
-      /(^|[\\/])\../, // dotfiles (includes .git)
+      /(^|[\\/])\.git([\\/]|$)/,
       /(^|[\\/])node_modules([\\/]|$)/,
       /(^|[\\/])dist([\\/]|$)/,
     ],

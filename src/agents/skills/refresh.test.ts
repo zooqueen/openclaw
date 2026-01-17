@@ -12,7 +12,7 @@ vi.mock("chokidar", () => {
 });
 
 describe("ensureSkillsWatcher", () => {
-  it("ignores node_modules and dist by default", async () => {
+  it("ignores node_modules, dist, and .git by default", async () => {
     const mod = await import("./refresh.js");
     mod.ensureSkillsWatcher({ workspaceDir: "/tmp/workspace" });
 
@@ -26,5 +26,6 @@ describe("ensureSkillsWatcher", () => {
     );
     expect(ignored.some((re) => re.test("/tmp/workspace/skills/dist/index.js"))).toBe(true);
     expect(ignored.some((re) => re.test("/tmp/workspace/skills/.git/config"))).toBe(true);
+    expect(ignored.some((re) => re.test("/tmp/.hidden/skills/index.md"))).toBe(false);
   });
 });

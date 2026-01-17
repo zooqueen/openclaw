@@ -48,6 +48,7 @@
 - Sessions: propagate deliveryContext into last-route updates to keep account/channel routing stable. (#1058)
 - Gateway: honor explicit delivery targets without implicit accountId fallback; preserve lastAccountId for implicit routing.
 - Gateway: avoid reusing last-to/accountId when the requested channel differs; sync deliveryContext with last route fields.
+- Skills: narrow skills watcher ignores to `.git` so hidden workspaces still refresh. (#1074) — thanks @roshanasingh4.
 - Repo: fix oxlint config filename and move ignore pattern into config. (#1064) — thanks @connorshea.
 - Messages: `/stop` now hard-aborts queued followups and sub-agent runs; suppress zero-count stop notes.
 - Messages: include sender labels for live group messages across channels, matching queued/history formatting. (#1059)

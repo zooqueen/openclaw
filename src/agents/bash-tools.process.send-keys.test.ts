@@ -50,7 +50,7 @@ test("process submit sends CR for pty sessions", async () => {
   const processTool = createProcessTool();
   const result = await execTool.execute("toolcall", {
     command:
-      "node -e \"process.stdin.on('data', d => { if (d.includes(13)) { process.stdout.write('submitted'); process.exit(0); } });\"",
+      "node -e \"process.stdin.on('data', d => { if (d.includes(10) || d.includes(13)) { process.stdout.write('submitted'); process.exit(0); } });\"",
     pty: true,
     background: true,
   });
