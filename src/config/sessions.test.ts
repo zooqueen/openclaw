@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildGroupDisplayName,
@@ -155,6 +156,41 @@ describe("sessions", () => {
     const store = loadSessionStore(storePath);
     expect(store["agent:main:one"]?.sessionId).toBe("sess-1");
     expect(store["agent:main:two"]?.sessionId).toBe("sess-2");
+  });
+
+  it("updateSessionStore preserves sessions.json permissions", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(storePath, "{}", "utf-8");
+    await fs.chmod(storePath, 0o600);
+
+    await updateSessionStore(storePath, (store) => {
+      store["agent:main:main"] = { sessionId: "sess-1", updatedAt: 1 };
+    });
+
+    const mode = (await fs.stat(storePath)).mode & 0o777;
+    if (process.platform === "win32") {
+      expect([0o600, 0o666, 0o777]).toContain(mode);
+    } else {
+      expect(mode).toBe(0o600);
+    }
+  });
+
+  it("updateSessionStore ignores chmod failures", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(storePath, "{}", "utf-8");
+
+    const spy = vi.spyOn(fsSync.promises, "chmod").mockRejectedValueOnce(new Error("nope"));
+    try {
+      await expect(
+        updateSessionStore(storePath, (store) => {
+          store["agent:main:main"] = { sessionId: "sess-1", updatedAt: 1 };
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("updateSessionStore keeps deletions when concurrent writes happen", async () => {

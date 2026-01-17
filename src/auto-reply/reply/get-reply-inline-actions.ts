@@ -5,8 +5,10 @@ import type { SessionEntry } from "../../config/sessions.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "../thinking.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import { listChatCommands } from "../commands-registry.js";
 import { getAbortMemory } from "./abort.js";
 import { buildStatusReply, handleCommands } from "./commands.js";
+import { parseSlashCommand, renderCodexPrompt, resolveCodexPrompt } from "./codex-prompts.js";
 import type { InlineDirectives } from "./directive-handling.js";
 import { isDirectiveOnly } from "./directive-handling.js";
 import type { createModelSelectionState } from "./model-selection.js";
@@ -136,6 +138,46 @@ export async function handleInlineActions(params: {
     sessionCtx.Body = rewrittenBody;
     sessionCtx.BodyStripped = rewrittenBody;
     cleanedBody = rewrittenBody;
+  }
+
+  const slashCommand =
+    allowTextCommands && command.isAuthorizedSender
+      ? parseSlashCommand(command.commandBodyNormalized)
+      : null;
+  if (slashCommand) {
+    const reserved = new Set<string>();
+    for (const entry of listChatCommands()) {
+      if (entry.nativeName) reserved.add(entry.nativeName.toLowerCase());
+      for (const alias of entry.textAliases) {
+        if (!alias.startsWith("/")) continue;
+        reserved.add(alias.slice(1).toLowerCase());
+      }
+    }
+    for (const entry of skillCommands) {
+      reserved.add(entry.name.toLowerCase());
+    }
+    const hasInlineDirective =
+      directives.hasThinkDirective ||
+      directives.hasVerboseDirective ||
+      directives.hasReasoningDirective ||
+      directives.hasElevatedDirective ||
+      directives.hasModelDirective ||
+      directives.hasQueueDirective ||
+      directives.hasStatusDirective;
+    if (!hasInlineDirective && !reserved.has(slashCommand.name.toLowerCase())) {
+      const prompt = await resolveCodexPrompt(slashCommand.name);
+      if (prompt) {
+        const rendered = renderCodexPrompt({
+          body: prompt.body,
+          args: slashCommand.args,
+          commandName: slashCommand.name,
+        });
+        ctx.Body = rendered;
+        sessionCtx.Body = rendered;
+        sessionCtx.BodyStripped = rendered;
+        cleanedBody = rendered;
+      }
+    }
   }
 
   const sendInlineReply = async (reply?: ReplyPayload) => {

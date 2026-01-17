@@ -45,6 +45,16 @@ export function clearSessionStoreCacheForTest(): void {
   SESSION_STORE_CACHE.clear();
 }
 
+const sessionStoreWriteOptions = { mode: 0o600, encoding: "utf-8" } as const;
+
+async function ensurePrivateMode(storePath: string): Promise<void> {
+  try {
+    await fs.promises.chmod(storePath, 0o600);
+  } catch {
+    // Best-effort: ignore chmod failures (e.g., Windows or filesystem quirks).
+  }
+}
+
 type LoadSessionStoreOptions = {
   skipCache?: boolean;
 };
@@ -121,7 +131,8 @@ async function saveSessionStoreUnlocked(
   // We serialize writers via the session-store lock instead.
   if (process.platform === "win32") {
     try {
-      await fs.promises.writeFile(storePath, json, "utf-8");
+      await fs.promises.writeFile(storePath, json, sessionStoreWriteOptions);
+      await ensurePrivateMode(storePath);
     } catch (err) {
       const code =
         err && typeof err === "object" && "code" in err
@@ -135,10 +146,9 @@ async function saveSessionStoreUnlocked(
 
   const tmp = `${storePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
   try {
-    await fs.promises.writeFile(tmp, json, { mode: 0o600, encoding: "utf-8" });
+    await fs.promises.writeFile(tmp, json, sessionStoreWriteOptions);
     await fs.promises.rename(tmp, storePath);
-    // Ensure permissions are set even if rename loses them
-    await fs.promises.chmod(storePath, 0o600);
+    await ensurePrivateMode(storePath);
   } catch (err) {
     const code =
       err && typeof err === "object" && "code" in err
@@ -150,8 +160,8 @@ async function saveSessionStoreUnlocked(
       // Best-effort: try a direct write (recreating the parent dir), otherwise ignore.
       try {
         await fs.promises.mkdir(path.dirname(storePath), { recursive: true });
-        await fs.promises.writeFile(storePath, json, { mode: 0o600, encoding: "utf-8" });
-        await fs.promises.chmod(storePath, 0o600);
+        await fs.promises.writeFile(storePath, json, sessionStoreWriteOptions);
+        await ensurePrivateMode(storePath);
       } catch (err2) {
         const code2 =
           err2 && typeof err2 === "object" && "code" in err2
