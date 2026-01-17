@@ -125,6 +125,29 @@ describe("resolveChannelCapabilities", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("falls back to channel capabilities when account capabilities use object format", () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          capabilities: ["inlineButtons"],
+          accounts: {
+            default: {
+              capabilities: { inlineButtons: "dm" },
+            },
+          },
+        },
+      },
+    } satisfies Partial<ClawdbotConfig>;
+
+    expect(
+      resolveChannelCapabilities({
+        cfg: cfg as ClawdbotConfig,
+        channel: "telegram",
+        accountId: "default",
+      }),
+    ).toEqual(["inlineButtons"]);
+  });
 });
 
 const createRegistry = (channels: PluginRegistry["channels"]): PluginRegistry => ({

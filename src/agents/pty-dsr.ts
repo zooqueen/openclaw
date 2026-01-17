@@ -1,4 +1,5 @@
-const DSR_PATTERN = /\x1b\[\??6n/g;
+const ESC = String.fromCharCode(0x1b);
+const DSR_PATTERN = new RegExp(`${ESC}\\[\\??6n`, "g");
 
 export function stripDsrRequests(input: string): { cleaned: string; requests: number } {
   let requests = 0;
