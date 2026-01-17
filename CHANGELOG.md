@@ -40,6 +40,7 @@
 - Discord: truncate skill command descriptions to 100 chars for slash command limits. (#1018) — thanks @evalexpr.
 - Security: bump `tar` to 7.5.3.
 - Models: align ZAI thinking toggles.
+- iMessage: fetch remote attachments for SSH wrappers and document `remoteHost`. (#1054) — thanks @tyler6204.
 
 ## 2026.1.15
 

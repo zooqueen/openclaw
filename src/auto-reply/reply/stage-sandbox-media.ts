@@ -1,11 +1,12 @@
-import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureSandboxWorkspaceForSession } from "../../agents/sandbox.js";
 import type { ClawdbotConfig } from "../../config/config.js";
 import { logVerbose } from "../../globals.js";
-import { CONFIG_DIR } from "../../utils.js";
+import { copyRemoteFileViaScp } from "../../media/remote.js";
+import { ensureMediaDir } from "../../media/store.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 
 export async function stageSandboxMedia(params: {
@@ -31,11 +32,8 @@ export async function stageSandboxMedia(params: {
     sessionKey,
     workspaceDir,
   });
-
-  // For remote attachments without sandbox, use ~/.clawdbot/media (not agent workspace for privacy)
-  const remoteMediaCacheDir = ctx.MediaRemoteHost ? path.join(CONFIG_DIR, "media", "remote-cache", sessionKey) : null;
-  const effectiveWorkspaceDir = sandbox?.workspaceDir ?? remoteMediaCacheDir;
-  if (!effectiveWorkspaceDir) return;
+  const usesRemoteMedia = Boolean(ctx.MediaRemoteHost);
+  if (!sandbox && !usesRemoteMedia) return;
 
   const resolveAbsolutePath = (value: string): string | null => {
     let resolved = value.trim();
@@ -52,8 +50,9 @@ export async function stageSandboxMedia(params: {
   };
 
   try {
-    // For sandbox: <workspace>/media/inbound, for remote cache: use dir directly
-    const destDir = sandbox ? path.join(effectiveWorkspaceDir, "media", "inbound") : effectiveWorkspaceDir;
+    const destDir = sandbox
+      ? path.join(sandbox.workspaceDir, "media", "inbound")
+      : path.join(await ensureMediaDir(), "inbound");
     await fs.mkdir(destDir, { recursive: true });
 
     const usedNames = new Set<string>();
@@ -68,21 +67,29 @@ export async function stageSandboxMedia(params: {
       if (!baseName) continue;
       const parsed = path.parse(baseName);
       let fileName = baseName;
-      let suffix = 1;
-      while (usedNames.has(fileName)) {
-        fileName = `${parsed.name}-${suffix}${parsed.ext}`;
-        suffix += 1;
+      if (!sandbox && usesRemoteMedia) {
+        fileName = `${parsed.name}-${crypto.randomUUID()}${parsed.ext}`;
+      } else {
+        let suffix = 1;
+        while (usedNames.has(fileName)) {
+          fileName = `${parsed.name}-${suffix}${parsed.ext}`;
+          suffix += 1;
+        }
       }
       usedNames.add(fileName);
 
       const dest = path.join(destDir, fileName);
       if (ctx.MediaRemoteHost) {
         // Always use SCP when remote host is configured - local paths refer to remote machine
-        await scpFile(ctx.MediaRemoteHost, source, dest);
+        await copyRemoteFileViaScp({
+          remoteHost: ctx.MediaRemoteHost,
+          remotePath: source,
+          localPath: dest,
+        });
       } else {
         await fs.copyFile(source, dest);
       }
-      // For sandbox use relative path, for remote cache use absolute path
+      // For sandbox use relative path, otherwise use absolute path
       const stagedPath = sandbox ? path.posix.join("media", "inbound", fileName) : dest;
       staged.set(source, stagedPath);
     }
@@ -123,33 +130,4 @@ export async function stageSandboxMedia(params: {
   } catch (err) {
     logVerbose(`Failed to stage inbound media for sandbox: ${String(err)}`);
   }
-}
-
-async function scpFile(remoteHost: string, remotePath: string, localPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "/usr/bin/scp",
-      [
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        `${remoteHost}:${remotePath}`,
-        localPath,
-      ],
-      { stdio: ["ignore", "ignore", "pipe"] },
-    );
-
-    let stderr = "";
-    child.stderr?.setEncoding("utf8");
-    child.stderr?.on("data", (chunk) => {
-      stderr += chunk;
-    });
-
-    child.once("error", reject);
-    child.once("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`scp failed (${code}): ${stderr.trim()}`));
-    });
-  });
 }

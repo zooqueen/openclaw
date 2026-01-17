@@ -14,7 +14,7 @@ export type IMessageAccountConfig = {
   cliPath?: string;
   /** Optional Messages db path override. */
   dbPath?: string;
-  /** Remote host for SCP when attachments live on a different machine (e.g., clawdbot@192.168.64.3). */
+  /** Remote host for SCP when attachments live on a different machine (e.g., user@gateway-host). */
   remoteHost?: string;
   /** Optional default send service (imessage|sms|auto). */
   service?: "imessage" | "sms" | "auto";

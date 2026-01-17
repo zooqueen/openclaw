@@ -41,7 +41,7 @@ import {
   upsertChannelPairingRequest,
 } from "../../pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
-import { truncateUtf16Safe } from "../../utils.js";
+import { resolveUserPath, truncateUtf16Safe } from "../../utils.js";
 import { resolveIMessageAccount } from "../accounts.js";
 import { createIMessageRpcClient } from "../client.js";
 import { probeIMessage } from "../probe.js";
@@ -63,19 +63,53 @@ import type { IMessagePayload, MonitorIMessageOpts } from "./types.js";
  */
 async function detectRemoteHostFromCliPath(cliPath: string): Promise<string | undefined> {
   try {
-    // Expand ~ to home directory
-    const expanded = cliPath.startsWith("~")
-      ? cliPath.replace(/^~/, process.env.HOME ?? "")
-      : cliPath;
+    const expanded = resolveUserPath(cliPath);
+    const stat = await fs.stat(expanded).catch(() => null);
+    if (!stat?.isFile()) return undefined;
+
     const content = await fs.readFile(expanded, "utf8");
+    if (!content.includes("ssh")) return undefined;
 
-    // Match user@host pattern first (e.g., clawdbot@192.168.64.3)
-    const userHostMatch = content.match(/\bssh\b[^\n]*?\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+)/);
-    if (userHostMatch) return userHostMatch[1];
+    const tokensFromLine = (line: string): string[] =>
+      line.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+    const stripQuotes = (token: string): string => token.replace(/^['"]|['"]$/g, "");
+    const optsWithValue = new Set([
+      "-b",
+      "-c",
+      "-D",
+      "-E",
+      "-F",
+      "-I",
+      "-i",
+      "-J",
+      "-L",
+      "-o",
+      "-p",
+      "-R",
+      "-S",
+      "-W",
+      "-w",
+    ]);
 
-    // Fallback: match host-only before imsg command (e.g., ssh -T mac-mini imsg)
-    const hostOnlyMatch = content.match(/\bssh\b[^\n]*?\s+([a-zA-Z][a-zA-Z0-9._-]*)\s+\S*\bimsg\b/);
-    return hostOnlyMatch?.[1];
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      if (!line.includes("ssh") || !line.includes("imsg")) continue;
+      const tokens = tokensFromLine(line).map(stripQuotes).filter(Boolean);
+      const sshIndex = tokens.findIndex((token) => token === "ssh" || token.endsWith("/ssh"));
+      if (sshIndex < 0) continue;
+      for (let idx = sshIndex + 1; idx < tokens.length; idx += 1) {
+        const token = tokens[idx] ?? "";
+        if (!token) continue;
+        if (token.startsWith("-")) {
+          if (optsWithValue.has(token)) idx += 1;
+          continue;
+        }
+        if (token === "imsg" || token.endsWith("/imsg")) break;
+        return token;
+      }
+    }
+    return undefined;
   } catch {
     return undefined;
   }

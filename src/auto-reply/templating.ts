@@ -38,7 +38,7 @@ export type MsgContext = {
   MediaPaths?: string[];
   MediaUrls?: string[];
   MediaTypes?: string[];
-  /** Remote host for SCP when media lives on a different machine (e.g., clawdbot@192.168.64.3). */
+  /** Internal: remote host for inbound media fetch (iMessage SSH wrappers). */
   MediaRemoteHost?: string;
   Transcript?: string;
   ChatType?: string;

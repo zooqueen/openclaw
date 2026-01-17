@@ -108,7 +108,7 @@ If you want iMessage on another Mac, set `channels.imessage.cliPath` to a wrappe
 Example wrapper:
 ```bash
 #!/usr/bin/env bash
-exec ssh -T mac-mini imsg "$@"
+exec ssh -T gateway-host imsg "$@"
 ```
 
 **Remote attachments:** When `cliPath` points to a remote host via SSH, attachment paths in the Messages database reference files on the remote machine. Clawdbot can automatically fetch these over SCP by setting `channels.imessage.remoteHost`:
@@ -118,7 +118,7 @@ exec ssh -T mac-mini imsg "$@"
   channels: {
     imessage: {
       cliPath: "~/imsg-ssh",                     // SSH wrapper to remote Mac
-      remoteHost: "clawdbot@192.168.64.3",       // for SCP file transfer
+      remoteHost: "user@gateway-host",           // for SCP file transfer
       includeAttachments: true
     }
   }
@@ -198,7 +198,7 @@ Provider options:
 - `channels.imessage.enabled`: enable/disable channel startup.
 - `channels.imessage.cliPath`: path to `imsg`.
 - `channels.imessage.dbPath`: Messages DB path.
-- `channels.imessage.remoteHost`: SSH host for SCP attachment transfer when `cliPath` points to a remote Mac (e.g., `clawdbot@192.168.64.3`). Auto-detected from SSH wrapper if not set.
+- `channels.imessage.remoteHost`: SSH host for SCP attachment transfer when `cliPath` points to a remote Mac (e.g., `user@gateway-host`). Auto-detected from SSH wrapper if not set.
 - `channels.imessage.service`: `imessage | sms | auto`.
 - `channels.imessage.region`: SMS region.
 - `channels.imessage.dmPolicy`: `pairing | allowlist | open | disabled` (default: pairing).
