@@ -6,6 +6,7 @@ Docs: https://docs.clawd.bot
 
 ### Changes
 - macOS: strip prerelease/build suffixes when parsing gateway semver patches. (#1110) — thanks @zerone0x.
+- Docs: remove duplicate logging nav entry. (#1106) — thanks @gumadeiras.
 
 ## 2026.1.16-2
 
