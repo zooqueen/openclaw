@@ -30,6 +30,7 @@ Docs: https://docs.clawd.bot
 - macOS: avoid touching launchd in Remote over SSH so quitting the app no longer disables the remote gateway. (#1105)
 - Memory: index atomically so failed reindex preserves the previous memory database. (#1151)
 - Memory: avoid sqlite-vec unique constraint failures when reindexing duplicate chunk ids. (#1151)
+- Voice call: separate TwiML fetches from status callbacks to avoid stuck calls. (#1180) — thanks @andrew-kurin.
 
 ## 2026.1.18-5
 
@@ -47,6 +48,7 @@ Docs: https://docs.clawd.bot
 - macOS: avoid touching launchd in Remote over SSH so quitting the app no longer disables the remote gateway. (#1105)
 - Memory: index atomically so failed reindex preserves the previous memory database. (#1151)
 - Memory: avoid sqlite-vec unique constraint failures when reindexing duplicate chunk ids. (#1151)
+- Voice call: separate TwiML fetches from status callbacks to avoid stuck calls. (#1180) — thanks @andrew-kurin.
 
 ## 2026.1.18-5
 

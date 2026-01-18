@@ -84,10 +84,13 @@ export class TwilioProvider implements VoiceCallProvider {
     const webhookUrl = this.callWebhookUrls.get(providerCallId);
     if (!webhookUrl) return;
 
-    const callIdMatch = webhookUrl.match(/callId=([^&]+)/);
-    if (!callIdMatch) return;
-
-    this.deleteStoredTwiml(callIdMatch[1]);
+    try {
+      const callId = new URL(webhookUrl).searchParams.get("callId");
+      if (!callId) return;
+      this.deleteStoredTwiml(callId);
+    } catch {
+      // Ignore malformed URLs; best-effort cleanup only.
+    }
   }
 
   constructor(config: TwilioConfig, options: TwilioProviderOptions = {}) {
@@ -177,7 +180,14 @@ export class TwilioProvider implements VoiceCallProvider {
         typeof ctx.query?.callId === "string" && ctx.query.callId.trim()
           ? ctx.query.callId.trim()
           : undefined;
-      const event = this.normalizeEvent(params, callIdFromQuery);
+      const requestType =
+        typeof ctx.query?.type === "string" && ctx.query.type.trim()
+          ? ctx.query.type.trim()
+          : undefined;
+      const isTwimlRequest = requestType === "twiml";
+      const event = isTwimlRequest
+        ? null
+        : this.normalizeEvent(params, callIdFromQuery);
 
       // For Twilio, we must return TwiML. Most actions are driven by Calls API updates,
       // so the webhook response is typically a pause to keep the call alive.
@@ -292,12 +302,16 @@ export class TwilioProvider implements VoiceCallProvider {
       typeof ctx.query?.callId === "string" && ctx.query.callId.trim()
         ? ctx.query.callId.trim()
         : undefined;
+    const requestType =
+      typeof ctx.query?.type === "string" && ctx.query.type.trim()
+        ? ctx.query.type.trim()
+        : undefined;
 
     // Avoid logging webhook params/TwiML (may contain PII).
 
     // Handle initial TwiML request (when Twilio first initiates the call)
     // Check if we have stored TwiML for this call (notify mode)
-    if (callIdFromQuery) {
+    if (callIdFromQuery && requestType !== "status") {
       const storedTwiml = this.twimlStorage.get(callIdFromQuery);
       if (storedTwiml) {
         // Clean up after serving (one-time use)
@@ -373,12 +387,14 @@ export class TwilioProvider implements VoiceCallProvider {
    * Otherwise, uses webhook URL for dynamic TwiML.
    */
   async initiateCall(input: InitiateCallInput): Promise<InitiateCallResult> {
-    const url = new URL(input.webhookUrl);
-    url.searchParams.set("callId", input.callId);
+    const webhookUrl = new URL(input.webhookUrl);
+    webhookUrl.searchParams.set("callId", input.callId);
+
+    const twimlUrl = new URL(webhookUrl);
+    twimlUrl.searchParams.set("type", "twiml");
 
     // Create separate URL for status callbacks (required by Twilio)
-    const statusUrl = new URL(input.webhookUrl);
-    statusUrl.searchParams.set("callId", input.callId);
+    const statusUrl = new URL(webhookUrl);
     statusUrl.searchParams.set("type", "status"); // Differentiate from TwiML requests
 
     // Store TwiML content if provided (for notify mode)
@@ -392,7 +408,7 @@ export class TwilioProvider implements VoiceCallProvider {
     const params: Record<string, string> = {
       To: input.to,
       From: input.from,
-      Url: url.toString(), // TwiML serving endpoint
+      Url: twimlUrl.toString(), // TwiML serving endpoint
       StatusCallback: statusUrl.toString(), // Separate status callback endpoint
       StatusCallbackEvent: "initiated ringing answered completed",
       Timeout: "30",
@@ -403,7 +419,7 @@ export class TwilioProvider implements VoiceCallProvider {
       params,
     );
 
-    this.callWebhookUrls.set(result.sid, url.toString());
+    this.callWebhookUrls.set(result.sid, webhookUrl.toString());
 
     return {
       providerCallId: result.sid,

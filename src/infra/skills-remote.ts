@@ -36,7 +36,11 @@ function extractErrorMessage(err: unknown): string | undefined {
   if (typeof err === "object" && "message" in err && typeof err.message === "string") {
     return err.message;
   }
-  return String(err);
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return undefined;
+  }
 }
 
 function logRemoteBinProbeFailure(nodeId: string, err: unknown) {
