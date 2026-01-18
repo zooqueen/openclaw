@@ -29,12 +29,15 @@ type MemoryConfig = {
   autoRecall?: boolean;
 };
 
+const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "other"] as const;
+type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+
 type MemoryEntry = {
   id: string;
   text: string;
   vector: number[];
   importance: number;
-  category: "preference" | "fact" | "decision" | "entity" | "other";
+  category: MemoryCategory;
   createdAt: number;
 };
 
@@ -60,13 +63,14 @@ const memoryConfigSchema = {
       throw new Error("embedding.apiKey is required");
     }
 
+    const model =
+      typeof embedding.model === "string" ? embedding.model : "text-embedding-3-small";
+    ensureSupportedEmbeddingModel(model);
+
     return {
       embedding: {
         provider: "openai",
-        model:
-          typeof embedding.model === "string"
-            ? embedding.model
-            : "text-embedding-3-small",
+        model,
         apiKey: resolveEnvVars(embedding.apiKey),
       },
       dbPath:
@@ -105,6 +109,28 @@ const memoryConfigSchema = {
   },
 };
 
+const EMBEDDING_DIMENSIONS: Record<string, number> = {
+  "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
+};
+
+function ensureSupportedEmbeddingModel(model: string): void {
+  if (!EMBEDDING_DIMENSIONS[model]) {
+    throw new Error(`Unsupported embedding model: ${model}`);
+  }
+}
+
+function stringEnum<T extends readonly string[]>(
+  values: T,
+  options: { description?: string } = {},
+) {
+  return Type.Unsafe<T[number]>({
+    type: "string",
+    enum: [...values],
+    ...options,
+  });
+}
+
 function resolveEnvVars(value: string): string {
   return value.replace(/\$\{([^}]+)\}/g, (_, envVar) => {
     const envValue = process.env[envVar];
@@ -120,14 +146,15 @@ function resolveEnvVars(value: string): string {
 // ============================================================================
 
 const TABLE_NAME = "memories";
-const VECTOR_DIM = 1536; // OpenAI text-embedding-3-small
-
 class MemoryDB {
   private db: lancedb.Connection | null = null;
   private table: lancedb.Table | null = null;
   private initPromise: Promise<void> | null = null;
 
-  constructor(private readonly dbPath: string) {}
+  constructor(
+    private readonly dbPath: string,
+    private readonly vectorDim: number,
+  ) {}
 
   private async ensureInitialized(): Promise<void> {
     if (this.table) return;
@@ -148,7 +175,7 @@ class MemoryDB {
         {
           id: "__schema__",
           text: "",
-          vector: new Array(VECTOR_DIM).fill(0),
+          vector: new Array(this.vectorDim).fill(0),
           importance: 0,
           category: "other",
           createdAt: 0,
@@ -274,9 +301,7 @@ function shouldCapture(text: string): boolean {
   return MEMORY_TRIGGERS.some((r) => r.test(text));
 }
 
-function detectCategory(
-  text: string,
-): "preference" | "fact" | "decision" | "entity" | "other" {
+function detectCategory(text: string): MemoryCategory {
   const lower = text.toLowerCase();
   if (/prefer|radši|like|love|hate|want/i.test(lower)) return "preference";
   if (/rozhodli|decided|will use|budeme/i.test(lower)) return "decision";
@@ -299,10 +324,12 @@ const memoryPlugin = {
 
   register(api: ClawdbotPluginApi) {
     const cfg = memoryConfigSchema.parse(api.pluginConfig);
-    const db = new MemoryDB(cfg.dbPath!);
-    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!);
+  const resolvedDbPath = api.resolvePath(cfg.dbPath!);
+  const vectorDim = EMBEDDING_DIMENSIONS[cfg.embedding.model ?? "text-embedding-3-small"];
+  const db = new MemoryDB(resolvedDbPath, vectorDim);
+  const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!);
 
-    api.logger.info(`memory: plugin registered (db: ${cfg.dbPath}, lazy init)`);
+  api.logger.info(`memory: plugin registered (db: ${resolvedDbPath}, lazy init)`);
 
     // ========================================================================
     // Tools
@@ -369,15 +396,7 @@ const memoryPlugin = {
           importance: Type.Optional(
             Type.Number({ description: "Importance 0-1 (default: 0.7)" }),
           ),
-          category: Type.Optional(
-            Type.Union([
-              Type.Literal("preference"),
-              Type.Literal("fact"),
-              Type.Literal("decision"),
-              Type.Literal("entity"),
-              Type.Literal("other"),
-            ]),
-          ),
+          category: Type.Optional(stringEnum(MEMORY_CATEGORIES)),
         }),
         async execute(_toolCallId, params) {
           const {
@@ -460,9 +479,9 @@ const memoryPlugin = {
               };
             }
 
-            const list = results
-              .map((r) => `- [${r.entry.id.slice(0, 8)}] ${r.entry.text.slice(0, 60)}...`)
-              .join("\n");
+          const list = results
+            .map((r) => `- [${r.entry.id.slice(0, 8)}] ${r.entry.text.slice(0, 60)}...`)
+            .join("\n");
 
             // Strip vector data for serialization
             const sanitizedCandidates = results.map((r) => ({
@@ -658,7 +677,7 @@ const memoryPlugin = {
       id: "memory",
       start: () => {
         api.logger.info(
-          `memory: initialized (db: ${cfg.dbPath}, model: ${cfg.embedding.model})`,
+          `memory: initialized (db: ${resolvedDbPath}, model: ${cfg.embedding.model})`,
         );
       },
       stop: () => {

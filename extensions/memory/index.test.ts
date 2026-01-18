@@ -9,7 +9,6 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
