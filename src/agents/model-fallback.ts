@@ -176,6 +176,16 @@ function resolveFallbackCandidates(params: {
   return candidates;
 }
 
+export function hasModelFallbackCandidates(params: {
+  cfg: ClawdbotConfig | undefined;
+  provider: string;
+  model: string;
+  /** Optional explicit fallbacks list; when provided (even empty), replaces agents.defaults.model.fallbacks. */
+  fallbacksOverride?: string[];
+}): boolean {
+  return resolveFallbackCandidates(params).length > 1;
+}
+
 export async function runWithModelFallback<T>(params: {
   cfg: ClawdbotConfig | undefined;
   provider: string;

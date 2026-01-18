@@ -10,6 +10,9 @@ Docs: https://docs.clawd.bot
 - Docs: document plugin slots and memory plugin behavior.
 - Plugins: migrate bundled messaging extensions to the plugin SDK; resolve plugin-sdk imports in loader.
 
+### Fixes
+- Agents: trigger model fallback for prompt-phase failover errors, respecting per-agent overrides. (#1136) — thanks @cheeeee.
+
 ## 2026.1.17-5
 
 ### Changes

@@ -4,6 +4,7 @@ import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { resolveUserPath } from "../../utils.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
 import { resolveClawdbotAgentDir } from "../agent-paths.js";
+import { resolveAgentModelFallbacksOverride, resolveSessionAgentId } from "../agent-scope.js";
 import {
   markAuthProfileFailure,
   markAuthProfileGood,
@@ -16,12 +17,13 @@ import {
   resolveContextWindowInfo,
 } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
-import { FailoverError, resolveFailoverStatus } from "../failover-error.js";
+import { FailoverError, coerceToFailoverError, resolveFailoverStatus } from "../failover-error.js";
 import {
   ensureAuthProfileStore,
   getApiKeyForModel,
   resolveAuthProfileOrder,
 } from "../model-auth.js";
+import { hasModelFallbackCandidates } from "../model-fallback.js";
 import { ensureClawdbotModelsJson } from "../models-config.js";
 import {
   classifyFailoverReason,
@@ -30,7 +32,6 @@ import {
   isCompactionFailureError,
   isContextOverflowError,
   isFailoverAssistantError,
-  isFailoverErrorMessage,
   isRateLimitAssistantError,
   isTimeoutErrorMessage,
   pickFallbackThinkingLevel,
@@ -88,6 +89,20 @@ export async function runEmbeddedPiAgent(
       if (!model) {
         throw new Error(error ?? `Unknown model: ${provider}/${modelId}`);
       }
+      const sessionAgentId = resolveSessionAgentId({
+        sessionKey: params.sessionKey,
+        config: params.config,
+      });
+      const fallbacksOverride = resolveAgentModelFallbacksOverride(
+        params.config ?? {},
+        sessionAgentId,
+      );
+      const hasModelFallbacks = hasModelFallbackCandidates({
+        cfg: params.config,
+        provider,
+        model: modelId,
+        fallbacksOverride,
+      });
 
       const ctxInfo = resolveContextWindowInfo({
         cfg: params.config,
@@ -290,7 +305,14 @@ export async function runEmbeddedPiAgent(
                 },
               };
             }
-            const promptFailoverReason = classifyFailoverReason(errorText);
+            const promptFailoverError =
+              coerceToFailoverError(promptError, {
+                provider,
+                model: modelId,
+                profileId: lastProfileId,
+              }) ?? null;
+            const promptFailoverReason =
+              promptFailoverError?.reason ?? classifyFailoverReason(errorText);
             if (promptFailoverReason && promptFailoverReason !== "timeout" && lastProfileId) {
               await markAuthProfileFailure({
                 store: authStore,
@@ -301,7 +323,7 @@ export async function runEmbeddedPiAgent(
               });
             }
             if (
-              isFailoverErrorMessage(errorText) &&
+              promptFailoverReason &&
               promptFailoverReason !== "timeout" &&
               (await advanceAuthProfile())
             ) {
@@ -318,17 +340,14 @@ export async function runEmbeddedPiAgent(
               thinkLevel = fallbackThinking;
               continue;
             }
-            // FIX: Throw FailoverError for prompt errors when fallbacks configured
-            // This enables model fallback for quota/rate limit errors during prompt submission
-            const promptFallbackConfigured =
-              (params.config?.agents?.defaults?.model?.fallbacks?.length ?? 0) > 0;
-            if (promptFallbackConfigured && isFailoverErrorMessage(errorText)) {
+            if (promptFailoverReason && hasModelFallbacks) {
+              if (promptFailoverError) throw promptFailoverError;
               throw new FailoverError(errorText, {
-                reason: promptFailoverReason ?? "unknown",
+                reason: promptFailoverReason,
                 provider,
                 model: modelId,
                 profileId: lastProfileId,
-                status: resolveFailoverStatus(promptFailoverReason ?? "unknown"),
+                status: resolveFailoverStatus(promptFailoverReason),
               });
             }
             throw promptError;
@@ -346,8 +365,6 @@ export async function runEmbeddedPiAgent(
             continue;
           }
 
-          const fallbackConfigured =
-            (params.config?.agents?.defaults?.model?.fallbacks?.length ?? 0) > 0;
           const authFailure = isAuthAssistantError(lastAssistant);
           const rateLimitFailure = isRateLimitAssistantError(lastAssistant);
           const failoverFailure = isFailoverAssistantError(lastAssistant);
@@ -385,7 +402,7 @@ export async function runEmbeddedPiAgent(
             const rotated = await advanceAuthProfile();
             if (rotated) continue;
 
-            if (fallbackConfigured) {
+            if (hasModelFallbacks) {
               // Prefer formatted error message (user-friendly) over raw errorMessage
               const message =
                 (lastAssistant

@@ -45,13 +45,21 @@ export function createPluginRuntime(): PluginRuntime {
         hasControlCommand,
       },
       reply: {
-        dispatchReplyWithBufferedBlockDispatcher,
-        createReplyDispatcherWithTyping,
+        dispatchReplyWithBufferedBlockDispatcher: async (params) => {
+          await dispatchReplyWithBufferedBlockDispatcher(
+            params as Parameters<typeof dispatchReplyWithBufferedBlockDispatcher>[0],
+          );
+        },
+        createReplyDispatcherWithTyping: (...args) =>
+          createReplyDispatcherWithTyping(
+            ...(args as Parameters<typeof createReplyDispatcherWithTyping>),
+          ),
         resolveEffectiveMessagesConfig,
         resolveHumanDelayConfig,
       },
       routing: {
-        resolveAgentRoute,
+        resolveAgentRoute: (params) =>
+          resolveAgentRoute(params as Parameters<typeof resolveAgentRoute>[0]),
       },
       pairing: {
         buildPairingReply,
@@ -60,19 +68,61 @@ export function createPluginRuntime(): PluginRuntime {
       },
       media: {
         fetchRemoteMedia,
-        saveMediaBuffer,
+        saveMediaBuffer: (buffer, contentType, direction, maxBytes) =>
+          saveMediaBuffer(
+            Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer),
+            contentType,
+            direction,
+            maxBytes,
+          ),
       },
       mentions: {
         buildMentionRegexes,
         matchesMentionPatterns,
       },
       groups: {
-        resolveGroupPolicy: resolveChannelGroupPolicy,
-        resolveRequireMention: resolveChannelGroupRequireMention,
+        resolveGroupPolicy: (cfg, channel, accountId, groupId) =>
+          resolveChannelGroupPolicy({
+            cfg,
+            channel: channel as Parameters<typeof resolveChannelGroupPolicy>[0]["channel"],
+            accountId,
+            groupId,
+          }),
+        resolveRequireMention: (cfg, channel, accountId, groupId, override) =>
+          resolveChannelGroupRequireMention({
+            cfg,
+            channel: channel as Parameters<typeof resolveChannelGroupRequireMention>[0]["channel"],
+            accountId,
+            groupId,
+            requireMentionOverride: override,
+          }),
       },
       debounce: {
-        createInboundDebouncer,
-        resolveInboundDebounceMs,
+        createInboundDebouncer: (opts) => {
+          const keys = new Set<string>();
+          const debouncer = createInboundDebouncer({
+            debounceMs: opts.debounceMs,
+            buildKey: (item) => {
+              const key = opts.buildKey(item);
+              if (key) keys.add(key);
+              return key;
+            },
+            shouldDebounce: opts.shouldDebounce,
+            onFlush: opts.onFlush,
+            onError: opts.onError ? (err) => opts.onError?.(err) : undefined,
+          });
+          return {
+            push: (value) => {
+              void debouncer.enqueue(value);
+            },
+            flush: async () => {
+              const pending = Array.from(keys);
+              keys.clear();
+              await Promise.all(pending.map((key) => debouncer.flushKey(key)));
+            },
+          };
+        },
+        resolveInboundDebounceMs: (cfg, channel) => resolveInboundDebounceMs({ cfg, channel }),
       },
       commands: {
         resolveCommandAuthorizedFromAuthorizers,
@@ -81,7 +131,10 @@ export function createPluginRuntime(): PluginRuntime {
     logging: {
       shouldLogVerbose,
       getChildLogger: (bindings, opts) => {
-        const logger = getChildLogger(bindings, opts);
+        const logger = getChildLogger(
+          bindings,
+          opts as Parameters<typeof getChildLogger>[1],
+        );
         return {
           debug: (message) => logger.debug?.(message),
           info: (message) => logger.info(message),
@@ -91,7 +144,7 @@ export function createPluginRuntime(): PluginRuntime {
       },
     },
     state: {
-      resolveStateDir,
+      resolveStateDir: () => resolveStateDir(),
     },
   };
 }

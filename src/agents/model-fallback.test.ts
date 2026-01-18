@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ClawdbotConfig } from "../config/config.js";
-import { runWithModelFallback } from "./model-fallback.js";
+import { hasModelFallbackCandidates, runWithModelFallback } from "./model-fallback.js";
 
 function makeCfg(overrides: Partial<ClawdbotConfig> = {}): ClawdbotConfig {
   return {
@@ -308,5 +308,75 @@ describe("runWithModelFallback", () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(result.provider).toBe("openai");
     expect(result.model).toBe("gpt-4.1-mini");
+  });
+});
+
+describe("hasModelFallbackCandidates", () => {
+  it("returns false when only the primary candidate is available", () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "openai/gpt-4.1-mini",
+            fallbacks: [],
+          },
+        },
+      },
+    });
+
+    expect(
+      hasModelFallbackCandidates({
+        cfg,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when the configured primary differs from the requested model", () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "openai/gpt-4.1-mini",
+            fallbacks: [],
+          },
+        },
+      },
+    });
+
+    expect(
+      hasModelFallbackCandidates({
+        cfg,
+        provider: "openrouter",
+        model: "meta-llama/llama-3.3-70b:free",
+      }),
+    ).toBe(true);
+  });
+
+  it("honors an explicit empty fallbacksOverride", () => {
+    const cfg = makeCfg();
+
+    expect(
+      hasModelFallbackCandidates({
+        cfg,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        fallbacksOverride: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when fallbacksOverride provides extra candidates", () => {
+    const cfg = makeCfg();
+
+    expect(
+      hasModelFallbackCandidates({
+        cfg,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        fallbacksOverride: ["openai/gpt-4.1"],
+      }),
+    ).toBe(true);
   });
 });
