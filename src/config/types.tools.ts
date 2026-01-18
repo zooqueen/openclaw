@@ -236,7 +236,7 @@ export type ToolsConfig = {
       perplexity?: {
         /** API key for Perplexity or OpenRouter (defaults to PERPLEXITY_API_KEY or OPENROUTER_API_KEY env var). */
         apiKey?: string;
-        /** Base URL for API requests (defaults to OpenRouter: https://openrouter.ai/api/v1). */
+        /** Base URL for API requests (defaults to Perplexity if PERPLEXITY_API_KEY is set, otherwise OpenRouter). */
         baseUrl?: string;
         /** Model to use (defaults to "perplexity/sonar-pro"). */
         model?: string;

@@ -375,29 +375,52 @@ export async function finalizeOnboardingWizard(options: FinalizeOnboardingOption
     );
   }
 
-  const webSearchKey = (nextConfig.tools?.web?.search?.apiKey ?? "").trim();
-  const webSearchEnv = (process.env.BRAVE_API_KEY ?? "").trim();
-  const hasWebSearchKey = Boolean(webSearchKey || webSearchEnv);
+  const webSearchProvider =
+    nextConfig.tools?.web?.search?.provider === "perplexity" ? "perplexity" : "brave";
+  const braveKey = (nextConfig.tools?.web?.search?.apiKey ?? "").trim();
+  const braveEnv = (process.env.BRAVE_API_KEY ?? "").trim();
+  const perplexityKey = (nextConfig.tools?.web?.search?.perplexity?.apiKey ?? "").trim();
+  const perplexityEnv = (process.env.PERPLEXITY_API_KEY ?? "").trim();
+  const openRouterEnv = (process.env.OPENROUTER_API_KEY ?? "").trim();
+  const perplexityBaseUrl = (nextConfig.tools?.web?.search?.perplexity?.baseUrl ?? "").trim();
+  const hasWebSearchKey =
+    webSearchProvider === "perplexity"
+      ? Boolean(perplexityKey || perplexityEnv || openRouterEnv)
+      : Boolean(braveKey || braveEnv);
   await prompter.note(
     hasWebSearchKey
       ? [
           "Web search is enabled, so your agent can look things up online when needed.",
           "",
-          webSearchKey
-            ? "API key: stored in config (tools.web.search.apiKey)."
-            : "API key: provided via BRAVE_API_KEY env var (Gateway environment).",
+          webSearchProvider === "perplexity"
+            ? perplexityKey
+              ? "API key: stored in config (tools.web.search.perplexity.apiKey)."
+              : perplexityBaseUrl.includes("openrouter.ai")
+                ? "API key: provided via OPENROUTER_API_KEY env var (Gateway environment)."
+                : perplexityBaseUrl.includes("api.perplexity.ai")
+                  ? "API key: provided via PERPLEXITY_API_KEY env var (Gateway environment)."
+                  : perplexityEnv
+                    ? "API key: provided via PERPLEXITY_API_KEY env var (Gateway environment)."
+                    : "API key: provided via OPENROUTER_API_KEY env var (Gateway environment)."
+            : braveKey
+              ? "API key: stored in config (tools.web.search.apiKey)."
+              : "API key: provided via BRAVE_API_KEY env var (Gateway environment).",
           "Docs: https://docs.clawd.bot/tools/web",
         ].join("\n")
       : [
           "If you want your agent to be able to search the web, you’ll need an API key.",
           "",
-          "Clawdbot uses Brave Search for the `web_search` tool. Without a Brave Search API key, web search won’t work.",
+          webSearchProvider === "perplexity"
+            ? "Clawdbot can use Perplexity Sonar for the `web_search` tool. Without a Perplexity/OpenRouter API key, web search won’t work."
+            : "Clawdbot uses Brave Search for the `web_search` tool. Without a Brave Search API key, web search won’t work.",
           "",
           "Set it up interactively:",
           "- Run: clawdbot configure --section web",
-          "- Enable web_search and paste your Brave Search API key",
+          "- Enable web_search and paste your API key",
           "",
-          "Alternative: set BRAVE_API_KEY in the Gateway environment (no config changes).",
+          webSearchProvider === "perplexity"
+            ? "Alternative: set PERPLEXITY_API_KEY or OPENROUTER_API_KEY in the Gateway environment (no config changes)."
+            : "Alternative: set BRAVE_API_KEY in the Gateway environment (no config changes).",
           "Docs: https://docs.clawd.bot/tools/web",
         ].join("\n"),
     "Web search (optional)",

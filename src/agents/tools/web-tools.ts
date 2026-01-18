@@ -20,7 +20,8 @@ const DEFAULT_FETCH_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
-const DEFAULT_PERPLEXITY_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_PERPLEXITY_MODEL = "perplexity/sonar-pro";
 
 type WebSearchConfig = NonNullable<ClawdbotConfig["tools"]>["web"] extends infer Web
@@ -198,8 +199,27 @@ function resolveFirecrawlMaxAgeMsOrDefault(firecrawl?: FirecrawlFetchConfig): nu
   return DEFAULT_FIRECRAWL_MAX_AGE_MS;
 }
 
-function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
+function missingSearchKeyPayload(
+  provider: (typeof SEARCH_PROVIDERS)[number],
+  perplexityBaseUrl?: string,
+) {
   if (provider === "perplexity") {
+    if (perplexityBaseUrl && isOpenRouterBaseUrl(perplexityBaseUrl)) {
+      return {
+        error: "missing_openrouter_api_key",
+        message:
+          "web_search (perplexity via OpenRouter) needs an API key. Set OPENROUTER_API_KEY in the Gateway environment, or configure tools.web.search.perplexity.apiKey.",
+        docs: "https://docs.clawd.bot/tools/web",
+      };
+    }
+    if (perplexityBaseUrl && isPerplexityBaseUrl(perplexityBaseUrl)) {
+      return {
+        error: "missing_perplexity_api_key",
+        message:
+          "web_search (perplexity direct) needs an API key. Set PERPLEXITY_API_KEY in the Gateway environment, or configure tools.web.search.perplexity.apiKey.",
+        docs: "https://docs.clawd.bot/tools/web",
+      };
+    }
     return {
       error: "missing_perplexity_api_key",
       message:
@@ -231,6 +251,32 @@ type PerplexityConfig = {
   model?: string;
 };
 
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function isPerplexityBaseUrl(value: string): boolean {
+  try {
+    return new URL(value).hostname === "api.perplexity.ai";
+  } catch {
+    return false;
+  }
+}
+
+function isOpenRouterBaseUrl(value: string): boolean {
+  try {
+    return new URL(value).hostname === "openrouter.ai";
+  } catch {
+    return false;
+  }
+}
+
+function inferPerplexityBaseUrlFromKey(apiKey: string): string | undefined {
+  if (apiKey.startsWith("pplx-")) return DEFAULT_PERPLEXITY_BASE_URL;
+  if (apiKey.startsWith("sk-or-")) return DEFAULT_OPENROUTER_BASE_URL;
+  return undefined;
+}
+
 function resolvePerplexityConfig(search?: WebSearchConfig): PerplexityConfig {
   if (!search || typeof search !== "object") return {};
   const perplexity = "perplexity" in search ? search.perplexity : undefined;
@@ -238,14 +284,24 @@ function resolvePerplexityConfig(search?: WebSearchConfig): PerplexityConfig {
   return perplexity as PerplexityConfig;
 }
 
-function resolvePerplexityApiKey(perplexity?: PerplexityConfig): string | undefined {
+function resolvePerplexityApiKey(
+  perplexity: PerplexityConfig | undefined,
+  baseUrl: string,
+): string | undefined {
   const fromConfig =
     perplexity && "apiKey" in perplexity && typeof perplexity.apiKey === "string"
       ? perplexity.apiKey.trim()
       : "";
+  if (fromConfig) return fromConfig;
   const fromEnvPerplexity = (process.env.PERPLEXITY_API_KEY ?? "").trim();
   const fromEnvOpenRouter = (process.env.OPENROUTER_API_KEY ?? "").trim();
-  return fromConfig || fromEnvPerplexity || fromEnvOpenRouter || undefined;
+  if (isPerplexityBaseUrl(baseUrl)) {
+    return fromEnvPerplexity || undefined;
+  }
+  if (isOpenRouterBaseUrl(baseUrl)) {
+    return fromEnvOpenRouter || undefined;
+  }
+  return fromEnvPerplexity || fromEnvOpenRouter || undefined;
 }
 
 function resolvePerplexityBaseUrl(perplexity?: PerplexityConfig): string {
@@ -253,7 +309,20 @@ function resolvePerplexityBaseUrl(perplexity?: PerplexityConfig): string {
     perplexity && "baseUrl" in perplexity && typeof perplexity.baseUrl === "string"
       ? perplexity.baseUrl.trim()
       : "";
-  return fromConfig || DEFAULT_PERPLEXITY_BASE_URL;
+  if (fromConfig) return normalizeBaseUrl(fromConfig);
+  const fromConfigKey =
+    perplexity && "apiKey" in perplexity && typeof perplexity.apiKey === "string"
+      ? perplexity.apiKey.trim()
+      : "";
+  const inferredFromConfigKey = fromConfigKey
+    ? inferPerplexityBaseUrlFromKey(fromConfigKey)
+    : undefined;
+  if (inferredFromConfigKey) return inferredFromConfigKey;
+  const fromEnvPerplexity = (process.env.PERPLEXITY_API_KEY ?? "").trim();
+  const fromEnvOpenRouter = (process.env.OPENROUTER_API_KEY ?? "").trim();
+  if (fromEnvPerplexity) return DEFAULT_PERPLEXITY_BASE_URL;
+  if (fromEnvOpenRouter) return DEFAULT_OPENROUTER_BASE_URL;
+  return DEFAULT_OPENROUTER_BASE_URL;
 }
 
 function resolvePerplexityModel(perplexity?: PerplexityConfig): string {
@@ -545,6 +614,13 @@ type PerplexitySearchResponse = {
   citations?: string[];
 };
 
+function resolvePerplexityEndpoint(baseUrl: string): string {
+  const trimmed = normalizeBaseUrl(baseUrl);
+  if (!trimmed) return `${DEFAULT_OPENROUTER_BASE_URL}/chat/completions`;
+  if (trimmed.endsWith("/chat/completions")) return trimmed;
+  return `${trimmed}/chat/completions`;
+}
+
 async function runPerplexitySearch(params: {
   query: string;
   apiKey: string;
@@ -552,7 +628,7 @@ async function runPerplexitySearch(params: {
   model: string;
   timeoutSeconds: number;
 }): Promise<{ content: string; citations: string[] }> {
-  const endpoint = `${params.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const endpoint = resolvePerplexityEndpoint(params.baseUrl);
 
   const res = await fetch(endpoint, {
     method: "POST",
@@ -599,8 +675,12 @@ async function runWebSearch(params: {
   perplexityBaseUrl?: string;
   perplexityModel?: string;
 }): Promise<Record<string, unknown>> {
+  const providerKey =
+    params.provider === "perplexity"
+      ? `${params.provider}:${params.perplexityModel ?? DEFAULT_PERPLEXITY_MODEL}:${params.perplexityBaseUrl ?? DEFAULT_OPENROUTER_BASE_URL}`
+      : params.provider;
   const cacheKey = normalizeCacheKey(
-    `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
+    `${providerKey}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
   );
   const cached = readCache(SEARCH_CACHE, cacheKey);
   if (cached) return { ...cached.value, cached: true };
@@ -899,11 +979,13 @@ export function createWebSearchTool(options?: {
 
   const provider = resolveSearchProvider(search);
   const perplexityConfig = resolvePerplexityConfig(search);
+  const perplexityBaseUrl = resolvePerplexityBaseUrl(perplexityConfig);
+  const perplexityModel = resolvePerplexityModel(perplexityConfig);
 
   // Determine description based on provider
   const description =
     provider === "perplexity"
-      ? "Search the web using Perplexity Sonar (via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
+      ? "Search the web using Perplexity Sonar (direct API or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
       : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
@@ -915,11 +997,11 @@ export function createWebSearchTool(options?: {
       // Resolve API key based on provider
       const apiKey =
         provider === "perplexity"
-          ? resolvePerplexityApiKey(perplexityConfig)
+          ? resolvePerplexityApiKey(perplexityConfig, perplexityBaseUrl)
           : resolveSearchApiKey(search);
 
       if (!apiKey) {
-        return jsonResult(missingSearchKeyPayload(provider));
+        return jsonResult(missingSearchKeyPayload(provider, perplexityBaseUrl));
       }
       const params = args as Record<string, unknown>;
       const query = readStringParam(params, "query", { required: true });
@@ -938,8 +1020,8 @@ export function createWebSearchTool(options?: {
         country,
         search_lang,
         ui_lang,
-        perplexityBaseUrl: resolvePerplexityBaseUrl(perplexityConfig),
-        perplexityModel: resolvePerplexityModel(perplexityConfig),
+        perplexityBaseUrl,
+        perplexityModel,
       });
       return jsonResult(result);
     },

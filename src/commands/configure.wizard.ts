@@ -97,12 +97,15 @@ async function promptWebToolsConfig(
 ): Promise<ClawdbotConfig> {
   const existingSearch = nextConfig.tools?.web?.search;
   const existingFetch = nextConfig.tools?.web?.fetch;
-  const hasSearchKey = Boolean(existingSearch?.apiKey);
+  const existingProvider = existingSearch?.provider === "perplexity" ? "perplexity" : "brave";
+  const hasBraveKey = Boolean(existingSearch?.apiKey);
+  const hasPerplexityKey = Boolean(existingSearch?.perplexity?.apiKey);
+  const hasSearchKey = existingProvider === "perplexity" ? hasPerplexityKey : hasBraveKey;
 
   note(
     [
       "Web search lets your agent look things up online using the `web_search` tool.",
-      "It requires a Brave Search API key (you can store it in the config or set BRAVE_API_KEY in the Gateway environment).",
+      "Choose Brave (structured results) or Perplexity Sonar (answers + citations).",
       "Docs: https://docs.clawd.bot/tools/web",
     ].join("\n"),
     "Web search",
@@ -110,7 +113,7 @@ async function promptWebToolsConfig(
 
   const enableSearch = guardCancel(
     await confirm({
-      message: "Enable web_search (Brave Search)?",
+      message: "Enable web_search?",
       initialValue: existingSearch?.enabled ?? hasSearchKey,
     }),
     runtime,
@@ -122,27 +125,84 @@ async function promptWebToolsConfig(
   };
 
   if (enableSearch) {
-    const keyInput = guardCancel(
-      await text({
-        message: hasSearchKey
-          ? "Brave Search API key (leave blank to keep current or use BRAVE_API_KEY)"
-          : "Brave Search API key (paste it here; leave blank to use BRAVE_API_KEY)",
-        placeholder: hasSearchKey ? "Leave blank to keep current" : "BSA...",
+    const provider = guardCancel(
+      await select<"brave" | "perplexity">({
+        message: "Web search provider",
+        options: [
+          { value: "brave", label: "Brave Search (structured results)" },
+          { value: "perplexity", label: "Perplexity Sonar (answers + citations)" },
+        ],
+        initialValue: existingProvider,
       }),
       runtime,
     );
-    const key = String(keyInput ?? "").trim();
-    if (key) {
-      nextSearch = { ...nextSearch, apiKey: key };
-    } else if (!hasSearchKey) {
-      note(
-        [
-          "No key stored yet, so web_search will stay unavailable.",
-          "Store a key here or set BRAVE_API_KEY in the Gateway environment.",
-          "Docs: https://docs.clawd.bot/tools/web",
-        ].join("\n"),
-        "Web search",
+
+    nextSearch = { ...nextSearch, provider };
+
+    if (provider === "brave") {
+      const keyInput = guardCancel(
+        await text({
+          message: hasBraveKey
+            ? "Brave Search API key (leave blank to keep current or use BRAVE_API_KEY)"
+            : "Brave Search API key (paste it here; leave blank to use BRAVE_API_KEY)",
+          placeholder: hasBraveKey ? "Leave blank to keep current" : "BSA...",
+        }),
+        runtime,
       );
+      const key = String(keyInput ?? "").trim();
+      if (key) {
+        nextSearch = { ...nextSearch, apiKey: key };
+      } else if (!hasBraveKey) {
+        note(
+          [
+            "No key stored yet, so web_search will stay unavailable.",
+            "Store a key here or set BRAVE_API_KEY in the Gateway environment.",
+            "Docs: https://docs.clawd.bot/tools/web",
+          ].join("\n"),
+          "Web search",
+        );
+      }
+    } else {
+      const existingPerplexity = existingSearch?.perplexity ?? {};
+      const keyInput = guardCancel(
+        await text({
+          message: hasPerplexityKey
+            ? "Perplexity/OpenRouter API key (leave blank to keep current or use PERPLEXITY_API_KEY/OPENROUTER_API_KEY)"
+            : "Perplexity/OpenRouter API key (paste it here; leave blank to use PERPLEXITY_API_KEY/OPENROUTER_API_KEY)",
+          placeholder: hasPerplexityKey ? "Leave blank to keep current" : "pplx-... or sk-or-...",
+        }),
+        runtime,
+      );
+      const key = String(keyInput ?? "").trim();
+      let nextPerplexity = { ...existingPerplexity };
+      if (key) {
+        nextPerplexity = { ...nextPerplexity, apiKey: key };
+      }
+
+      const baseUrlInput = guardCancel(
+        await text({
+          message: "Perplexity base URL (optional; leave blank for default)",
+          placeholder: existingPerplexity.baseUrl ?? "https://api.perplexity.ai",
+        }),
+        runtime,
+      );
+      const baseUrl = String(baseUrlInput ?? "").trim();
+      if (baseUrl) {
+        nextPerplexity = { ...nextPerplexity, baseUrl };
+      }
+
+      nextSearch = { ...nextSearch, perplexity: nextPerplexity };
+
+      if (!key && !hasPerplexityKey) {
+        note(
+          [
+            "No key stored yet, so web_search will stay unavailable.",
+            "Store a key here or set PERPLEXITY_API_KEY/OPENROUTER_API_KEY in the Gateway environment.",
+            "Docs: https://docs.clawd.bot/tools/web",
+          ].join("\n"),
+          "Web search",
+        );
+      }
     }
   }
 

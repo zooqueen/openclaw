@@ -6,6 +6,7 @@ Docs: https://docs.clawd.bot
 
 ### Changes
 - Tools: allow `sessions_spawn` to override thinking level for sub-agent runs.
+- Tools: add Perplexity Sonar provider for `web_search` with direct Perplexity/OpenRouter support. (#1131) — thanks @CMLKevin.
 
 ### Fixes
 - Memory: apply OpenAI batch defaults even without explicit remote config.

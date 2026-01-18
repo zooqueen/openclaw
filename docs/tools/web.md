@@ -1,5 +1,5 @@
 ---
-summary: "Web search + fetch tools (Brave Search API, Perplexity via OpenRouter)"
+summary: "Web search + fetch tools (Brave Search API, Perplexity Sonar)"
 read_when:
   - You want to enable web_search or web_fetch
   - You need Brave Search API key setup
@@ -10,7 +10,7 @@ read_when:
 
 Clawdbot ships two lightweight web tools:
 
-- `web_search` — Search the web via Brave Search API (default) or Perplexity Sonar (via OpenRouter).
+- `web_search` — Search the web via Brave Search API (default) or Perplexity Sonar (direct or via OpenRouter).
 - `web_fetch` — HTTP fetch + readable extraction (HTML → markdown/text).
 
 These are **not** browser automation. For JS-heavy sites or logins, use the
@@ -28,10 +28,12 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 
 ## Choosing a search provider
 
+Provider docs: [Brave Search API](https://brave.com/search/api/) and [Perplexity Sonar](/perplexity).
+
 | Provider | Pros | Cons | API Key |
 |----------|------|------|---------|
 | **Brave** (default) | Fast, structured results, free tier | Traditional search results | `BRAVE_API_KEY` |
-| **Perplexity** | AI-synthesized answers, citations, real-time | Requires OpenRouter credits | `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` |
+| **Perplexity** | AI-synthesized answers, citations, real-time | Requires Perplexity or OpenRouter credits | `PERPLEXITY_API_KEY` or `OPENROUTER_API_KEY` |
 
 Set the provider in config:
 
@@ -65,13 +67,22 @@ current limits and pricing.
 environment. For a daemon install, put it in `~/.clawdbot/.env` (or your
 service environment). See [Env vars](/start/faq#how-does-clawdbot-load-environment-variables).
 
-## Using Perplexity (via OpenRouter)
+## Using Perplexity Sonar
 
 Perplexity Sonar models have built-in web search capabilities and return AI-synthesized
-answers with citations. You can use them via OpenRouter (no credit card required - supports
-crypto/prepaid).
+answers with citations. You can use them either directly via Perplexity’s API or via OpenRouter
+(supports crypto/prepaid).
 
-### Getting an OpenRouter API key
+See [Perplexity Sonar](/perplexity) for a dedicated setup guide.
+
+### Getting an API key
+
+**Perplexity (direct):**
+
+1) Create a Perplexity account and generate an API key.
+2) Set `PERPLEXITY_API_KEY` in the Gateway environment or store the key in config.
+
+**OpenRouter (alternative):**
 
 1) Create an account at https://openrouter.ai/
 2) Add credits (supports crypto, prepaid, or credit card)
@@ -88,9 +99,11 @@ crypto/prepaid).
         provider: "perplexity",
         perplexity: {
           // API key (optional if OPENROUTER_API_KEY or PERPLEXITY_API_KEY is set)
-          apiKey: "sk-or-v1-...",
-          // Base URL (defaults to OpenRouter)
-          baseUrl: "https://openrouter.ai/api/v1",
+          apiKey: "pplx-... or sk-or-v1-...",
+          // Base URL:
+          // - https://api.perplexity.ai (default when PERPLEXITY_API_KEY is set)
+          // - https://openrouter.ai/api/v1 (default when only OPENROUTER_API_KEY is set)
+          baseUrl: "https://api.perplexity.ai",
           // Model (defaults to perplexity/sonar-pro)
           model: "perplexity/sonar-pro"
         }
@@ -100,8 +113,9 @@ crypto/prepaid).
 }
 ```
 
-**Environment alternative:** set `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` in the Gateway
-environment. For a daemon install, put it in `~/.clawdbot/.env`.
+**Environment alternative:** set `PERPLEXITY_API_KEY` or `OPENROUTER_API_KEY` in the Gateway
+environment. For a daemon install, put it in `~/.clawdbot/.env`. If you set both keys, set
+`tools.web.search.perplexity.baseUrl` (or `tools.web.search.perplexity.apiKey`) to disambiguate.
 
 ### Available Perplexity models
 
@@ -120,7 +134,7 @@ Search the web using your configured provider.
 - `tools.web.search.enabled` must not be `false` (default: enabled)
 - API key for your chosen provider:
   - **Brave**: `BRAVE_API_KEY` or `tools.web.search.apiKey`
-  - **Perplexity**: `OPENROUTER_API_KEY`, `PERPLEXITY_API_KEY`, or `tools.web.search.perplexity.apiKey`
+  - **Perplexity**: `PERPLEXITY_API_KEY` (direct), `OPENROUTER_API_KEY` (OpenRouter), or `tools.web.search.perplexity.apiKey`
 
 ### Config
 
