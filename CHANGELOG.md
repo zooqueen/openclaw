@@ -7,6 +7,9 @@ Docs: https://docs.clawd.bot
 ### Changes
 - Dependencies: update core + plugin deps (grammy, vitest, openai, Microsoft agents hosting, etc.).
 
+### Fixes
+- Plugins: auto-select exclusive slots when enabling/installing plugins. (#1181) — thanks @sebslight.
+
 ## 2026.1.18-4
 
 ### Changes
