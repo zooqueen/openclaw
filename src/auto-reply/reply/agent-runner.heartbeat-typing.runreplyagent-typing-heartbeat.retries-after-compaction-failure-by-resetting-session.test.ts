@@ -172,6 +172,53 @@ describe("runReplyAgent typing (heartbeat)", () => {
       }
     }
   });
+  it("returns a user-facing error after repeated compaction failure", async () => {
+    const prevStateDir = process.env.CLAWDBOT_STATE_DIR;
+    const stateDir = await fs.mkdtemp(path.join(tmpdir(), "clawdbot-session-compaction-repeat-"));
+    process.env.CLAWDBOT_STATE_DIR = stateDir;
+    try {
+      const sessionId = "session";
+      const storePath = path.join(stateDir, "sessions", "sessions.json");
+      const transcriptPath = sessions.resolveSessionTranscriptPath(sessionId);
+      const sessionEntry = { sessionId, updatedAt: Date.now(), sessionFile: transcriptPath };
+      const sessionStore = { main: sessionEntry };
+
+      await fs.mkdir(path.dirname(storePath), { recursive: true });
+      await fs.writeFile(storePath, JSON.stringify(sessionStore), "utf-8");
+      await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
+      await fs.writeFile(transcriptPath, "ok", "utf-8");
+
+      runEmbeddedPiAgentMock.mockImplementation(async () => {
+        throw new Error(
+          'Context overflow: Summarization failed: 400 {"message":"prompt is too long"}',
+        );
+      });
+
+      const callsBefore = runEmbeddedPiAgentMock.mock.calls.length;
+      const { run } = createMinimalRun({
+        sessionEntry,
+        sessionStore,
+        sessionKey: "main",
+        storePath,
+      });
+      const res = await run();
+
+      expect(runEmbeddedPiAgentMock.mock.calls.length - callsBefore).toBe(2);
+      const payload = Array.isArray(res) ? res[0] : res;
+      expect(payload.text).toContain("Context limit exceeded");
+      expect(payload.text?.toLowerCase()).toContain("reset");
+      expect(sessionStore.main.sessionId).not.toBe(sessionId);
+
+      const persisted = JSON.parse(await fs.readFile(storePath, "utf-8"));
+      expect(persisted.main.sessionId).toBe(sessionStore.main.sessionId);
+    } finally {
+      if (prevStateDir) {
+        process.env.CLAWDBOT_STATE_DIR = prevStateDir;
+      } else {
+        delete process.env.CLAWDBOT_STATE_DIR;
+      }
+    }
+  });
   it("retries after context overflow payload by resetting the session", async () => {
     const prevStateDir = process.env.CLAWDBOT_STATE_DIR;
     const stateDir = await fs.mkdtemp(path.join(tmpdir(), "clawdbot-session-overflow-reset-"));
