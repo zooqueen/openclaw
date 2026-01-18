@@ -25,6 +25,7 @@ Docs: https://docs.clawd.bot
 - macOS: add approvals socket UI server + node exec lifecycle events.
 - Nodes: add headless node host (`clawdbot node start`) for `system.run`/`system.which`.
 - Nodes: add node daemon service install/status/start/stop/restart.
+- Hooks: run `BOOT.md` on gateway startup with the boot-md hook. (#1164) — thanks @ngutman.
 - Bridge: add `skills.bins` RPC to support node host auto-allow skill bins.
 - Slash commands: replace `/cost` with `/usage off|tokens|full` to control per-response usage footer; `/usage` no longer aliases `/status`. (Supersedes #1140) — thanks @Nachx639.
 - Sessions: add daily reset policy with per-type overrides and idle windows (default 4am local), preserving legacy idle-only configs. (#1146) — thanks @austinm911.
@@ -47,6 +48,7 @@ Docs: https://docs.clawd.bot
 - Memory: index atomically so failed reindex preserves the previous memory database. (#1151)
 - Memory: avoid sqlite-vec unique constraint failures when reindexing duplicate chunk ids. (#1151)
 - Exec approvals: enforce allowlist when ask is off; prefer raw command for node approvals/events.
+- Exec approvals: parse command tokens correctly for PATH and relative resolution.
 - Tools: return a companion-app-required message when node exec is requested with no paired node.
 - Streaming: emit assistant deltas for OpenAI-compatible SSE chunks. (#1147) — thanks @alauppe.
 - Model fallback: treat timeout aborts as failover while preserving user aborts. (#1137) — thanks @cheeeee.
