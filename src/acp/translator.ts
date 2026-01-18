@@ -6,8 +6,6 @@ import type {
   AuthenticateRequest,
   AuthenticateResponse,
   CancelNotification,
-  ContentBlock,
-  ImageContent,
   InitializeRequest,
   InitializeResponse,
   ListSessionsRequest,
@@ -21,21 +19,22 @@ import type {
   SetSessionModeRequest,
   SetSessionModeResponse,
   StopReason,
-  ToolKind,
 } from "@agentclientprotocol/sdk";
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 
 import type { GatewayClient } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import type { SessionsListResult } from "../gateway/session-utils.js";
-import { ACP_AGENT_INFO, type AcpServerOptions } from "./types.js";
+import { readBool, readNumber, readString } from "./meta.js";
 import {
-  cancelActiveRun,
-  clearActiveRun,
-  createSession,
-  getSession,
-  setActiveRun,
-} from "./session.js";
+  extractAttachmentsFromPrompt,
+  extractTextFromPrompt,
+  formatToolTitle,
+  inferToolKind,
+} from "./event-mapper.js";
+import { parseSessionMeta, resetSessionIfNeeded, resolveSessionKey } from "./session-mapper.js";
+import { ACP_AGENT_INFO, type AcpServerOptions } from "./types.js";
+import { defaultAcpSessionStore, type AcpSessionStore } from "./session.js";
 
 type PendingPrompt = {
   sessionId: string;
@@ -48,25 +47,22 @@ type PendingPrompt = {
   toolCalls?: Set<string>;
 };
 
-type SessionMeta = {
-  sessionKey?: string;
-  sessionLabel?: string;
-  resetSession?: boolean;
-  requireExisting?: boolean;
-  prefixCwd?: boolean;
+type AcpGatewayAgentOptions = AcpServerOptions & {
+  sessionStore?: AcpSessionStore;
 };
 
 export class AcpGatewayAgent implements Agent {
   private connection: AgentSideConnection;
   private gateway: GatewayClient;
-  private opts: AcpServerOptions;
+  private opts: AcpGatewayAgentOptions;
   private log: (msg: string) => void;
+  private sessionStore: AcpSessionStore;
   private pendingPrompts = new Map<string, PendingPrompt>();
 
   constructor(
     connection: AgentSideConnection,
     gateway: GatewayClient,
-    opts: AcpServerOptions = {},
+    opts: AcpGatewayAgentOptions = {},
   ) {
     this.connection = connection;
     this.gateway = gateway;
@@ -74,6 +70,7 @@ export class AcpGatewayAgent implements Agent {
     this.log = opts.verbose
       ? (msg: string) => process.stderr.write(`[acp] ${msg}\n`)
       : () => {};
+    this.sessionStore = opts.sessionStore ?? defaultAcpSessionStore;
   }
 
   start(): void {
@@ -88,7 +85,7 @@ export class AcpGatewayAgent implements Agent {
     this.log(`gateway disconnected: ${reason}`);
     for (const pending of this.pendingPrompts.values()) {
       pending.reject(new Error(`Gateway disconnected: ${reason}`));
-      clearActiveRun(pending.sessionId);
+      this.sessionStore.clearActiveRun(pending.sessionId);
     }
     this.pendingPrompts.clear();
   }
@@ -132,11 +129,21 @@ export class AcpGatewayAgent implements Agent {
     }
 
     const sessionId = randomUUID();
-    const meta = this.parseSessionMeta(params._meta);
-    const sessionKey = await this.resolveSessionKey(meta, `acp:${sessionId}`);
-    await this.resetSessionIfNeeded(meta, sessionKey);
+    const meta = parseSessionMeta(params._meta);
+    const sessionKey = await resolveSessionKey({
+      meta,
+      fallbackKey: `acp:${sessionId}`,
+      gateway: this.gateway,
+      opts: this.opts,
+    });
+    await resetSessionIfNeeded({
+      meta,
+      sessionKey,
+      gateway: this.gateway,
+      opts: this.opts,
+    });
 
-    const session = createSession({
+    const session = this.sessionStore.createSession({
       sessionId,
       sessionKey,
       cwd: params.cwd,
@@ -150,11 +157,21 @@ export class AcpGatewayAgent implements Agent {
       this.log(`ignoring ${params.mcpServers.length} MCP servers`);
     }
 
-    const meta = this.parseSessionMeta(params._meta);
-    const sessionKey = await this.resolveSessionKey(meta, params.sessionId);
-    await this.resetSessionIfNeeded(meta, sessionKey);
+    const meta = parseSessionMeta(params._meta);
+    const sessionKey = await resolveSessionKey({
+      meta,
+      fallbackKey: params.sessionId,
+      gateway: this.gateway,
+      opts: this.opts,
+    });
+    await resetSessionIfNeeded({
+      meta,
+      sessionKey,
+      gateway: this.gateway,
+      opts: this.opts,
+    });
 
-    const session = createSession({
+    const session = this.sessionStore.createSession({
       sessionId: params.sessionId,
       sessionKey,
       cwd: params.cwd,
@@ -190,7 +207,7 @@ export class AcpGatewayAgent implements Agent {
   async setSessionMode(
     params: SetSessionModeRequest,
   ): Promise<SetSessionModeResponse | void> {
-    const session = getSession(params.sessionId);
+    const session = this.sessionStore.getSession(params.sessionId);
     if (!session) {
       throw new Error(`Session ${params.sessionId} not found`);
     }
@@ -208,22 +225,22 @@ export class AcpGatewayAgent implements Agent {
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
-    const session = getSession(params.sessionId);
+    const session = this.sessionStore.getSession(params.sessionId);
     if (!session) {
       throw new Error(`Session ${params.sessionId} not found`);
     }
 
     if (session.abortController) {
-      cancelActiveRun(params.sessionId);
+      this.sessionStore.cancelActiveRun(params.sessionId);
     }
 
     const abortController = new AbortController();
     const runId = randomUUID();
-    setActiveRun(params.sessionId, runId, abortController);
+    this.sessionStore.setActiveRun(params.sessionId, runId, abortController);
 
-    const meta = this.parseSessionMeta(params._meta);
-    const userText = this.extractTextFromPrompt(params.prompt);
-    const attachments = this.extractAttachmentsFromPrompt(params.prompt);
+    const meta = parseSessionMeta(params._meta);
+    const userText = extractTextFromPrompt(params.prompt);
+    const attachments = extractAttachmentsFromPrompt(params.prompt);
     const prefixCwd = meta.prefixCwd ?? this.opts.prefixCwd ?? true;
     const message = prefixCwd ? `[Working directory: ${session.cwd}]\n\n${userText}` : userText;
 
@@ -252,17 +269,17 @@ export class AcpGatewayAgent implements Agent {
         )
         .catch((err) => {
           this.pendingPrompts.delete(params.sessionId);
-          clearActiveRun(params.sessionId);
+          this.sessionStore.clearActiveRun(params.sessionId);
           reject(err instanceof Error ? err : new Error(String(err)));
         });
     });
   }
 
   async cancel(params: CancelNotification): Promise<void> {
-    const session = getSession(params.sessionId);
+    const session = this.sessionStore.getSession(params.sessionId);
     if (!session) return;
 
-    cancelActiveRun(params.sessionId);
+    this.sessionStore.cancelActiveRun(params.sessionId);
     try {
       await this.gateway.request("chat.abort", { sessionKey: session.sessionKey });
     } catch (err) {
@@ -389,7 +406,7 @@ export class AcpGatewayAgent implements Agent {
     stopReason: StopReason,
   ): void {
     this.pendingPrompts.delete(sessionId);
-    clearActiveRun(sessionId);
+    this.sessionStore.clearActiveRun(sessionId);
     pending.resolve({ stopReason });
   }
 
@@ -400,157 +417,4 @@ export class AcpGatewayAgent implements Agent {
     return undefined;
   }
 
-  private extractTextFromPrompt(prompt: ContentBlock[]): string {
-    const parts: string[] = [];
-    for (const block of prompt) {
-      if (block.type === "text") {
-        parts.push(block.text);
-        continue;
-      }
-      if (block.type === "resource") {
-        const resource = block.resource as { text?: string } | undefined;
-        if (resource?.text) parts.push(resource.text);
-        continue;
-      }
-      if (block.type === "resource_link") {
-        const title = block.title ? ` (${block.title})` : "";
-        const uri = block.uri ?? "";
-        const line = uri ? `[Resource link${title}] ${uri}` : `[Resource link${title}]`;
-        parts.push(line);
-      }
-    }
-    return parts.join("\n");
-  }
-
-  private extractAttachmentsFromPrompt(
-    prompt: ContentBlock[],
-  ): Array<{ type: string; mimeType: string; content: string }> {
-    const attachments: Array<{ type: string; mimeType: string; content: string }> = [];
-    for (const block of prompt) {
-      if (block.type !== "image") continue;
-      const image = block as ImageContent;
-      if (!image.data || !image.mimeType) continue;
-      attachments.push({
-        type: "image",
-        mimeType: image.mimeType,
-        content: image.data,
-      });
-    }
-    return attachments;
-  }
-
-  private parseSessionMeta(meta: unknown): SessionMeta {
-    if (!meta || typeof meta !== "object") return {};
-    const record = meta as Record<string, unknown>;
-    return {
-      sessionKey: readString(record, ["sessionKey", "session", "key"]),
-      sessionLabel: readString(record, ["sessionLabel", "label"]),
-      resetSession: readBool(record, ["resetSession", "reset"]),
-      requireExisting: readBool(record, ["requireExistingSession", "requireExisting"]),
-      prefixCwd: readBool(record, ["prefixCwd"]),
-    };
-  }
-
-  private async resolveSessionKey(meta: SessionMeta, fallbackKey: string): Promise<string> {
-    const requestedKey = meta.sessionKey ?? this.opts.defaultSessionKey;
-    const requestedLabel = meta.sessionLabel ?? this.opts.defaultSessionLabel;
-    const requireExisting =
-      meta.requireExisting ?? this.opts.requireExistingSession ?? false;
-
-    if (requestedLabel) {
-      const resolved = await this.gateway.request<{ ok: true; key: string }>(
-        "sessions.resolve",
-        { label: requestedLabel },
-      );
-      if (!resolved?.key) {
-        throw new Error(`Unable to resolve session label: ${requestedLabel}`);
-      }
-      return resolved.key;
-    }
-
-    if (requestedKey) {
-      if (!requireExisting) return requestedKey;
-      const resolved = await this.gateway.request<{ ok: true; key: string }>(
-        "sessions.resolve",
-        { key: requestedKey },
-      );
-      if (!resolved?.key) {
-        throw new Error(`Session key not found: ${requestedKey}`);
-      }
-      return resolved.key;
-    }
-
-    return fallbackKey;
-  }
-
-  private async resetSessionIfNeeded(meta: SessionMeta, sessionKey: string): Promise<void> {
-    const resetSession = meta.resetSession ?? this.opts.resetSession ?? false;
-    if (!resetSession) return;
-    await this.gateway.request("sessions.reset", { key: sessionKey });
-  }
-}
-
-function readString(
-  meta: Record<string, unknown> | null | undefined,
-  keys: string[],
-): string | undefined {
-  if (!meta) return undefined;
-  for (const key of keys) {
-    const value = meta[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function readBool(
-  meta: Record<string, unknown> | null | undefined,
-  keys: string[],
-): boolean | undefined {
-  if (!meta) return undefined;
-  for (const key of keys) {
-    const value = meta[key];
-    if (typeof value === "boolean") return value;
-  }
-  return undefined;
-}
-
-function readNumber(
-  meta: Record<string, unknown> | null | undefined,
-  keys: string[],
-): number | undefined {
-  if (!meta) return undefined;
-  for (const key of keys) {
-    const value = meta[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return undefined;
-}
-
-function formatToolTitle(
-  name: string | undefined,
-  args: Record<string, unknown> | undefined,
-): string {
-  const base = name ?? "tool";
-  if (!args || Object.keys(args).length === 0) return base;
-  const parts = Object.entries(args).map(([key, value]) => {
-    const raw = typeof value === "string" ? value : JSON.stringify(value);
-    const safe = raw.length > 100 ? `${raw.slice(0, 100)}...` : raw;
-    return `${key}: ${safe}`;
-  });
-  return `${base}: ${parts.join(", ")}`;
-}
-
-function inferToolKind(name?: string): ToolKind | undefined {
-  if (!name) return "other";
-  const normalized = name.toLowerCase();
-  if (normalized.includes("read")) return "read";
-  if (normalized.includes("write") || normalized.includes("edit")) return "edit";
-  if (normalized.includes("delete") || normalized.includes("remove")) return "delete";
-  if (normalized.includes("move") || normalized.includes("rename")) return "move";
-  if (normalized.includes("search") || normalized.includes("find")) return "search";
-  if (normalized.includes("exec") || normalized.includes("run") || normalized.includes("bash")) {
-    return "execute";
-  }
-  if (normalized.includes("fetch") || normalized.includes("http")) return "fetch";
-  return "other";
 }

@@ -1,30 +1,26 @@
 import { describe, expect, it, afterEach } from "vitest";
 
-import {
-  cancelActiveRun,
-  clearAllSessionsForTest,
-  createSession,
-  getSessionByRunId,
-  setActiveRun,
-} from "./session.js";
+import { createInMemorySessionStore } from "./session.js";
 
 describe("acp session manager", () => {
+  const store = createInMemorySessionStore();
+
   afterEach(() => {
-    clearAllSessionsForTest();
+    store.clearAllSessionsForTest();
   });
 
   it("tracks active runs and clears on cancel", () => {
-    const session = createSession({
+    const session = store.createSession({
       sessionKey: "acp:test",
       cwd: "/tmp",
     });
     const controller = new AbortController();
-    setActiveRun(session.sessionId, "run-1", controller);
+    store.setActiveRun(session.sessionId, "run-1", controller);
 
-    expect(getSessionByRunId("run-1")?.sessionId).toBe(session.sessionId);
+    expect(store.getSessionByRunId("run-1")?.sessionId).toBe(session.sessionId);
 
-    const cancelled = cancelActiveRun(session.sessionId);
+    const cancelled = store.cancelActiveRun(session.sessionId);
     expect(cancelled).toBe(true);
-    expect(getSessionByRunId("run-1")).toBeUndefined();
+    expect(store.getSessionByRunId("run-1")).toBeUndefined();
   });
 });
