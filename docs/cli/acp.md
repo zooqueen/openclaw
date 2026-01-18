@@ -30,6 +30,83 @@ clawdbot acp --session-label "support inbox"
 clawdbot acp --session agent:main:main --reset-session
 ```
 
+## How to use this
+
+Use ACP when an IDE (or other client) speaks Agent Client Protocol and you want
+it to drive a Clawdbot Gateway session.
+
+1. Ensure the Gateway is running (local or remote).
+2. Configure the Gateway target (config or flags).
+3. Point your IDE to run `clawdbot acp` over stdio.
+
+Example config (persisted):
+
+```bash
+clawdbot config set gateway.remote.url wss://gateway-host:18789
+clawdbot config set gateway.remote.token <token>
+```
+
+Example direct run (no config write):
+
+```bash
+clawdbot acp --url wss://gateway-host:18789 --token <token>
+```
+
+## Selecting agents
+
+ACP does not pick agents directly. It routes by the Gateway session key.
+
+Use agent-scoped session keys to target a specific agent:
+
+```bash
+clawdbot acp --session agent:main:main
+clawdbot acp --session agent:design:main
+clawdbot acp --session agent:qa:bug-123
+```
+
+Each ACP session maps to a single Gateway session key. One agent can have many
+sessions; ACP defaults to an isolated `acp:<uuid>` session unless you override
+the key or label.
+
+## Zed editor setup
+
+Add a custom ACP agent in `~/.config/zed/settings.json` (or use Zed’s Settings UI):
+
+```json
+{
+  "agent_servers": {
+    "Clawdbot ACP": {
+      "type": "custom",
+      "command": "clawdbot",
+      "args": ["acp"],
+      "env": {}
+    }
+  }
+}
+```
+
+To target a specific Gateway or agent:
+
+```json
+{
+  "agent_servers": {
+    "Clawdbot ACP": {
+      "type": "custom",
+      "command": "clawdbot",
+      "args": [
+        "acp",
+        "--url", "wss://gateway-host:18789",
+        "--token", "<token>",
+        "--session", "agent:design:main"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+
+In Zed, open the Agent panel and select “Clawdbot ACP” to start a thread.
+
 ## Session mapping
 
 By default, ACP sessions get an isolated Gateway session key with an `acp:` prefix.
