@@ -231,7 +231,8 @@ export async function startTailscaleTunnel(config: {
   }
 
   const path = config.path.startsWith("/") ? config.path : `/${config.path}`;
-  const localUrl = `http://127.0.0.1:${config.port}${path}`;
+  // --set-path already mounts the path; keep the target base URL to avoid /path/path.
+  const localUrl = `http://127.0.0.1:${config.port}`;
 
   return new Promise((resolve, reject) => {
     const proc = spawn(

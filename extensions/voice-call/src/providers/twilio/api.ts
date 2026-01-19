@@ -29,6 +29,7 @@ export async function twilioApiRequest<T = unknown>(params: {
       Authorization: `Basic ${Buffer.from(`${params.accountSid}:${params.authToken}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
+    // URL-encoded body required by Twilio, with repeated keys for arrays.
     body: bodyParams,
   });
 

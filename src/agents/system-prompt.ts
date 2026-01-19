@@ -553,7 +553,7 @@ export function buildAgentSystemPrompt(params: {
 }
 
 export function buildRuntimeLine(
-  runtimeInfo: {
+  runtimeInfo?: {
     agentId?: string;
     host?: string;
     os?: string;

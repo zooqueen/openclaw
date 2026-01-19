@@ -20,6 +20,7 @@ Docs: https://docs.clawd.bot
 - TUI: show generic empty-state text for searchable pickers. (#1201) — thanks @vignesh07.
 - Doctor: canonicalize legacy session keys in session stores to prevent stale metadata. (#1169)
 - CLI: centralize CLI command registration to keep fast-path routing and program wiring in sync. (#1207) — thanks @gumadeiras.
+- Voice call: keep Twilio notify callbacks out of streaming paths, normalize Tailscale serve paths, and honor ASCII signature ordering. (#1213) — thanks @andrew-kurin.
 
 ## 2026.1.18-5
 

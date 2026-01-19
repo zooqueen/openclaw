@@ -64,16 +64,20 @@ export class TwilioProvider implements VoiceCallProvider {
 
   /** Storage for TwiML content (for notify mode with URL-based TwiML) */
   private readonly twimlStorage = new Map<string, string>();
-  /** Track notify-mode calls to avoid streaming on follow-up callbacks */
+  /** Track notify-mode calls to avoid streaming on follow-up callbacks. */
   private readonly notifyCalls = new Set<string>();
 
   /**
    * Delete stored TwiML for a given `callId`.
    *
    * We keep TwiML in-memory only long enough to satisfy the initial Twilio
-   * webhook request (notify mode). Subsequent webhooks should not reuse it.
+   * webhook request (notify mode). The notify guard is cleared separately.
    */
   private deleteStoredTwiml(callId: string): void {
+    this.twimlStorage.delete(callId);
+  }
+
+  private clearNotifyState(callId: string): void {
     this.twimlStorage.delete(callId);
     this.notifyCalls.delete(callId);
   }
@@ -90,7 +94,7 @@ export class TwilioProvider implements VoiceCallProvider {
     const callIdMatch = webhookUrl.match(/callId=([^&]+)/);
     if (!callIdMatch) return;
 
-    this.deleteStoredTwiml(callIdMatch[1]);
+    this.clearNotifyState(callIdMatch[1]);
   }
 
   constructor(config: TwilioConfig, options: TwilioProviderOptions = {}) {
@@ -260,12 +264,12 @@ export class TwilioProvider implements VoiceCallProvider {
       case "no-answer":
       case "failed":
         if (callIdOverride) {
-          this.deleteStoredTwiml(callIdOverride);
+          this.clearNotifyState(callIdOverride);
         }
         return { ...baseEvent, type: "call.ended", reason: callStatus };
       case "canceled":
         if (callIdOverride) {
-          this.deleteStoredTwiml(callIdOverride);
+          this.clearNotifyState(callIdOverride);
         }
         return { ...baseEvent, type: "call.ended", reason: "hangup-bot" };
       default:
@@ -399,6 +403,7 @@ export class TwilioProvider implements VoiceCallProvider {
     // We now serve it from the webhook endpoint instead of sending inline
     if (input.inlineTwiml) {
       this.twimlStorage.set(input.callId, input.inlineTwiml);
+      // Keep notify-mode calls out of streaming TwiML for any follow-up callbacks.
       this.notifyCalls.add(input.callId);
     }
 

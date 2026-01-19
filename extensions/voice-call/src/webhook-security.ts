@@ -23,7 +23,7 @@ export function validateTwilioSignature(
   // Build the string to sign: URL + sorted params (key+value pairs)
   let dataToSign = url;
 
-  // Sort params alphabetically and append key+value
+  // Sort params by ASCII order (Twilio spec) and append key+value.
   const sortedParams = Array.from(params.entries()).sort((a, b) =>
     a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
   );

@@ -79,7 +79,7 @@ function twilioSignature(params: {
   let dataToSign = params.url;
   const sortedParams = Array.from(
     new URLSearchParams(params.postBody).entries(),
-  ).sort((a, b) => a[0].localeCompare(b[0]));
+  ).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
   for (const [key, value] of sortedParams) {
     dataToSign += key + value;
@@ -198,6 +198,35 @@ describe("verifyTwilioWebhook", () => {
         url: "http://local/voice/webhook?callId=abc",
         method: "POST",
         query: { callId: "abc" },
+      },
+      authToken,
+      { publicUrl },
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("sorts params using ASCII order", () => {
+    const authToken = "test-auth-token";
+    const publicUrl = "https://example.com/voice/webhook";
+    const postBody = "Z=first&a=second";
+
+    const signature = twilioSignature({
+      authToken,
+      url: publicUrl,
+      postBody,
+    });
+
+    const result = verifyTwilioWebhook(
+      {
+        headers: {
+          host: "example.com",
+          "x-forwarded-proto": "https",
+          "x-twilio-signature": signature,
+        },
+        rawBody: postBody,
+        url: "http://local/voice/webhook",
+        method: "POST",
       },
       authToken,
       { publicUrl },
