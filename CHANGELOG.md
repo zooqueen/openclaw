@@ -20,6 +20,7 @@ Docs: https://docs.clawd.bot
 - Discovery: shorten Bonjour DNS-SD service type to `_clawdbot-gw._tcp` and update discovery clients/docs.
 - Agents: preserve subagent announce thread/topic routing + queued replies across channels. (#1241) — thanks @gnarco.
 - Agents: avoid treating timeout errors with "aborted" messages as user aborts, so model fallback still runs.
+- Model catalog: avoid caching import failures, log transient discovery errors, and keep partial results. (#1326) — thanks @dougvk.
 - Doctor: clarify plugin auto-enable hint text in the startup banner.
 - Gateway: clarify unauthorized handshake responses with token/password mismatch guidance.
 - Web search: infer Perplexity base URL from API key source (direct vs OpenRouter).
