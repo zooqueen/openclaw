@@ -13,6 +13,7 @@ Docs: https://docs.clawd.bot
 - Plugins/UI: let channel plugin metadata drive UI labels/icons and cron channel options. (#1306) — thanks @steipete.
 ### Fixes
 - Web search: infer Perplexity base URL from API key source (direct vs OpenRouter).
+- Config: allow Perplexity as a web_search provider in config validation. (#1230, #1247) — thanks @sebslight.
 - TUI: keep thinking blocks ordered before content during streaming and isolate per-run assembly. (#1202) — thanks @aaronveklabs.
 - CLI: avoid duplicating --profile/--dev flags when formatting commands.
 - Exec: prefer bash when fish is default shell, falling back to sh if bash is missing. (#1297) — thanks @ysqander.
@@ -29,9 +30,6 @@ Docs: https://docs.clawd.bot
 ### Fixes
 - Gateway: strip inbound envelope headers from chat history messages to keep clients clean.
 - UI: prevent double-scroll in Control UI chat by locking chat layout to the viewport. (#1283) — thanks @bradleypriest.
-
-### Fixes
-- Config: allow Perplexity as a web_search provider in config validation. (#1230)
 
 ## 2026.1.19-2
 
