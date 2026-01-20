@@ -4,7 +4,6 @@ import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation";
 import { loadChatHistory } from "./controllers/chat";
-import { syncUrlWithSessionKey } from "./app-settings";
 import type { SessionsListResult } from "./types";
 import type { ThemeMode } from "./theme";
 import type { ThemeTransitionContext } from "./theme-transition";
@@ -54,20 +53,13 @@ export function renderChatControls(state: AppViewState) {
           ?disabled=${!state.connected}
           @change=${(e: Event) => {
             const next = (e.target as HTMLSelectElement).value;
-            state.sessionKey = next;
-            state.chatMessage = "";
-            state.chatStream = null;
-            state.chatStreamStartedAt = null;
-            state.chatRunId = null;
-            state.resetToolStream();
-            state.resetChatScroll();
-            state.applySettings({
-              ...state.settings,
-              sessionKey: next,
-              lastActiveSessionKey: next,
+            state.setSessionKey(next, {
+              source: "user",
+              resetChat: true,
+              loadHistory: true,
+              syncUrl: true,
+              replace: true,
             });
-            syncUrlWithSessionKey(state, next, true);
-            void loadChatHistory(state);
           }}
         >
           ${repeat(

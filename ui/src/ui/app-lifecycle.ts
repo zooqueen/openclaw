@@ -1,11 +1,10 @@
 import type { Tab } from "./navigation";
 import { connectGateway } from "./app-gateway";
 import {
-  applySettingsFromUrl,
+  applyStateFromLocation,
   attachThemeListener,
   detachThemeListener,
   inferBasePath,
-  syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings";
 import { observeTopbar, scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
@@ -33,9 +32,9 @@ type LifecycleHost = {
 
 export function handleConnected(host: LifecycleHost) {
   host.basePath = inferBasePath();
-  syncTabWithLocation(
-    host as unknown as Parameters<typeof syncTabWithLocation>[0],
-    true,
+  applyStateFromLocation(
+    host as unknown as Parameters<typeof applyStateFromLocation>[0],
+    { replace: true },
   );
   syncThemeWithSettings(
     host as unknown as Parameters<typeof syncThemeWithSettings>[0],
@@ -44,9 +43,6 @@ export function handleConnected(host: LifecycleHost) {
     host as unknown as Parameters<typeof attachThemeListener>[0],
   );
   window.addEventListener("popstate", host.popStateHandler);
-  applySettingsFromUrl(
-    host as unknown as Parameters<typeof applySettingsFromUrl>[0],
-  );
   connectGateway(host as unknown as Parameters<typeof connectGateway>[0]);
   startNodesPolling(host as unknown as Parameters<typeof startNodesPolling>[0]);
   if (host.tab === "logs") {

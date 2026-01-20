@@ -50,8 +50,10 @@ import {
   applySettings as applySettingsInternal,
   loadCron as loadCronInternal,
   loadOverview as loadOverviewInternal,
+  setSessionKey as setSessionKeyInternal,
   setTab as setTabInternal,
   setTheme as setThemeInternal,
+  type SessionKeyOptions,
   onPopState as onPopStateInternal,
 } from "./app-settings";
 import {
@@ -295,6 +297,14 @@ export class ClawdbotApp extends LitElement {
 
   setTab(next: Tab) {
     setTabInternal(this as unknown as Parameters<typeof setTabInternal>[0], next);
+  }
+
+  setSessionKey(next: string, options?: SessionKeyOptions) {
+    setSessionKeyInternal(
+      this as unknown as Parameters<typeof setSessionKeyInternal>[0],
+      next,
+      options,
+    );
   }
 
   setTheme(next: ThemeMode, context?: Parameters<typeof setThemeInternal>[2]) {

@@ -1,5 +1,6 @@
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway";
 import type { Tab } from "./navigation";
+import type { SessionKeyOptions } from "./app-settings";
 import type { UiSettings } from "./storage";
 import type { ThemeMode } from "./theme";
 import type { ThemeTransitionContext } from "./theme-transition";
@@ -160,7 +161,7 @@ export type AppViewState = {
   handleDebugCall: () => Promise<void>;
   handleRunUpdate: () => Promise<void>;
   setPassword: (next: string) => void;
-  setSessionKey: (next: string) => void;
+  setSessionKey: (next: string, options?: SessionKeyOptions) => void;
   setChatMessage: (next: string) => void;
   handleChatSend: () => Promise<void>;
   handleChatAbort: () => Promise<void>;

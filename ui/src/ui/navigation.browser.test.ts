@@ -167,6 +167,35 @@ describe("control UI routing", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("hydrates session from chat URL params", async () => {
+    const app = mountApp("/chat?session=agent:main");
+    await app.updateComplete;
+
+    expect(app.sessionKey).toBe("agent:main");
+    expect(window.location.pathname).toBe("/chat");
+    expect(new URLSearchParams(window.location.search).get("session")).toBe(
+      "agent:main",
+    );
+  });
+
+  it("adds session param for chat routes when missing", async () => {
+    const app = mountApp("/chat");
+    await app.updateComplete;
+
+    expect(app.sessionKey).toBe("main");
+    expect(window.location.pathname).toBe("/chat");
+    expect(new URLSearchParams(window.location.search).get("session")).toBe("main");
+  });
+
+  it("strips session params from non-chat routes", async () => {
+    const app = mountApp("/sessions?session=agent:main");
+    await app.updateComplete;
+
+    expect(app.tab).toBe("sessions");
+    expect(window.location.pathname).toBe("/sessions");
+    expect(new URLSearchParams(window.location.search).get("session")).toBeNull();
+  });
+
   it("hydrates token from URL params even when settings already set", async () => {
     localStorage.setItem(
       "clawdbot.control.settings.v1",

@@ -183,14 +183,14 @@ export function renderApp(state: AppViewState) {
               onSettingsChange: (next) => state.applySettings(next),
               onPasswordChange: (next) => (state.password = next),
               onSessionKeyChange: (next) => {
-                state.sessionKey = next;
+                state.setSessionKey(next, {
+                  source: "settings",
+                  resetChat: false,
+                  loadHistory: false,
+                  syncUrl: false,
+                });
                 state.chatMessage = "";
                 state.resetToolStream();
-                state.applySettings({
-                  ...state.settings,
-                  sessionKey: next,
-                  lastActiveSessionKey: next,
-                });
               },
               onConnect: () => state.connect(),
               onRefresh: () => state.loadOverview(),
@@ -366,20 +366,14 @@ export function renderApp(state: AppViewState) {
           ? renderChat({
               sessionKey: state.sessionKey,
               onSessionKeyChange: (next) => {
-                state.sessionKey = next;
-                state.chatMessage = "";
-                state.chatStream = null;
-                state.chatStreamStartedAt = null;
-                state.chatRunId = null;
-                state.chatQueue = [];
-                state.resetToolStream();
-                state.resetChatScroll();
-                state.applySettings({
-                  ...state.settings,
-                  sessionKey: next,
-                  lastActiveSessionKey: next,
+                state.setSessionKey(next, {
+                  source: "user",
+                  resetChat: true,
+                  loadHistory: true,
+                  syncUrl: true,
+                  replace: true,
+                  clearQueue: true,
                 });
-                void loadChatHistory(state);
               },
               thinkingLevel: state.chatThinkingLevel,
               loading: state.chatLoading,

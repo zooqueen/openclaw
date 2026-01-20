@@ -1,3 +1,4 @@
+import { loadChatHistory } from "./controllers/chat";
 import { loadConfig, loadConfigSchema } from "./controllers/config";
 import { loadCronJobs, loadCronStatus } from "./controllers/cron";
 import { loadChannels } from "./controllers/channels";
@@ -16,6 +17,7 @@ import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
 import { startLogsPolling, stopLogsPolling } from "./app-polling";
 import { refreshChat } from "./app-chat";
 import type { ClawdbotApp } from "./app";
+import type { ChatQueueItem } from "./ui-types";
 
 type SettingsHost = {
   settings: UiSettings;
@@ -32,6 +34,25 @@ type SettingsHost = {
   basePath: string;
   themeMedia: MediaQueryList | null;
   themeMediaHandler: ((event: MediaQueryListEvent) => void) | null;
+};
+
+export type SessionKeyOptions = {
+  source?: "user" | "route" | "settings" | "gateway";
+  syncUrl?: boolean;
+  replace?: boolean;
+  resetChat?: boolean;
+  loadHistory?: boolean;
+  clearQueue?: boolean;
+};
+
+type SessionKeyHost = SettingsHost & {
+  chatMessage: string;
+  chatStream: string | null;
+  chatStreamStartedAt: number | null;
+  chatRunId: string | null;
+  chatQueue: ChatQueueItem[];
+  resetToolStream: () => void;
+  resetChatScroll: () => void;
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
@@ -55,13 +76,85 @@ export function setLastActiveSessionKey(host: SettingsHost, next: string) {
   applySettings(host, { ...host.settings, lastActiveSessionKey: trimmed });
 }
 
-export function applySettingsFromUrl(host: SettingsHost) {
-  if (!window.location.search) return;
-  const params = new URLSearchParams(window.location.search);
+function updateSessionSettings(host: SettingsHost, next: string) {
+  const trimmed = next.trim();
+  if (!trimmed) return;
+  if (
+    host.settings.sessionKey === trimmed &&
+    host.settings.lastActiveSessionKey === trimmed
+  ) {
+    return;
+  }
+  applySettings(host, {
+    ...host.settings,
+    sessionKey: trimmed,
+    lastActiveSessionKey: trimmed,
+  });
+}
+
+export function setSessionKey(
+  host: SessionKeyHost,
+  next: string,
+  options: SessionKeyOptions = {},
+) {
+  const trimmed = next.trim();
+  if (!trimmed) return;
+
+  const shouldResetChat = options.resetChat ?? false;
+  if (shouldResetChat) {
+    host.chatMessage = "";
+    host.chatStream = null;
+    host.chatStreamStartedAt = null;
+    host.chatRunId = null;
+    host.resetToolStream();
+    host.resetChatScroll();
+    if (options.clearQueue ?? true) {
+      host.chatQueue = [];
+    }
+  }
+
+  if (host.sessionKey !== trimmed) {
+    host.sessionKey = trimmed;
+  }
+  updateSessionSettings(host, trimmed);
+
+  if (options.syncUrl ?? host.tab === "chat") {
+    syncUrlWithTab(host, host.tab, options.replace ?? true);
+  }
+
+  if (options.loadHistory) {
+    void loadChatHistory(host as unknown as ClawdbotApp);
+  }
+}
+
+type LocationApplyOptions = {
+  replace: boolean;
+};
+
+function buildUrlForTab(host: SettingsHost, tab: Tab, baseUrl?: URL) {
+  const url = baseUrl ? new URL(baseUrl.toString()) : new URL(window.location.href);
+  const targetPath = normalizePath(pathForTab(tab, host.basePath));
+  url.pathname = targetPath;
+  if (tab === "chat" && host.sessionKey) {
+    url.searchParams.set("session", host.sessionKey);
+  } else {
+    url.searchParams.delete("session");
+  }
+  return url;
+}
+
+export function applyStateFromLocation(
+  host: SessionKeyHost,
+  options: LocationApplyOptions,
+) {
+  if (typeof window === "undefined") return;
+  const currentHref = window.location.href;
+  const url = new URL(currentHref);
+  const params = url.searchParams;
+
   const tokenRaw = params.get("token");
   const passwordRaw = params.get("password");
   const sessionRaw = params.get("session");
-  let shouldCleanUrl = false;
 
   if (tokenRaw != null) {
     const token = tokenRaw.trim();
@@ -69,7 +162,6 @@ export function applySettingsFromUrl(host: SettingsHost) {
       applySettings(host, { ...host.settings, token });
     }
     params.delete("token");
-    shouldCleanUrl = true;
   }
 
   if (passwordRaw != null) {
@@ -78,25 +170,34 @@ export function applySettingsFromUrl(host: SettingsHost) {
       (host as { password: string }).password = password;
     }
     params.delete("password");
-    shouldCleanUrl = true;
   }
 
-  if (sessionRaw != null) {
-    const session = sessionRaw.trim();
+  const resolved = tabFromPath(url.pathname, host.basePath) ?? "chat";
+  const session = sessionRaw?.trim() ?? "";
+  if (resolved === "chat") {
     if (session) {
-      host.sessionKey = session;
-      applySettings(host, {
-        ...host.settings,
-        sessionKey: session,
-        lastActiveSessionKey: session,
+      setSessionKey(host, session, {
+        source: "route",
+        syncUrl: false,
+        resetChat: false,
+        loadHistory: false,
       });
+    } else if (sessionRaw != null) {
+      params.delete("session");
     }
+  } else if (sessionRaw != null) {
+    params.delete("session");
   }
 
-  if (!shouldCleanUrl) return;
-  const url = new URL(window.location.href);
-  url.search = params.toString();
-  window.history.replaceState({}, "", url.toString());
+  setTabFromRoute(host, resolved);
+
+  const targetUrl = buildUrlForTab(host, resolved, url).toString();
+  if (targetUrl === currentHref) return;
+  if (options.replace) {
+    window.history.replaceState({}, "", targetUrl);
+  } else {
+    window.history.pushState({}, "", targetUrl);
+  }
 }
 
 export function setTab(host: SettingsHost, next: Tab) {
@@ -217,30 +318,8 @@ export function detachThemeListener(host: SettingsHost) {
   host.themeMediaHandler = null;
 }
 
-export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
-  if (typeof window === "undefined") return;
-  const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "chat";
-  setTabFromRoute(host, resolved);
-  syncUrlWithTab(host, resolved, replace);
-}
-
-export function onPopState(host: SettingsHost) {
-  if (typeof window === "undefined") return;
-  const resolved = tabFromPath(window.location.pathname, host.basePath);
-  if (!resolved) return;
-
-  const url = new URL(window.location.href);
-  const session = url.searchParams.get("session")?.trim();
-  if (session) {
-    host.sessionKey = session;
-    applySettings(host, {
-      ...host.settings,
-      sessionKey: session,
-      lastActiveSessionKey: session,
-    });
-  }
-
-  setTabFromRoute(host, resolved);
+export function onPopState(host: SessionKeyHost) {
+  applyStateFromLocation(host, { replace: true });
 }
 
 export function setTabFromRoute(host: SettingsHost, next: Tab) {
@@ -254,37 +333,13 @@ export function setTabFromRoute(host: SettingsHost, next: Tab) {
 
 export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
   if (typeof window === "undefined") return;
-  const targetPath = normalizePath(pathForTab(tab, host.basePath));
-  const currentPath = normalizePath(window.location.pathname);
-  const url = new URL(window.location.href);
-
-  if (tab === "chat" && host.sessionKey) {
-    url.searchParams.set("session", host.sessionKey);
-  } else {
-    url.searchParams.delete("session");
-  }
-
-  if (currentPath !== targetPath) {
-    url.pathname = targetPath;
-  }
-
+  const targetUrl = buildUrlForTab(host, tab).toString();
+  if (targetUrl === window.location.href) return;
   if (replace) {
-    window.history.replaceState({}, "", url.toString());
+    window.history.replaceState({}, "", targetUrl);
   } else {
-    window.history.pushState({}, "", url.toString());
+    window.history.pushState({}, "", targetUrl);
   }
-}
-
-export function syncUrlWithSessionKey(
-  host: SettingsHost,
-  sessionKey: string,
-  replace: boolean,
-) {
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  url.searchParams.set("session", sessionKey);
-  if (replace) window.history.replaceState({}, "", url.toString());
-  else window.history.pushState({}, "", url.toString());
 }
 
 export async function loadOverview(host: SettingsHost) {
