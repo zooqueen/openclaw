@@ -240,7 +240,6 @@ async function extractPdfContent(params: {
   const { buffer, limits } = params;
   const pdf = await getDocument({
     data: new Uint8Array(buffer),
-    // @ts-expect-error pdfjs-dist legacy option not in current type defs.
     disableWorker: true,
   }).promise;
   const maxPages = Math.min(pdf.numPages, limits.pdf.maxPages);
