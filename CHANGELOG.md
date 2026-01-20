@@ -16,6 +16,7 @@ Docs: https://docs.clawd.bot
 - Zalouser: add channel dock metadata, config schema, setup wiring, probe, and status issues. (#1219) — thanks @suminhthanh.
 ### Fixes
 - Web search: infer Perplexity base URL from API key source (direct vs OpenRouter).
+- Session: preserve command argument casing while matching reset triggers. (#1308) — thanks @dougvk.
 - TUI: keep thinking blocks ordered before content during streaming and isolate per-run assembly. (#1202) — thanks @aaronveklabs.
 - TUI: align custom editor initialization with the latest pi-tui API. (#1298) — thanks @sibbl.
 - CLI: avoid duplicating --profile/--dev flags when formatting commands.
