@@ -290,11 +290,18 @@ export function attachGatewayWsMessageHandler(params: {
         connectParams.role = role;
         connectParams.scopes = scopes;
 
+        const authResult = await authorizeGatewayConnect({
+          auth: resolvedAuth,
+          connectAuth: connectParams.auth,
+          req: upgradeReq,
+        });
+        let authOk = authResult.ok;
+        let authMethod = authResult.method ?? "none";
+        const allowsDeviceOptional = authOk && authMethod === "token";
+
         const device = connectParams.device;
         let devicePublicKey: string | null = null;
-        // Allow token-authenticated connections (e.g., control-ui) to skip device identity
-        const hasTokenAuth = !!connectParams.auth?.token;
-        if (!device && !hasTokenAuth) {
+        if (!device && !allowsDeviceOptional) {
           setHandshakeState("failed");
           setCloseCause("device-required", {
             client: connectParams.client.id,
@@ -460,13 +467,6 @@ export function attachGatewayWsMessageHandler(params: {
           }
         }
 
-        const authResult = await authorizeGatewayConnect({
-          auth: resolvedAuth,
-          connectAuth: connectParams.auth,
-          req: upgradeReq,
-        });
-        let authOk = authResult.ok;
-        let authMethod = authResult.method ?? "none";
         if (!authOk && connectParams.auth?.token && device) {
           const tokenCheck = await verifyDeviceToken({
             deviceId: device.id,

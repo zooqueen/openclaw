@@ -280,7 +280,7 @@ export async function connectReq(
       signature: string;
       signedAt: number;
       nonce?: string;
-    };
+    } | null;
   },
 ): Promise<ConnectResponse> {
   const { randomUUID } = await import("node:crypto");
@@ -294,6 +294,7 @@ export async function connectReq(
   const role = opts?.role ?? "operator";
   const requestedScopes = Array.isArray(opts?.scopes) ? opts?.scopes : [];
   const device = (() => {
+    if (opts?.device === null) return undefined;
     if (opts?.device) return opts.device;
     const identity = loadOrCreateDeviceIdentity();
     const signedAtMs = Date.now();

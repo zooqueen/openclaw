@@ -102,6 +102,33 @@ describe("gateway server auth/connect", () => {
     }
   });
 
+  test("accepts token auth without device identity", async () => {
+    const { server, ws, prevToken } = await startServerWithClient("secret");
+    const res = await connectReq(ws, { token: "secret", device: null });
+    expect(res.ok).toBe(true);
+    ws.close();
+    await server.close();
+    if (prevToken === undefined) {
+      delete process.env.CLAWDBOT_GATEWAY_TOKEN;
+    } else {
+      process.env.CLAWDBOT_GATEWAY_TOKEN = prevToken;
+    }
+  });
+
+  test("requires device identity when auth mode is none", async () => {
+    const { server, ws, prevToken } = await startServerWithClient();
+    const res = await connectReq(ws, { device: null });
+    expect(res.ok).toBe(false);
+    expect(res.error?.message ?? "").toContain("device identity required");
+    ws.close();
+    await server.close();
+    if (prevToken === undefined) {
+      delete process.env.CLAWDBOT_GATEWAY_TOKEN;
+    } else {
+      process.env.CLAWDBOT_GATEWAY_TOKEN = prevToken;
+    }
+  });
+
   test("accepts password auth when configured", async () => {
     testState.gatewayAuth = { mode: "password", password: "secret" };
     const port = await getFreePort();
