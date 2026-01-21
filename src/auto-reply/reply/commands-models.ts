@@ -1,8 +1,10 @@
 import { loadModelCatalog } from "../../agents/model-catalog.js";
 import {
   buildAllowedModelSet,
+  buildModelAliasIndex,
   normalizeProviderId,
   resolveConfiguredModelRef,
+  resolveModelRefFromString,
 } from "../../agents/model-selection.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../agents/defaults.js";
 import type { ReplyPayload } from "../types.js";
@@ -13,6 +15,15 @@ const PAGE_SIZE_MAX = 100;
 
 function formatProviderLine(params: { provider: string; count: number }): string {
   return `- ${params.provider} (${params.count})`;
+}
+
+function addModelRef(map: Map<string, Set<string>>, provider: string, model: string): void {
+  const normalizedProvider = normalizeProviderId(provider);
+  const normalizedModel = String(model ?? "").trim();
+  if (!normalizedProvider || !normalizedModel) return;
+  const set = map.get(normalizedProvider) ?? new Set<string>();
+  set.add(normalizedModel);
+  map.set(normalizedProvider, set);
 }
 
 function parseModelsArgs(raw: string): {
@@ -90,27 +101,55 @@ export const handleModelsCommand: CommandHandler = async (params, allowTextComma
   });
 
   const byProvider = new Map<string, Set<string>>();
-  const add = (p: string, m: string) => {
-    const key = normalizeProviderId(p);
-    const set = byProvider.get(key) ?? new Set<string>();
-    set.add(m);
-    byProvider.set(key, set);
+  const aliasIndex = buildModelAliasIndex({
+    cfg: params.cfg,
+    defaultProvider: resolvedDefault.provider,
+  });
+  const addRaw = (raw?: string) => {
+    const value = String(raw ?? "").trim();
+    if (!value) return;
+    const resolved = resolveModelRefFromString({
+      raw: value,
+      defaultProvider: resolvedDefault.provider,
+      aliasIndex,
+    });
+    if (!resolved) return;
+    addModelRef(byProvider, resolved.ref.provider, resolved.ref.model);
   };
 
   for (const entry of allowed.allowedCatalog) {
-    add(entry.provider, entry.id);
+    addModelRef(byProvider, entry.provider, entry.id);
   }
 
-  // Include config-only allowlist keys that aren't in the curated catalog.
+  addModelRef(byProvider, resolvedDefault.provider, resolvedDefault.model);
+
+  const modelConfig = params.cfg.agents?.defaults?.model;
+  const modelFallbacks =
+    modelConfig && typeof modelConfig === "object" ? (modelConfig.fallbacks ?? []) : [];
+  for (const fallback of modelFallbacks) {
+    addRaw(String(fallback ?? ""));
+  }
+
+  const imageConfig = params.cfg.agents?.defaults?.imageModel;
+  if (imageConfig) {
+    if (typeof imageConfig === "string") {
+      addRaw(imageConfig);
+    } else {
+      addRaw(imageConfig.primary);
+      for (const fallback of imageConfig.fallbacks ?? []) {
+        addRaw(String(fallback ?? ""));
+      }
+    }
+  }
+
   for (const raw of Object.keys(params.cfg.agents?.defaults?.models ?? {})) {
-    const rawKey = String(raw ?? "").trim();
-    if (!rawKey) continue;
-    const slash = rawKey.indexOf("/");
-    if (slash === -1) continue;
-    const p = normalizeProviderId(rawKey.slice(0, slash));
-    const m = rawKey.slice(slash + 1).trim();
-    if (!p || !m) continue;
-    add(p, m);
+    addRaw(String(raw ?? ""));
+  }
+
+  for (const [provider, providerConfig] of Object.entries(params.cfg.models?.providers ?? {})) {
+    for (const modelDef of providerConfig?.models ?? []) {
+      addModelRef(byProvider, provider, modelDef?.id ?? "");
+    }
   }
 
   const providers = [...byProvider.keys()].sort();

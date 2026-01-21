@@ -80,6 +80,49 @@ describe("/models command", () => {
     expect(result.reply?.text).toContain("All: /models anthropic all");
   });
 
+  it("includes configured providers and defaults", async () => {
+    const configuredCfg = {
+      commands: { text: true },
+      agents: {
+        defaults: {
+          model: {
+            primary: "synthetic/synth-1",
+            fallbacks: ["synthetic/synth-2"],
+          },
+          imageModel: {
+            primary: "synthetic/synth-image",
+            fallbacks: ["synthetic/synth-image-2"],
+          },
+        },
+      },
+      models: {
+        providers: {
+          synthetic: {
+            baseUrl: "https://example.com",
+            models: [
+              {
+                id: "synth-3",
+                name: "Synth 3",
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as ClawdbotConfig;
+
+    const providersResult = await handleCommands(buildParams("/models", configuredCfg));
+    expect(providersResult.shouldContinue).toBe(false);
+    expect(providersResult.reply?.text).toContain("synthetic");
+
+    const modelsResult = await handleCommands(buildParams("/models synthetic", configuredCfg));
+    expect(modelsResult.shouldContinue).toBe(false);
+    expect(modelsResult.reply?.text).toContain("synthetic/synth-1");
+    expect(modelsResult.reply?.text).toContain("synthetic/synth-2");
+    expect(modelsResult.reply?.text).toContain("synthetic/synth-3");
+    expect(modelsResult.reply?.text).toContain("synthetic/synth-image");
+    expect(modelsResult.reply?.text).toContain("synthetic/synth-image-2");
+  });
+
   it("errors on out-of-range pages", async () => {
     const params = buildParams("/models anthropic 4", cfg);
     const result = await handleCommands(params);

@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe("trigger handling", () => {
-  it("shows a quick /model picker listing provider/model pairs", async () => {
+  it("shows a /model summary with browse hints", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);
       const res = await getReplyFromConfig(
@@ -115,23 +115,18 @@ describe("trigger handling", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       const normalized = normalizeTestText(text ?? "");
-      expect(normalized).toContain("Pick: /model <#> or /model <provider/model>");
-      // Each provider/model combo is listed separately for clear selection
-      expect(normalized).toContain("anthropic/claude-opus-4-5");
-      expect(normalized).toContain("openrouter/anthropic/claude-opus-4-5");
-      expect(normalized).toContain("openai/gpt-5.2");
-      expect(normalized).toContain("openai-codex/gpt-5.2");
+      expect(normalized).toContain("Current: anthropic/claude-opus-4-5");
+      expect(normalized).toContain("Browse: /models");
+      expect(normalized).toContain("Switch: /model <provider/model>");
       expect(normalized).toContain("More: /model status");
-      expect(normalized).not.toContain("reasoning");
-      expect(normalized).not.toContain("image");
     });
   });
-  it("orders provider/model pairs by provider preference", async () => {
+  it("lists providers on /models", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);
       const res = await getReplyFromConfig(
         {
-          Body: "/model",
+          Body: "/models",
           From: "telegram:111",
           To: "telegram:111",
           ChatType: "direct",
@@ -146,54 +141,22 @@ describe("trigger handling", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       const normalized = normalizeTestText(text ?? "");
-      const anthropicIndex = normalized.indexOf("anthropic/claude-opus-4-5");
-      const openrouterIndex = normalized.indexOf("openrouter/anthropic/claude-opus-4-5");
-      const openaiIndex = normalized.indexOf("openai/gpt-4.1-mini");
-      const codexIndex = normalized.indexOf("openai-codex/gpt-5.2");
-      expect(anthropicIndex).toBeGreaterThanOrEqual(0);
-      expect(openrouterIndex).toBeGreaterThanOrEqual(0);
-      expect(openaiIndex).toBeGreaterThanOrEqual(0);
-      expect(codexIndex).toBeGreaterThanOrEqual(0);
-      expect(anthropicIndex).toBeLessThan(openrouterIndex);
-      expect(openaiIndex).toBeLessThan(codexIndex);
+      expect(normalized).toContain("Providers:");
+      expect(normalized).toContain("anthropic");
+      expect(normalized).toContain("openrouter");
+      expect(normalized).toContain("openai");
+      expect(normalized).toContain("openai-codex");
+      expect(normalized).toContain("minimax");
     });
   });
-  it("selects the exact provider/model pair for openrouter by index", async () => {
+  it("selects the exact provider/model pair for openrouter", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);
       const sessionKey = "telegram:slash:111";
-      const list = await getReplyFromConfig(
-        {
-          Body: "/model",
-          From: "telegram:111",
-          To: "telegram:111",
-          ChatType: "direct",
-          Provider: "telegram",
-          Surface: "telegram",
-          SessionKey: sessionKey,
-          CommandAuthorized: true,
-        },
-        {},
-        cfg,
-      );
-
-      const listText = Array.isArray(list) ? list[0]?.text : list?.text;
-      const lines = normalizeTestText(listText ?? "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const targetLine = lines.find((line) =>
-        line.includes("openrouter/anthropic/claude-opus-4-5"),
-      );
-      expect(targetLine).toBeDefined();
-      const match = targetLine?.match(/^(\d+)\)/);
-      expect(match?.[1]).toBeDefined();
-      const index = Number.parseInt(match?.[1] ?? "", 10);
-      expect(Number.isFinite(index)).toBe(true);
 
       const res = await getReplyFromConfig(
         {
-          Body: `/model ${index}`,
+          Body: "/model openrouter/anthropic/claude-opus-4-5",
           From: "telegram:111",
           To: "telegram:111",
           ChatType: "direct",
@@ -238,7 +201,7 @@ describe("trigger handling", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(normalizeTestText(text ?? "")).toContain(
-        'Invalid model selection "99". Use /model to list.',
+        "Numeric model selection is not supported in chat.",
       );
 
       const store = loadSessionStore(cfg.session.store);
@@ -246,15 +209,14 @@ describe("trigger handling", () => {
       expect(store[sessionKey]?.modelOverride).toBeUndefined();
     });
   });
-  it("selects exact provider/model combo by index via /model <#>", async () => {
+  it("selects exact provider/model combo via /model <provider/model>", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);
       const sessionKey = "telegram:slash:111";
 
-      // /model 1 should select the first item (anthropic/claude-opus-4-5)
       const res = await getReplyFromConfig(
         {
-          Body: "/model 1",
+          Body: "/model anthropic/claude-opus-4-5",
           From: "telegram:111",
           To: "telegram:111",
           ChatType: "direct",
@@ -268,8 +230,9 @@ describe("trigger handling", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      // Selecting the default model shows "reset to default" instead of "set to"
-      expect(normalizeTestText(text ?? "")).toContain("anthropic/claude-opus-4-5");
+      expect(normalizeTestText(text ?? "")).toContain(
+        "Model reset to default (anthropic/claude-opus-4-5).",
+      );
 
       const store = loadSessionStore(cfg.session.store);
       // When selecting the default, overrides are cleared
@@ -277,14 +240,14 @@ describe("trigger handling", () => {
       expect(store[sessionKey]?.modelOverride).toBeUndefined();
     });
   });
-  it("selects a model by index via /model <#>", async () => {
+  it("selects a model via /model <provider/model>", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);
       const sessionKey = "telegram:slash:111";
 
       const res = await getReplyFromConfig(
         {
-          Body: "/model 3",
+          Body: "/model openai/gpt-5.2",
           From: "telegram:111",
           To: "telegram:111",
           ChatType: "direct",

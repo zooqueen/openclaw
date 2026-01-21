@@ -60,13 +60,13 @@ describe("directive behavior", () => {
     vi.restoreAllMocks();
   });
 
-  it("lists allowlisted models on /model list", async () => {
+  it("lists allowlisted models on /models <provider>", async () => {
     await withTempHome(async (home) => {
       vi.mocked(runEmbeddedPiAgent).mockReset();
       const storePath = path.join(home, "sessions.json");
 
       const res = await getReplyFromConfig(
-        { Body: "/model list", From: "+1222", To: "+1222", CommandAuthorized: true },
+        { Body: "/models anthropic", From: "+1222", To: "+1222", CommandAuthorized: true },
         {},
         {
           agents: {
@@ -84,9 +84,29 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("Pick: /model <#> or /model <provider/model>");
+      expect(text).toContain("Models (anthropic)");
       expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("openai/gpt-4.1-mini");
+
+      const openaiRes = await getReplyFromConfig(
+        { Body: "/models openai", From: "+1222", To: "+1222", CommandAuthorized: true },
+        {},
+        {
+          agents: {
+            defaults: {
+              model: { primary: "anthropic/claude-opus-4-5" },
+              workspace: path.join(home, "clawd"),
+              models: {
+                "anthropic/claude-opus-4-5": {},
+                "openai/gpt-4.1-mini": {},
+              },
+            },
+          },
+          session: { store: storePath },
+        },
+      );
+      const openaiText = Array.isArray(openaiRes) ? openaiRes[0]?.text : openaiRes?.text;
+      expect(openaiText).toContain("Models (openai)");
+      expect(openaiText).toContain("openai/gpt-4.1-mini");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -97,7 +117,7 @@ describe("directive behavior", () => {
       const storePath = path.join(home, "sessions.json");
 
       const res = await getReplyFromConfig(
-        { Body: "/model", From: "+1222", To: "+1222", CommandAuthorized: true },
+        { Body: "/models anthropic", From: "+1222", To: "+1222", CommandAuthorized: true },
         {},
         {
           agents: {
@@ -115,9 +135,29 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("Pick: /model <#> or /model <provider/model>");
+      expect(text).toContain("Models (anthropic)");
       expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("openai/gpt-4.1-mini");
+
+      const openaiRes = await getReplyFromConfig(
+        { Body: "/models openai", From: "+1222", To: "+1222", CommandAuthorized: true },
+        {},
+        {
+          agents: {
+            defaults: {
+              model: { primary: "anthropic/claude-opus-4-5" },
+              workspace: path.join(home, "clawd"),
+              models: {
+                "anthropic/claude-opus-4-5": {},
+                "openai/gpt-4.1-mini": {},
+              },
+            },
+          },
+          session: { store: storePath },
+        },
+      );
+      const openaiText = Array.isArray(openaiRes) ? openaiRes[0]?.text : openaiRes?.text;
+      expect(openaiText).toContain("Models (openai)");
+      expect(openaiText).toContain("openai/gpt-4.1-mini");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -132,7 +172,7 @@ describe("directive behavior", () => {
       const storePath = path.join(home, "sessions.json");
 
       const res = await getReplyFromConfig(
-        { Body: "/model list", From: "+1222", To: "+1222", CommandAuthorized: true },
+        { Body: "/models xai", From: "+1222", To: "+1222", CommandAuthorized: true },
         {},
         {
           agents: {
@@ -150,10 +190,29 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("openai/gpt-4.1-mini");
-      expect(text).toContain("minimax/MiniMax-M2.1");
+      expect(text).toContain("Models (xai)");
       expect(text).toContain("xai/grok-4");
+
+      const minimaxRes = await getReplyFromConfig(
+        { Body: "/models minimax", From: "+1222", To: "+1222", CommandAuthorized: true },
+        {},
+        {
+          agents: {
+            defaults: {
+              model: {
+                primary: "anthropic/claude-opus-4-5",
+                fallbacks: ["openai/gpt-4.1-mini"],
+              },
+              imageModel: { primary: "minimax/MiniMax-M2.1" },
+              workspace: path.join(home, "clawd"),
+            },
+          },
+          session: { store: storePath },
+        },
+      );
+      const minimaxText = Array.isArray(minimaxRes) ? minimaxRes[0]?.text : minimaxRes?.text;
+      expect(minimaxText).toContain("Models (minimax)");
+      expect(minimaxText).toContain("minimax/MiniMax-M2.1");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -173,7 +232,7 @@ describe("directive behavior", () => {
       const storePath = path.join(home, "sessions.json");
 
       const res = await getReplyFromConfig(
-        { Body: "/model list", From: "+1222", To: "+1222", CommandAuthorized: true },
+        { Body: "/models minimax", From: "+1222", To: "+1222", CommandAuthorized: true },
         {},
         {
           agents: {
@@ -202,8 +261,7 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("openai/gpt-4.1-mini");
+      expect(text).toContain("Models (minimax)");
       expect(text).toContain("minimax/MiniMax-M2.1");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
@@ -231,6 +289,7 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
+      expect(text).toContain("Model listing moved.");
       expect(text).not.toContain("missing (missing)");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });

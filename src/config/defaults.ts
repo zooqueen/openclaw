@@ -205,7 +205,7 @@ export function applyContextPruningDefaults(cfg: ClawdbotConfig): ClawdbotConfig
 
   if (defaults.contextPruning?.mode === undefined) {
     nextDefaults.contextPruning = {
-      ...(defaults.contextPruning ?? {}),
+      ...defaults.contextPruning,
       mode: "cache-ttl",
       ttl: defaults.contextPruning?.ttl ?? "1h",
     };
@@ -214,7 +214,7 @@ export function applyContextPruningDefaults(cfg: ClawdbotConfig): ClawdbotConfig
 
   if (defaults.heartbeat?.every === undefined) {
     nextDefaults.heartbeat = {
-      ...(defaults.heartbeat ?? {}),
+      ...defaults.heartbeat,
       every: authMode === "oauth" ? "1h" : "30m",
     };
     mutated = true;

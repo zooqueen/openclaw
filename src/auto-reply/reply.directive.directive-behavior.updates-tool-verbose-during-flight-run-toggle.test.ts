@@ -187,7 +187,7 @@ describe("directive behavior", () => {
       expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
     });
   });
-  it("lists allowlisted models on /model", async () => {
+  it("shows a model summary on /model", async () => {
     await withTempHome(async (home) => {
       vi.mocked(runEmbeddedPiAgent).mockReset();
       const storePath = path.join(home, "sessions.json");
@@ -211,10 +211,9 @@ describe("directive behavior", () => {
       );
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toContain("anthropic/claude-opus-4-5");
-      expect(text).toContain("Pick: /model <#> or /model <provider/model>");
-      expect(text).toContain("openai/gpt-4.1-mini");
-      expect(text).not.toContain("claude-sonnet-4-1");
+      expect(text).toContain("Current: anthropic/claude-opus-4-5");
+      expect(text).toContain("Browse: /models");
+      expect(text).toContain("Switch: /model <provider/model>");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });

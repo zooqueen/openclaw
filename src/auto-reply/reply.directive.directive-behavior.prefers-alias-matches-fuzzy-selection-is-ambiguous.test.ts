@@ -62,13 +62,13 @@ describe("directive behavior", () => {
     vi.restoreAllMocks();
   });
 
-  it("prefers alias matches when fuzzy selection is ambiguous", async () => {
+  it("selects exact alias matches even when ambiguous", async () => {
     await withTempHome(async (home) => {
       vi.mocked(runEmbeddedPiAgent).mockReset();
       const storePath = path.join(home, "sessions.json");
 
       await getReplyFromConfig(
-        { Body: "/model ki", From: "+1222", To: "+1222", CommandAuthorized: true },
+        { Body: "/model Kimi", From: "+1222", To: "+1222", CommandAuthorized: true },
         {},
         {
           agents: {
