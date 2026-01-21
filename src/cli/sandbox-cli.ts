@@ -13,7 +13,7 @@ type CommandOptions = Record<string, unknown>;
 
 // --- Helpers ---
 
-const SANDBOX_EXAMPLES = {
+const SANDBOX_EXAMPLES: Record<string, [string, string][]> = {
   main: [
     ["clawdbot sandbox list", "List all sandbox containers."],
     ["clawdbot sandbox list --browser", "List only browser containers."],
@@ -40,7 +40,7 @@ const SANDBOX_EXAMPLES = {
     ["clawdbot sandbox explain --agent work", "Explain an agent sandbox."],
     ["clawdbot sandbox explain --json", "JSON output."],
   ],
-} as const;
+};
 
 function createRunner(
   commandFn: (opts: CommandOptions, runtime: typeof defaultRuntime) => Promise<void>,

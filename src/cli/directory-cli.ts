@@ -30,6 +30,13 @@ function buildRows(entries: Array<{ id: string; name?: string | undefined }>) {
   }));
 }
 
+function formatEntry(entry: { id: string; name?: string; handle?: string }) {
+  const name = entry.name?.trim() ?? "";
+  const handle = entry.handle?.trim() ?? "";
+  const label = name || handle;
+  return label ? `${entry.id} - ${label}` : entry.id;
+}
+
 export function registerDirectoryCli(program: Command) {
   const directory = program
     .command("directory")

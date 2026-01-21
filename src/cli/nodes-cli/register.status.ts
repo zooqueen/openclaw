@@ -46,7 +46,16 @@ function formatNodeVersions(node: {
 
 function parseSinceMs(raw: unknown, label: string): number | undefined {
   if (raw === undefined || raw === null) return undefined;
-  const value = String(raw).trim();
+  let value = "";
+  if (typeof raw === "string") {
+    value = raw.trim();
+  } else if (typeof raw === "number") {
+    value = `${raw}`;
+  } else {
+    defaultRuntime.error(`${label}: expected a duration string`);
+    defaultRuntime.exit(1);
+    return undefined;
+  }
   if (!value) return undefined;
   try {
     return parseDurationMs(value);

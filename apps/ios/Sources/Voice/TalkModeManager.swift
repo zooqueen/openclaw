@@ -133,8 +133,9 @@ final class TalkModeManager: NSObject {
 
     private func startRecognition() throws {
         #if targetEnvironment(simulator)
+            // Apple Speech live-audio recognition is not supported on Simulator.
             throw NSError(domain: "TalkMode", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Talk mode is not supported on the iOS simulator",
+                NSLocalizedDescriptionKey: "Talk mode is not supported on the iOS simulator (Speech live audio requires a device).",
             ])
         #endif
 

@@ -25,6 +25,7 @@ Docs: https://docs.clawd.bot
 - UI: add copy-as-markdown with error feedback and drop legacy list view. (#1345) — thanks @bradleypriest.
 - TUI: add input history (up/down) for submitted messages. (#1348) — thanks @vignesh07.
 ### Fixes
+- iOS: explain Talk mode is unavailable on the simulator to avoid Speech live-audio crashes. (#1358) — thanks @vignesh07.
 - Discovery: shorten Bonjour DNS-SD service type to `_clawdbot-gw._tcp` and update discovery clients/docs.
 - Agents: preserve subagent announce thread/topic routing + queued replies across channels. (#1241) — thanks @gnarco.
 - Agents: avoid treating timeout errors with "aborted" messages as user aborts, so model fallback still runs.

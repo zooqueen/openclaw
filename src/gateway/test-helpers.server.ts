@@ -187,7 +187,7 @@ export function onceMessage<T = unknown>(
   // Full-suite runs can saturate the event loop (581+ files). Keep this high
   // enough to avoid flaky RPC timeouts, but still fail fast when a response
   // never arrives.
-  timeoutMs = 10_000,
+  timeoutMs = 15_000,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);

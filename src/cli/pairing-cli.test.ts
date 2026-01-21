@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { describe, expect, it, vi } from "vitest";
 
+import { defaultRuntime } from "../runtime.js";
+
 const listChannelPairingRequests = vi.fn();
 const approveChannelPairingCode = vi.fn();
 const notifyPairingApproved = vi.fn();
@@ -64,14 +66,16 @@ describe("pairing cli", () => {
       },
     ]);
 
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const log = vi.spyOn(defaultRuntime, "log").mockImplementation(() => {});
     const program = new Command();
     program.name("test");
     registerPairingCli(program);
     await program.parseAsync(["pairing", "list", "--channel", "telegram"], {
       from: "user",
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("telegramUserId=123"));
+    const output = log.mock.calls.map((args) => args.join(" ")).join("\n");
+    expect(output).toContain("telegramUserId");
+    expect(output).toContain("123");
   });
 
   it("accepts channel as positional for list", async () => {
@@ -124,14 +128,16 @@ describe("pairing cli", () => {
       },
     ]);
 
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const log = vi.spyOn(defaultRuntime, "log").mockImplementation(() => {});
     const program = new Command();
     program.name("test");
     registerPairingCli(program);
     await program.parseAsync(["pairing", "list", "--channel", "discord"], {
       from: "user",
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("discordUserId=999"));
+    const output = log.mock.calls.map((args) => args.join(" ")).join("\n");
+    expect(output).toContain("discordUserId");
+    expect(output).toContain("999");
   });
 
   it("accepts channel as positional for approve (npm-run compatible)", async () => {
@@ -146,7 +152,7 @@ describe("pairing cli", () => {
       },
     });
 
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const log = vi.spyOn(defaultRuntime, "log").mockImplementation(() => {});
     const program = new Command();
     program.name("test");
     registerPairingCli(program);
