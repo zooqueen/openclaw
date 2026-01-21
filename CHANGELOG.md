@@ -24,6 +24,7 @@ Docs: https://docs.clawd.bot
 - UI: add copy-as-markdown with error feedback and drop legacy list view. (#1345) — thanks @bradleypriest.
 ### Fixes
 - Discovery: shorten Bonjour DNS-SD service type to `_clawdbot-gw._tcp` and update discovery clients/docs.
+- Telegram: answer callback queries immediately to prevent retries. (#1349) — thanks @siddhantjain.
 - Agents: preserve subagent announce thread/topic routing + queued replies across channels. (#1241) — thanks @gnarco.
 - Agents: avoid treating timeout errors with "aborted" messages as user aborts, so model fallback still runs.
 - Diagnostics: export OTLP logs, correct queue depth tracking, and document message-flow telemetry.
