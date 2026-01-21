@@ -63,7 +63,7 @@ function createBaseRun(params: { runOverrides?: Partial<FollowupRun["run"]> }) {
       provider: "anthropic",
       model: "claude-opus",
       authProfileId: "anthropic:clawd",
-      authProfileIdSource: "manual",
+      authProfileIdSource: "user",
       thinkLevel: "low",
       verboseLevel: "off",
       elevatedLevel: "off",
@@ -106,7 +106,7 @@ describe("authProfileId fallback scoping", () => {
         provider: "anthropic",
         model: "claude-opus",
         authProfileId: "anthropic:clawd",
-        authProfileIdSource: "manual",
+        authProfileIdSource: "user",
       },
     });
 

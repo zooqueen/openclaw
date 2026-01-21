@@ -23,6 +23,7 @@ Docs: https://docs.clawd.bot
 - Docs: clarify WhatsApp voice notes and Windows WSL portproxy LAN access notes.
 - UI: add copy-as-markdown with error feedback and drop legacy list view. (#1345) — thanks @bradleypriest.
 ### Fixes
+- Tests: cover auth profile scoping when model fallback switches providers. (#1350) — thanks @Jackten.
 - Discovery: shorten Bonjour DNS-SD service type to `_clawdbot-gw._tcp` and update discovery clients/docs.
 - Agents: preserve subagent announce thread/topic routing + queued replies across channels. (#1241) — thanks @gnarco.
 - Agents: avoid treating timeout errors with "aborted" messages as user aborts, so model fallback still runs.
