@@ -47,6 +47,45 @@ describe("exec approval handlers", () => {
       };
       expect(validateExecApprovalRequestParams(params)).toBe(false);
     });
+
+    it("accepts request with sessionKey omitted", () => {
+      const params = {
+        command: "echo hi",
+        cwd: "/tmp",
+        host: "node",
+      };
+      expect(validateExecApprovalRequestParams(params)).toBe(true);
+    });
+
+    it("accepts request with sessionKey as string", () => {
+      const params = {
+        command: "echo hi",
+        cwd: "/tmp",
+        host: "node",
+        sessionKey: "session-1",
+      };
+      expect(validateExecApprovalRequestParams(params)).toBe(true);
+    });
+
+    it("accepts request with sessionKey as undefined", () => {
+      const params = {
+        command: "echo hi",
+        cwd: "/tmp",
+        host: "node",
+        sessionKey: undefined,
+      };
+      expect(validateExecApprovalRequestParams(params)).toBe(true);
+    });
+
+    it("rejects request with sessionKey as null", () => {
+      const params = {
+        command: "echo hi",
+        cwd: "/tmp",
+        host: "node",
+        sessionKey: null,
+      };
+      expect(validateExecApprovalRequestParams(params)).toBe(false);
+    });
   });
 
   it("broadcasts request + resolve", async () => {
