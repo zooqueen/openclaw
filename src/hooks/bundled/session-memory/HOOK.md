@@ -26,7 +26,7 @@ When you run `/new` to start a fresh session:
 2. **Extracts conversation** - Reads the last 15 lines of conversation from the session
 3. **Generates descriptive slug** - Uses LLM to create a meaningful filename slug based on conversation content
 4. **Saves to memory** - Creates a new file at `<workspace>/memory/YYYY-MM-DD-slug.md`
-5. **Sends confirmation** - Notifies you with the file path
+5. **Logs completion** - Writes the file path to logs (no user-visible confirmation)
 
 ## Output Format
 
