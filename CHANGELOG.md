@@ -25,6 +25,7 @@ Docs: https://docs.clawd.bot
 - Google Antigravity: drop unsigned thinking blocks for Claude models to avoid signature errors.
 - Config: avoid stack traces for invalid configs and log the config path.
 - CLI: read Codex CLI account_id for workspace billing. (#1422) Thanks @aj47.
+- Agents: include skills section in minimal prompts for subagents. (#1431) Thanks @robbyczgw-cla.
 - Doctor: avoid recreating WhatsApp config when only legacy routing keys remain. (#900)
 - Doctor: warn when gateway.mode is unset with configure/config guidance.
 - OpenCode Zen: route models to the Zen API shape per family so proxy endpoints are used. (#1416)

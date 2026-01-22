@@ -23,7 +23,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("Owner numbers:");
   });
 
-  it("omits extended sections in minimal prompt mode", () => {
+  it("keeps skills but omits other extended sections in minimal prompt mode", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/clawd",
       promptMode: "minimal",
@@ -37,7 +37,8 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).not.toContain("## User Identity");
-    expect(prompt).not.toContain("## Skills");
+    expect(prompt).toContain("## Skills (mandatory)");
+    expect(prompt).toContain("<available_skills>");
     expect(prompt).not.toContain("## Memory Recall");
     expect(prompt).not.toContain("## Documentation");
     expect(prompt).not.toContain("## Reply Tags");
