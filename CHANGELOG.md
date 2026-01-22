@@ -2,6 +2,11 @@
 
 Docs: https://docs.clawd.bot
 
+## 2026.1.22
+
+### Fixes
+- Auto-reply: only report a model switch when session state is available. (#1465) Thanks @robbyczgw-cla.
+
 ## 2026.1.21-2
 
 ### Fixes
