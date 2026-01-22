@@ -20,18 +20,18 @@ Today, complex workflows require many back-and-forth tool calls. Each call costs
 Without Lobster:
 ```
 User: "Check my email and draft replies"
-→ clawd calls gmail.list
+→ clawdbot calls gmail.list
 → LLM summarizes
 → User: "draft replies to #2 and #5"
 → LLM drafts
 → User: "send #2"
-→ clawd calls gmail.send
+→ clawdbot calls gmail.send
 (repeat daily, no memory of what was triaged)
 ```
 
 With Lobster:
 ```
-clawd calls: lobster.run("email.triage --limit 20")
+clawdbot calls: lobster.run("email.triage --limit 20")
 
 Returns:
 {
@@ -46,7 +46,7 @@ Returns:
   }
 }
 
-User approves → clawd calls: lobster.resume(token, approve: true)
+User approves → clawdbot calls: lobster.resume(token, approve: true)
 → Emails sent
 ```
 

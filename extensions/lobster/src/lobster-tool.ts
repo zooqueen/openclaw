@@ -35,12 +35,18 @@ async function runLobsterSubprocess(params: {
   cwd: string;
   timeoutMs: number;
   maxStdoutBytes: number;
+  signal?: AbortSignal;
 }) {
   const { execPath, argv, cwd } = params;
   const timeoutMs = Math.max(200, params.timeoutMs);
   const maxStdoutBytes = Math.max(1024, params.maxStdoutBytes);
 
   return await new Promise<{ stdout: string }>((resolve, reject) => {
+    if (params.signal?.aborted) {
+      reject(new Error("lobster subprocess aborted"));
+      return;
+    }
+
     const child = spawn(execPath, argv, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
@@ -53,6 +59,25 @@ async function runLobsterSubprocess(params: {
     let stdout = "";
     let stdoutBytes = 0;
     let stderr = "";
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (params.signal) params.signal.removeEventListener("abort", onAbort);
+      fn();
+    };
+
+    const onAbort = () => {
+      try {
+        child.kill("SIGKILL");
+      } finally {
+        finish(() => reject(new Error("lobster subprocess aborted")));
+      }
+    };
+
+    params.signal?.addEventListener("abort", onAbort);
 
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
@@ -64,7 +89,7 @@ async function runLobsterSubprocess(params: {
         try {
           child.kill("SIGKILL");
         } finally {
-          reject(new Error("lobster output exceeded maxStdoutBytes"));
+          finish(() => reject(new Error("lobster output exceeded maxStdoutBytes")));
         }
         return;
       }
@@ -79,22 +104,22 @@ async function runLobsterSubprocess(params: {
       try {
         child.kill("SIGKILL");
       } finally {
-        reject(new Error("lobster subprocess timed out"));
+        finish(() => reject(new Error("lobster subprocess timed out")));
       }
     }, timeoutMs);
 
     child.once("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
+      finish(() => reject(err));
     });
 
     child.once("exit", (code) => {
-      clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error(`lobster failed (${code ?? "?"}): ${stderr.trim() || stdout.trim()}`));
+        finish(() =>
+          reject(new Error(`lobster failed (${code ?? "?"}): ${stderr.trim() || stdout.trim()}`)),
+        );
         return;
       }
-      resolve({ stdout });
+      finish(() => resolve({ stdout }));
     });
   });
 }
@@ -135,7 +160,7 @@ export function createLobsterTool(api: ClawdbotPluginApi) {
       timeoutMs: Type.Optional(Type.Number()),
       maxStdoutBytes: Type.Optional(Type.Number()),
     }),
-    async execute(_id: string, params: Record<string, unknown>) {
+    async execute(_id: string, params: Record<string, unknown>, signal?: AbortSignal) {
       const action = String(params.action || "").trim();
       if (!action) throw new Error("action required");
 
@@ -172,6 +197,7 @@ export function createLobsterTool(api: ClawdbotPluginApi) {
         cwd,
         timeoutMs,
         maxStdoutBytes,
+        signal,
       });
 
       const envelope = parseEnvelope(stdout);

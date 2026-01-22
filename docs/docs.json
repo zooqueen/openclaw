@@ -977,6 +977,7 @@
           "plugin",
           "plugins/voice-call",
           "plugins/zalouser",
+          "tools/lobster",
           "tools/exec",
           "tools/web",
           "tools/apply-patch",

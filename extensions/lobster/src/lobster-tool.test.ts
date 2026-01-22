@@ -8,13 +8,26 @@ import type { ClawdbotPluginApi, ClawdbotPluginToolContext } from "../../../src/
 import { createLobsterTool } from "./lobster-tool.js";
 
 async function writeFakeLobster(params: {
-  payload: unknown;
+  payload?: unknown;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  delayMs?: number;
 }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-lobster-plugin-"));
   const binPath = path.join(dir, "lobster");
 
+  const payload = params.stdout ?? JSON.stringify(params.payload ?? null);
+  const delay = Math.max(0, params.delayMs ?? 0);
+  const exitCode = Number.isFinite(params.exitCode) ? params.exitCode : 0;
+  const stderr = params.stderr ? String(params.stderr) : "";
+
   const file = `#!/usr/bin/env node\n` +
-    `process.stdout.write(JSON.stringify(${JSON.stringify(params.payload)}));\n`;
+    `setTimeout(() => {\n` +
+    `  if (${JSON.stringify(stderr)}.length) process.stderr.write(${JSON.stringify(stderr)});\n` +
+    `  process.stdout.write(${JSON.stringify(payload)});\n` +
+    `  process.exit(${exitCode});\n` +
+    `}, ${delay});\n`;
 
   await fs.writeFile(binPath, file, { encoding: "utf8", mode: 0o755 });
   return { dir, binPath };
@@ -97,6 +110,78 @@ describe("lobster plugin tool", () => {
         lobsterPath: binPath,
       }),
     ).rejects.toThrow(/invalid JSON/);
+  });
+
+  it("errors on timeout", async () => {
+    const fake = await writeFakeLobster({
+      payload: { ok: true, status: "ok", output: [], requiresApproval: null },
+      delayMs: 250,
+    });
+
+    const tool = createLobsterTool(fakeApi());
+    await expect(
+      tool.execute("call4", {
+        action: "run",
+        pipeline: "noop",
+        lobsterPath: fake.binPath,
+        timeoutMs: 50,
+      }),
+    ).rejects.toThrow(/timed out/);
+  });
+
+  it("caps stdout", async () => {
+    const fake = await writeFakeLobster({
+      stdout: "x".repeat(2000),
+    });
+
+    const tool = createLobsterTool(fakeApi());
+    await expect(
+      tool.execute("call5", {
+        action: "run",
+        pipeline: "noop",
+        lobsterPath: fake.binPath,
+        maxStdoutBytes: 128,
+      }),
+    ).rejects.toThrow(/maxStdoutBytes/);
+  });
+
+  it("returns stderr in non-zero exit errors", async () => {
+    const fake = await writeFakeLobster({
+      stdout: "",
+      stderr: "boom",
+      exitCode: 2,
+    });
+
+    const tool = createLobsterTool(fakeApi());
+    await expect(
+      tool.execute("call6", {
+        action: "run",
+        pipeline: "noop",
+        lobsterPath: fake.binPath,
+      }),
+    ).rejects.toThrow(/boom/);
+  });
+
+  it("aborts via signal", async () => {
+    const fake = await writeFakeLobster({
+      payload: { ok: true, status: "ok", output: [], requiresApproval: null },
+      delayMs: 200,
+    });
+
+    const tool = createLobsterTool(fakeApi());
+    const controller = new AbortController();
+    const promise = tool.execute(
+      "call7",
+      {
+        action: "run",
+        pipeline: "noop",
+        lobsterPath: fake.binPath,
+      },
+      controller.signal,
+    );
+
+    controller.abort();
+    await expect(promise).rejects.toThrow(/aborted/);
   });
 
   it("can be gated off in sandboxed contexts", async () => {

@@ -11,6 +11,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - Doctor: warn when gateway.mode is unset with configure/config guidance.
+- Lobster: fix plugin discovery and harden the tool runtime. (#1152) Thanks @vignesh07.
 
 ## 2026.1.21
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UpdateRunResult } from "../infra/update-runner.js";
+import { parseSemver } from "../infra/runtime-guard.js";
 
 // Mock the update-runner module
 vi.mock("../infra/update-runner.js", () => ({
@@ -72,6 +73,23 @@ describe("update-cli", () => {
       value,
       configurable: true,
     });
+  };
+
+  const readRepoVersion = async () => {
+    const raw = await fs.readFile(new URL("../../package.json", import.meta.url), "utf-8");
+    const parsed = JSON.parse(raw) as { version?: string };
+    if (!parsed.version) {
+      throw new Error("package.json version missing");
+    }
+    return parsed.version;
+  };
+
+  const bumpPatch = (version: string, delta: number) => {
+    const parsed = parseSemver(version);
+    if (!parsed) {
+      throw new Error(`invalid version: ${version}`);
+    }
+    return `${parsed.major}.${parsed.minor}.${Math.max(0, parsed.patch + delta)}`;
   };
 
   beforeEach(async () => {
@@ -271,9 +289,12 @@ describe("update-cli", () => {
   it("falls back to latest when beta tag is older than release", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-update-"));
     try {
+      const repoVersion = await readRepoVersion();
+      const currentVersion = bumpPatch(repoVersion, 0);
+      const latestVersion = bumpPatch(repoVersion, 1);
       await fs.writeFile(
         path.join(tempDir, "package.json"),
-        JSON.stringify({ name: "clawdbot", version: "2026.1.18-1" }),
+        JSON.stringify({ name: "clawdbot", version: currentVersion }),
         "utf-8",
       );
 
@@ -302,7 +323,7 @@ describe("update-cli", () => {
       });
       vi.mocked(resolveNpmChannelTag).mockResolvedValue({
         tag: "latest",
-        version: "1.2.3-1",
+        version: latestVersion,
       });
       vi.mocked(runGatewayUpdate).mockResolvedValue({
         status: "ok",

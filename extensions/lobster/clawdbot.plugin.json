@@ -1,0 +1,8 @@
+{
+  "id": "lobster",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
