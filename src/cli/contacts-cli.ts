@@ -2,7 +2,6 @@ import type { Command } from "commander";
 
 import {
   autoLinkHighConfidence,
-  ContactStore,
   findLinkSuggestions,
   getContactStore,
   linkContacts,

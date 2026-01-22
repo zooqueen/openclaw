@@ -5,7 +5,6 @@ import type { Platform } from "../contacts/types.js";
 import { danger } from "../globals.js";
 import { defaultRuntime } from "../runtime.js";
 import { formatDocsLink } from "../terminal/links.js";
-import { renderTable } from "../terminal/table.js";
 import { theme } from "../terminal/theme.js";
 
 function formatTimestamp(ts: number): string {

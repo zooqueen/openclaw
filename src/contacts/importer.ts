@@ -272,11 +272,11 @@ export async function importSlackUsers(
           if (isNew) result.imported++;
         }
       } catch (err) {
-        result.errors.push(`Failed to import user ${user.id}: ${err}`);
+        result.errors.push(`Failed to import user ${user.id}: ${String(err)}`);
       }
     }
   } catch (err) {
-    result.errors.push(`Failed to list Slack users: ${err}`);
+    result.errors.push(`Failed to list Slack users: ${String(err)}`);
   }
 
   return result;
@@ -327,11 +327,11 @@ export async function importDiscordGuildMembers(
           if (isNew) result.imported++;
         }
       } catch (err) {
-        result.errors.push(`Failed to import member ${member.user.id}: ${err}`);
+        result.errors.push(`Failed to import member ${member.user.id}: ${String(err)}`);
       }
     }
   } catch (err) {
-    result.errors.push(`Failed to list Discord members: ${err}`);
+    result.errors.push(`Failed to list Discord members: ${String(err)}`);
   }
 
   return result;
@@ -374,11 +374,11 @@ export async function importWhatsAppGroupParticipants(
           if (isNew) result.imported++;
         }
       } catch (err) {
-        result.errors.push(`Failed to import participant ${participant.id}: ${err}`);
+        result.errors.push(`Failed to import participant ${participant.id}: ${String(err)}`);
       }
     }
   } catch (err) {
-    result.errors.push(`Failed to get group metadata for ${groupJid}: ${err}`);
+    result.errors.push(`Failed to get group metadata for ${groupJid}: ${String(err)}`);
   }
 
   return result;

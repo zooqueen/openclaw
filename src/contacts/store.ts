@@ -366,10 +366,7 @@ export class ContactStore {
   /**
    * Get a platform identity by platform and platform-specific ID.
    */
-  getIdentityByPlatformId(
-    platform: Platform | string,
-    platformId: string,
-  ): PlatformIdentity | null {
+  getIdentityByPlatformId(platform: string, platformId: string): PlatformIdentity | null {
     const row = this.stmtGetIdentityByPlatformId.get(platform, platformId) as
       | {
           id: number;
@@ -434,7 +431,7 @@ export class ContactStore {
   /**
    * Update last seen timestamp for a platform identity.
    */
-  updateIdentityLastSeen(platform: Platform | string, platformId: string): void {
+  updateIdentityLastSeen(platform: string, platformId: string): void {
     this.stmtUpdateIdentityLastSeen.run(Date.now(), platform, platformId);
   }
 
@@ -442,7 +439,7 @@ export class ContactStore {
    * Resolve a platform sender to a canonical contact ID.
    * Returns null if the sender is not in the contact graph.
    */
-  resolveContact(platform: Platform | string, platformId: string): string | null {
+  resolveContact(platform: string, platformId: string): string | null {
     const identity = this.getIdentityByPlatformId(platform, platformId);
     return identity?.contactId ?? null;
   }

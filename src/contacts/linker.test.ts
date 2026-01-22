@@ -491,11 +491,9 @@ describe("linker", () => {
         lastSeenAt: null,
       });
 
-      const initialCount = store.listContacts().length;
       const result = autoLinkHighConfidence(store);
 
       // Name similarity below threshold should not auto-link
-      const finalCount = store.listContacts().length;
       // They may or may not be linked depending on exact similarity
       // But we verify auto-link only processes high confidence
       expect(result.suggestions.every((s) => s.confidence === "high")).toBe(true);
