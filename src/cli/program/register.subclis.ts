@@ -222,6 +222,22 @@ const entries: SubCliEntry[] = [
       mod.registerUpdateCli(program);
     },
   },
+  {
+    name: "contacts",
+    description: "Unified contact graph",
+    register: async (program) => {
+      const mod = await import("../contacts-cli.js");
+      mod.registerContactsCli(program);
+    },
+  },
+  {
+    name: "search",
+    description: "Cross-platform message search",
+    register: async (program) => {
+      const mod = await import("../search-cli.js");
+      mod.registerSearchCli(program);
+    },
+  },
 ];
 
 function removeCommand(program: Command, command: Command) {

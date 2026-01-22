@@ -558,6 +558,21 @@ function buildChatCommands(): ChatCommandDefinition[] {
         },
       ],
     }),
+    defineChatCommand({
+      key: "search",
+      description: "Search messages across all platforms.",
+      textAlias: "/search",
+      scope: "text",
+      args: [
+        {
+          name: "query",
+          description: "Search query",
+          type: "string",
+          required: true,
+          captureRemaining: true,
+        },
+      ],
+    }),
     ...listChannelDocks()
       .filter((dock) => dock.capabilities.nativeCommands)
       .map((dock) => defineDockCommand(dock)),
