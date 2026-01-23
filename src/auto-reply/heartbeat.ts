@@ -28,8 +28,9 @@ export function isHeartbeatContentEffectivelyEmpty(content: string | undefined |
     const trimmed = line.trim();
     // Skip empty lines
     if (!trimmed) continue;
-    // Skip comment/header lines (markdown headers are comments for our purposes)
-    if (trimmed.startsWith("#")) continue;
+    // Skip markdown header lines (# followed by space or alone, ## etc)
+    // This intentionally does NOT skip lines like "#TODO" or "#hashtag" which might be content
+    if (/^#+\s*$/.test(trimmed) || /^#+\s/.test(trimmed)) continue;
     // Found a non-empty, non-comment line - there's actionable content
     return false;
   }
