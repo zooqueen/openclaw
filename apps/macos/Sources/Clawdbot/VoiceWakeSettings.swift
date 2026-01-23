@@ -22,6 +22,7 @@ struct VoiceWakeSettings: View {
     @State private var micRefreshTask: Task<Void, Never>?
     @State private var availableLocales: [Locale] = []
     @State private var triggerEntries: [TriggerEntry] = []
+    @FocusState private var focusedTriggerEntryID: UUID?
     private let fieldLabelWidth: CGFloat = 140
     private let controlWidth: CGFloat = 240
     private let isPreview = ProcessInfo.processInfo.isPreview
@@ -142,6 +143,11 @@ struct VoiceWakeSettings: View {
             Task { await self.meter.stop() }
             self.syncTriggerEntriesToState()
         }
+        .onChange(of: self.state.swabbleTriggerWords) { _, _ in
+            guard !self.isPreview else { return }
+            guard self.focusedTriggerEntryID == nil else { return }
+            self.loadTriggerEntries()
+        }
     }
 
     private func loadTriggerEntries() {
@@ -177,6 +183,7 @@ struct VoiceWakeSettings: View {
                     HStack(spacing: 8) {
                         TextField("Wake word", text: $entry.value)
                             .textFieldStyle(.roundedBorder)
+                            .focused(self.$focusedTriggerEntryID, equals: entry.id)
                             .onSubmit {
                                 self.syncTriggerEntriesToState()
                             }
@@ -196,6 +203,10 @@ struct VoiceWakeSettings: View {
                         Divider()
                     }
                 }
+            }
+            .onChange(of: self.focusedTriggerEntryID) { oldValue, newValue in
+                guard oldValue != nil, oldValue != newValue else { return }
+                self.syncTriggerEntriesToState()
             }
             .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
             .background(Color(nsColor: .textBackgroundColor))

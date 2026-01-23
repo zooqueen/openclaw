@@ -10,6 +10,7 @@ Docs: https://docs.clawd.bot
 - Markdown: add per-channel table conversion (bullets for Signal/WhatsApp, code blocks elsewhere). (#1495) Thanks @odysseus0.
 
 ### Fixes
+- macOS: sync voice wake trigger words on submit/blur in settings. (#1506) Thanks @shiv19.
 - TUI: forward unknown slash commands (for example, `/context`) to the Gateway.
 - TUI: include Gateway slash commands in autocomplete and `/help`.
 - CLI: skip usage lines in `clawdbot models status` when provider usage is unavailable.

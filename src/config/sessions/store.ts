@@ -267,9 +267,10 @@ async function withSessionStoreLock<T>(
   fn: () => Promise<T>,
   opts: SessionStoreLockOptions = {},
 ): Promise<T> {
-  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const isFastTest = process.env.CLAWDBOT_TEST_FAST === "1";
+  const timeoutMs = opts.timeoutMs ?? (isFastTest ? 30_000 : 10_000);
   const pollIntervalMs = opts.pollIntervalMs ?? 25;
-  const staleMs = opts.staleMs ?? 30_000;
+  const staleMs = opts.staleMs ?? (isFastTest ? 5_000 : 30_000);
   const lockPath = `${storePath}.lock`;
   const startedAt = Date.now();
 
