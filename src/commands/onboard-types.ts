@@ -50,9 +50,9 @@ export type OnboardOptions = {
   acceptRisk?: boolean;
   reset?: boolean;
   authChoice?: AuthChoice;
-  /** Used when `authChoice=token` in non-interactive mode. */
+  /** Used when `authChoice=token` in non-interactive mode, or `authChoice=apiKey` in wizard mode. */
   tokenProvider?: string;
-  /** Used when `authChoice=token` in non-interactive mode. */
+  /** Used when `authChoice=token` in non-interactive mode, or `authChoice=apiKey` in wizard mode. */
   token?: string;
   /** Used when `authChoice=token` in non-interactive mode. */
   tokenProfileId?: string;

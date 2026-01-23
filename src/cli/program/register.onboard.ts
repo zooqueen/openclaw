@@ -56,9 +56,12 @@ export function registerOnboardCommand(program: Command) {
     )
     .option(
       "--token-provider <id>",
-      "Token provider id (non-interactive; used with --auth-choice token)",
+      "Token provider id (non-interactive; used with --auth-choice token or apiKey)",
     )
-    .option("--token <token>", "Token value (non-interactive; used with --auth-choice token)")
+    .option(
+      "--token <token>",
+      "Token value (non-interactive; used with --auth-choice token or apiKey)",
+    )
     .option(
       "--token-profile-id <id>",
       "Auth profile id (non-interactive; default: <provider>:manual)",

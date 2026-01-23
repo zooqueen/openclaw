@@ -1,4 +1,5 @@
 import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../agents/auth-profiles.js";
+import { normalizeProviderId } from "../agents/model-selection.js";
 import { resolveEnvApiKey } from "../agents/model-auth.js";
 import {
   formatApiKeyPreview,
@@ -6,6 +7,7 @@ import {
   validateApiKeyInput,
 } from "./auth-choice.api-key.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
+import type { AuthChoice } from "./onboard-types.js";
 import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
 import {
   applyGoogleGeminiModelDefault,
@@ -56,84 +58,86 @@ export async function applyAuthChoiceApiProviders(
     );
   };
 
+  const tokenProvider = params.opts?.tokenProvider
+    ? normalizeProviderId(params.opts.tokenProvider)
+    : undefined;
+  const tokenValue = params.opts?.token;
   let authChoice = params.authChoice;
   if (
     authChoice === "apiKey" &&
-    params.opts?.tokenProvider &&
-    params.opts.tokenProvider !== "anthropic" &&
-    params.opts.tokenProvider !== "openai"
+    tokenProvider &&
+    tokenProvider !== "anthropic" &&
+    tokenProvider !== "openai"
   ) {
-    if (params.opts.tokenProvider === "openrouter") {
-      authChoice = "openrouter-api-key";
-    } else if (params.opts.tokenProvider === "vercel-ai-gateway") {
-      authChoice = "ai-gateway-api-key";
-    } else if (params.opts.tokenProvider === "moonshot") {
-      authChoice = "moonshot-api-key";
-    } else if (params.opts.tokenProvider === "kimi-code") {
-      authChoice = "kimi-code-api-key";
-    } else if (params.opts.tokenProvider === "google") {
-      authChoice = "gemini-api-key";
-    } else if (params.opts.tokenProvider === "zai") {
-      authChoice = "zai-api-key";
-    } else if (params.opts.tokenProvider === "synthetic") {
-      authChoice = "synthetic-api-key";
-    } else if (params.opts.tokenProvider === "opencode") {
-      authChoice = "opencode-zen";
-    }
+    const mapped: Partial<Record<string, AuthChoice>> = {
+      openrouter: "openrouter-api-key",
+      "vercel-ai-gateway": "ai-gateway-api-key",
+      moonshot: "moonshot-api-key",
+      "kimi-code": "kimi-code-api-key",
+      google: "gemini-api-key",
+      zai: "zai-api-key",
+      synthetic: "synthetic-api-key",
+      opencode: "opencode-zen",
+    };
+    authChoice = mapped[tokenProvider] ?? authChoice;
   }
 
   if (authChoice === "openrouter-api-key") {
-    const store = ensureAuthProfileStore(params.agentDir, {
-      allowKeychainPrompt: false,
-    });
-    const profileOrder = resolveAuthProfileOrder({
-      cfg: nextConfig,
-      store,
-      provider: "openrouter",
-    });
-    const existingProfileId = profileOrder.find((profileId) => Boolean(store.profiles[profileId]));
-    const existingCred = existingProfileId ? store.profiles[existingProfileId] : undefined;
     let profileId = "openrouter:default";
     let mode: "api_key" | "oauth" | "token" = "api_key";
     let hasCredential = false;
+    const explicitToken =
+      tokenProvider === "openrouter" ? normalizeApiKeyInput(tokenValue ?? "") : "";
 
-    if (existingProfileId && existingCred?.type) {
-      profileId = existingProfileId;
-      mode =
-        existingCred.type === "oauth"
-          ? "oauth"
-          : existingCred.type === "token"
-            ? "token"
-            : "api_key";
+    if (explicitToken) {
+      await setOpenrouterApiKey(explicitToken, params.agentDir);
       hasCredential = true;
-    }
+    } else {
+      const store = ensureAuthProfileStore(params.agentDir, {
+        allowKeychainPrompt: false,
+      });
+      const profileOrder = resolveAuthProfileOrder({
+        cfg: nextConfig,
+        store,
+        provider: "openrouter",
+      });
+      const existingProfileId = profileOrder.find((profileId) =>
+        Boolean(store.profiles[profileId]),
+      );
+      const existingCred = existingProfileId ? store.profiles[existingProfileId] : undefined;
+      if (existingProfileId && existingCred?.type) {
+        profileId = existingProfileId;
+        mode =
+          existingCred.type === "oauth"
+            ? "oauth"
+            : existingCred.type === "token"
+              ? "token"
+              : "api_key";
+        hasCredential = true;
+      }
 
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "openrouter") {
-      await setOpenrouterApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    if (!hasCredential) {
-      const envKey = resolveEnvApiKey("openrouter");
-      if (envKey) {
-        const useExisting = await params.prompter.confirm({
-          message: `Use existing OPENROUTER_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-          initialValue: true,
-        });
-        if (useExisting) {
-          await setOpenrouterApiKey(envKey.apiKey, params.agentDir);
-          hasCredential = true;
+      if (!hasCredential) {
+        const envKey = resolveEnvApiKey("openrouter");
+        if (envKey) {
+          const useExisting = await params.prompter.confirm({
+            message: `Use existing OPENROUTER_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
+            initialValue: true,
+          });
+          if (useExisting) {
+            await setOpenrouterApiKey(envKey.apiKey, params.agentDir);
+            hasCredential = true;
+          }
         }
       }
-    }
 
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "Enter OpenRouter API key",
-        validate: validateApiKeyInput,
-      });
-      await setOpenrouterApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-      hasCredential = true;
+      if (!hasCredential) {
+        const key = await params.prompter.text({
+          message: "Enter OpenRouter API key",
+          validate: validateApiKeyInput,
+        });
+        await setOpenrouterApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
+        hasCredential = true;
+      }
     }
 
     if (hasCredential) {
@@ -162,18 +166,14 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "ai-gateway-api-key") {
     let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "vercel-ai-gateway"
-    ) {
-      await setVercelAiGatewayApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken =
+      tokenProvider === "vercel-ai-gateway" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setVercelAiGatewayApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     const envKey = resolveEnvApiKey("vercel-ai-gateway");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing AI_GATEWAY_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
@@ -214,14 +214,14 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "moonshot-api-key") {
     let hasCredential = false;
-
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "moonshot") {
-      await setMoonshotApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken =
+      tokenProvider === "moonshot" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setMoonshotApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     const envKey = resolveEnvApiKey("moonshot");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing MOONSHOT_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
@@ -261,11 +261,12 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "kimi-code-api-key") {
     let hasCredential = false;
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "kimi-code") {
-      await setKimiCodeApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken =
+      tokenProvider === "kimi-code" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setKimiCodeApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     if (!hasCredential) {
       await params.prompter.note(
         [
@@ -276,7 +277,7 @@ export async function applyAuthChoiceApiProviders(
       );
     }
     const envKey = resolveEnvApiKey("kimi-code");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing KIMICODE_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
@@ -317,14 +318,13 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "gemini-api-key") {
     let hasCredential = false;
-
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "google") {
-      await setGeminiApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken = tokenProvider === "google" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setGeminiApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     const envKey = resolveEnvApiKey("google");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing GEMINI_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
@@ -364,14 +364,13 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "zai-api-key") {
     let hasCredential = false;
-
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "zai") {
-      await setZaiApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken = tokenProvider === "zai" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setZaiApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     const envKey = resolveEnvApiKey("zai");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing ZAI_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
@@ -426,8 +425,10 @@ export async function applyAuthChoiceApiProviders(
   }
 
   if (authChoice === "synthetic-api-key") {
-    if (params.opts?.token && params.opts?.tokenProvider === "synthetic") {
-      await setSyntheticApiKey(String(params.opts.token).trim(), params.agentDir);
+    const explicitToken =
+      tokenProvider === "synthetic" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setSyntheticApiKey(explicitToken, params.agentDir);
     } else {
       const key = await params.prompter.text({
         message: "Enter Synthetic API key",
@@ -459,11 +460,12 @@ export async function applyAuthChoiceApiProviders(
 
   if (authChoice === "opencode-zen") {
     let hasCredential = false;
-    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "opencode") {
-      await setOpencodeZenApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    const explicitToken =
+      tokenProvider === "opencode" ? normalizeApiKeyInput(tokenValue ?? "") : "";
+    if (explicitToken) {
+      await setOpencodeZenApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     if (!hasCredential) {
       await params.prompter.note(
         [
@@ -475,7 +477,7 @@ export async function applyAuthChoiceApiProviders(
       );
     }
     const envKey = resolveEnvApiKey("opencode");
-    if (envKey) {
+    if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing OPENCODE_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,

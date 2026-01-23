@@ -1,5 +1,6 @@
 import { loginOpenAICodex } from "@mariozechner/pi-ai";
 import { CODEX_CLI_PROFILE_ID, ensureAuthProfileStore } from "../agents/auth-profiles.js";
+import { normalizeProviderId } from "../agents/model-selection.js";
 import { resolveEnvApiKey } from "../agents/model-auth.js";
 import { upsertSharedEnvVar } from "../infra/env-file.js";
 import { isRemoteEnvironment } from "./oauth-env.js";
@@ -20,44 +21,47 @@ import {
 export async function applyAuthChoiceOpenAI(
   params: ApplyAuthChoiceParams,
 ): Promise<ApplyAuthChoiceResult | null> {
+  const tokenProvider = params.opts?.tokenProvider
+    ? normalizeProviderId(params.opts.tokenProvider)
+    : undefined;
+  const explicitToken =
+    tokenProvider === "openai" ? normalizeApiKeyInput(params.opts?.token ?? "") : "";
   let authChoice = params.authChoice;
-  if (authChoice === "apiKey" && params.opts?.tokenProvider === "openai") {
+  if (authChoice === "apiKey" && tokenProvider === "openai") {
     authChoice = "openai-api-key";
   }
 
   if (authChoice === "openai-api-key") {
-    const envKey = resolveEnvApiKey("openai");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `Use existing OPENAI_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        const result = upsertSharedEnvVar({
-          key: "OPENAI_API_KEY",
-          value: envKey.apiKey,
+    if (!explicitToken) {
+      const envKey = resolveEnvApiKey("openai");
+      if (envKey) {
+        const useExisting = await params.prompter.confirm({
+          message: `Use existing OPENAI_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
+          initialValue: true,
         });
-        if (!process.env.OPENAI_API_KEY) {
-          process.env.OPENAI_API_KEY = envKey.apiKey;
+        if (useExisting) {
+          const result = upsertSharedEnvVar({
+            key: "OPENAI_API_KEY",
+            value: envKey.apiKey,
+          });
+          if (!process.env.OPENAI_API_KEY) {
+            process.env.OPENAI_API_KEY = envKey.apiKey;
+          }
+          await params.prompter.note(
+            `Copied OPENAI_API_KEY to ${result.path} for launchd compatibility.`,
+            "OpenAI API key",
+          );
+          return { config: params.config };
         }
-        await params.prompter.note(
-          `Copied OPENAI_API_KEY to ${result.path} for launchd compatibility.`,
-          "OpenAI API key",
-        );
-        return { config: params.config };
       }
     }
 
-    let key: string | undefined;
-    if (params.opts?.token && params.opts?.tokenProvider === "openai") {
-      key = params.opts.token;
-    } else {
-      key = await params.prompter.text({
-        message: "Enter OpenAI API key",
-        validate: validateApiKeyInput,
-      });
-    }
-
+    const key = explicitToken
+      ? explicitToken
+      : await params.prompter.text({
+          message: "Enter OpenAI API key",
+          validate: validateApiKeyInput,
+        });
     const trimmed = normalizeApiKeyInput(String(key));
     const result = upsertSharedEnvVar({
       key: "OPENAI_API_KEY",

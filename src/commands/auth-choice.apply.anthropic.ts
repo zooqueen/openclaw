@@ -8,6 +8,7 @@ import {
   normalizeApiKeyInput,
   validateApiKeyInput,
 } from "./auth-choice.api-key.js";
+import { normalizeProviderId } from "../agents/model-selection.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { buildTokenProfileId, validateAnthropicSetupToken } from "./auth-token.js";
 import { applyAuthProfileConfig, setAnthropicApiKey } from "./onboard-auth.js";
@@ -198,19 +199,22 @@ export async function applyAuthChoiceAnthropic(
   }
 
   if (params.authChoice === "apiKey") {
-    if (params.opts?.tokenProvider && params.opts.tokenProvider !== "anthropic") {
+    const tokenProvider = params.opts?.tokenProvider
+      ? normalizeProviderId(params.opts.tokenProvider)
+      : undefined;
+    const explicitToken =
+      tokenProvider === "anthropic" ? normalizeApiKeyInput(params.opts?.token ?? "") : "";
+    if (tokenProvider && tokenProvider !== "anthropic") {
       return null;
     }
 
     let nextConfig = params.config;
     let hasCredential = false;
     const envKey = process.env.ANTHROPIC_API_KEY?.trim();
-
-    if (params.opts?.token) {
-      await setAnthropicApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    if (explicitToken) {
+      await setAnthropicApiKey(explicitToken, params.agentDir);
       hasCredential = true;
     }
-
     if (!hasCredential && envKey) {
       const useExisting = await params.prompter.confirm({
         message: `Use existing ANTHROPIC_API_KEY (env, ${formatApiKeyPreview(envKey)})?`,
