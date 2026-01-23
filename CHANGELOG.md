@@ -6,10 +6,21 @@ Docs: https://docs.clawd.bot
 
 ### Changes
 - CLI: restart the gateway by default after `clawdbot update`; add `--no-restart` to skip it.
+- CLI: add live auth probes to `clawdbot models status` for per-profile verification.
+- Markdown: add per-channel table conversion (bullets for Signal/WhatsApp, code blocks elsewhere). (#1495) Thanks @odysseus0.
 
 ### Fixes
+- Discord: limit autoThread mention bypass to bot-owned threads; keep ack reactions mention-gated. (#1511) Thanks @pvoo.
+- Gateway: accept null optional fields in exec approval requests. (#1511) Thanks @pvoo.
+- TUI: forward unknown slash commands (for example, `/context`) to the Gateway.
+- TUI: include Gateway slash commands in autocomplete and `/help`.
+- CLI: skip usage lines in `clawdbot models status` when provider usage is unavailable.
+- CLI: suppress diagnostic session/run noise during auth probes.
+- Linux: include env-configured user bin roots in systemd PATH and align PATH audits. (#1512) Thanks @robbyczgw-cla.
+- TUI: render Gateway slash-command replies as system output (for example, `/context`).
 - Media: preserve PNG alpha when possible; fall back to JPEG when still over size cap. (#1491) Thanks @robbyczgw-cla.
 - Agents: treat plugin-only tool allowlists as opt-ins; keep core tools enabled. (#1467)
+- Exec approvals: persist allowlist entry ids to keep macOS allowlist rows stable. (#1521) Thanks @ngutman.
 
 ## 2026.1.22
 
