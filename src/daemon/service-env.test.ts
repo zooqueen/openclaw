@@ -70,6 +70,30 @@ describe("getMinimalServicePathParts - Linux user directories", () => {
     expect(extraDirIndex).toBeLessThan(userDirIndex);
   });
 
+  it("includes env-configured bin roots when HOME is set on Linux", () => {
+    const result = getMinimalServicePathParts({
+      platform: "linux",
+      home: "/home/testuser",
+      env: {
+        PNPM_HOME: "/opt/pnpm",
+        NPM_CONFIG_PREFIX: "/opt/npm",
+        BUN_INSTALL: "/opt/bun",
+        VOLTA_HOME: "/opt/volta",
+        ASDF_DATA_DIR: "/opt/asdf",
+        NVM_DIR: "/opt/nvm",
+        FNM_DIR: "/opt/fnm",
+      },
+    });
+
+    expect(result).toContain("/opt/pnpm");
+    expect(result).toContain("/opt/npm/bin");
+    expect(result).toContain("/opt/bun/bin");
+    expect(result).toContain("/opt/volta/bin");
+    expect(result).toContain("/opt/asdf/shims");
+    expect(result).toContain("/opt/nvm/current/bin");
+    expect(result).toContain("/opt/fnm/current/bin");
+  });
+
   it("does not include Linux user directories on macOS", () => {
     const result = getMinimalServicePathParts({
       platform: "darwin",
