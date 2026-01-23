@@ -20,12 +20,12 @@ describe("buildSlackThreadingToolContext", () => {
     expect(result.replyToMode).toBe("first");
   });
 
-  it("uses dm.replyToMode for direct messages when configured", () => {
+  it("uses chat-type replyToMode overrides for direct messages when configured", () => {
     const cfg = {
       channels: {
         slack: {
           replyToMode: "off",
-          dm: { replyToMode: "all" },
+          replyToModeByChatType: { direct: "all" },
         },
       },
     } as ClawdbotConfig;
@@ -37,12 +37,12 @@ describe("buildSlackThreadingToolContext", () => {
     expect(result.replyToMode).toBe("all");
   });
 
-  it("uses top-level replyToMode for channels even when dm.replyToMode is set", () => {
+  it("uses top-level replyToMode for channels when no channel override is set", () => {
     const cfg = {
       channels: {
         slack: {
           replyToMode: "off",
-          dm: { replyToMode: "all" },
+          replyToModeByChatType: { direct: "all" },
         },
       },
     } as ClawdbotConfig;
@@ -54,12 +54,11 @@ describe("buildSlackThreadingToolContext", () => {
     expect(result.replyToMode).toBe("off");
   });
 
-  it("falls back to top-level when dm.replyToMode is not set", () => {
+  it("falls back to top-level when no chat-type override is set", () => {
     const cfg = {
       channels: {
         slack: {
           replyToMode: "first",
-          dm: { enabled: true },
         },
       },
     } as ClawdbotConfig;

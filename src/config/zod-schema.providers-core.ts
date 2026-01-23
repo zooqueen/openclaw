@@ -280,6 +280,14 @@ export const SlackThreadSchema = z
   })
   .strict();
 
+const SlackReplyToModeByChatTypeSchema = z
+  .object({
+    direct: ReplyToModeSchema.optional(),
+    group: ReplyToModeSchema.optional(),
+    channel: ReplyToModeSchema.optional(),
+  })
+  .strict();
+
 export const SlackAccountSchema = z
   .object({
     name: z.string().optional(),
@@ -307,6 +315,7 @@ export const SlackAccountSchema = z
     reactionNotifications: z.enum(["off", "own", "all", "allowlist"]).optional(),
     reactionAllowlist: z.array(z.union([z.string(), z.number()])).optional(),
     replyToMode: ReplyToModeSchema.optional(),
+    replyToModeByChatType: SlackReplyToModeByChatTypeSchema.optional(),
     thread: SlackThreadSchema.optional(),
     actions: z
       .object({
