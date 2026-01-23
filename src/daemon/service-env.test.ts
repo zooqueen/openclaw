@@ -5,45 +5,7 @@ import {
   buildNodeServiceEnvironment,
   buildServiceEnvironment,
   getMinimalServicePathParts,
-  resolveLinuxUserBinDirs,
 } from "./service-env.js";
-
-describe("resolveLinuxUserBinDirs", () => {
-  it("returns correct paths when HOME is provided", () => {
-    const dirs = resolveLinuxUserBinDirs("/home/testuser");
-
-    expect(dirs).toEqual([
-      "/home/testuser/.local/bin",
-      "/home/testuser/.npm-global/bin",
-      "/home/testuser/bin",
-      "/home/testuser/.nvm/current/bin",
-      "/home/testuser/.fnm/current/bin",
-      "/home/testuser/.volta/bin",
-      "/home/testuser/.asdf/shims",
-      "/home/testuser/.local/share/pnpm",
-      "/home/testuser/.bun/bin",
-    ]);
-  });
-
-  it("returns empty array when HOME is undefined", () => {
-    const dirs = resolveLinuxUserBinDirs(undefined);
-    expect(dirs).toEqual([]);
-  });
-
-  it("returns empty array when HOME is empty string", () => {
-    const dirs = resolveLinuxUserBinDirs("");
-    expect(dirs).toEqual([]);
-  });
-
-  it("handles root home directory correctly", () => {
-    const dirs = resolveLinuxUserBinDirs("/root");
-
-    expect(dirs).toContain("/root/.local/bin");
-    expect(dirs).toContain("/root/.npm-global/bin");
-    expect(dirs).toContain("/root/.nvm/current/bin");
-    expect(dirs.length).toBe(9);
-  });
-});
 
 describe("getMinimalServicePathParts - Linux user directories", () => {
   it("includes user bin directories when HOME is set on Linux", () => {
