@@ -31,7 +31,8 @@ const subagentRuns = new Map<string, SubagentRunRecord>();
 let sweeper: NodeJS.Timeout | null = null;
 let listenerStarted = false;
 let listenerStop: (() => void) | null = null;
-let restoreAttempted = false;
+// Use var to avoid TDZ on circular init paths that can call restoreSubagentRunsOnce early.
+var restoreAttempted = false;
 
 function persistSubagentRuns() {
   try {

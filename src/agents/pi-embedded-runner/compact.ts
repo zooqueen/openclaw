@@ -375,19 +375,24 @@ export async function compactEmbeddedPiSession(params: {
               session.agent.replaceMessages(limited);
             }
             const result = await session.compact(params.customInstructions);
-            // Estimate tokens after compaction by summing token estimates for remaining messages
+            // Estimate tokens after compaction with the same context-usage heuristics.
             let tokensAfter: number | undefined;
             try {
-              tokensAfter = 0;
-              for (const message of session.messages) {
-                tokensAfter += estimateTokens(message);
+              const usage =
+                typeof session.getContextUsage === "function"
+                  ? session.getContextUsage()
+                  : undefined;
+              let estimate = usage?.tokens;
+              if (!Number.isFinite(estimate) || !estimate || estimate <= 0) {
+                estimate = 0;
+                for (const message of session.messages) {
+                  estimate += estimateTokens(message);
+                }
               }
-              // Sanity check: tokensAfter should be less than tokensBefore
-              if (tokensAfter > result.tokensBefore) {
-                tokensAfter = undefined; // Don't trust the estimate
+              if (Number.isFinite(estimate) && estimate > 0 && estimate <= result.tokensBefore) {
+                tokensAfter = estimate;
               }
             } catch {
-              // If estimation fails, leave tokensAfter undefined
               tokensAfter = undefined;
             }
             return {

@@ -237,7 +237,7 @@ export async function incrementCompactionCount(params: {
   sessionKey?: string;
   storePath?: string;
   now?: number;
-  /** Token count after compaction - if provided, updates session token counts */
+  /** Token count after compaction - if provided, updates cached context usage */
   tokensAfter?: number;
 }): Promise<number | undefined> {
   const {
@@ -252,17 +252,14 @@ export async function incrementCompactionCount(params: {
   const entry = sessionStore[sessionKey] ?? sessionEntry;
   if (!entry) return undefined;
   const nextCount = (entry.compactionCount ?? 0) + 1;
-  // Build update payload with compaction count and optionally updated token counts
+  // Build update payload with compaction count and optionally updated context usage.
   const updates: Partial<SessionEntry> = {
     compactionCount: nextCount,
     updatedAt: now,
   };
-  // If tokensAfter is provided, update the cached token counts to reflect post-compaction state
+  // If tokensAfter is provided, update the cached total to reflect post-compaction context size.
   if (tokensAfter != null && tokensAfter > 0) {
     updates.totalTokens = tokensAfter;
-    // Clear input/output breakdown since we only have the total estimate after compaction
-    updates.inputTokens = undefined;
-    updates.outputTokens = undefined;
   }
   sessionStore[sessionKey] = {
     ...entry,
