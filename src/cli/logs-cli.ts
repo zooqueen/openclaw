@@ -196,8 +196,8 @@ export function registerLogsCli(program: Command) {
 
     while (true) {
       let payload: LogsTailPayload;
-      // Show progress spinner only on first fetch, not during follow polling
-      const showProgress = first && !opts.follow;
+      // Show progress spinner only on first fetch for non-follow, non-JSON output.
+      const showProgress = first && !opts.follow && !jsonMode;
       try {
         payload = await fetchLogs(opts, cursor, showProgress);
       } catch (err) {

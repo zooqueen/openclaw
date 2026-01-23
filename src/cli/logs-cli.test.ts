@@ -82,4 +82,21 @@ describe("logs cli", () => {
 
     expect(stderrWrites.join("")).toContain("output stdout closed");
   });
+
+  it("disables progress spinner in json mode", async () => {
+    callGatewayFromCli.mockResolvedValueOnce({
+      file: "/tmp/clawdbot.log",
+      lines: [],
+    });
+
+    const { registerLogsCli } = await import("./logs-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerLogsCli(program);
+
+    await program.parseAsync(["logs", "--json"], { from: "user" });
+
+    const extra = callGatewayFromCli.mock.calls[0]?.[3];
+    expect(extra).toEqual({ progress: false });
+  });
 });

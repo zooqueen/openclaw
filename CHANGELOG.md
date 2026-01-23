@@ -25,6 +25,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - BlueBubbles: stop typing indicator on idle/no-reply. (#1439) Thanks @Nicell.
+- CLI: suppress progress spinner noise for `logs --follow` and JSON output. (#1472) Thanks @czekaj.
 - Auto-reply: only report a model switch when session state is available. (#1465) Thanks @robbyczgw-cla.
 - Control UI: resolve local avatar URLs with basePath across injection + identity RPC. (#1457) Thanks @dlauer.
 - Agents: surface concrete API error details instead of generic AI service errors.

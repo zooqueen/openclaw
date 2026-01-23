@@ -25,7 +25,7 @@ export async function callGatewayFromCli(
   params?: unknown,
   extra?: { expectFinal?: boolean; progress?: boolean },
 ) {
-  const showProgress = extra?.progress ?? opts.json !== true;
+  const showProgress = (extra?.progress ?? true) && opts.json !== true;
   return await withProgress(
     {
       label: `Gateway ${method}`,
