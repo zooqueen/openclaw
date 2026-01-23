@@ -24,6 +24,7 @@ Docs: https://docs.clawd.bot
 ### Fixes
 - BlueBubbles: stop typing indicator on idle/no-reply. (#1439) Thanks @Nicell.
 - Message tool: keep path/filePath as-is for send; hydrate buffers only for sendAttachment. (#1444) Thanks @hopyky.
+- CLI: handle Windows runtime exe argv and pnpm build shims more reliably. (#1480) Thanks @Takhoffman.
 - Auto-reply: only report a model switch when session state is available. (#1465) Thanks @robbyczgw-cla.
 - Control UI: resolve local avatar URLs with basePath across injection + identity RPC. (#1457) Thanks @dlauer.
 - Agents: surface concrete API error details instead of generic AI service errors.

@@ -95,6 +95,7 @@ export function buildParseArgv(params: {
         ? baseArgv.slice(1)
         : baseArgv;
   const executable = (normalizedArgv[0]?.split(/[/\\]/).pop() ?? "").toLowerCase();
+  // Normalize Windows `.exe` runtimes (node.exe/bun.exe) for runtime detection.
   const looksLikeNode =
     normalizedArgv.length >= 2 &&
     (executable === "node" ||

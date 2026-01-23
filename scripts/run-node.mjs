@@ -116,6 +116,7 @@ if (!shouldBuild()) {
 } else {
   logRunner("Building TypeScript (dist is stale).");
   const pnpmArgs = ["exec", compiler, ...projectArgs];
+  // On Windows, pnpm is a .cmd shim, so use cmd.exe for reliable resolution.
   const buildCmd = process.platform === "win32" ? "cmd.exe" : "pnpm";
   const buildArgs =
     process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...pnpmArgs] : pnpmArgs;

@@ -78,6 +78,16 @@ describe("argv helpers", () => {
     });
     expect(nodeArgv).toEqual(["node", "clawdbot", "status"]);
 
+    const nodeExeArgv = buildParseArgv({
+      programName: "clawdbot",
+      rawArgs: ["C:\\\\Program Files\\\\nodejs\\\\Node.EXE", "clawdbot", "status"],
+    });
+    expect(nodeExeArgv).toEqual([
+      "C:\\\\Program Files\\\\nodejs\\\\Node.EXE",
+      "clawdbot",
+      "status",
+    ]);
+
     const directArgv = buildParseArgv({
       programName: "clawdbot",
       rawArgs: ["clawdbot", "status"],
@@ -89,6 +99,12 @@ describe("argv helpers", () => {
       rawArgs: ["bun", "src/entry.ts", "status"],
     });
     expect(bunArgv).toEqual(["bun", "src/entry.ts", "status"]);
+
+    const bunExeArgv = buildParseArgv({
+      programName: "clawdbot",
+      rawArgs: ["C:\\\\bun\\\\bun.exe", "src\\\\entry.ts", "status"],
+    });
+    expect(bunExeArgv).toEqual(["C:\\\\bun\\\\bun.exe", "src\\\\entry.ts", "status"]);
   });
 
   it("builds parse argv from fallback args", () => {
