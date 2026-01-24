@@ -5,6 +5,7 @@ Docs: https://docs.clawd.bot
 ## 2026.1.23 (Unreleased)
 
 ### Changes
+- Plugins: add optional llm-task JSON-only tool for workflows. (#1498) Thanks @vignesh07.
 - CLI: restart the gateway by default after `clawdbot update`; add `--no-restart` to skip it.
 - CLI: add live auth probes to `clawdbot models status` for per-profile verification.
 - Docs: add cron vs heartbeat decision guide (with Lobster workflow notes). (#1533) Thanks @JustYannicc.
