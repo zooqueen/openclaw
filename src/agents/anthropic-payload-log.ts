@@ -90,6 +90,12 @@ function safeJsonStringify(value: unknown): string | null {
   }
 }
 
+function formatError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.stack ?? error.message;
+  return safeJsonStringify(error) ?? "[unknown error]";
+}
+
 function digest(value: unknown): string | undefined {
   const serialized = safeJsonStringify(value);
   if (!serialized) return undefined;
@@ -163,7 +169,7 @@ export function createAnthropicPayloadLogger(params: {
         options?.onPayload?.(payload);
       };
       return streamFn(model, context, {
-        ...(options ?? {}),
+        ...options,
         onPayload: nextOnPayload,
       });
     };
@@ -178,7 +184,7 @@ export function createAnthropicPayloadLogger(params: {
           ...base,
           ts: new Date().toISOString(),
           stage: "usage",
-          error: String(error),
+          error: formatError(error),
         });
       }
       return;
@@ -188,7 +194,7 @@ export function createAnthropicPayloadLogger(params: {
       ts: new Date().toISOString(),
       stage: "usage",
       usage,
-      error: error ? String(error) : undefined,
+      error: error ? formatError(error) : undefined,
     });
     log.info("anthropic usage", {
       runId: params.runId,

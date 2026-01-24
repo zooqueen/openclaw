@@ -194,8 +194,22 @@ function sanitizeArgs(args: string | undefined): string | undefined {
     return args.slice(0, MAX_ARGS_LENGTH);
   }
 
+  const stripControlChars = (value: string): string => {
+    let out = "";
+    for (let i = 0; i < value.length; i += 1) {
+      const code = value.charCodeAt(i);
+      if (code === 9 || code === 10) {
+        out += value[i];
+        continue;
+      }
+      if (code < 32 || code === 127) continue;
+      out += value[i];
+    }
+    return out;
+  };
+
   // Remove control characters (except newlines and tabs which may be intentional)
-  return args.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  return stripControlChars(args);
 }
 
 /**

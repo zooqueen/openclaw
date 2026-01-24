@@ -20,6 +20,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - Agents: ignore IDENTITY.md template placeholders when parsing identity to avoid placeholder replies. (#1556)
+- CLI: normalize Windows argv to drop duplicate node.exe entries before commands. (#1564) Thanks @Takhoffman.
 - Docker: update gateway command in docker-compose and Hetzner guide. (#1514)
 - Sessions: reject array-backed session stores to prevent silent wipes. (#1469)
 - Voice wake: auto-save wake words on blur/submit across iOS/Android and align limits with macOS.
