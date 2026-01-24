@@ -21,6 +21,7 @@ describe("stripThinkingTags", () => {
   it("returns original text when no tags exist", () => {
     expect(stripThinkingTags("Hello")).toBe("Hello");
   });
+<<<<<<< fix/tui-final-tag-strip
 
   it("strips <final>…</final> segments", () => {
     const input = "<final>\n\nHello there\n\n</final>";
@@ -39,4 +40,27 @@ describe("stripThinkingTags", () => {
     expect(stripThinkingTags("Hello</final>")).toBe("Hello");
   });
 });
+||||||| temp/landpr-
+});
+=======
+>>>>>>> local
 
+  it("strips <final>…</final> segments while keeping content", () => {
+    const input = "<final>\n\nHello there\n\n</final>";
+    expect(stripThinkingTags(input)).toBe("Hello there\n\n");
+  });
+
+  it("strips mixed <think> and <final> tags", () => {
+    const input = "<think>reasoning</think>\n\n<final>Hello</final>";
+    expect(stripThinkingTags(input)).toBe("Hello");
+  });
+
+  it("strips unpaired <final> tags", () => {
+    expect(stripThinkingTags("<final>Hello")).toBe("Hello");
+    expect(stripThinkingTags("Hello</final>")).toBe("Hello");
+  });
+
+  it("keeps incomplete <final tag text", () => {
+    expect(stripThinkingTags("<final\nHello")).toBe("<final\nHello");
+  });
+});
