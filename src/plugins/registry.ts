@@ -1,4 +1,5 @@
 import type { AnyAgentTool } from "../agents/tools/common.js";
+import type { ChatCommandDefinition } from "../auto-reply/commands-registry.types.js";
 import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type {
@@ -16,6 +17,7 @@ import type {
   ClawdbotPluginHookOptions,
   ProviderPlugin,
   ClawdbotPluginService,
+  PluginChatCommandHandler,
   ClawdbotPluginToolContext,
   ClawdbotPluginToolFactory,
   PluginConfigUiHint,
@@ -44,6 +46,13 @@ export type PluginCliRegistration = {
   pluginId: string;
   register: ClawdbotPluginCliRegistrar;
   commands: string[];
+  source: string;
+};
+
+export type PluginChatCommandRegistration = {
+  pluginId: string;
+  command: ChatCommandDefinition;
+  handler: PluginChatCommandHandler;
   source: string;
 };
 
@@ -103,6 +112,7 @@ export type PluginRecord = {
   providerIds: string[];
   gatewayMethods: string[];
   cliCommands: string[];
+  chatCommands: string[];
   services: string[];
   commands: string[];
   httpHandlers: number;
@@ -122,6 +132,7 @@ export type PluginRegistry = {
   gatewayHandlers: GatewayRequestHandlers;
   httpHandlers: PluginHttpRegistration[];
   cliRegistrars: PluginCliRegistration[];
+  chatCommands: PluginChatCommandRegistration[];
   services: PluginServiceRegistration[];
   commands: PluginCommandRegistration[];
   diagnostics: PluginDiagnostic[];
@@ -144,6 +155,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     gatewayHandlers: {},
     httpHandlers: [],
     cliRegistrars: [],
+    chatCommands: [],
     services: [],
     commands: [],
     diagnostics: [],
@@ -352,6 +364,30 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     });
   };
 
+  const registerChatCommand = (
+    record: PluginRecord,
+    command: ChatCommandDefinition,
+    handler: PluginChatCommandHandler,
+  ) => {
+    const key = command.key?.trim();
+    if (!key) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "chat command registration missing key",
+      });
+      return;
+    }
+    record.chatCommands.push(key);
+    registry.chatCommands.push({
+      pluginId: record.id,
+      command,
+      handler,
+      source: record.source,
+    });
+  };
+
   const registerService = (record: PluginRecord, service: ClawdbotPluginService) => {
     const id = service.id.trim();
     if (!id) return;
@@ -443,6 +479,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerProvider: (provider) => registerProvider(record, provider),
       registerGatewayMethod: (method, handler) => registerGatewayMethod(record, method, handler),
       registerCli: (registrar, opts) => registerCli(record, registrar, opts),
+      registerChatCommand: (command, handler) => registerChatCommand(record, command, handler),
       registerService: (service) => registerService(record, service),
       registerCommand: (command) => registerCommand(record, command),
       resolvePath: (input: string) => resolveUserPath(input),
@@ -459,6 +496,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     registerProvider,
     registerGatewayMethod,
     registerCli,
+    registerChatCommand,
     registerService,
     registerCommand,
     registerHook,

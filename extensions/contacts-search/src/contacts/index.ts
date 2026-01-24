@@ -8,7 +8,7 @@
  * - Auto-linking heuristics based on phone/email/name matching
  */
 
-export { ContactStore, getContactStore, closeContactStore } from "./store.js";
+export { ContactStore, configureContactStore, getContactStore, closeContactStore } from "./store.js";
 export { ensureContactStoreSchema, dropContactStoreTables } from "./schema.js";
 export {
   importContactFromMessage,

@@ -1,3 +1,5 @@
+import type { ChannelId } from "clawdbot/plugin-sdk";
+
 /**
  * Types for the unified contact graph.
  *
@@ -26,15 +28,7 @@ export type Contact = {
 /**
  * Supported messaging platforms.
  */
-export type Platform =
-  | "whatsapp"
-  | "telegram"
-  | "discord"
-  | "slack"
-  | "signal"
-  | "imessage"
-  | "matrix"
-  | "msteams";
+export type Platform = ChannelId;
 
 /**
  * A platform-specific identity linked to a canonical contact.

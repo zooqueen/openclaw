@@ -32,6 +32,8 @@ This page describes the current CLI behavior. If commands change, update this do
 - [`system`](/cli/system)
 - [`models`](/cli/models)
 - [`memory`](/cli/memory)
+- [`contacts`](/cli/contacts) (plugin; if enabled)
+- [`search`](/cli/search) (plugin; if enabled)
 - [`nodes`](/cli/nodes)
 - [`devices`](/cli/devices)
 - [`node`](/cli/node)
@@ -122,6 +124,8 @@ clawdbot [--dev] [--profile <name>] <command>
     status
     index
     search
+  contacts
+  search
   message
   agent
   agents

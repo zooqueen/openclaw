@@ -289,6 +289,29 @@ describe("importContactFromMessage", () => {
     expect(second.contactId).toBe(first.contactId);
   });
 
+  it("updates identity metadata for known sender", () => {
+    importContactFromMessage(store, {
+      platform: "telegram",
+      platformId: "123456789",
+      username: "johndoe",
+      displayName: "John Doe",
+      phone: null,
+    });
+
+    importContactFromMessage(store, {
+      platform: "telegram",
+      platformId: "123456789",
+      username: "johnny",
+      displayName: "John D",
+      phone: "+14155551234",
+    });
+
+    const identity = store.getIdentityByPlatformId("telegram", "123456789");
+    expect(identity?.username).toBe("johnny");
+    expect(identity?.displayName).toBe("John D");
+    expect(identity?.phone).toBe("+14155551234");
+  });
+
   it("uses platformId as displayName fallback", () => {
     const { contactId } = importContactFromMessage(store, {
       platform: "whatsapp",

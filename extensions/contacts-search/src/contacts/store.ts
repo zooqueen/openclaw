@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
-import { requireNodeSqlite } from "../memory/sqlite.js";
-import { resolveStateDir } from "../config/paths.js";
+import { requireNodeSqlite } from "../sqlite.js";
 import { ensureContactStoreSchema } from "./schema.js";
 import type {
   Contact,
@@ -44,6 +43,8 @@ export class ContactStore {
   private stmtUpdateIdentityLastSeen: StatementSync;
   private stmtInsertMessage: StatementSync;
   private stmtInsertMessageFts: StatementSync | null;
+  private stmtUpdateMessageContactBySender: StatementSync;
+  private stmtUpdateMessageFtsContactBySender: StatementSync | null;
 
   private constructor(db: DatabaseSync, ftsAvailable: boolean) {
     this.db = db;
@@ -93,14 +94,28 @@ export class ContactStore {
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `)
       : null;
+
+    this.stmtUpdateMessageContactBySender = db.prepare(`
+      UPDATE indexed_messages SET contact_id = ? WHERE platform = ? AND sender_id = ?
+    `);
+    this.stmtUpdateMessageFtsContactBySender = ftsAvailable
+      ? db.prepare(`
+          UPDATE messages_fts SET contact_id = ? WHERE platform = ? AND sender_id = ?
+        `)
+      : null;
   }
 
   /**
    * Open or create a contact store database.
    */
-  static open(dbPath?: string): ContactStore {
+  static open(params: { dbPath?: string; stateDir?: string } = {}): ContactStore {
     const nodeSqlite = requireNodeSqlite();
-    const resolvedPath = dbPath ?? path.join(resolveStateDir(), "contacts", CONTACTS_DB_FILENAME);
+    const resolvedPath =
+      params.dbPath ??
+      (params.stateDir ? path.join(params.stateDir, "contacts", CONTACTS_DB_FILENAME) : undefined);
+    if (!resolvedPath) {
+      throw new Error("ContactStore.open requires dbPath or stateDir");
+    }
 
     // Ensure directory exists
     const dir = path.dirname(resolvedPath);
@@ -237,7 +252,7 @@ export class ContactStore {
       conditions.push(
         `canonical_id IN (SELECT contact_id FROM platform_identities WHERE platform = ?)`,
       );
-      params.push(options.platform);
+      params.push(this.normalizePlatform(options.platform));
     }
 
     if (conditions.length > 0) {
@@ -316,21 +331,23 @@ export class ContactStore {
    * Add a platform identity to a contact.
    */
   addIdentity(input: PlatformIdentityInput): PlatformIdentity {
+    const platform = this.normalizePlatform(input.platform);
+    const phone = input.phone ? this.normalizePhone(input.phone) : null;
     this.stmtInsertIdentity.run(
       input.contactId,
-      input.platform,
+      platform,
       input.platformId,
       input.username,
-      input.phone,
+      phone,
       input.displayName,
       input.lastSeenAt,
     );
 
     // Get the inserted row to return
-    const identity = this.getIdentityByPlatformId(input.platform, input.platformId);
+    const identity = this.getIdentityByPlatformId(platform, input.platformId);
     if (!identity) {
       throw new Error(
-        `Failed to retrieve inserted identity: ${input.platform}:${input.platformId}`,
+        `Failed to retrieve inserted identity: ${platform}:${input.platformId}`,
       );
     }
     return identity;
@@ -367,7 +384,8 @@ export class ContactStore {
    * Get a platform identity by platform and platform-specific ID.
    */
   getIdentityByPlatformId(platform: string, platformId: string): PlatformIdentity | null {
-    const row = this.stmtGetIdentityByPlatformId.get(platform, platformId) as
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const row = this.stmtGetIdentityByPlatformId.get(normalizedPlatform, platformId) as
       | {
           id: number;
           contact_id: string;
@@ -432,7 +450,8 @@ export class ContactStore {
    * Update last seen timestamp for a platform identity.
    */
   updateIdentityLastSeen(platform: string, platformId: string): void {
-    this.stmtUpdateIdentityLastSeen.run(Date.now(), platform, platformId);
+    const normalizedPlatform = this.normalizePlatform(platform);
+    this.stmtUpdateIdentityLastSeen.run(Date.now(), normalizedPlatform, platformId);
   }
 
   /**
@@ -442,6 +461,19 @@ export class ContactStore {
   resolveContact(platform: string, platformId: string): string | null {
     const identity = this.getIdentityByPlatformId(platform, platformId);
     return identity?.contactId ?? null;
+  }
+
+  /**
+   * Reassign indexed messages for a platform identity to a contact.
+   */
+  updateMessageContactForIdentity(params: {
+    contactId: string | null;
+    platform: string;
+    senderId: string;
+  }): void {
+    const platform = this.normalizePlatform(params.platform);
+    this.stmtUpdateMessageContactBySender.run(params.contactId, platform, params.senderId);
+    this.stmtUpdateMessageFtsContactBySender?.run(params.contactId, platform, params.senderId);
   }
 
   /**
@@ -462,6 +494,10 @@ export class ContactStore {
     return normalized;
   }
 
+  private normalizePlatform(platform: string): string {
+    return platform.trim().toLowerCase();
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // MESSAGE INDEXING
   // ─────────────────────────────────────────────────────────────────────────────
@@ -470,14 +506,15 @@ export class ContactStore {
    * Index a message for cross-platform search.
    */
   indexMessage(message: Omit<IndexedMessage, "embedding"> & { embedding?: string | null }): void {
+    const platform = this.normalizePlatform(message.platform);
     // Try to resolve the sender to a canonical contact
-    const contactId = this.resolveContact(message.platform, message.senderId);
+    const contactId = this.resolveContact(platform, message.senderId);
 
     this.stmtInsertMessage.run(
       message.id,
       message.content,
       contactId,
-      message.platform,
+      platform,
       message.senderId,
       message.channelId,
       message.timestamp,
@@ -490,7 +527,7 @@ export class ContactStore {
         message.content,
         message.id,
         contactId,
-        message.platform,
+        platform,
         message.senderId,
         message.channelId,
         message.timestamp,
@@ -499,7 +536,7 @@ export class ContactStore {
 
     // Update last seen timestamp for the sender
     if (contactId) {
-      this.updateIdentityLastSeen(message.platform, message.senderId);
+      this.updateIdentityLastSeen(platform, message.senderId);
     }
   }
 
@@ -511,23 +548,34 @@ export class ContactStore {
 
     if (!options.query) return results;
 
+    const normalizedPlatforms = options.platforms?.map((platform) =>
+      this.normalizePlatform(platform),
+    );
+
     // Resolve "from" filter to contact IDs
     let contactIds: string[] | null = null;
     if (options.from) {
-      // Try to find contact by canonical ID, name, or username
+      const normalized = options.from.trim();
+      const exact = normalized ? this.getContact(normalized) : null;
       const matches = this.searchContacts(options.from, 10);
-      if (matches.length === 0) {
-        // No matching contacts, return empty results
+      const ids = new Set<string>(matches.map((m) => m.canonicalId));
+      if (exact) ids.add(exact.canonicalId);
+      if (ids.size === 0) {
         return results;
       }
-      contactIds = matches.map((m) => m.canonicalId);
+      contactIds = [...ids];
     }
 
     // Build query based on FTS availability
+    const normalizedOptions = {
+      ...options,
+      platforms: normalizedPlatforms,
+    };
+
     if (this.ftsAvailable) {
-      return this.searchMessagesFts(options, contactIds);
+      return this.searchMessagesFts(normalizedOptions, contactIds);
     }
-    return this.searchMessagesLike(options, contactIds);
+    return this.searchMessagesLike(normalizedOptions, contactIds);
   }
 
   private searchMessagesFts(
@@ -759,13 +807,22 @@ export class ContactStore {
 
 // Singleton instance
 let _store: ContactStore | null = null;
+let _storeConfig: { dbPath?: string; stateDir?: string } = {};
+
+export function configureContactStore(params: { dbPath?: string; stateDir?: string }): void {
+  _storeConfig = params;
+  if (_store) {
+    _store.close();
+    _store = null;
+  }
+}
 
 /**
  * Get the global contact store instance.
  */
 export function getContactStore(): ContactStore {
   if (!_store) {
-    _store = ContactStore.open();
+    _store = ContactStore.open(_storeConfig);
   }
   return _store;
 }

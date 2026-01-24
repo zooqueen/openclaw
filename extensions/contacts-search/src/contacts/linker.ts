@@ -285,6 +285,11 @@ export function linkContacts(
       displayName: identity.displayName,
       lastSeenAt: identity.lastSeenAt,
     });
+    store.updateMessageContactForIdentity({
+      contactId: primary.canonicalId,
+      platform: identity.platform,
+      senderId: identity.platformId,
+    });
   }
 
   // Merge aliases
@@ -342,6 +347,11 @@ export function unlinkIdentity(
     phone: identity.phone,
     displayName: identity.displayName,
     lastSeenAt: identity.lastSeenAt,
+  });
+  store.updateMessageContactForIdentity({
+    contactId: newContact.canonicalId,
+    platform: identity.platform,
+    senderId: identity.platformId,
   });
 
   return { success: true, newContactId: newContact.canonicalId };

@@ -139,6 +139,7 @@ const createStubPluginRegistry = (): PluginRegistry => ({
   gatewayHandlers: {},
   httpHandlers: [],
   cliRegistrars: [],
+  chatCommands: [],
   services: [],
   commands: [],
   diagnostics: [],

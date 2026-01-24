@@ -1,0 +1,9 @@
+{
+  "name": "@clawdbot/contacts-search",
+  "version": "2026.1.21",
+  "type": "module",
+  "description": "Clawdbot unified contacts and cross-platform search plugin",
+  "clawdbot": {
+    "extensions": ["./index.ts"]
+  }
+}

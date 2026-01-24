@@ -1,5 +1,5 @@
 import { listChannelDocks } from "../channels/dock.js";
-import { getActivePluginRegistry } from "../plugins/runtime.js";
+import { requireActivePluginRegistry } from "../plugins/runtime.js";
 import { listThinkingLevels } from "./thinking.js";
 import { COMMAND_ARG_FORMATTERS } from "./commands-args.js";
 import type { ChatCommandDefinition, CommandScope } from "./commands-registry.types.js";
@@ -113,9 +113,9 @@ function assertCommandRegistry(commands: ChatCommandDefinition[]): void {
 }
 
 let cachedCommands: ChatCommandDefinition[] | null = null;
-let cachedRegistry: ReturnType<typeof getActivePluginRegistry> | null = null;
+let cachedRegistry: ReturnType<typeof requireActivePluginRegistry> | null = null;
 let cachedNativeCommandSurfaces: Set<string> | null = null;
-let cachedNativeRegistry: ReturnType<typeof getActivePluginRegistry> | null = null;
+let cachedNativeRegistry: ReturnType<typeof requireActivePluginRegistry> | null = null;
 
 function buildChatCommands(): ChatCommandDefinition[] {
   const commands: ChatCommandDefinition[] = [
@@ -558,25 +558,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
         },
       ],
     }),
-    defineChatCommand({
-      key: "search",
-      description: "Search messages across all platforms.",
-      textAlias: "/search",
-      scope: "text",
-      args: [
-        {
-          name: "query",
-          description: "Search query",
-          type: "string",
-          required: true,
-          captureRemaining: true,
-        },
-      ],
-    }),
     ...listChannelDocks()
       .filter((dock) => dock.capabilities.nativeCommands)
       .map((dock) => defineDockCommand(dock)),
   ];
+
+  const registry = requireActivePluginRegistry();
+  if (registry.chatCommands.length > 0) {
+    commands.push(...registry.chatCommands.map((entry) => entry.command));
+  }
 
   registerAlias(commands, "whoami", "/id");
   registerAlias(commands, "think", "/thinking", "/t");
@@ -589,7 +579,7 @@ function buildChatCommands(): ChatCommandDefinition[] {
 }
 
 export function getChatCommands(): ChatCommandDefinition[] {
-  const registry = getActivePluginRegistry();
+  const registry = requireActivePluginRegistry();
   if (cachedCommands && registry === cachedRegistry) return cachedCommands;
   const commands = buildChatCommands();
   cachedCommands = commands;
@@ -599,7 +589,7 @@ export function getChatCommands(): ChatCommandDefinition[] {
 }
 
 export function getNativeCommandSurfaces(): Set<string> {
-  const registry = getActivePluginRegistry();
+  const registry = requireActivePluginRegistry();
   if (cachedNativeCommandSurfaces && registry === cachedNativeRegistry) {
     return cachedNativeCommandSurfaces;
   }

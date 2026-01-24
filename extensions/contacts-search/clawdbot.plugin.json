@@ -1,0 +1,10 @@
+{
+  "id": "contacts-search",
+  "name": "Contacts + Search",
+  "description": "Unified contact graph and cross-platform message search",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

@@ -1,11 +1,10 @@
 import type { Command } from "commander";
 
+import { formatDocsLink } from "clawdbot/plugin-sdk";
+
 import { getContactStore } from "../contacts/index.js";
 import type { Platform } from "../contacts/types.js";
-import { danger } from "../globals.js";
-import { defaultRuntime } from "../runtime.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { theme } from "../terminal/theme.js";
+import { cli, formatDanger, theme } from "./formatting.js";
 
 function formatTimestamp(ts: number): string {
   const date = new Date(ts);
@@ -55,15 +54,6 @@ function parseTimestamp(value: string): number | null {
   return null;
 }
 
-const VALID_PLATFORMS: Platform[] = [
-  "whatsapp",
-  "telegram",
-  "discord",
-  "slack",
-  "signal",
-  "imessage",
-];
-
 export function registerSearchCli(program: Command) {
   program
     .command("search")
@@ -72,7 +62,7 @@ export function registerSearchCli(program: Command) {
     .option("--from <contact>", "Filter by sender (contact name, username, or ID)")
     .option(
       "--platform <name>",
-      "Filter by platform (whatsapp, telegram, discord, slack, signal, imessage)",
+      "Filter by platform (channel id)",
     )
     .option("--since <time>", "Filter messages after this time (e.g., 1h, 2d, 1w, or ISO date)")
     .option("--until <time>", "Filter messages before this time")
@@ -96,13 +86,6 @@ export function registerSearchCli(program: Command) {
         let platforms: Platform[] | undefined;
         if (opts.platform) {
           const platform = (opts.platform as string).toLowerCase() as Platform;
-          if (!VALID_PLATFORMS.includes(platform)) {
-            defaultRuntime.error(
-              danger(`Invalid platform: ${opts.platform}. Valid: ${VALID_PLATFORMS.join(", ")}`),
-            );
-            defaultRuntime.exit(1);
-            return;
-          }
           platforms = [platform];
         }
 
@@ -111,13 +94,13 @@ export function registerSearchCli(program: Command) {
         const until = opts.until ? parseTimestamp(opts.until as string) : undefined;
 
         if (opts.since && since === null) {
-          defaultRuntime.error(danger(`Invalid --since value: ${opts.since}`));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(`Invalid --since value: ${opts.since}`));
+          cli.exit(1);
           return;
         }
         if (opts.until && until === null) {
-          defaultRuntime.error(danger(`Invalid --until value: ${opts.until}`));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(`Invalid --until value: ${opts.until}`));
+          cli.exit(1);
           return;
         }
 
@@ -131,48 +114,48 @@ export function registerSearchCli(program: Command) {
         });
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(results, null, 2));
+          cli.log(JSON.stringify(results, null, 2));
           return;
         }
 
         if (results.length === 0) {
-          defaultRuntime.log(theme.muted(`No messages found matching "${query}".`));
+          cli.log(theme.muted(`No messages found matching "${query}".`));
 
           // Helpful hints
           if (opts.from) {
             const contactMatches = store.searchContacts(opts.from as string, 5);
             if (contactMatches.length === 0) {
-              defaultRuntime.log(theme.muted(`Note: No contacts found matching "${opts.from}".`));
+              cli.log(theme.muted(`Note: No contacts found matching "${opts.from}".`));
             }
           }
           return;
         }
 
-        defaultRuntime.log(
+        cli.log(
           `${theme.heading("Search Results")} ${theme.muted(`(${results.length})`)}`,
         );
-        defaultRuntime.log("");
+        cli.log("");
 
         for (const result of results) {
           const { message, contact, snippet } = result;
           const senderName = contact?.displayName ?? message.senderId;
           const time = formatTimestamp(message.timestamp);
 
-          defaultRuntime.log(
+          cli.log(
             `${theme.accent(`[${message.platform}]`)} ${theme.accentBright(senderName)} ${theme.muted(`- ${time}`)}`,
           );
-          defaultRuntime.log(`  ${snippet}`);
-          defaultRuntime.log("");
+          cli.log(`  ${snippet}`);
+          cli.log("");
         }
 
         if (results.length === limit) {
-          defaultRuntime.log(
+          cli.log(
             theme.muted(`Showing first ${limit} results. Use --limit to see more.`),
           );
         }
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 }

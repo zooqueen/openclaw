@@ -7,11 +7,10 @@ import {
   linkContacts,
   unlinkIdentity,
 } from "../contacts/index.js";
-import { danger, success } from "../globals.js";
-import { defaultRuntime } from "../runtime.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { renderTable } from "../terminal/table.js";
-import { theme } from "../terminal/theme.js";
+import type { Platform } from "../contacts/types.js";
+import { formatDocsLink } from "clawdbot/plugin-sdk";
+
+import { cli, formatDanger, formatSuccess, renderTable, theme } from "./formatting.js";
 
 function formatPlatformList(platforms: string[]): string {
   return platforms.join(", ");
@@ -56,7 +55,7 @@ export function registerContactsCli(program: Command) {
     .command("list")
     .description("List all contacts in the unified graph")
     .option("--query <text>", "Search by name or alias")
-    .option("--platform <name>", "Filter by platform (whatsapp, telegram, discord, slack, signal)")
+    .option("--platform <name>", "Filter by platform (channel id)")
     .option("--limit <n>", "Limit results", "50")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
@@ -64,15 +63,12 @@ export function registerContactsCli(program: Command) {
         const store = getContactStore();
         const limit = parseInt(opts.limit as string, 10) || 50;
 
+        const platform = opts.platform
+          ? ((opts.platform as string).toLowerCase() as Platform)
+          : undefined;
         const contactsList = store.listContacts({
           query: opts.query as string | undefined,
-          platform: opts.platform as
-            | "whatsapp"
-            | "telegram"
-            | "discord"
-            | "slack"
-            | "signal"
-            | undefined,
+          platform,
           limit,
         });
 
@@ -81,20 +77,20 @@ export function registerContactsCli(program: Command) {
           .filter((c): c is NonNullable<typeof c> => c !== null);
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(contactsWithIdentities, null, 2));
+          cli.log(JSON.stringify(contactsWithIdentities, null, 2));
           return;
         }
 
         if (contactsWithIdentities.length === 0) {
-          defaultRuntime.log(theme.muted("No contacts found."));
+          cli.log(theme.muted("No contacts found."));
           return;
         }
 
         const tableWidth = Math.max(80, (process.stdout.columns ?? 120) - 1);
-        defaultRuntime.log(
+        cli.log(
           `${theme.heading("Contacts")} ${theme.muted(`(${contactsWithIdentities.length})`)}`,
         );
-        defaultRuntime.log(
+        cli.log(
           renderTable({
             width: tableWidth,
             columns: [
@@ -107,8 +103,8 @@ export function registerContactsCli(program: Command) {
           }).trimEnd(),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -135,30 +131,30 @@ export function registerContactsCli(program: Command) {
         }
 
         if (!contact) {
-          defaultRuntime.error(danger(`Contact not found: ${id}`));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(`Contact not found: ${id}`));
+          cli.exit(1);
           return;
         }
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(contact, null, 2));
+          cli.log(JSON.stringify(contact, null, 2));
           return;
         }
 
-        defaultRuntime.log(`${theme.heading("Contact")}`);
-        defaultRuntime.log(`  ID: ${contact.canonicalId}`);
-        defaultRuntime.log(`  Name: ${contact.displayName}`);
+        cli.log(`${theme.heading("Contact")}`);
+        cli.log(`  ID: ${contact.canonicalId}`);
+        cli.log(`  Name: ${contact.displayName}`);
         if (contact.aliases.length > 0) {
-          defaultRuntime.log(`  Aliases: ${contact.aliases.join(", ")}`);
+          cli.log(`  Aliases: ${contact.aliases.join(", ")}`);
         }
 
-        defaultRuntime.log("");
-        defaultRuntime.log(
+        cli.log("");
+        cli.log(
           `${theme.heading("Platform Identities")} (${contact.identities.length})`,
         );
 
         const tableWidth = Math.max(80, (process.stdout.columns ?? 120) - 1);
-        defaultRuntime.log(
+        cli.log(
           renderTable({
             width: tableWidth,
             columns: [
@@ -176,8 +172,8 @@ export function registerContactsCli(program: Command) {
           }).trimEnd(),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -198,20 +194,20 @@ export function registerContactsCli(program: Command) {
         const results = store.searchContacts(query, limit);
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(results, null, 2));
+          cli.log(JSON.stringify(results, null, 2));
           return;
         }
 
         if (results.length === 0) {
-          defaultRuntime.log(theme.muted(`No contacts found matching "${query}".`));
+          cli.log(theme.muted(`No contacts found matching "${query}".`));
           return;
         }
 
         const tableWidth = Math.max(80, (process.stdout.columns ?? 120) - 1);
-        defaultRuntime.log(
+        cli.log(
           `${theme.heading("Search Results")} ${theme.muted(`(${results.length})`)}`,
         );
-        defaultRuntime.log(
+        cli.log(
           renderTable({
             width: tableWidth,
             columns: [
@@ -224,8 +220,8 @@ export function registerContactsCli(program: Command) {
           }).trimEnd(),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -244,15 +240,15 @@ export function registerContactsCli(program: Command) {
         const result = linkContacts(store, primary, secondary);
 
         if (!result.success) {
-          defaultRuntime.error(danger(result.error ?? "Failed to link contacts"));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(result.error ?? "Failed to link contacts"));
+          cli.exit(1);
           return;
         }
 
-        defaultRuntime.log(success(`Linked: ${secondary} merged into ${primary}`));
+        cli.log(formatSuccess(`Linked: ${secondary} merged into ${primary}`));
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -263,7 +259,7 @@ export function registerContactsCli(program: Command) {
   contacts
     .command("unlink")
     .description("Unlink a platform identity from its contact (creates a new contact)")
-    .argument("<platform>", "Platform (whatsapp, telegram, discord, slack, signal)")
+    .argument("<platform>", "Platform (channel id)")
     .argument("<platformId>", "Platform-specific user ID")
     .action(async (platform: string, platformId: string) => {
       try {
@@ -271,17 +267,19 @@ export function registerContactsCli(program: Command) {
         const result = unlinkIdentity(store, platform, platformId);
 
         if (!result.success) {
-          defaultRuntime.error(danger(result.error ?? "Failed to unlink identity"));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(result.error ?? "Failed to unlink identity"));
+          cli.exit(1);
           return;
         }
 
-        defaultRuntime.log(
-          success(`Unlinked: ${platform}:${platformId} → new contact ${result.newContactId}`),
+        cli.log(
+          formatSuccess(
+            `Unlinked: ${platform}:${platformId} → new contact ${result.newContactId}`,
+          ),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -301,21 +299,21 @@ export function registerContactsCli(program: Command) {
         const suggestions = findLinkSuggestions(store, { minNameScore: minScore });
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(suggestions, null, 2));
+          cli.log(JSON.stringify(suggestions, null, 2));
           return;
         }
 
         if (suggestions.length === 0) {
-          defaultRuntime.log(theme.muted("No link suggestions found."));
+          cli.log(theme.muted("No link suggestions found."));
           return;
         }
 
-        defaultRuntime.log(
+        cli.log(
           `${theme.heading("Link Suggestions")} ${theme.muted(`(${suggestions.length})`)}`,
         );
 
         const tableWidth = Math.max(100, (process.stdout.columns ?? 120) - 1);
-        defaultRuntime.log(
+        cli.log(
           renderTable({
             width: tableWidth,
             columns: [
@@ -335,13 +333,13 @@ export function registerContactsCli(program: Command) {
           }).trimEnd(),
         );
 
-        defaultRuntime.log("");
-        defaultRuntime.log(
+        cli.log("");
+        cli.log(
           theme.muted("To link: clawdbot contacts link <source-contact-id> <target-contact-id>"),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -362,15 +360,15 @@ export function registerContactsCli(program: Command) {
           const highConfidence = suggestions.filter((s) => s.confidence === "high");
 
           if (highConfidence.length === 0) {
-            defaultRuntime.log(theme.muted("No high-confidence matches found."));
+            cli.log(theme.muted("No high-confidence matches found."));
             return;
           }
 
-          defaultRuntime.log(
+          cli.log(
             `${theme.heading("Would auto-link")} ${theme.muted(`(${highConfidence.length})`)}`,
           );
           for (const s of highConfidence) {
-            defaultRuntime.log(
+            cli.log(
               `  ${s.sourceIdentity.contactId} + ${s.targetIdentity.contactId} (${s.reason})`,
             );
           }
@@ -380,14 +378,14 @@ export function registerContactsCli(program: Command) {
         const result = autoLinkHighConfidence(store);
 
         if (result.linked === 0) {
-          defaultRuntime.log(theme.muted("No high-confidence matches found to auto-link."));
+          cli.log(theme.muted("No high-confidence matches found to auto-link."));
           return;
         }
 
-        defaultRuntime.log(success(`Auto-linked ${result.linked} contact(s)`));
+        cli.log(formatSuccess(`Auto-linked ${result.linked} contact(s)`));
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -405,22 +403,22 @@ export function registerContactsCli(program: Command) {
         const stats = store.getStats();
 
         if (opts.json) {
-          defaultRuntime.log(JSON.stringify(stats, null, 2));
+          cli.log(JSON.stringify(stats, null, 2));
           return;
         }
 
-        defaultRuntime.log(`${theme.heading("Contact Store Statistics")}`);
-        defaultRuntime.log(`  Contacts: ${stats.contacts}`);
-        defaultRuntime.log(`  Identities: ${stats.identities}`);
-        defaultRuntime.log(`  Indexed Messages: ${stats.messages}`);
-        defaultRuntime.log("");
-        defaultRuntime.log(`${theme.heading("Identities by Platform")}`);
+        cli.log(`${theme.heading("Contact Store Statistics")}`);
+        cli.log(`  Contacts: ${stats.contacts}`);
+        cli.log(`  Identities: ${stats.identities}`);
+        cli.log(`  Indexed Messages: ${stats.messages}`);
+        cli.log("");
+        cli.log(`${theme.heading("Identities by Platform")}`);
         for (const [platform, count] of Object.entries(stats.platforms)) {
-          defaultRuntime.log(`  ${platform}: ${count}`);
+          cli.log(`  ${platform}: ${count}`);
         }
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 
@@ -440,8 +438,8 @@ export function registerContactsCli(program: Command) {
         const contact = store.getContact(contactId);
 
         if (!contact) {
-          defaultRuntime.error(danger(`Contact not found: ${contactId}`));
-          defaultRuntime.exit(1);
+          cli.error(formatDanger(`Contact not found: ${contactId}`));
+          cli.exit(1);
           return;
         }
 
@@ -451,24 +449,26 @@ export function registerContactsCli(program: Command) {
         if (opts.remove) {
           newAliases = currentAliases.filter((a) => a !== alias);
           if (newAliases.length === currentAliases.length) {
-            defaultRuntime.log(theme.muted(`Alias "${alias}" not found on this contact.`));
+            cli.log(theme.muted(`Alias "${alias}" not found on this contact.`));
             return;
           }
         } else {
           if (currentAliases.includes(alias)) {
-            defaultRuntime.log(theme.muted(`Alias "${alias}" already exists on this contact.`));
+            cli.log(theme.muted(`Alias "${alias}" already exists on this contact.`));
             return;
           }
           newAliases = [...currentAliases, alias];
         }
 
         store.updateContact(contactId, { aliases: newAliases });
-        defaultRuntime.log(
-          success(opts.remove ? `Removed alias "${alias}"` : `Added alias "${alias}"`),
+        cli.log(
+          formatSuccess(
+            opts.remove ? `Removed alias "${alias}"` : `Added alias "${alias}"`,
+          ),
         );
       } catch (err) {
-        defaultRuntime.error(danger(String(err)));
-        defaultRuntime.exit(1);
+        cli.error(formatDanger(String(err)));
+        cli.exit(1);
       }
     });
 }

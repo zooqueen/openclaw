@@ -5,6 +5,11 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 import type { AuthProfileCredential, OAuthCredential } from "../agents/auth-profiles/types.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
+import type { ChatCommandDefinition } from "../auto-reply/commands-registry.types.js";
+import type {
+  CommandHandlerResult,
+  HandleCommandsParams,
+} from "../auto-reply/reply/commands-types.js";
 import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { ClawdbotConfig } from "../config/config.js";
@@ -196,6 +201,11 @@ export type ClawdbotPluginCliContext = {
 
 export type ClawdbotPluginCliRegistrar = (ctx: ClawdbotPluginCliContext) => void | Promise<void>;
 
+export type PluginChatCommandHandler = (
+  params: HandleCommandsParams,
+  allowTextCommands: boolean,
+) => Promise<CommandHandlerResult | null> | CommandHandlerResult | null;
+
 export type ClawdbotPluginServiceContext = {
   config: ClawdbotConfig;
   workspaceDir?: string;
@@ -252,6 +262,7 @@ export type ClawdbotPluginApi = {
   registerChannel: (registration: ClawdbotPluginChannelRegistration | ChannelPlugin) => void;
   registerGatewayMethod: (method: string, handler: GatewayRequestHandler) => void;
   registerCli: (registrar: ClawdbotPluginCliRegistrar, opts?: { commands?: string[] }) => void;
+  registerChatCommand: (command: ChatCommandDefinition, handler: PluginChatCommandHandler) => void;
   registerService: (service: ClawdbotPluginService) => void;
   registerProvider: (provider: ProviderPlugin) => void;
   /**
@@ -349,6 +360,11 @@ export type PluginHookMessageReceivedEvent = {
   from: string;
   content: string;
   timestamp?: number;
+  messageId?: string;
+  senderId?: string;
+  senderName?: string;
+  senderUsername?: string;
+  senderE164?: string;
   metadata?: Record<string, unknown>;
 };
 

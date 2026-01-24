@@ -337,6 +337,35 @@ describe("ContactStore", () => {
       expect(results[0]?.message.contactId).toBe(contact.canonicalId);
     });
 
+    it("filters messages by canonical contact id", () => {
+      const contact = store.createContact("Filter Sender");
+      store.addIdentity({
+        contactId: contact.canonicalId,
+        platform: "telegram",
+        platformId: "sender-filter",
+        username: "filter",
+        phone: null,
+        displayName: null,
+        lastSeenAt: null,
+      });
+
+      store.indexMessage({
+        id: "msg-filter",
+        content: "Message for canonical filter",
+        platform: "telegram" as Platform,
+        senderId: "sender-filter",
+        channelId: "chat-1",
+        timestamp: Date.now(),
+      });
+
+      const results = store.searchMessages({
+        query: "canonical filter",
+        from: contact.canonicalId,
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.message.contactId).toBe(contact.canonicalId);
+    });
+
     it("searches messages by content", () => {
       store.indexMessage({
         id: "msg-search-1",

@@ -66,8 +66,16 @@ export function importContactFromMessage(
   // Check if identity already exists
   const existing = store.getIdentityByPlatformId(data.platform, data.platformId);
   if (existing) {
-    // Update last seen
-    store.updateIdentityLastSeen(data.platform, data.platformId);
+    const updated = {
+      contactId: existing.contactId,
+      platform: existing.platform,
+      platformId: existing.platformId,
+      username: data.username ?? existing.username,
+      phone: data.phone ?? existing.phone,
+      displayName: data.displayName ?? existing.displayName,
+      lastSeenAt: Date.now(),
+    } satisfies PlatformIdentityInput;
+    store.addIdentity(updated);
     return { contactId: existing.contactId, isNew: false };
   }
 

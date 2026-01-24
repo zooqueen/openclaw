@@ -85,6 +85,26 @@ describe("commands registry", () => {
     expect(native.find((spec) => spec.name === "demo_skill")).toBeTruthy();
   });
 
+  it("includes plugin chat commands", () => {
+    const registry = createTestRegistry([]);
+    registry.chatCommands = [
+      {
+        pluginId: "demo-plugin",
+        source: "test",
+        command: {
+          key: "demo",
+          description: "Demo command",
+          textAliases: ["/demo"],
+          scope: "text",
+        },
+        handler: async () => null,
+      },
+    ];
+    setActivePluginRegistry(registry);
+    const commands = listChatCommands();
+    expect(commands.find((spec) => spec.key === "demo")).toBeTruthy();
+  });
+
   it("detects known text commands", () => {
     const detection = getCommandDetection();
     expect(detection.exact.has("/commands")).toBe(true);

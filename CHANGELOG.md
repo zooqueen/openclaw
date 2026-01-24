@@ -9,6 +9,7 @@ Docs: https://docs.clawd.bot
 - Agents: remove redundant bash tool alias from tool registration/display. (#1571) Thanks @Takhoffman.
 - Browser: add node-host proxy auto-routing for remote gateways (configurable per gateway/node).
 - Plugins: add optional llm-task JSON-only tool for workflows. (#1498) Thanks @vignesh07.
+- Contacts/Search: add the contacts-search plugin for unified contacts + cross-platform message search (CLI + /search). (#1438) Thanks @bluzername. https://docs.clawd.bot/plugins/contacts-search https://docs.clawd.bot/contact https://docs.clawd.bot/cli/contacts https://docs.clawd.bot/cli/search
 - CLI: restart the gateway by default after `clawdbot update`; add `--no-restart` to skip it.
 - CLI: add live auth probes to `clawdbot models status` for per-profile verification.
 - CLI: add `clawdbot system` for system events + heartbeat controls; remove standalone `wake`.
@@ -111,22 +112,22 @@ Docs: https://docs.clawd.bot
 ## 2026.1.21
 
 ### Changes
-- Highlight: Lobster optional plugin tool for typed workflows + approval gates. https://docs.clawd.bot/tools/lobster
-- Lobster: allow workflow file args via `argsJson` in the plugin tool. https://docs.clawd.bot/tools/lobster
-- Heartbeat: allow running heartbeats in an explicit session key. (#1256) Thanks @zknicker.
-- CLI: default exec approvals to the local host, add gateway/node targeting flags, and show target details in allowlist output.
-- CLI: exec approvals mutations render tables instead of raw JSON.
-- Exec approvals: support wildcard agent allowlists (`*`) across all agents.
-- Exec approvals: allowlist matches resolved binary paths only, add safe stdin-only bins, and tighten allowlist shell parsing.
-- Nodes: expose node PATH in status/describe and bootstrap PATH for node-host execution.
-- CLI: flatten node service commands under `clawdbot node` and remove `service node` docs.
-- CLI: move gateway service commands under `clawdbot gateway` and add `gateway probe` for reachability.
-- Sessions: add per-channel reset overrides via `session.resetByChannel`. (#1353) Thanks @cash-echo-bot.
-- Agents: add identity avatar config support and Control UI avatar rendering. (#1329, #1424) Thanks @dlauer.
-- UI: show per-session assistant identity in the Control UI. (#1420) Thanks @robbyczgw-cla.
-- CLI: add `clawdbot update wizard` for interactive channel selection and restart prompts. https://docs.clawd.bot/cli/update
-- Signal: add typing indicators and DM read receipts via signal-cli.
-- MSTeams: add file uploads, adaptive cards, and attachment handling improvements. (#1410) Thanks @Evizero.
+- Highlight: Lobster optional plugin tool for typed workflows + approval gates. https://docs.clawd.bot/tools/lobster (#1152) Thanks @vignesh07.
+- Agents/UI: add identity avatar config support and Control UI avatar rendering. (#1329, #1424) Thanks @dlauer. https://docs.clawd.bot/gateway/configuration https://docs.clawd.bot/cli/agents
+- Control UI: add custom assistant identity support and per-session identity display. (#1420) Thanks @robbyczgw-cla. https://docs.clawd.bot/web/control-ui
+- CLI: add `clawdbot update wizard` with interactive channel selection + restart prompts, plus preflight checks before rebasing. https://docs.clawd.bot/cli/update
+- Models/Commands: add `/models`, improve `/model` listing UX, and expand `clawdbot models` paging. (#1398) Thanks @vignesh07. https://docs.clawd.bot/cli/models
+- CLI: move gateway service commands under `clawdbot gateway`, flatten node service commands under `clawdbot node`, and add `gateway probe` for reachability. https://docs.clawd.bot/cli/gateway https://docs.clawd.bot/cli/node
+- Exec: add elevated ask/full modes, tighten allowlist gating, and render approvals tables on write. https://docs.clawd.bot/tools/elevated https://docs.clawd.bot/tools/exec-approvals
+- Exec approvals: default to local host, add gateway/node targeting + target details, support wildcard agent allowlists, and tighten allowlist parsing/safe bins. https://docs.clawd.bot/cli/approvals https://docs.clawd.bot/tools/exec-approvals
+- Heartbeat: allow explicit session keys and active hours. (#1256) Thanks @zknicker. https://docs.clawd.bot/gateway/heartbeat
+- Sessions: add per-channel idle durations via `sessions.channelIdleMinutes`. (#1353) Thanks @cash-echo-bot.
+- Nodes: run exec-style, expose PATH in status/describe, and bootstrap PATH for node-host execution. https://docs.clawd.bot/cli/node
+- Cache: add `cache.ttlPrune` mode and auth-aware defaults for cache TTL behavior.
+- Queue: add per-channel debounce overrides for auto-reply. https://docs.clawd.bot/concepts/queue
+- Discord: add wildcard channel config support. (#1334) Thanks @pvoo. https://docs.clawd.bot/channels/discord
+- Signal: add typing indicators and DM read receipts via signal-cli. https://docs.clawd.bot/channels/signal
+- MSTeams: add file uploads, adaptive cards, and attachment handling improvements. (#1410) Thanks @Evizero. https://docs.clawd.bot/channels/msteams
 - Onboarding: remove the run setup-token auth option (paste setup-token or reuse CLI creds instead).
 - Docs: add troubleshooting entry for gateway.mode blocking gateway start. https://docs.clawd.bot/gateway/troubleshooting
 - Docs: add /model allowlist troubleshooting note. (#1405)

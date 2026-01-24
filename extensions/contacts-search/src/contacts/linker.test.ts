@@ -330,6 +330,56 @@ describe("linker", () => {
       expect(merged?.aliases).toContain("John on Discord");
     });
 
+    it("reassigns message history when merging contacts", () => {
+      const primary = store.createContact("Merge Primary");
+      store.addIdentity({
+        contactId: primary.canonicalId,
+        platform: "telegram",
+        platformId: "tg-merge",
+        username: null,
+        phone: null,
+        displayName: "TG Merge",
+        lastSeenAt: null,
+      });
+      const secondary = store.createContact("Merge Secondary");
+      store.addIdentity({
+        contactId: secondary.canonicalId,
+        platform: "discord",
+        platformId: "dc-merge",
+        username: null,
+        phone: null,
+        displayName: "DC Merge",
+        lastSeenAt: null,
+      });
+
+      store.indexMessage({
+        id: "msg-merge-1",
+        content: "merge history one",
+        platform: "telegram",
+        senderId: "tg-merge",
+        channelId: "c1",
+        timestamp: Date.now(),
+      });
+      store.indexMessage({
+        id: "msg-merge-2",
+        content: "merge history two",
+        platform: "discord",
+        senderId: "dc-merge",
+        channelId: "c2",
+        timestamp: Date.now(),
+      });
+
+      const result = linkContacts(store, primary.canonicalId, secondary.canonicalId);
+      expect(result.success).toBe(true);
+
+      const results = store.searchMessages({ query: "merge history", from: primary.canonicalId });
+      expect(results.length).toBe(2);
+      const ids = results.map((entry) => entry.message.id);
+      expect(ids).toContain("msg-merge-1");
+      expect(ids).toContain("msg-merge-2");
+      expect(results.every((entry) => entry.message.contactId === primary.canonicalId)).toBe(true);
+    });
+
     it("returns error for non-existent primary contact", () => {
       const contact = store.createContact("Test");
       store.addIdentity({
@@ -400,6 +450,54 @@ describe("linker", () => {
       const newContact = store.getContactWithIdentities(result.newContactId!);
       expect(newContact?.identities.length).toBe(1);
       expect(newContact?.identities[0]?.platform).toBe("discord");
+    });
+
+    it("moves message history to new contact when unlinking", () => {
+      const contact = store.createContact("Unlink User");
+      store.addIdentity({
+        contactId: contact.canonicalId,
+        platform: "telegram",
+        platformId: "tg-unlink",
+        username: null,
+        phone: null,
+        displayName: "TG Unlink",
+        lastSeenAt: null,
+      });
+      store.addIdentity({
+        contactId: contact.canonicalId,
+        platform: "discord",
+        platformId: "dc-unlink",
+        username: null,
+        phone: null,
+        displayName: "DC Unlink",
+        lastSeenAt: null,
+      });
+
+      store.indexMessage({
+        id: "msg-unlink",
+        content: "unlink history message",
+        platform: "discord",
+        senderId: "dc-unlink",
+        channelId: "c3",
+        timestamp: Date.now(),
+      });
+
+      const result = unlinkIdentity(store, "discord", "dc-unlink");
+      expect(result.success).toBe(true);
+
+      const newContactId = result.newContactId!;
+      const newResults = store.searchMessages({
+        query: "unlink history",
+        from: newContactId,
+      });
+      expect(newResults.length).toBe(1);
+      expect(newResults[0]?.message.contactId).toBe(newContactId);
+
+      const oldResults = store.searchMessages({
+        query: "unlink history",
+        from: contact.canonicalId,
+      });
+      expect(oldResults.length).toBe(0);
     });
 
     it("returns error for non-existent identity", () => {
