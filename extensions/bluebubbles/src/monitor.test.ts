@@ -1985,7 +1985,7 @@ describe("BlueBubbles webhook monitor", () => {
           handle: { address: "+15551234567" },
           isGroup: false,
           isFromMe: false,
-          guid: "msg-uuid-12345",
+          guid: "p:1/msg-uuid-12345",
           chatGuid: "iMessage;-;+15551234567",
           date: Date.now(),
         },
@@ -2001,7 +2001,7 @@ describe("BlueBubbles webhook monitor", () => {
       const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
       // MessageSid should be short ID "1" instead of full UUID
       expect(callArgs.ctx.MessageSid).toBe("1");
-      expect(callArgs.ctx.MessageSidFull).toBe("msg-uuid-12345");
+      expect(callArgs.ctx.MessageSidFull).toBe("p:1/msg-uuid-12345");
     });
 
     it("resolves short ID back to UUID", async () => {
@@ -2025,7 +2025,7 @@ describe("BlueBubbles webhook monitor", () => {
           handle: { address: "+15551234567" },
           isGroup: false,
           isFromMe: false,
-          guid: "msg-uuid-12345",
+          guid: "p:1/msg-uuid-12345",
           chatGuid: "iMessage;-;+15551234567",
           date: Date.now(),
         },
@@ -2038,7 +2038,7 @@ describe("BlueBubbles webhook monitor", () => {
       await flushAsync();
 
       // The short ID "1" should resolve back to the full UUID
-      expect(resolveBlueBubblesMessageId("1")).toBe("msg-uuid-12345");
+      expect(resolveBlueBubblesMessageId("1")).toBe("p:1/msg-uuid-12345");
     });
 
     it("returns UUID unchanged when not in cache", () => {

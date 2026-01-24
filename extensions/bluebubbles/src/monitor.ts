@@ -55,7 +55,7 @@ type BlueBubblesReplyCacheEntry = {
 // Best-effort cache for resolving reply context when BlueBubbles webhooks omit sender/body.
 const blueBubblesReplyCacheByMessageId = new Map<string, BlueBubblesReplyCacheEntry>();
 
-// Bidirectional maps for short ID ↔ UUID resolution (token savings optimization)
+// Bidirectional maps for short ID ↔ message GUID resolution (token savings optimization)
 const blueBubblesShortIdToUuid = new Map<string, string>();
 const blueBubblesUuidToShortId = new Map<string, string>();
 let blueBubblesShortIdCounter = 0;
@@ -85,18 +85,18 @@ function rememberBlueBubblesReplyCache(
   if (!rawMessageId) {
     return { ...entry, shortId: "" };
   }
-  // Normalize to strip "p:N/" prefix for consistent lookups
+  // Normalize to strip "p:N/" prefix for consistent cache lookups
   const messageId = normalizeMessageIdForCache(rawMessageId);
 
-  // Check if we already have a short ID for this UUID
-  let shortId = blueBubblesUuidToShortId.get(messageId);
+  // Check if we already have a short ID for this GUID (keep "p:N/" prefix)
+  let shortId = blueBubblesUuidToShortId.get(rawMessageId);
   if (!shortId) {
     shortId = generateShortId();
-    blueBubblesShortIdToUuid.set(shortId, messageId);
-    blueBubblesUuidToShortId.set(messageId, shortId);
+    blueBubblesShortIdToUuid.set(shortId, rawMessageId);
+    blueBubblesUuidToShortId.set(rawMessageId, shortId);
   }
 
-  const fullEntry: BlueBubblesReplyCacheEntry = { ...entry, shortId };
+  const fullEntry: BlueBubblesReplyCacheEntry = { ...entry, messageId: rawMessageId, shortId };
 
   // Refresh insertion order.
   blueBubblesReplyCacheByMessageId.delete(messageId);
@@ -110,7 +110,7 @@ function rememberBlueBubblesReplyCache(
       // Clean up short ID mappings for expired entries
       if (value.shortId) {
         blueBubblesShortIdToUuid.delete(value.shortId);
-        blueBubblesUuidToShortId.delete(key);
+        blueBubblesUuidToShortId.delete(value.messageId.trim());
       }
       continue;
     }
@@ -124,7 +124,7 @@ function rememberBlueBubblesReplyCache(
     // Clean up short ID mappings for evicted entries
     if (oldEntry?.shortId) {
       blueBubblesShortIdToUuid.delete(oldEntry.shortId);
-      blueBubblesUuidToShortId.delete(oldest);
+      blueBubblesUuidToShortId.delete(oldEntry.messageId.trim());
     }
   }
 
@@ -132,8 +132,8 @@ function rememberBlueBubblesReplyCache(
 }
 
 /**
- * Resolves a short message ID (e.g., "1", "2") to a full BlueBubbles UUID.
- * Returns the input unchanged if it's already a UUID or not found in the mapping.
+ * Resolves a short message ID (e.g., "1", "2") to a full BlueBubbles GUID.
+ * Returns the input unchanged if it's already a GUID or not found in the mapping.
  */
 export function resolveBlueBubblesMessageId(
   shortOrUuid: string,
@@ -169,12 +169,15 @@ export function _resetBlueBubblesShortIdState(): void {
 }
 
 /**
- * Gets the short ID for a UUID, if one exists.
- * Normalizes the UUID by stripping "p:N/" prefix before lookup.
+ * Gets the short ID for a message GUID, if one exists.
  */
 function getShortIdForUuid(uuid: string): string | undefined {
-  const normalized = normalizeMessageIdForCache(uuid);
-  return blueBubblesUuidToShortId.get(normalized);
+  const trimmed = uuid.trim();
+  if (!trimmed) return undefined;
+  const direct = blueBubblesUuidToShortId.get(trimmed);
+  if (direct) return direct;
+  const normalized = normalizeMessageIdForCache(trimmed);
+  return normalized === trimmed ? undefined : blueBubblesUuidToShortId.get(normalized);
 }
 
 function resolveReplyContextFromCache(params: {
@@ -1616,7 +1619,7 @@ async function processMessage(
     replyToId = tapbackContext.replyToId;
   }
 
-  if (replyToId && (!replyToBody || !replyToSender)) {
+  if (replyToId) {
     const cached = resolveReplyContextFromCache({
       accountId: account.accountId,
       replyToId,
