@@ -1,9 +1,11 @@
 import type { ClawdbotConfig } from "../config/config.js";
+import type { ModelDefinitionConfig } from "../config/types.models.js";
 import {
   DEFAULT_COPILOT_API_BASE_URL,
   resolveCopilotApiToken,
 } from "../providers/github-copilot-token.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
+import { normalizeProviderId } from "./model-selection.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
@@ -61,6 +63,127 @@ const QWEN_PORTAL_DEFAULT_COST = {
   cacheRead: 0,
   cacheWrite: 0,
 };
+
+const OLLAMA_HOST_BASE_URL = "http://127.0.0.1:11434";
+const OLLAMA_DEFAULT_CONTEXT_WINDOW = 8192;
+const OLLAMA_MAX_TOKENS_MULTIPLIER = 10;
+const OLLAMA_DISCOVERY_TIMEOUT_MS = 5000;
+const OLLAMA_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+interface OllamaModel {
+  name: string;
+  modified_at: string;
+  size: number;
+  digest: string;
+  details?: {
+    family?: string;
+    parameter_size?: string;
+  };
+}
+
+interface OllamaTagsResponse {
+  models: OllamaModel[];
+}
+
+interface OllamaShowResponse {
+  capabilities?: string[];
+  model_info?: Record<string, string | number>;
+}
+
+function parseOllamaNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function resolveOllamaContextWindow(
+  modelInfo: Record<string, string | number> | undefined,
+): number {
+  if (!modelInfo) return OLLAMA_DEFAULT_CONTEXT_WINDOW;
+  const architecture = String(modelInfo["general.architecture"] ?? "").trim();
+  const contextKey = architecture ? `${architecture}.context_length` : "";
+  const contextWindow =
+    (contextKey ? parseOllamaNumber(modelInfo[contextKey]) : undefined) ??
+    parseOllamaNumber(modelInfo["context_length"]);
+  return contextWindow ?? OLLAMA_DEFAULT_CONTEXT_WINDOW;
+}
+
+function normalizeOllamaHostBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  return trimmed.endsWith("/v1") ? trimmed.slice(0, -3) : trimmed;
+}
+
+async function discoverOllamaModels(baseUrl: string): Promise<ModelDefinitionConfig[]> {
+  // Skip Ollama discovery in test environments
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return [];
+  }
+  try {
+    const response = await fetch(`${baseUrl}/api/tags`, {
+      signal: AbortSignal.timeout(OLLAMA_DISCOVERY_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.warn(`Failed to discover Ollama models: ${response.status}`);
+      return [];
+    }
+    const data = (await response.json()) as OllamaTagsResponse;
+    if (!data.models || data.models.length === 0) {
+      console.warn("No Ollama models found on local instance");
+      return [];
+    }
+    const models = await Promise.all(
+      data.models.map(async (model) => {
+        try {
+          const detailsResponse = await fetch(`${baseUrl}/api/show`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name: model.name }),
+            signal: AbortSignal.timeout(OLLAMA_DISCOVERY_TIMEOUT_MS),
+          });
+          if (!detailsResponse.ok) {
+            console.warn(
+              `Failed to fetch Ollama model details for ${model.name}: ${detailsResponse.status}`,
+            );
+            return null;
+          }
+          const details = (await detailsResponse.json()) as OllamaShowResponse;
+          const capabilities = Array.isArray(details.capabilities) ? details.capabilities : [];
+          if (!capabilities.includes("tools")) {
+            console.debug(`Skipping Ollama model ${model.name}: does not support tools`);
+            return null;
+          }
+          const contextWindow = resolveOllamaContextWindow(details.model_info);
+          return {
+            id: model.name,
+            name: model.name,
+            reasoning: capabilities.includes("thinking"),
+            input: ["text"],
+            cost: OLLAMA_DEFAULT_COST,
+            contextWindow,
+            maxTokens: contextWindow * OLLAMA_MAX_TOKENS_MULTIPLIER,
+          };
+        } catch (error) {
+          console.warn(`Failed to fetch Ollama model details for ${model.name}: ${String(error)}`);
+          return null;
+        }
+      }),
+    );
+    return models.filter((model): model is ModelDefinitionConfig => Boolean(model));
+  } catch (error) {
+    console.warn(`Failed to discover Ollama models: ${String(error)}`);
+    return [];
+  }
+}
 
 function normalizeApiKeyConfig(value: string): string {
   const trimmed = value.trim();
@@ -275,11 +398,28 @@ function buildSyntheticProvider(): ProviderConfig {
   };
 }
 
-export function resolveImplicitProviders(params: { agentDir: string }): ModelsConfig["providers"] {
+async function buildOllamaProvider(baseUrl: string): Promise<ProviderConfig> {
+  const hostBaseUrl = normalizeOllamaHostBaseUrl(baseUrl);
+  const models = await discoverOllamaModels(hostBaseUrl);
+  return {
+    baseUrl: `${hostBaseUrl}/v1`,
+    api: "openai-completions",
+    models,
+  };
+}
+
+export async function resolveImplicitProviders(params: {
+  agentDir: string;
+  explicitProviders?: ModelsConfig["providers"];
+}): Promise<ModelsConfig["providers"]> {
   const providers: Record<string, ProviderConfig> = {};
   const authStore = ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
+  const explicitProviders = params.explicitProviders ?? {};
+  const hasExplicitOllama = Object.keys(explicitProviders).some(
+    (key) => normalizeProviderId(key) === "ollama",
+  );
 
   const minimaxKey =
     resolveEnvApiKeyVarName("minimax") ??
@@ -315,6 +455,14 @@ export function resolveImplicitProviders(params: { agentDir: string }): ModelsCo
       ...buildQwenPortalProvider(),
       apiKey: QWEN_PORTAL_OAUTH_PLACEHOLDER,
     };
+  }
+
+  // Ollama provider - only add if explicitly configured
+  const ollamaKey =
+    resolveEnvApiKeyVarName("ollama") ??
+    resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
+  if (ollamaKey && !hasExplicitOllama) {
+    providers.ollama = { ...(await buildOllamaProvider(OLLAMA_HOST_BASE_URL)), apiKey: ollamaKey };
   }
 
   return providers;

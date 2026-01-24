@@ -10,6 +10,7 @@ Docs: https://docs.clawd.bot
 - Docs: update Fly.io guide notes.
 - Docs: add Bedrock EC2 instance role setup + IAM steps. (#1625) Thanks @sergical. https://docs.clawd.bot/bedrock
 - Exec approvals: forward approval prompts to chat with `/approve` for all channels (including plugins). (#1621) Thanks @czekaj. https://docs.clawd.bot/tools/exec-approvals https://docs.clawd.bot/tools/slash-commands
+- Models: add Ollama provider discovery + docs. (#1606) Thanks @abhaymundhara. https://docs.clawd.bot/providers/ollama
 
 ### Fixes
 - Web UI: hide internal `message_id` hints in chat bubbles.

@@ -236,6 +236,30 @@ MiniMax is configured via `models.providers` because it uses custom endpoints:
 
 See [/providers/minimax](/providers/minimax) for setup details, model options, and config snippets.
 
+### Ollama
+
+Ollama is a local LLM runtime that provides an OpenAI-compatible API:
+
+- Provider: `ollama`
+- Auth: `OLLAMA_API_KEY` (any value; Ollama runs locally)
+- Example model: `ollama/llama3.3`
+- Installation: https://ollama.ai
+
+```bash
+# Install Ollama, then pull a model:
+ollama pull llama3.3
+```
+
+```json5
+{
+  agents: {
+    defaults: { model: { primary: "ollama/llama3.3" } }
+  }
+}
+```
+
+Ollama is auto-discovered when `OLLAMA_API_KEY` (or an auth profile) is set and no explicit `models.providers.ollama` entry exists. Discovery probes `http://127.0.0.1:11434` and filters to tool-capable models. See [/providers/ollama](/providers/ollama) for model recommendations and custom configuration.
+
 ### Local proxies (LM Studio, vLLM, LiteLLM, etc.)
 
 Example (OpenAI‑compatible):
