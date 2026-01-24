@@ -19,6 +19,7 @@ Docs: https://docs.clawd.bot
 - CLI: suppress diagnostic session/run noise during auth probes.
 - Linux: include env-configured user bin roots in systemd PATH and align PATH audits. (#1512) Thanks @robbyczgw-cla.
 - TUI: render Gateway slash-command replies as system output (for example, `/context`).
+- TUI/Gateway: reset session token counters on `/new` and refresh the footer immediately. (#1542) Thanks @robbyczgw-cla.
 - Media: preserve PNG alpha when possible; fall back to JPEG when still over size cap. (#1491) Thanks @robbyczgw-cla.
 - Agents: treat plugin-only tool allowlists as opt-ins; keep core tools enabled. (#1467)
 - Exec approvals: persist allowlist entry ids to keep macOS allowlist rows stable. (#1521) Thanks @ngutman.

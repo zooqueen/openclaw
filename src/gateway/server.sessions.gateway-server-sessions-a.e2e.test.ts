@@ -345,11 +345,19 @@ describe("gateway server sessions", () => {
     const reset = await rpcReq<{
       ok: true;
       key: string;
-      entry: { sessionId: string };
+      entry: {
+        sessionId: string;
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+      };
     }>(ws, "sessions.reset", { key: "agent:main:main" });
     expect(reset.ok).toBe(true);
     expect(reset.payload?.key).toBe("agent:main:main");
     expect(reset.payload?.entry.sessionId).not.toBe("sess-main");
+    expect(reset.payload?.entry.inputTokens).toBe(0);
+    expect(reset.payload?.entry.outputTokens).toBe(0);
+    expect(reset.payload?.entry.totalTokens).toBe(0);
 
     const badThinking = await rpcReq(ws, "sessions.patch", {
       key: "agent:main:main",
