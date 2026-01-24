@@ -65,7 +65,6 @@ describe("tailscale helpers", () => {
   it("enableTailscaleServe attempts normal first, then sudo", async () => {
     // 1. First attempt fails
     // 2. Second attempt (sudo) succeeds
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const exec = vi
       .fn()
       .mockRejectedValueOnce(new Error("permission denied"))
@@ -75,7 +74,7 @@ describe("tailscale helpers", () => {
 
     expect(exec).toHaveBeenNthCalledWith(
       1,
-      "tailscale",
+      expect.stringMatching(/tailscale$/),
       expect.arrayContaining(["serve", "--bg", "--yes", "3000"]),
       expect.any(Object),
     );
@@ -83,27 +82,32 @@ describe("tailscale helpers", () => {
     expect(exec).toHaveBeenNthCalledWith(
       2,
       "sudo",
-      expect.arrayContaining(["-n", "tailscale", "serve", "--bg", "--yes", "3000"]),
+      expect.arrayContaining([
+        "-n",
+        expect.stringMatching(/tailscale$/),
+        "serve",
+        "--bg",
+        "--yes",
+        "3000",
+      ]),
       expect.any(Object),
     );
   });
 
   it("enableTailscaleServe does NOT use sudo if first attempt succeeds", async () => {
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const exec = vi.fn().mockResolvedValue({ stdout: "" });
 
     await enableTailscaleServe(3000, exec as never);
 
     expect(exec).toHaveBeenCalledTimes(1);
     expect(exec).toHaveBeenCalledWith(
-      "tailscale",
+      expect.stringMatching(/tailscale$/),
       expect.arrayContaining(["serve", "--bg", "--yes", "3000"]),
       expect.any(Object),
     );
   });
 
   it("disableTailscaleServe uses fallback", async () => {
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const exec = vi
       .fn()
       .mockRejectedValueOnce(new Error("permission denied"))
@@ -115,7 +119,7 @@ describe("tailscale helpers", () => {
     expect(exec).toHaveBeenNthCalledWith(
       2,
       "sudo",
-      expect.arrayContaining(["-n", "tailscale", "serve", "reset"]),
+      expect.arrayContaining(["-n", expect.stringMatching(/tailscale$/), "serve", "reset"]),
       expect.any(Object),
     );
   });
@@ -125,7 +129,6 @@ describe("tailscale helpers", () => {
     // 1. status (success)
     // 2. enable (fails)
     // 3. enable sudo (success)
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const exec = vi
       .fn()
       .mockResolvedValueOnce({ stdout: JSON.stringify({ BackendState: "Running" }) }) // status
@@ -144,14 +147,14 @@ describe("tailscale helpers", () => {
     // 1. status
     expect(exec).toHaveBeenNthCalledWith(
       1,
-      "tailscale",
+      expect.stringMatching(/tailscale$/),
       expect.arrayContaining(["funnel", "status", "--json"]),
     );
 
     // 2. enable normal
     expect(exec).toHaveBeenNthCalledWith(
       2,
-      "tailscale",
+      expect.stringMatching(/tailscale$/),
       expect.arrayContaining(["funnel", "--yes", "--bg", "8080"]),
       expect.any(Object),
     );
@@ -160,13 +163,19 @@ describe("tailscale helpers", () => {
     expect(exec).toHaveBeenNthCalledWith(
       3,
       "sudo",
-      expect.arrayContaining(["-n", "tailscale", "funnel", "--yes", "--bg", "8080"]),
+      expect.arrayContaining([
+        "-n",
+        expect.stringMatching(/tailscale$/),
+        "funnel",
+        "--yes",
+        "--bg",
+        "8080",
+      ]),
       expect.any(Object),
     );
   });
 
   it("enableTailscaleServe skips sudo on non-permission errors", async () => {
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const exec = vi.fn().mockRejectedValueOnce(new Error("boom"));
 
     await expect(enableTailscaleServe(3000, exec as never)).rejects.toThrow("boom");
@@ -175,7 +184,6 @@ describe("tailscale helpers", () => {
   });
 
   it("enableTailscaleServe rethrows original error if sudo fails", async () => {
-    vi.spyOn(tailscale, "getTailscaleBinary").mockResolvedValue("tailscale");
     const originalError = Object.assign(new Error("permission denied"), {
       stderr: "permission denied",
     });

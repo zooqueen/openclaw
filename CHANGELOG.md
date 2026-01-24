@@ -8,6 +8,7 @@ Docs: https://docs.clawd.bot
 - CLI: restart the gateway by default after `clawdbot update`; add `--no-restart` to skip it.
 - CLI: add live auth probes to `clawdbot models status` for per-profile verification.
 - Markdown: add per-channel table conversion (bullets for Signal/WhatsApp, code blocks elsewhere). (#1495) Thanks @odysseus0.
+- Docs: remove the misplaced Google Docs Editor entry from the showcase. (#1547) Thanks @aj47.
 
 ### Fixes
 - Voice wake: auto-save wake words on blur/submit across iOS/Android and align limits with macOS.
