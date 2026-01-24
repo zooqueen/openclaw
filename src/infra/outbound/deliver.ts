@@ -1,8 +1,4 @@
-import {
-  chunkTextWithMode,
-  resolveChunkMode,
-  resolveTextChunkLimit,
-} from "../../auto-reply/chunk.js";
+import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import { resolveChannelMediaMaxBytes } from "../../channels/plugins/media-limits.js";
 import { loadChannelOutboundAdapter } from "../../channels/plugins/outbound/load.js";
@@ -196,7 +192,6 @@ export async function deliverOutboundPayloads(params: {
         fallbackLimit: handler.textChunkLimit,
       })
     : undefined;
-  const chunkMode = resolveChunkMode(cfg, channel, accountId);
   const isSignalChannel = channel === "signal";
   const signalTableMode = isSignalChannel
     ? resolveMarkdownTableMode({ cfg, channel: "signal", accountId })
@@ -217,11 +212,7 @@ export async function deliverOutboundPayloads(params: {
       results.push(await handler.sendText(text));
       return;
     }
-    // Use newline chunking if explicitly configured, otherwise use the adapter's chunker
-    const chunks =
-      chunkMode === "newline"
-        ? chunkTextWithMode(text, textLimit, chunkMode)
-        : handler.chunker(text, textLimit);
+    const chunks = handler.chunker(text, textLimit);
     for (const chunk of chunks) {
       throwIfAborted(abortSignal);
       results.push(await handler.sendText(chunk));

@@ -69,7 +69,7 @@ export function resolveBlockStreamingChunking(
   });
   const chunkCfg = cfg?.agents?.defaults?.blockStreamingChunk;
 
-  // Check if channel has chunkMode: "newline" - if so, use newline-based streaming
+  // BlueBubbles-only: if chunkMode is "newline", use newline-based streaming
   const channelChunkMode = resolveChunkMode(cfg, providerKey, accountId);
   if (channelChunkMode === "newline") {
     // For newline mode: use very low minChars to flush quickly on newlines
@@ -103,7 +103,7 @@ export function resolveBlockStreamingCoalescing(
 ): BlockStreamingCoalescing | undefined {
   const providerKey = normalizeChunkProvider(provider);
 
-  // When chunkMode is "newline", disable coalescing entirely to send each line immediately
+  // BlueBubbles-only: when chunkMode is "newline", disable coalescing to send each line immediately
   const channelChunkMode = resolveChunkMode(cfg, providerKey, accountId);
   if (channelChunkMode === "newline") {
     return undefined;

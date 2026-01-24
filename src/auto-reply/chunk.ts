@@ -101,6 +101,8 @@ export function resolveChunkMode(
   accountId?: string | null,
 ): ChunkMode {
   if (!provider || provider === INTERNAL_MESSAGE_CHANNEL) return DEFAULT_CHUNK_MODE;
+  // Chunk mode is only supported for BlueBubbles.
+  if (provider !== "bluebubbles") return DEFAULT_CHUNK_MODE;
   const channelsConfig = cfg?.channels as Record<string, unknown> | undefined;
   const providerConfig = (channelsConfig?.[provider] ??
     (cfg as Record<string, unknown> | undefined)?.[provider]) as ProviderChunkConfig | undefined;

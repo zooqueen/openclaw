@@ -299,20 +299,20 @@ describe("resolveChunkMode", () => {
   });
 
   it("returns length for internal channel", () => {
-    const cfg = { channels: { telegram: { chunkMode: "newline" as const } } };
+    const cfg = { channels: { bluebubbles: { chunkMode: "newline" as const } } };
     expect(resolveChunkMode(cfg, "__internal__")).toBe("length");
   });
 
-  it("supports provider-level overrides", () => {
-    const cfg = { channels: { telegram: { chunkMode: "newline" as const } } };
-    expect(resolveChunkMode(cfg, "telegram")).toBe("newline");
+  it("supports provider-level overrides for bluebubbles", () => {
+    const cfg = { channels: { bluebubbles: { chunkMode: "newline" as const } } };
+    expect(resolveChunkMode(cfg, "bluebubbles")).toBe("newline");
     expect(resolveChunkMode(cfg, "discord")).toBe("length");
   });
 
-  it("supports account-level overrides", () => {
+  it("supports account-level overrides for bluebubbles", () => {
     const cfg = {
       channels: {
-        telegram: {
+        bluebubbles: {
           chunkMode: "length" as const,
           accounts: {
             primary: { chunkMode: "newline" as const },
@@ -320,7 +320,12 @@ describe("resolveChunkMode", () => {
         },
       },
     };
-    expect(resolveChunkMode(cfg, "telegram", "primary")).toBe("newline");
-    expect(resolveChunkMode(cfg, "telegram", "other")).toBe("length");
+    expect(resolveChunkMode(cfg, "bluebubbles", "primary")).toBe("newline");
+    expect(resolveChunkMode(cfg, "bluebubbles", "other")).toBe("length");
+  });
+
+  it("ignores chunkMode for non-bluebubbles providers", () => {
+    const cfg = { channels: { ["telegram" as string]: { chunkMode: "newline" as const } } };
+    expect(resolveChunkMode(cfg, "telegram")).toBe("length");
   });
 });
