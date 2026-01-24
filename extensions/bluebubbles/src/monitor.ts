@@ -1851,16 +1851,25 @@ async function processMessage(
             account.config.textChunkLimit && account.config.textChunkLimit > 0
               ? account.config.textChunkLimit
               : DEFAULT_TEXT_LIMIT;
+          const chunkMode = core.channel.text.resolveChunkMode(
+            config,
+            "bluebubbles",
+            account.accountId,
+          );
           const tableMode = core.channel.text.resolveMarkdownTableMode({
             cfg: config,
             channel: "bluebubbles",
             accountId: account.accountId,
           });
           const text = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
-          const chunks = core.channel.text.chunkMarkdownText(text, textLimit);
+          const chunks =
+            chunkMode === "newline"
+              ? core.channel.text.chunkTextWithMode(text, textLimit, chunkMode)
+              : core.channel.text.chunkMarkdownText(text, textLimit);
           if (!chunks.length && text) chunks.push(text);
           if (!chunks.length) return;
-          for (const chunk of chunks) {
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
             const result = await sendMessageBlueBubbles(outboundTarget, chunk, {
               cfg: config,
               accountId: account.accountId,
@@ -1869,6 +1878,15 @@ async function processMessage(
             maybeEnqueueOutboundMessageId(result.messageId, chunk);
             sentMessage = true;
             statusSink?.({ lastOutboundAt: Date.now() });
+            // In newline mode, restart typing after each chunk if more chunks remain
+            if (chunkMode === "newline" && i < chunks.length - 1 && chatGuidForActions) {
+              sendBlueBubblesTyping(chatGuidForActions, true, {
+                cfg: config,
+                accountId: account.accountId,
+              }).catch(() => {
+                // Ignore typing errors
+              });
+            }
           }
         },
         onReplyStart: async () => {
