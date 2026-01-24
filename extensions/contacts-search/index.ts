@@ -1,9 +1,4 @@
-import type {
-  ChatCommandDefinition,
-  ClawdbotPluginApi,
-  PluginHookMessageContext,
-  PluginHookMessageReceivedEvent,
-} from "clawdbot/plugin-sdk";
+import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 import { emptyPluginConfigSchema } from "clawdbot/plugin-sdk";
 
 import {
@@ -12,25 +7,8 @@ import {
 } from "./src/contacts/index.js";
 import { registerContactsCli } from "./src/cli/contacts-cli.js";
 import { registerSearchCli } from "./src/cli/search-cli.js";
-import { handleSearchCommand } from "./src/commands/search-command.js";
+import { runSearchCommand } from "./src/commands/search-command.js";
 import { indexInboundMessage } from "./src/hooks/message-indexer.js";
-
-const SEARCH_COMMAND: ChatCommandDefinition = {
-  key: "search",
-  description: "Search messages across platforms.",
-  textAliases: ["/search"],
-  scope: "text",
-  acceptsArgs: true,
-  args: [
-    {
-      name: "query",
-      description: "Search query",
-      type: "string",
-      required: true,
-      captureRemaining: true,
-    },
-  ],
-};
 
 const contactsSearchPlugin = {
   id: "contacts-search",
@@ -49,11 +27,16 @@ const contactsSearchPlugin = {
       { commands: ["contacts", "search"] },
     );
 
-    api.registerChatCommand(SEARCH_COMMAND, handleSearchCommand);
+    api.registerCommand({
+      name: "search",
+      description: "Search messages across platforms.",
+      acceptsArgs: true,
+      handler: async (ctx) => ({ text: runSearchCommand(ctx.commandBody) }),
+    });
 
     api.on(
       "message_received",
-      (event: PluginHookMessageReceivedEvent, ctx: PluginHookMessageContext) => {
+      (event, ctx) => {
         indexInboundMessage({ event, ctx, logger: api.logger });
       },
     );

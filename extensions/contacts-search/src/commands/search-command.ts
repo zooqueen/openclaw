@@ -1,5 +1,3 @@
-import type { PluginChatCommandHandler } from "clawdbot/plugin-sdk";
-
 import { getContactStore } from "../contacts/index.js";
 import { parseSearchArgs } from "./search-args.js";
 
@@ -24,32 +22,15 @@ function formatTimestamp(ts: number): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-/**
- * Handle the /search command for cross-platform message search.
- */
-export const handleSearchCommand: PluginChatCommandHandler = async (params, allowTextCommands) => {
-  if (!allowTextCommands) return null;
-
-  const normalized = params.command.commandBodyNormalized;
-  if (normalized !== "/search" && !normalized.startsWith("/search ")) return null;
-
-  if (!params.command.isAuthorizedSender) {
-    return { shouldContinue: false };
-  }
-
-  // Parse arguments from commandBodyNormalized (mentions already stripped)
-  const parsed = parseSearchArgs(params.command.commandBodyNormalized);
+export function runSearchCommand(commandBody: string): string {
+  const parsed = parseSearchArgs(commandBody);
   if (parsed.error) {
-    return {
-      shouldContinue: false,
-      reply: { text: `❌ ${parsed.error}` },
-    };
+    return `❌ ${parsed.error}`;
   }
 
   try {
     const store = getContactStore();
 
-    // Search messages
     const results = store.searchMessages({
       query: parsed.query,
       from: parsed.from,
@@ -66,13 +47,9 @@ export const handleSearchCommand: PluginChatCommandHandler = async (params, allo
           msg += `\n\n⚠️ Note: No contacts found matching "${parsed.from}"`;
         }
       }
-      return {
-        shouldContinue: false,
-        reply: { text: msg },
-      };
+      return msg;
     }
 
-    // Format results
     const lines = [`🔍 Search Results (${results.length})\n`];
 
     for (const result of results) {
@@ -90,14 +67,8 @@ export const handleSearchCommand: PluginChatCommandHandler = async (params, allo
       lines.push('Use the CLI for more results: clawdbot search "' + parsed.query + '" --limit 50');
     }
 
-    return {
-      shouldContinue: false,
-      reply: { text: lines.join("\n").trim() },
-    };
+    return lines.join("\n").trim();
   } catch (err) {
-    return {
-      shouldContinue: false,
-      reply: { text: `❌ Search error: ${err instanceof Error ? err.message : String(err)}` },
-    };
+    return `❌ Search error: ${err instanceof Error ? err.message : String(err)}`;
   }
-};
+}

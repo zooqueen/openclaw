@@ -11,7 +11,6 @@ export const createTestRegistry = (overrides: Partial<PluginRegistry> = {}): Plu
     gatewayHandlers: {},
     httpHandlers: [],
     cliRegistrars: [],
-    chatCommands: [],
     services: [],
     commands: [],
     diagnostics: [],

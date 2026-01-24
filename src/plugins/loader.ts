@@ -147,7 +147,6 @@ function createPluginRecord(params: {
     providerIds: [],
     gatewayMethods: [],
     cliCommands: [],
-    chatCommands: [],
     services: [],
     commands: [],
     httpHandlers: 0,

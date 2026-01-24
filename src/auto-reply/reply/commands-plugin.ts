@@ -1,26 +1,41 @@
-import { requireActivePluginRegistry } from "../../plugins/runtime.js";
-import { parseCommandArgs, resolveTextCommand } from "../commands-registry.js";
-import type { CommandHandler } from "./commands-types.js";
+/**
+ * Plugin Command Handler
+ *
+ * Handles commands registered by plugins, bypassing the LLM agent.
+ * This handler is called before built-in command handlers.
+ */
 
-export const handlePluginCommand: CommandHandler = async (params, allowTextCommands) => {
-  if (!allowTextCommands) return null;
-  const registry = requireActivePluginRegistry();
-  if (registry.chatCommands.length === 0) return null;
+import { matchPluginCommand, executePluginCommand } from "../../plugins/commands.js";
+import type { CommandHandler, CommandHandlerResult } from "./commands-types.js";
 
-  const raw = params.command.commandBodyNormalized;
-  if (!raw.startsWith("/")) return null;
+/**
+ * Handle plugin-registered commands.
+ * Returns a result if a plugin command was matched and executed,
+ * or null to continue to the next handler.
+ */
+export const handlePluginCommand: CommandHandler = async (
+  params,
+  _allowTextCommands,
+): Promise<CommandHandlerResult | null> => {
+  const { command, cfg } = params;
 
-  const resolved = resolveTextCommand(raw, params.cfg);
-  if (!resolved) return null;
+  // Try to match a plugin command
+  const match = matchPluginCommand(command.commandBodyNormalized);
+  if (!match) return null;
 
-  const registration = registry.chatCommands.find(
-    (entry) => entry.command.key === resolved.command.key,
-  );
-  if (!registration) return null;
+  // Execute the plugin command (always returns a result)
+  const result = await executePluginCommand({
+    command: match.command,
+    args: match.args,
+    senderId: command.senderId,
+    channel: command.channel,
+    isAuthorizedSender: command.isAuthorizedSender,
+    commandBody: command.commandBodyNormalized,
+    config: cfg,
+  });
 
-  if (resolved.args) {
-    params.ctx.CommandArgs = parseCommandArgs(resolved.command, resolved.args);
-  }
-
-  return await registration.handler(params, allowTextCommands);
+  return {
+    shouldContinue: false,
+    reply: { text: result.text },
+  };
 };

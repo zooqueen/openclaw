@@ -1,10 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import type {
-  PluginHookMessageContext,
-  PluginHookMessageReceivedEvent,
-} from "clawdbot/plugin-sdk";
-
 import { importContactFromMessage, getContactStore } from "../contacts/index.js";
 import type { Platform } from "../contacts/types.js";
 
@@ -35,15 +30,32 @@ function resolveMessageId(params: {
 }
 
 export function indexInboundMessage(params: {
-  event: PluginHookMessageReceivedEvent;
-  ctx: PluginHookMessageContext;
+  event: {
+    from: string;
+    content: string;
+    timestamp?: number;
+    metadata?: Record<string, unknown>;
+  };
+  ctx: {
+    channelId: string;
+    accountId?: string;
+    conversationId?: string;
+  };
   logger?: { warn?: (message: string) => void };
 }): void {
   const { event, ctx, logger } = params;
   const channelId = (ctx.channelId ?? "").trim();
   if (!channelId) return;
 
-  const senderId = (event.senderId ?? event.from ?? "").trim();
+  const metadata = event.metadata ?? {};
+  const meta = metadata as {
+    senderId?: string;
+    messageId?: string;
+    senderUsername?: string;
+    senderE164?: string;
+    senderName?: string;
+  };
+  const senderId = String(meta.senderId ?? event.from ?? "").trim();
   if (!senderId) return;
 
   const content = typeof event.content === "string" ? event.content.trim() : "";
@@ -52,8 +64,9 @@ export function indexInboundMessage(params: {
     typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
       ? event.timestamp
       : Date.now();
+  const metadataMessageId = meta.messageId;
   const messageId = resolveMessageId({
-    messageId: event.messageId,
+    messageId: typeof metadataMessageId === "string" ? metadataMessageId : undefined,
     platform,
     senderId,
     timestamp,
@@ -66,9 +79,9 @@ export function indexInboundMessage(params: {
     importContactFromMessage(store, {
       platform,
       platformId: senderId,
-      username: event.senderUsername ?? null,
-      phone: event.senderE164 ?? null,
-      displayName: event.senderName ?? null,
+      username: typeof meta.senderUsername === "string" ? meta.senderUsername : null,
+      phone: typeof meta.senderE164 === "string" ? meta.senderE164 : null,
+      displayName: typeof meta.senderName === "string" ? meta.senderName : null,
     });
 
     if (!content) return;

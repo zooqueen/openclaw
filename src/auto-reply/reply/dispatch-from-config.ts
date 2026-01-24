@@ -106,11 +106,6 @@ export async function dispatchReplyFromConfig(params: {
           from: ctx.From ?? "",
           content,
           timestamp,
-          messageId: messageIdForHook,
-          senderId: ctx.SenderId,
-          senderName: ctx.SenderName,
-          senderUsername: ctx.SenderUsername,
-          senderE164: ctx.SenderE164,
           metadata: {
             to: ctx.To,
             provider: ctx.Provider,
@@ -118,6 +113,11 @@ export async function dispatchReplyFromConfig(params: {
             threadId: ctx.MessageThreadId,
             originatingChannel: ctx.OriginatingChannel,
             originatingTo: ctx.OriginatingTo,
+            messageId: messageIdForHook,
+            senderId: ctx.SenderId,
+            senderName: ctx.SenderName,
+            senderUsername: ctx.SenderUsername,
+            senderE164: ctx.SenderE164,
           },
         },
         {
