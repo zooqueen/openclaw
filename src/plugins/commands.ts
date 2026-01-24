@@ -23,10 +23,7 @@ let registryLockCount = 0;
 // Maximum allowed length for command arguments (defense in depth)
 const MAX_ARGS_LENGTH = 4096;
 
-let cachedReservedCommands: Set<string> | null = null;
-
 function getReservedCommands(): Set<string> {
-  if (cachedReservedCommands) return cachedReservedCommands;
   const reserved = new Set<string>();
   for (const command of listChatCommands()) {
     if (command.nativeName) {
@@ -41,7 +38,6 @@ function getReservedCommands(): Set<string> {
       if (normalized) reserved.add(normalized);
     }
   }
-  cachedReservedCommands = reserved;
   return reserved;
 }
 
