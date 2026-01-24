@@ -12,6 +12,7 @@ Docs: https://docs.clawd.bot
 - Exec approvals: forward approval prompts to chat with `/approve` for all channels (including plugins). (#1621) Thanks @czekaj. https://docs.clawd.bot/tools/exec-approvals https://docs.clawd.bot/tools/slash-commands
 
 ### Fixes
+- BlueBubbles: preserve full message GUIDs in reply tags + reaction events (no part-prefix stripping). (#1641) Thanks @tyler6204.
 - Web UI: hide internal `message_id` hints in chat bubbles.
 - Heartbeat: normalize target identifiers for consistent routing.
 - Telegram: use wrapped fetch for long-polling on Node to normalize AbortSignal handling. (#1639)
