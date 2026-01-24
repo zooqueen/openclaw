@@ -44,7 +44,9 @@ export async function persistSessionUsageUpdate(params: {
           };
           if (params.cliSessionId) {
             const nextEntry = { ...entry, ...patch };
-            setCliSessionId(nextEntry, params.providerUsed, params.cliSessionId);
+            const provider = params.providerUsed ?? entry.modelProvider;
+            if (!provider) return patch;
+            setCliSessionId(nextEntry, provider, params.cliSessionId);
             return {
               ...patch,
               cliSessionIds: nextEntry.cliSessionIds,
@@ -75,7 +77,9 @@ export async function persistSessionUsageUpdate(params: {
           };
           if (params.cliSessionId) {
             const nextEntry = { ...entry, ...patch };
-            setCliSessionId(nextEntry, params.providerUsed, params.cliSessionId);
+            const provider = params.providerUsed ?? entry.modelProvider;
+            if (!provider) return patch;
+            setCliSessionId(nextEntry, provider, params.cliSessionId);
             return {
               ...patch,
               cliSessionIds: nextEntry.cliSessionIds,
