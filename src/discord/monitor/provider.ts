@@ -95,7 +95,13 @@ function formatDiscordDeployErrorDetails(err: unknown): string {
     try {
       bodyText = JSON.stringify(rawBody);
     } catch {
-      bodyText = String(rawBody);
+      if (typeof rawBody === "string") {
+        bodyText = rawBody;
+      } else if (rawBody instanceof Error) {
+        bodyText = rawBody.message;
+      } else {
+        bodyText = "[unserializable]";
+      }
     }
     if (bodyText) {
       const maxLen = 800;

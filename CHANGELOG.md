@@ -14,6 +14,7 @@ Docs: https://docs.clawd.bot
 - Browser: add node-host proxy auto-routing for remote gateways (configurable per gateway/node).
 - Heartbeat: add per-channel visibility controls (OK/alerts/indicator). (#1452) Thanks @dlauer.
 - Plugins: add optional llm-task JSON-only tool for workflows. (#1498) Thanks @vignesh07.
+- Docs: add emoji reaction guidance to AGENTS.md template. (#1591) Thanks @EnzeD.
 - CLI: restart the gateway by default after `clawdbot update`; add `--no-restart` to skip it.
 - CLI: add live auth probes to `clawdbot models status` for per-profile verification.
 - CLI: add `clawdbot system` for system events + heartbeat controls; remove standalone `wake`.
@@ -27,6 +28,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - Sessions: accept non-UUID sessionIds for history/send/status while preserving agent scoping. (#1518)
+- Routing/Cron: normalize agentId casing for bindings and cron payloads. (#1591)
 - Gateway: compare Linux process start time to avoid PID recycling lock loops; keep locks unless stale. (#1572) Thanks @steipete.
 - Messaging: mirror outbound sends into target session keys (threads + dmScope) and create session entries on send. (#1520)
 - Sessions: normalize session key casing to lowercase for consistent routing.
