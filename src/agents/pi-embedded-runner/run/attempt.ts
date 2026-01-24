@@ -643,6 +643,7 @@ export async function runEmbeddedAttempt(
 
       let messagesSnapshot: AgentMessage[] = [];
       let sessionIdUsed = activeSession.sessionId;
+      let promptStartMessageCount = activeSession.messages.length;
       const onAbort = () => {
         const reason = params.abortSignal ? getAbortReason(params.abortSignal) : undefined;
         const timeout = reason ? isTimeoutError(reason) : false;
@@ -713,6 +714,8 @@ export async function runEmbeddedAttempt(
               `runId=${params.runId} sessionId=${params.sessionId}`,
           );
         }
+
+        promptStartMessageCount = activeSession.messages.length;
 
         try {
           // Detect and load images referenced in the prompt for vision-capable models.
@@ -789,7 +792,7 @@ export async function runEmbeddedAttempt(
           messages: messagesSnapshot,
           note: promptError ? "prompt error" : undefined,
         });
-        anthropicPayloadLogger?.recordUsage(messagesSnapshot, promptError);
+        anthropicPayloadLogger?.recordUsage(messagesSnapshot, promptError, promptStartMessageCount);
 
         // Run agent_end hooks to allow plugins to analyze the conversation
         // This is fire-and-forget, so we don't await

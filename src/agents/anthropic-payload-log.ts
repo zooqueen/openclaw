@@ -110,8 +110,12 @@ function isAnthropicModel(model: Model<Api> | undefined | null): boolean {
   return (model as { api?: unknown })?.api === "anthropic-messages";
 }
 
-function findLastAssistantUsage(messages: AgentMessage[]): Record<string, unknown> | null {
+function findLastAssistantUsage(
+  messages: AgentMessage[],
+  minIndex = 0,
+): Record<string, unknown> | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (i < minIndex) break;
     const msg = messages[i] as { role?: unknown; usage?: unknown };
     if (msg?.role === "assistant" && msg.usage && typeof msg.usage === "object") {
       return msg.usage as Record<string, unknown>;
@@ -124,7 +128,7 @@ export type AnthropicPayloadLogger = {
   enabled: true;
   filePath: string;
   wrapStreamFn: (streamFn: StreamFn) => StreamFn;
-  recordUsage: (messages: AgentMessage[], error?: unknown) => void;
+  recordUsage: (messages: AgentMessage[], error?: unknown, baselineMessageCount?: number) => void;
 };
 
 export function createAnthropicPayloadLogger(params: {
@@ -184,8 +188,12 @@ export function createAnthropicPayloadLogger(params: {
     return wrapped;
   };
 
-  const recordUsage: AnthropicPayloadLogger["recordUsage"] = (messages, error) => {
-    const usage = findLastAssistantUsage(messages);
+  const recordUsage: AnthropicPayloadLogger["recordUsage"] = (
+    messages,
+    error,
+    baselineMessageCount,
+  ) => {
+    const usage = findLastAssistantUsage(messages, baselineMessageCount ?? 0);
     if (!usage) {
       if (error) {
         record({

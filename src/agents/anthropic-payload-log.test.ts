@@ -76,6 +76,43 @@ describe("createAnthropicPayloadLogger", () => {
     expect(event.usage).toEqual({ input: 12 });
   });
 
+  it("skips usage when no new assistant message was added", () => {
+    const lines: string[] = [];
+    const logger = createAnthropicPayloadLogger({
+      cfg: {
+        diagnostics: {
+          anthropicPayloadLog: {
+            enabled: true,
+          },
+        },
+      },
+      env: {},
+      modelApi: "anthropic-messages",
+      writer: {
+        filePath: "memory",
+        write: (line) => lines.push(line),
+      },
+    });
+
+    logger?.recordUsage(
+      [
+        {
+          role: "assistant",
+          usage: {
+            input: 1,
+          },
+        } as unknown as {
+          role: string;
+          usage: { input: number };
+        },
+      ],
+      undefined,
+      1,
+    );
+
+    expect(lines.length).toBe(0);
+  });
+
   it("records request payloads and forwards onPayload", async () => {
     const lines: string[] = [];
     let forwarded: unknown;
