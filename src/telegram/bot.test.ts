@@ -2187,6 +2187,11 @@ describe("createTelegramBot", () => {
       match: "",
     });
 
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0][0];
+    expect(payload.OriginatingChannel).toBe("telegram");
+    expect(payload.OriginatingTo).toBe("telegram:-1001234567890");
+    expect(payload.MessageThreadId).toBe(99);
     expect(sendMessageSpy).toHaveBeenCalledWith(
       "-1001234567890",
       expect.any(String),
