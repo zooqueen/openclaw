@@ -1,6 +1,7 @@
 import type { ClawdbotConfig } from "../config/types.js";
 import type { SkillCommandSpec } from "../agents/skills.js";
 import { getChatCommands, getNativeCommandSurfaces } from "./commands-registry.data.js";
+import { getPluginCommandSpecs } from "../plugins/commands.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import type {
@@ -108,7 +109,7 @@ export function listChatCommandsForConfig(
 export function listNativeCommandSpecs(params?: {
   skillCommands?: SkillCommandSpec[];
 }): NativeCommandSpec[] {
-  return listChatCommands({ skillCommands: params?.skillCommands })
+  const base = listChatCommands({ skillCommands: params?.skillCommands })
     .filter((command) => command.scope !== "text" && command.nativeName)
     .map((command) => ({
       name: command.nativeName ?? command.key,
@@ -116,13 +117,18 @@ export function listNativeCommandSpecs(params?: {
       acceptsArgs: Boolean(command.acceptsArgs),
       args: command.args,
     }));
+  const pluginSpecs = getPluginCommandSpecs();
+  if (pluginSpecs.length === 0) return base;
+  const seen = new Set(base.map((spec) => spec.name.toLowerCase()));
+  const extras = pluginSpecs.filter((spec) => !seen.has(spec.name.toLowerCase()));
+  return extras.length > 0 ? [...base, ...extras] : base;
 }
 
 export function listNativeCommandSpecsForConfig(
   cfg: ClawdbotConfig,
   params?: { skillCommands?: SkillCommandSpec[] },
 ): NativeCommandSpec[] {
-  return listChatCommandsForConfig(cfg, params)
+  const base = listChatCommandsForConfig(cfg, params)
     .filter((command) => command.scope !== "text" && command.nativeName)
     .map((command) => ({
       name: command.nativeName ?? command.key,
@@ -130,6 +136,11 @@ export function listNativeCommandSpecsForConfig(
       acceptsArgs: Boolean(command.acceptsArgs),
       args: command.args,
     }));
+  const pluginSpecs = getPluginCommandSpecs();
+  if (pluginSpecs.length === 0) return base;
+  const seen = new Set(base.map((spec) => spec.name.toLowerCase()));
+  const extras = pluginSpecs.filter((spec) => !seen.has(spec.name.toLowerCase()));
+  return extras.length > 0 ? [...base, ...extras] : base;
 }
 
 export function findCommandByNativeName(name: string): ChatCommandDefinition | undefined {

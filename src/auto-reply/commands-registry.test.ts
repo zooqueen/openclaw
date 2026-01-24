@@ -15,15 +15,18 @@ import {
   shouldHandleTextCommands,
 } from "./commands-registry.js";
 import type { ChatCommandDefinition } from "./commands-registry.types.js";
+import { clearPluginCommands, registerPluginCommand } from "../plugins/commands.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createTestRegistry } from "../test-utils/channel-plugins.js";
 
 beforeEach(() => {
   setActivePluginRegistry(createTestRegistry([]));
+  clearPluginCommands();
 });
 
 afterEach(() => {
   setActivePluginRegistry(createTestRegistry([]));
+  clearPluginCommands();
 });
 
 describe("commands registry", () => {
@@ -83,6 +86,19 @@ describe("commands registry", () => {
       { skillCommands },
     );
     expect(native.find((spec) => spec.name === "demo_skill")).toBeTruthy();
+  });
+
+  it("includes plugin commands in native specs", () => {
+    registerPluginCommand("plugin-core", {
+      name: "plugstatus",
+      description: "Plugin status",
+      handler: () => ({ text: "ok" }),
+    });
+    const native = listNativeCommandSpecsForConfig(
+      { commands: { config: false, debug: false, native: true } },
+      { skillCommands: [] },
+    );
+    expect(native.find((spec) => spec.name === "plugstatus")).toBeTruthy();
   });
 
   it("detects known text commands", () => {
