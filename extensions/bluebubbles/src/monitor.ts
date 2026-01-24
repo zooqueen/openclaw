@@ -70,13 +70,23 @@ function generateShortId(): string {
   return String(blueBubblesShortIdCounter);
 }
 
+// Normalize message ID by stripping "p:N/" prefix for consistent cache keys
+function normalizeMessageIdForCache(messageId: string): string {
+  const trimmed = messageId.trim();
+  // Strip "p:N/" prefix if present (e.g., "p:0/UUID" -> "UUID")
+  const match = trimmed.match(/^p:\d+\/(.+)$/);
+  return match ? match[1] : trimmed;
+}
+
 function rememberBlueBubblesReplyCache(
   entry: Omit<BlueBubblesReplyCacheEntry, "shortId">,
 ): BlueBubblesReplyCacheEntry {
-  const messageId = entry.messageId.trim();
-  if (!messageId) {
+  const rawMessageId = entry.messageId.trim();
+  if (!rawMessageId) {
     return { ...entry, shortId: "" };
   }
+  // Normalize to strip "p:N/" prefix for consistent lookups
+  const messageId = normalizeMessageIdForCache(rawMessageId);
 
   // Check if we already have a short ID for this UUID
   let shortId = blueBubblesUuidToShortId.get(messageId);
@@ -160,9 +170,11 @@ export function _resetBlueBubblesShortIdState(): void {
 
 /**
  * Gets the short ID for a UUID, if one exists.
+ * Normalizes the UUID by stripping "p:N/" prefix before lookup.
  */
 function getShortIdForUuid(uuid: string): string | undefined {
-  return blueBubblesUuidToShortId.get(uuid.trim());
+  const normalized = normalizeMessageIdForCache(uuid);
+  return blueBubblesUuidToShortId.get(normalized);
 }
 
 function resolveReplyContextFromCache(params: {
@@ -172,8 +184,10 @@ function resolveReplyContextFromCache(params: {
   chatIdentifier?: string;
   chatId?: number;
 }): BlueBubblesReplyCacheEntry | null {
-  const replyToId = params.replyToId.trim();
-  if (!replyToId) return null;
+  const rawReplyToId = params.replyToId.trim();
+  if (!rawReplyToId) return null;
+  // Normalize to strip "p:N/" prefix for consistent lookups
+  const replyToId = normalizeMessageIdForCache(rawReplyToId);
 
   const cached = blueBubblesReplyCacheByMessageId.get(replyToId);
   if (!cached) return null;
@@ -392,27 +406,16 @@ function buildMessagePlaceholder(message: NormalizedWebhookMessage): string {
 
 const REPLY_BODY_TRUNCATE_LENGTH = 60;
 
-function formatReplyContext(message: {
+// Returns inline reply tag like "[[reply_to:4]]" for prepending to message body
+function formatReplyTag(message: {
   replyToId?: string;
   replyToShortId?: string;
-  replyToBody?: string;
-  replyToSender?: string;
 }): string | null {
-  if (!message.replyToId && !message.replyToBody && !message.replyToSender) return null;
-  // Prefer short ID for token savings
-  const displayId = message.replyToShortId || message.replyToId;
-  // Only include sender if we don't have an ID (fallback)
-  const label = displayId ? `id:${displayId}` : (message.replyToSender?.trim() || "unknown");
-  const rawBody = message.replyToBody?.trim();
-  if (!rawBody) {
-    return `[Replying to ${label}]\n[/Replying]`;
-  }
-  // Truncate long reply bodies for token savings
-  const body =
-    rawBody.length > REPLY_BODY_TRUNCATE_LENGTH
-      ? `${rawBody.slice(0, REPLY_BODY_TRUNCATE_LENGTH)}…`
-      : rawBody;
-  return `[Replying to ${label}]\n${body}\n[/Replying]`;
+  // Prefer short ID, strip "p:N/" part index prefix from full UUIDs
+  const rawId = message.replyToShortId || message.replyToId;
+  if (!rawId) return null;
+  const displayId = stripPartIndexPrefix(rawId);
+  return `[[reply_to:${displayId}]]`;
 }
 
 function readNumberLike(record: Record<string, unknown> | null, key: string): number | undefined {
@@ -664,6 +667,52 @@ const REACTION_TYPE_MAP = new Map<number, { emoji: string; action: "added" | "re
   [3004, { emoji: "‼️", action: "removed" }],
   [3005, { emoji: "❓", action: "removed" }],
 ]);
+
+// Maps tapback text patterns (e.g., "Loved", "Liked") to emoji + action
+const TAPBACK_TEXT_MAP = new Map<string, { emoji: string; action: "added" | "removed" }>([
+  ["loved", { emoji: "❤️", action: "added" }],
+  ["liked", { emoji: "👍", action: "added" }],
+  ["disliked", { emoji: "👎", action: "added" }],
+  ["laughed at", { emoji: "😂", action: "added" }],
+  ["emphasized", { emoji: "‼️", action: "added" }],
+  ["questioned", { emoji: "❓", action: "added" }],
+  // Removal patterns (e.g., "Removed a heart from")
+  ["removed a heart from", { emoji: "❤️", action: "removed" }],
+  ["removed a like from", { emoji: "👍", action: "removed" }],
+  ["removed a dislike from", { emoji: "👎", action: "removed" }],
+  ["removed a laugh from", { emoji: "😂", action: "removed" }],
+  ["removed an emphasis from", { emoji: "‼️", action: "removed" }],
+  ["removed a question from", { emoji: "❓", action: "removed" }],
+]);
+
+// Detects tapback text patterns like 'Loved "message"' and converts to structured format
+function parseTapbackText(text: string): {
+  emoji: string;
+  action: "added" | "removed";
+  quotedText: string;
+} | null {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+
+  for (const [pattern, { emoji, action }] of TAPBACK_TEXT_MAP) {
+    if (lower.startsWith(pattern)) {
+      // Extract quoted text if present (e.g., 'Loved "hello"' -> "hello")
+      const afterPattern = trimmed.slice(pattern.length).trim();
+      // Handle both "quoted" and "quoted" formats
+      const quoteMatch = afterPattern.match(/^[""](.*)[""]$/s);
+      const quotedText = quoteMatch ? quoteMatch[1] : afterPattern;
+      return { emoji, action, quotedText };
+    }
+  }
+  return null;
+}
+
+// Strips the "p:N/" part index prefix from BlueBubbles message GUIDs
+function stripPartIndexPrefix(guid: string): string {
+  // Format: "p:0/UUID" -> "UUID"
+  const match = guid.match(/^p:\d+\/(.+)$/);
+  return match ? match[1] : guid;
+}
 
 function maskSecret(value: string): string {
   if (value.length <= 6) return "***";
@@ -1122,7 +1171,15 @@ async function processMessage(
   const text = message.text.trim();
   const attachments = message.attachments ?? [];
   const placeholder = buildMessagePlaceholder(message);
-  const rawBody = text || placeholder;
+  // Check if text is a tapback pattern (e.g., 'Loved "hello"') and transform to emoji format
+  // For tapbacks, we'll append [[reply_to:N]] at the end; for regular messages, prepend it
+  const tapbackParsed = parseTapbackText(text);
+  const isTapbackMessage = Boolean(tapbackParsed);
+  const rawBody = tapbackParsed
+    ? tapbackParsed.action === "removed"
+      ? `removed ${tapbackParsed.emoji} reaction`
+      : `reacted with ${tapbackParsed.emoji}`
+    : text || placeholder;
 
   const cacheMessageId = message.messageId?.trim();
   let messageShortId: string | undefined;
@@ -1477,8 +1534,15 @@ async function processMessage(
     replyToShortId = getShortIdForUuid(replyToId);
   }
 
-  const replyContext = formatReplyContext({ replyToId, replyToShortId, replyToBody, replyToSender });
-  const baseBody = replyContext ? `${rawBody}\n\n${replyContext}` : rawBody;
+  // Use inline [[reply_to:N]] tag format
+  // For tapbacks/reactions: append at end (e.g., "reacted with ❤️ [[reply_to:4]]")
+  // For regular replies: prepend at start (e.g., "[[reply_to:4]] Awesome")
+  const replyTag = formatReplyTag({ replyToId, replyToShortId });
+  const baseBody = replyTag
+    ? isTapbackMessage
+      ? `${rawBody} ${replyTag}`
+      : `${replyTag} ${rawBody}`
+    : rawBody;
   const fromLabel = isGroup ? undefined : message.senderName || `user:${message.senderId}`;
   const groupSubject = isGroup ? message.chatName?.trim() || undefined : undefined;
   const groupMembers = isGroup
@@ -1869,9 +1933,14 @@ async function processReaction(
 
   const senderLabel = reaction.senderName || reaction.senderId;
   const chatLabel = reaction.isGroup ? ` in group:${peerId}` : "";
-  // Use short ID for token savings
-  const messageDisplayId = getShortIdForUuid(reaction.messageId) || reaction.messageId;
-  const text = `BlueBubbles reaction ${reaction.action}: ${reaction.emoji} by ${senderLabel}${chatLabel} on msg ${messageDisplayId}`;
+  // Use short ID for token savings, strip "p:N/" prefix
+  const rawMessageId = getShortIdForUuid(reaction.messageId) || reaction.messageId;
+  const messageDisplayId = stripPartIndexPrefix(rawMessageId);
+  // Format: "Tyler reacted with ❤️ [[reply_to:5]]" or "Tyler removed ❤️ reaction [[reply_to:5]]"
+  const text =
+    reaction.action === "removed"
+      ? `${senderLabel} removed ${reaction.emoji} reaction [[reply_to:${messageDisplayId}]]${chatLabel}`
+      : `${senderLabel} reacted with ${reaction.emoji} [[reply_to:${messageDisplayId}]]${chatLabel}`;
   core.system.enqueueSystemEvent(text, {
     sessionKey: route.sessionKey,
     contextKey: `bluebubbles:reaction:${reaction.action}:${peerId}:${reaction.messageId}:${reaction.senderId}:${reaction.emoji}`,

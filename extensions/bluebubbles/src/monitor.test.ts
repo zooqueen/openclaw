@@ -1189,9 +1189,8 @@ describe("BlueBubbles webhook monitor", () => {
       expect(callArgs.ctx.ReplyToId).toBe("msg-0");
       expect(callArgs.ctx.ReplyToBody).toBe("original message");
       expect(callArgs.ctx.ReplyToSender).toBe("+15550000000");
-      // Body uses just the ID (no sender) for token savings
-      expect(callArgs.ctx.Body).toContain("[Replying to id:msg-0]");
-      expect(callArgs.ctx.Body).toContain("original message");
+      // Body uses inline [[reply_to:N]] tag format
+      expect(callArgs.ctx.Body).toContain("[[reply_to:msg-0]]");
     });
 
     it("hydrates missing reply sender/body from the recent-message cache", async () => {
@@ -1260,9 +1259,8 @@ describe("BlueBubbles webhook monitor", () => {
       expect(callArgs.ctx.ReplyToIdFull).toBe("cache-msg-0");
       expect(callArgs.ctx.ReplyToBody).toBe("original message (cached)");
       expect(callArgs.ctx.ReplyToSender).toBe("+15550000000");
-      // Body uses just the short ID (no sender) for token savings
-      expect(callArgs.ctx.Body).toContain("[Replying to id:1]");
-      expect(callArgs.ctx.Body).toContain("original message (cached)");
+      // Body uses inline [[reply_to:N]] tag format with short ID
+      expect(callArgs.ctx.Body).toContain("[[reply_to:1]]");
     });
 
     it("falls back to threadOriginatorGuid when reply metadata is absent", async () => {
@@ -1759,7 +1757,7 @@ describe("BlueBubbles webhook monitor", () => {
       await flushAsync();
 
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
-        expect.stringContaining("reaction added"),
+        expect.stringContaining("reacted with ❤️ [[reply_to:"),
         expect.any(Object),
       );
     });
@@ -1799,7 +1797,7 @@ describe("BlueBubbles webhook monitor", () => {
       await flushAsync();
 
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
-        expect.stringContaining("reaction removed"),
+        expect.stringContaining("removed ❤️ reaction [[reply_to:"),
         expect.any(Object),
       );
     });
