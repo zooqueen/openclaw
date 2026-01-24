@@ -17,6 +17,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - Packaging: include dist/tts output in npm tarball (fixes missing dist/tts/tts.js).
+- CI: publish multi-arch Docker images on main and release tags. (#1602) Thanks @denysvitali.
 
 ## 2026.1.23
 
