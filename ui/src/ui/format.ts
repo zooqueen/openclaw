@@ -1,3 +1,5 @@
+import { stripReasoningTagsFromText } from "../../../src/shared/text/reasoning-tags.js";
+
 export function formatMs(ms?: number | null): string {
   if (!ms && ms !== 0) return "n/a";
   return new Date(ms).toLocaleString();
@@ -67,62 +69,6 @@ export function parseList(input: string): string[] {
     .filter((v) => v.length > 0);
 }
 
-<<<<<<< fix/tui-final-tag-strip
-const THINKING_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|final)\s*>/gi;
-const THINKING_OPEN_RE = /<\s*(?:think(?:ing)?|final)\s*>/i;
-const THINKING_CLOSE_RE = /<\s*\/\s*(?:think(?:ing)?|final)\s*>/i;
-||||||| temp/landpr-
-const THINKING_TAG_RE = /<\s*\/?\s*think(?:ing)?\s*>/gi;
-const THINKING_OPEN_RE = /<\s*think(?:ing)?\s*>/i;
-const THINKING_CLOSE_RE = /<\s*\/\s*think(?:ing)?\s*>/i;
-=======
-const FINAL_TAG_RE = /<\s*\/?\s*final\s*>/gi;
-const THINKING_TAG_RE = /<\s*\/?\s*think(?:ing)?\s*>/gi;
-const THINKING_OPEN_RE = /<\s*think(?:ing)?\s*>/i;
-const THINKING_CLOSE_RE = /<\s*\/\s*think(?:ing)?\s*>/i;
->>>>>>> local
-
 export function stripThinkingTags(value: string): string {
-  if (!value) return value;
-  let cleaned = value;
-  let strippedFinal = false;
-  if (FINAL_TAG_RE.test(cleaned)) {
-    FINAL_TAG_RE.lastIndex = 0;
-    cleaned = cleaned.replace(FINAL_TAG_RE, "");
-    strippedFinal = true;
-  } else {
-    FINAL_TAG_RE.lastIndex = 0;
-  }
-
-  const hasOpen = THINKING_OPEN_RE.test(cleaned);
-  const hasClose = THINKING_CLOSE_RE.test(cleaned);
-  if (!hasOpen && !hasClose) return strippedFinal ? cleaned.trimStart() : cleaned;
-  // If we don't have a balanced pair, avoid dropping trailing content.
-  if (hasOpen !== hasClose) {
-    if (!hasOpen) return cleaned.replace(THINKING_CLOSE_RE, "").trimStart();
-    return cleaned.replace(THINKING_OPEN_RE, "").trimStart();
-  }
-
-  if (!THINKING_TAG_RE.test(cleaned)) {
-    THINKING_TAG_RE.lastIndex = 0;
-    return strippedFinal ? cleaned.trimStart() : cleaned;
-  }
-  THINKING_TAG_RE.lastIndex = 0;
-
-  let result = "";
-  let lastIndex = 0;
-  let inThinking = false;
-  for (const match of cleaned.matchAll(THINKING_TAG_RE)) {
-    const idx = match.index ?? 0;
-    if (!inThinking) {
-      result += cleaned.slice(lastIndex, idx);
-    }
-    const tag = match[0].toLowerCase();
-    inThinking = !tag.includes("/");
-    lastIndex = idx + match[0].length;
-  }
-  if (!inThinking) {
-    result += cleaned.slice(lastIndex);
-  }
-  return result.trimStart();
+  return stripReasoningTagsFromText(value, { mode: "preserve", trim: "start" });
 }
