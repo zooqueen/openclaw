@@ -46,16 +46,25 @@ export async function readDockerPort(containerName: string, port: number) {
   return Number.isFinite(mapped) ? mapped : null;
 }
 
+export function resolveDockerImageInspectResult(
+  image: string,
+  result: { stdout: string; stderr: string; code: number },
+): { exists: boolean; error?: string } {
+  if (result.code === 0) return { exists: true };
+  const stderr = result.stderr.trim();
+  if (/no such image/i.test(stderr)) return { exists: false };
+  const stdout = result.stdout.trim();
+  const detail = stderr || stdout || `docker image inspect ${image} failed (exit ${result.code})`;
+  return { exists: false, error: `Failed to inspect sandbox image: ${detail}` };
+}
+
 async function dockerImageExists(image: string) {
   const result = await execDocker(["image", "inspect", image], {
     allowFailure: true,
   });
-  if (result.code === 0) return true;
-  const stderr = result.stderr.trim();
-  if (stderr.includes("No such image")) {
-    return false;
-  }
-  throw new Error(`Failed to inspect sandbox image: ${stderr}`);
+  const resolved = resolveDockerImageInspectResult(image, result);
+  if (resolved.error) throw new Error(resolved.error);
+  return resolved.exists;
 }
 
 export async function ensureDockerImage(image: string) {

@@ -79,11 +79,14 @@ async function dockerImageExists(image: string): Promise<boolean> {
     await runExec("docker", ["image", "inspect", image], { timeoutMs: 5_000 });
     return true;
   } catch (error: any) {
-    const stderr = error?.stderr || error?.message || "";
-    if (String(stderr).includes("No such image")) {
+    const stderr = typeof error?.stderr === "string" ? error.stderr.trim() : "";
+    const stdout = typeof error?.stdout === "string" ? error.stdout.trim() : "";
+    const message = typeof error?.message === "string" ? error.message.trim() : "";
+    const detail = stderr || stdout || message;
+    if (/no such image/i.test(detail)) {
       return false;
     }
-    throw error;
+    throw new Error(`Failed to inspect sandbox image: ${detail || "unknown error"}`);
   }
 }
 
@@ -147,7 +150,17 @@ async function handleMissingSandboxImage(
   runtime: RuntimeEnv,
   prompter: DoctorPrompter,
 ) {
-  const exists = await dockerImageExists(params.image);
+  let exists = false;
+  try {
+    exists = await dockerImageExists(params.image);
+  } catch (error: any) {
+    const stderr = typeof error?.stderr === "string" ? error.stderr.trim() : "";
+    const stdout = typeof error?.stdout === "string" ? error.stdout.trim() : "";
+    const message = typeof error?.message === "string" ? error.message.trim() : "";
+    const detail = stderr || stdout || message || "unknown error";
+    note(`Unable to inspect sandbox ${params.label} image (${params.image}): ${detail}`, "Sandbox");
+    return;
+  }
   if (exists) return;
 
   const buildHint = params.buildScript
