@@ -392,7 +392,7 @@ describe("send", () => {
       });
 
       await expect(
-        sendMessageBlueBubbles("+15559999999", "Hello", {
+        sendMessageBlueBubbles("chat_id:123", "Hello", {
           serverUrl: "http://localhost:1234",
           password: "test",
         }),
