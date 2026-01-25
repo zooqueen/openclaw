@@ -29,6 +29,7 @@ Docs: https://docs.clawd.bot
 
 ### Fixes
 - Gateway: include inline config env vars in service install environments. (#1735) Thanks @Seredeep.
+- UI: add ellipsis to config section titles in the Control UI. (#1784) Thanks @robbyczgw-cla.
 - BlueBubbles: route phone-number targets to DMs, avoid leaking routing IDs, and auto-create missing DMs (Private API required). (#1751) Thanks @tyler6204. https://docs.clawd.bot/channels/bluebubbles
 - BlueBubbles: keep part-index GUIDs in reply tags when short IDs are missing.
 - Web UI: hide internal `message_id` hints in chat bubbles.
