@@ -151,6 +151,11 @@ export const bluebubblesPlugin: ChannelPlugin<ResolvedBlueBubblesAccount> = {
       hint: "<handle|chat_guid:GUID|chat_id:ID|chat_identifier:ID>",
     },
     formatTargetDisplay: ({ target, display }) => {
+      const shouldParseDisplay = (value: string): boolean => {
+        if (looksLikeBlueBubblesTargetId(value)) return true;
+        return /^(bluebubbles:|chat_guid:|chat_id:|chat_identifier:)/i.test(value);
+      };
+
       // Helper to extract a clean handle from any BlueBubbles target format
       const extractCleanDisplay = (value: string | undefined): string | null => {
         const trimmed = value?.trim();
@@ -181,8 +186,14 @@ export const bluebubblesPlugin: ChannelPlugin<ResolvedBlueBubblesAccount> = {
       };
 
       // Try to get a clean display from the display parameter first
-      const cleanDisplay = extractCleanDisplay(display);
-      if (cleanDisplay) return cleanDisplay;
+      const trimmedDisplay = display?.trim();
+      if (trimmedDisplay) {
+        if (!shouldParseDisplay(trimmedDisplay)) {
+          return trimmedDisplay;
+        }
+        const cleanDisplay = extractCleanDisplay(trimmedDisplay);
+        if (cleanDisplay) return cleanDisplay;
+      }
 
       // Fall back to extracting from target
       const cleanTarget = extractCleanDisplay(target);
