@@ -119,6 +119,8 @@ export async function buildCrossContextDecoration(params: {
   accountId?: string | null;
 }): Promise<CrossContextDecoration | null> {
   if (!params.toolContext?.currentChannelId) return null;
+  // Skip decoration for direct tool sends (agent composing, not forwarding)
+  if (params.toolContext.skipCrossContextDecoration) return null;
   if (!isCrossContextTarget(params)) return null;
 
   const markerConfig = params.cfg.tools?.message?.crossContext?.marker;
