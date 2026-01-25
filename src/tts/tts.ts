@@ -743,7 +743,9 @@ export const OPENAI_TTS_MODELS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"] as con
  * When set, model/voice validation is relaxed to allow non-OpenAI models.
  * Example: OPENAI_TTS_BASE_URL=http://localhost:8880/v1
  */
-const OPENAI_TTS_BASE_URL = (process.env.OPENAI_TTS_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+const OPENAI_TTS_BASE_URL = (
+  process.env.OPENAI_TTS_BASE_URL?.trim() || "https://api.openai.com/v1"
+).replace(/\/+$/, "");
 const isCustomOpenAIEndpoint = OPENAI_TTS_BASE_URL !== "https://api.openai.com/v1";
 export const OPENAI_TTS_VOICES = [
   "alloy",
