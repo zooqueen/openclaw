@@ -137,7 +137,12 @@ export function resolveConfiguredModelRef(params: {
       aliasIndex,
     });
     if (resolved) return resolved.ref;
-    // TODO(steipete): drop this fallback once provider-less agents.defaults.model is fully deprecated.
+
+    // Default to anthropic if no provider is specified, but warn as this is deprecated.
+    console.warn(
+      `[clawdbot] Model "${trimmed}" specified without provider. Falling back to "anthropic/${trimmed}". ` +
+      `Please use "anthropic/${trimmed}" in your config.`,
+    );
     return { provider: "anthropic", model: trimmed };
   }
   return { provider: params.defaultProvider, model: params.defaultModel };
@@ -153,20 +158,20 @@ export function resolveDefaultModelForAgent(params: {
   const cfg =
     agentModelOverride && agentModelOverride.length > 0
       ? {
-          ...params.cfg,
-          agents: {
-            ...params.cfg.agents,
-            defaults: {
-              ...params.cfg.agents?.defaults,
-              model: {
-                ...(typeof params.cfg.agents?.defaults?.model === "object"
-                  ? params.cfg.agents.defaults.model
-                  : undefined),
-                primary: agentModelOverride,
-              },
+        ...params.cfg,
+        agents: {
+          ...params.cfg.agents,
+          defaults: {
+            ...params.cfg.agents?.defaults,
+            model: {
+              ...(typeof params.cfg.agents?.defaults?.model === "object"
+                ? params.cfg.agents.defaults.model
+                : undefined),
+              primary: agentModelOverride,
             },
           },
-        }
+        },
+      }
       : params.cfg;
   return resolveConfiguredModelRef({
     cfg,
@@ -282,8 +287,8 @@ export function resolveAllowedModelRef(params: {
 }):
   | { ref: ModelRef; key: string }
   | {
-      error: string;
-    } {
+    error: string;
+  } {
   const trimmed = params.raw.trim();
   if (!trimmed) return { error: "invalid model: empty" };
 
