@@ -28,6 +28,7 @@ import {
 } from "./commands-session.js";
 import { handlePluginCommand } from "./commands-plugin.js";
 import { handlePlansCommand } from "./commands-plans.js";
+import { handlePlanCommand } from "./commands-plan.js";
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -44,6 +45,7 @@ const HANDLERS: CommandHandler[] = [
   handleRestartCommand,
   handleTtsCommands,
   handleHelpCommand,
+  handlePlanCommand,
   handlePlansCommand,
   handleCommandsListCommand,
   handleStatusCommand,
