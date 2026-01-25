@@ -257,11 +257,17 @@ export async function resolveChatGuidForTarget(params: {
           return guid;
         }
         if (!participantMatch && guid) {
-          const participants = extractParticipantAddresses(chat).map((entry) =>
-            normalizeBlueBubblesHandle(entry),
-          );
-          if (participants.includes(normalizedHandle)) {
-            participantMatch = guid;
+          // Only consider DM chats (`;-;` separator) as participant matches.
+          // Group chats (`;+;` separator) should never match when searching by handle/phone.
+          // This prevents routing "send to +1234567890" to a group chat that contains that number.
+          const isDmChat = guid.includes(";-;");
+          if (isDmChat) {
+            const participants = extractParticipantAddresses(chat).map((entry) =>
+              normalizeBlueBubblesHandle(entry),
+            );
+            if (participants.includes(normalizedHandle)) {
+              participantMatch = guid;
+            }
           }
         }
       }
