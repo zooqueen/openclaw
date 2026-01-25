@@ -134,8 +134,9 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     threadParentType === ChannelType.GuildForum || threadParentType === ChannelType.GuildMedia;
   const forumParentSlug =
     isForumParent && threadParentName ? normalizeDiscordSlug(threadParentName) : "";
+  const threadChannelId = threadChannel?.id;
   const isForumStarter =
-    Boolean(threadChannel && isForumParent && forumParentSlug) && message.id === threadChannel.id;
+    Boolean(threadChannelId && isForumParent && forumParentSlug) && message.id === threadChannelId;
   const forumContextLine = isForumStarter ? `[Forum parent: #${forumParentSlug}]` : null;
   const groupChannel = isGuildMessage && displayChannelSlug ? `#${displayChannelSlug}` : undefined;
   const groupSubject = isDirectMessage ? undefined : groupChannel;
