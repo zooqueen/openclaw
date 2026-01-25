@@ -48,6 +48,7 @@ Docs: https://docs.clawd.bot
 - Google Chat: normalize space targets without double `spaces/` prefix.
 - Agents: auto-compact on context overflow prompt errors before failing. (#1627) Thanks @rodrigouroz.
 - Agents: use the active auth profile for auto-compaction recovery.
+- Agents: let cron isolated runs inherit subagent allowlists from the parent agent. (#1771) Thanks @Noctivoro.
 - Media understanding: skip image understanding when the primary model already supports vision. (#1747) Thanks @tyler6204.
 - Models: default missing custom provider fields so minimal configs are accepted.
 - Messaging: keep newline chunking safe for fenced markdown blocks across channels.
