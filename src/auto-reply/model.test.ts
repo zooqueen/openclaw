@@ -17,10 +17,10 @@ describe("extractModelDirective", () => {
       expect(result.cleaned).toBe("/models gpt-5");
     });
 
-    it("does not strip /models when embedded in text", () => {
-      const result = extractModelDirective("please show /models openai");
+    it("does not parse /models as a /model directive (no args)", () => {
+      const result = extractModelDirective("/models");
       expect(result.hasDirective).toBe(false);
-      expect(result.cleaned).toBe("please show /models openai");
+      expect(result.cleaned).toBe("/models");
     });
 
     it("extracts /model with provider/model format", () => {
