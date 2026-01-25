@@ -131,7 +131,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
           {
             id: "openai",
             name: "OpenAI",
-            configured: Boolean(resolveTtsApiKey(config, "openai")),
+            configured: isTtsProviderConfigured(config, "openai"),
             models: [...OPENAI_TTS_MODELS],
             voices: [...OPENAI_TTS_VOICES],
           },

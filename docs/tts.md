@@ -33,10 +33,17 @@ does not publish limits, so assume similar or lower limits. citeturn0searc
 
 If you want OpenAI or ElevenLabs:
 - `ELEVENLABS_API_KEY` (or `XI_API_KEY`)
-- `OPENAI_API_KEY`
+- `OPENAI_API_KEY` (optional for custom OpenAI-compatible endpoints)
+
+Optional:
+- `OPENAI_TTS_BASE_URL` (defaults to `https://api.openai.com/v1`)
 
 Edge TTS does **not** require an API key. If no API keys are found, Clawdbot defaults
 to Edge TTS (unless disabled via `messages.tts.edge.enabled=false`).
+
+When `OPENAI_TTS_BASE_URL` points to a non-OpenAI endpoint, Clawdbot relaxes
+OpenAI model/voice validation and does **not** require an API key. If your
+endpoint needs authentication, set `messages.tts.openai.apiKey` or `OPENAI_API_KEY`.
 
 If multiple providers are configured, the selected provider is used first and the others are fallback options.
 Auto-summary uses the configured `summaryModel` (or `agents.defaults.model.primary`),
@@ -109,6 +116,32 @@ Full schema is in [Gateway configuration](/gateway/configuration).
           useSpeakerBoost: true,
           speed: 1.0
         }
+      }
+    }
+  }
+}
+```
+
+### Custom OpenAI-compatible endpoint
+
+Set an endpoint in the environment:
+
+```bash
+export OPENAI_TTS_BASE_URL="http://localhost:8880/v1"
+```
+
+Then configure TTS as usual (API key optional for custom endpoints):
+
+```json5
+{
+  messages: {
+    tts: {
+      auto: "always",
+      provider: "openai",
+      openai: {
+        baseUrl: "http://localhost:8880/v1",
+        model: "kokoro",
+        voice: "zm_yunxia"
       }
     }
   }

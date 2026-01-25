@@ -9,6 +9,7 @@ Docs: https://docs.clawd.bot
 - Venius (Venice AI): highlight provider guide + cross-links + expanded guidance. https://docs.clawd.bot/providers/venice
 
 ### Changes
+- TTS: allow custom OpenAI-compatible TTS endpoints without API keys. (#1701) Thanks @louzhixian. https://docs.clawd.bot/tts
 - TTS: add Edge TTS provider fallback, defaulting to keyless Edge with MP3 retry on format failures. (#1668) Thanks @steipete. https://docs.clawd.bot/tts
 - Web search: add Brave freshness filter parameter for time-scoped results. (#1688) Thanks @JonUleis. https://docs.clawd.bot/tools/web
 - TTS: add auto mode enum (off/always/inbound/tagged) with per-session `/tts` override. (#1667) Thanks @sebslight. https://docs.clawd.bot/tts

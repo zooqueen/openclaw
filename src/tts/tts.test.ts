@@ -106,6 +106,10 @@ describe("tts", () => {
       expect(isValidOpenAIVoice("alloy ")).toBe(false);
       expect(isValidOpenAIVoice(" alloy")).toBe(false);
     });
+
+    it("accepts custom voices for custom endpoints", () => {
+      expect(isValidOpenAIVoice("zm_yunxia", { baseUrl: "http://localhost:8880/v1" })).toBe(true);
+    });
   });
 
   describe("isValidOpenAIModel", () => {
@@ -115,10 +119,14 @@ describe("tts", () => {
       expect(isValidOpenAIModel("tts-1-hd")).toBe(true);
     });
 
-    it("rejects unsupported models", () => {
+    it("rejects other models", () => {
       expect(isValidOpenAIModel("invalid")).toBe(false);
       expect(isValidOpenAIModel("")).toBe(false);
       expect(isValidOpenAIModel("gpt-4")).toBe(false);
+    });
+
+    it("accepts custom models for custom endpoints", () => {
+      expect(isValidOpenAIModel("kokoro", { baseUrl: "http://localhost:8880/v1" })).toBe(true);
     });
   });
 
@@ -200,6 +208,30 @@ describe("tts", () => {
       const result = parseTtsDirectives(input, policy);
 
       expect(result.overrides.provider).toBe("edge");
+    });
+
+    it("routes custom OpenAI models when custom endpoints are used", () => {
+      const policy = resolveModelOverridePolicy({ enabled: true });
+      const input = "Hello [[tts:provider=openai model=kokoro voice=zm_yunxia]] world";
+      const result = parseTtsDirectives(input, policy, {
+        defaultProvider: "openai",
+        openaiBaseUrl: "http://localhost:8880/v1",
+      });
+
+      expect(result.overrides.openai?.model).toBe("kokoro");
+      expect(result.overrides.openai?.voice).toBe("zm_yunxia");
+    });
+
+    it("routes model overrides to ElevenLabs when provider is ElevenLabs", () => {
+      const policy = resolveModelOverridePolicy({ enabled: true });
+      const input = "Hello [[tts:provider=elevenlabs model=eleven_multilingual_v2]] world";
+      const result = parseTtsDirectives(input, policy, {
+        defaultProvider: "openai",
+        openaiBaseUrl: "http://localhost:8880/v1",
+      });
+
+      expect(result.overrides.elevenlabs?.modelId).toBe("eleven_multilingual_v2");
+      expect(result.overrides.openai?.model).toBeUndefined();
     });
 
     it("keeps text intact when overrides are disabled", () => {
@@ -359,7 +391,12 @@ describe("tts", () => {
     };
 
     const restoreEnv = (snapshot: Record<string, string | undefined>) => {
-      const keys = ["OPENAI_API_KEY", "ELEVENLABS_API_KEY", "XI_API_KEY"] as const;
+      const keys = [
+        "OPENAI_API_KEY",
+        "OPENAI_TTS_BASE_URL",
+        "ELEVENLABS_API_KEY",
+        "XI_API_KEY",
+      ] as const;
       for (const key of keys) {
         const value = snapshot[key];
         if (value === undefined) {
@@ -373,6 +410,7 @@ describe("tts", () => {
     const withEnv = (env: Record<string, string | undefined>, run: () => void) => {
       const snapshot = {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        OPENAI_TTS_BASE_URL: process.env.OPENAI_TTS_BASE_URL,
         ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
         XI_API_KEY: process.env.XI_API_KEY,
       };
@@ -394,6 +432,7 @@ describe("tts", () => {
       withEnv(
         {
           OPENAI_API_KEY: "test-openai-key",
+          OPENAI_TTS_BASE_URL: undefined,
           ELEVENLABS_API_KEY: undefined,
           XI_API_KEY: undefined,
         },
@@ -409,6 +448,7 @@ describe("tts", () => {
       withEnv(
         {
           OPENAI_API_KEY: undefined,
+          OPENAI_TTS_BASE_URL: undefined,
           ELEVENLABS_API_KEY: "test-elevenlabs-key",
           XI_API_KEY: undefined,
         },
@@ -424,6 +464,7 @@ describe("tts", () => {
       withEnv(
         {
           OPENAI_API_KEY: undefined,
+          OPENAI_TTS_BASE_URL: undefined,
           ELEVENLABS_API_KEY: undefined,
           XI_API_KEY: undefined,
         },
@@ -431,6 +472,22 @@ describe("tts", () => {
           const config = resolveTtsConfig(baseCfg);
           const provider = getTtsProvider(config, "/tmp/tts-prefs-edge.json");
           expect(provider).toBe("edge");
+        },
+      );
+    });
+
+    it("prefers OpenAI when a custom endpoint is configured without API keys", () => {
+      withEnv(
+        {
+          OPENAI_API_KEY: undefined,
+          OPENAI_TTS_BASE_URL: "http://localhost:8880/v1",
+          ELEVENLABS_API_KEY: undefined,
+          XI_API_KEY: undefined,
+        },
+        () => {
+          const config = resolveTtsConfig(baseCfg);
+          const provider = getTtsProvider(config, "/tmp/tts-prefs-openai-custom.json");
+          expect(provider).toBe("openai");
         },
       );
     });
@@ -494,6 +551,55 @@ describe("tts", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
       globalThis.fetch = originalFetch;
+      process.env.CLAWDBOT_TTS_PREFS = prevPrefs;
+    });
+
+    it("allows custom OpenAI endpoints without API keys", async () => {
+      const prevPrefs = process.env.CLAWDBOT_TTS_PREFS;
+      const prevBaseUrl = process.env.OPENAI_TTS_BASE_URL;
+      const prevOpenAiKey = process.env.OPENAI_API_KEY;
+      process.env.CLAWDBOT_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      process.env.OPENAI_TTS_BASE_URL = "http://localhost:8880/v1";
+      delete process.env.OPENAI_API_KEY;
+      const originalFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(1),
+      }));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const cfg = {
+        agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
+        messages: {
+          tts: {
+            auto: "always",
+            provider: "openai",
+            openai: { model: "kokoro", voice: "zm_yunxia" },
+          },
+        },
+      };
+
+      const result = await maybeApplyTtsToPayload({
+        payload: { text: "Hello world" },
+        cfg,
+        kind: "final",
+      });
+
+      expect(result.mediaUrl).toBeDefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchMock.mock.calls[0] ?? [];
+      expect(url).toBe("http://localhost:8880/v1/audio/speech");
+      expect(
+        (options as { headers?: Record<string, string> })?.headers?.Authorization,
+      ).toBeUndefined();
+
+      globalThis.fetch = originalFetch;
+      process.env.OPENAI_TTS_BASE_URL = prevBaseUrl;
+      if (prevOpenAiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = prevOpenAiKey;
+      }
       process.env.CLAWDBOT_TTS_PREFS = prevPrefs;
     });
 

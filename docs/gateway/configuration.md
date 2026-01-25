@@ -1538,6 +1538,7 @@ voice notes; other channels send MP3 audio.
       },
       openai: {
         apiKey: "openai_api_key",
+        baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o-mini-tts",
         voice: "alloy"
       }
@@ -1558,6 +1559,8 @@ Notes:
 - `/tts limit` and `/tts summary` control per-user summarization settings.
 - `apiKey` values fall back to `ELEVENLABS_API_KEY`/`XI_API_KEY` and `OPENAI_API_KEY`.
 - `elevenlabs.baseUrl` overrides the ElevenLabs API base URL.
+- `openai.baseUrl` overrides the OpenAI TTS base URL (defaults to `https://api.openai.com/v1`,
+  or `OPENAI_TTS_BASE_URL` when set). Custom endpoints do not require an API key.
 - `elevenlabs.voiceSettings` supports `stability`/`similarityBoost`/`style` (0..1),
   `useSpeakerBoost`, and `speed` (0.5..2.0).
 

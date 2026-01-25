@@ -48,6 +48,7 @@ const DEFAULT_ELEVENLABS_VOICE_ID = "pMsXgVXv3BLzUgSXRplE";
 const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini-tts";
 const DEFAULT_OPENAI_VOICE = "alloy";
+const DEFAULT_OPENAI_TTS_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_EDGE_VOICE = "en-US-MichelleNeural";
 const DEFAULT_EDGE_LANG = "en-US";
 const DEFAULT_EDGE_OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
@@ -103,6 +104,7 @@ export type ResolvedTtsConfig = {
   };
   openai: {
     apiKey?: string;
+    baseUrl: string;
     model: string;
     voice: string;
   };
@@ -234,6 +236,9 @@ export function resolveTtsConfig(cfg: ClawdbotConfig): ResolvedTtsConfig {
   const raw: TtsConfig = cfg.messages?.tts ?? {};
   const providerSource = raw.provider ? "config" : "default";
   const edgeOutputFormat = raw.edge?.outputFormat?.trim();
+  const openaiBaseUrl = normalizeOpenAiTtsBaseUrl(
+    raw.openai?.baseUrl?.trim() || process.env.OPENAI_TTS_BASE_URL,
+  );
   const auto = normalizeTtsAutoMode(raw.auto) ?? (raw.enabled ? "always" : "off");
   return {
     auto,
@@ -265,6 +270,7 @@ export function resolveTtsConfig(cfg: ClawdbotConfig): ResolvedTtsConfig {
     },
     openai: {
       apiKey: raw.openai?.apiKey,
+      baseUrl: openaiBaseUrl,
       model: raw.openai?.model ?? DEFAULT_OPENAI_MODEL,
       voice: raw.openai?.voice ?? DEFAULT_OPENAI_VOICE,
     },
@@ -395,7 +401,9 @@ export function getTtsProvider(config: ResolvedTtsConfig, prefsPath: string): Tt
   if (prefs.tts?.provider) return prefs.tts.provider;
   if (config.providerSource === "config") return config.provider;
 
-  if (resolveTtsApiKey(config, "openai")) return "openai";
+  if (resolveTtsApiKey(config, "openai") || isCustomOpenAiTtsEndpoint(config.openai.baseUrl)) {
+    return "openai";
+  }
   if (resolveTtsApiKey(config, "elevenlabs")) return "elevenlabs";
   return "edge";
 }
@@ -470,6 +478,12 @@ export function resolveTtsProviderOrder(primary: TtsProvider): TtsProvider[] {
 
 export function isTtsProviderConfigured(config: ResolvedTtsConfig, provider: TtsProvider): boolean {
   if (provider === "edge") return config.edge.enabled;
+  if (provider === "openai") {
+    return (
+      Boolean(resolveTtsApiKey(config, provider)) ||
+      isCustomOpenAiTtsEndpoint(config.openai.baseUrl)
+    );
+  }
   return Boolean(resolveTtsApiKey(config, provider));
 }
 
@@ -481,6 +495,16 @@ function normalizeElevenLabsBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim();
   if (!trimmed) return DEFAULT_ELEVENLABS_BASE_URL;
   return trimmed.replace(/\/+$/, "");
+}
+
+function normalizeOpenAiTtsBaseUrl(baseUrl?: string): string {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed) return DEFAULT_OPENAI_TTS_BASE_URL;
+  return trimmed.replace(/\/+$/, "");
+}
+
+function isCustomOpenAiTtsEndpoint(baseUrl: string): boolean {
+  return normalizeOpenAiTtsBaseUrl(baseUrl) !== DEFAULT_OPENAI_TTS_BASE_URL;
 }
 
 function requireInRange(value: number, min: number, max: number, label: string): void {
@@ -538,6 +562,7 @@ function parseNumberValue(value: string): number | undefined {
 function parseTtsDirectives(
   text: string,
   policy: ResolvedTtsModelOverrides,
+  options: { defaultProvider?: TtsProvider; openaiBaseUrl?: string } = {},
 ): TtsDirectiveParseResult {
   if (!policy.enabled) {
     return { cleanedText: text, overrides: {}, warnings: [], hasDirective: false };
@@ -561,6 +586,30 @@ function parseTtsDirectives(
   cleanedText = cleanedText.replace(directiveRegex, (_match, body: string) => {
     hasDirective = true;
     const tokens = body.split(/\s+/).filter(Boolean);
+    let providerOverride: TtsProvider | undefined;
+
+    for (const token of tokens) {
+      const eqIndex = token.indexOf("=");
+      if (eqIndex === -1) continue;
+      const rawKey = token.slice(0, eqIndex).trim();
+      const rawValue = token.slice(eqIndex + 1).trim();
+      if (!rawKey || !rawValue) continue;
+      if (rawKey.toLowerCase() !== "provider") continue;
+      if (!policy.allowProvider) break;
+      if (rawValue === "openai" || rawValue === "elevenlabs" || rawValue === "edge") {
+        providerOverride = rawValue;
+      } else {
+        warnings.push(`unsupported provider "${rawValue}"`);
+      }
+      break;
+    }
+
+    if (providerOverride) {
+      overrides.provider = providerOverride;
+    }
+
+    const providerHint = overrides.provider ?? options.defaultProvider;
+    const openAiContext = { baseUrl: options.openaiBaseUrl };
     for (const token of tokens) {
       const eqIndex = token.indexOf("=");
       if (eqIndex === -1) continue;
@@ -571,18 +620,12 @@ function parseTtsDirectives(
       try {
         switch (key) {
           case "provider":
-            if (!policy.allowProvider) break;
-            if (rawValue === "openai" || rawValue === "elevenlabs" || rawValue === "edge") {
-              overrides.provider = rawValue;
-            } else {
-              warnings.push(`unsupported provider "${rawValue}"`);
-            }
             break;
           case "voice":
           case "openai_voice":
           case "openaivoice":
             if (!policy.allowVoice) break;
-            if (isValidOpenAIVoice(rawValue)) {
+            if (isValidOpenAIVoice(rawValue, openAiContext)) {
               overrides.openai = { ...overrides.openai, voice: rawValue };
             } else {
               warnings.push(`invalid OpenAI voice "${rawValue}"`);
@@ -602,16 +645,39 @@ function parseTtsDirectives(
           case "model":
           case "modelid":
           case "model_id":
-          case "elevenlabs_model":
-          case "elevenlabsmodel":
           case "openai_model":
           case "openaimodel":
             if (!policy.allowModelId) break;
-            if (isValidOpenAIModel(rawValue)) {
+            if (key === "openai_model" || key === "openaimodel") {
+              if (isValidOpenAIModel(rawValue, openAiContext)) {
+                overrides.openai = { ...overrides.openai, model: rawValue };
+              } else {
+                warnings.push(`invalid OpenAI model "${rawValue}"`);
+              }
+              break;
+            }
+            if (providerHint === "openai") {
+              if (isValidOpenAIModel(rawValue, openAiContext)) {
+                overrides.openai = { ...overrides.openai, model: rawValue };
+              } else {
+                warnings.push(`invalid OpenAI model "${rawValue}"`);
+              }
+              break;
+            }
+            if (providerHint === "elevenlabs") {
+              overrides.elevenlabs = { ...overrides.elevenlabs, modelId: rawValue };
+              break;
+            }
+            if (isValidOpenAIModel(rawValue, openAiContext)) {
               overrides.openai = { ...overrides.openai, model: rawValue };
             } else {
               overrides.elevenlabs = { ...overrides.elevenlabs, modelId: rawValue };
             }
+            break;
+          case "elevenlabs_model":
+          case "elevenlabsmodel":
+            if (!policy.allowModelId) break;
+            overrides.elevenlabs = { ...overrides.elevenlabs, modelId: rawValue };
             break;
           case "stability":
             if (!policy.allowVoiceSettings) break;
@@ -737,16 +803,6 @@ function parseTtsDirectives(
 }
 
 export const OPENAI_TTS_MODELS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"] as const;
-
-/**
- * Custom OpenAI-compatible TTS endpoint.
- * When set, model/voice validation is relaxed to allow non-OpenAI models.
- * Example: OPENAI_TTS_BASE_URL=http://localhost:8880/v1
- */
-const OPENAI_TTS_BASE_URL = (
-  process.env.OPENAI_TTS_BASE_URL?.trim() || "https://api.openai.com/v1"
-).replace(/\/+$/, "");
-const isCustomOpenAIEndpoint = OPENAI_TTS_BASE_URL !== "https://api.openai.com/v1";
 export const OPENAI_TTS_VOICES = [
   "alloy",
   "ash",
@@ -760,16 +816,15 @@ export const OPENAI_TTS_VOICES = [
 ] as const;
 
 type OpenAiTtsVoice = (typeof OPENAI_TTS_VOICES)[number];
+type OpenAiTtsValidationContext = { baseUrl?: string };
 
-function isValidOpenAIModel(model: string): boolean {
-  // Allow any model when using custom endpoint (e.g., Kokoro, LocalAI)
-  if (isCustomOpenAIEndpoint) return true;
+function isValidOpenAIModel(model: string, context: OpenAiTtsValidationContext = {}): boolean {
+  if (context.baseUrl && isCustomOpenAiTtsEndpoint(context.baseUrl)) return true;
   return OPENAI_TTS_MODELS.includes(model as (typeof OPENAI_TTS_MODELS)[number]);
 }
 
-function isValidOpenAIVoice(voice: string): voice is OpenAiTtsVoice {
-  // Allow any voice when using custom endpoint (e.g., Kokoro Chinese voices)
-  if (isCustomOpenAIEndpoint) return true;
+function isValidOpenAIVoice(voice: string, context: OpenAiTtsValidationContext = {}): boolean {
+  if (context.baseUrl && isCustomOpenAiTtsEndpoint(context.baseUrl)) return true;
   return OPENAI_TTS_VOICES.includes(voice as OpenAiTtsVoice);
 }
 
@@ -977,18 +1032,21 @@ async function elevenLabsTTS(params: {
 
 async function openaiTTS(params: {
   text: string;
-  apiKey: string;
+  apiKey?: string;
+  baseUrl: string;
   model: string;
   voice: string;
   responseFormat: "mp3" | "opus";
   timeoutMs: number;
 }): Promise<Buffer> {
-  const { text, apiKey, model, voice, responseFormat, timeoutMs } = params;
+  const { text, model, voice, responseFormat, timeoutMs } = params;
+  const apiKey = params.apiKey?.trim();
+  const baseUrl = normalizeOpenAiTtsBaseUrl(params.baseUrl);
 
-  if (!isValidOpenAIModel(model)) {
+  if (!isValidOpenAIModel(model, { baseUrl })) {
     throw new Error(`Invalid model: ${model}`);
   }
-  if (!isValidOpenAIVoice(voice)) {
+  if (!isValidOpenAIVoice(voice, { baseUrl })) {
     throw new Error(`Invalid voice: ${voice}`);
   }
 
@@ -996,12 +1054,15 @@ async function openaiTTS(params: {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${OPENAI_TTS_BASE_URL}/audio/speech`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    const response = await fetch(`${baseUrl}/audio/speech`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         model,
         input: text,
@@ -1151,13 +1212,19 @@ export async function textToSpeech(params: {
       }
 
       const apiKey = resolveTtsApiKey(config, provider);
-      if (!apiKey) {
+      const allowMissingKey =
+        provider === "openai" && isCustomOpenAiTtsEndpoint(config.openai.baseUrl);
+      if (!apiKey && !allowMissingKey) {
         lastError = `No API key for ${provider}`;
         continue;
       }
 
       let audioBuffer: Buffer;
       if (provider === "elevenlabs") {
+        if (!apiKey) {
+          lastError = "No API key for elevenlabs";
+          continue;
+        }
         const voiceIdOverride = params.overrides?.elevenlabs?.voiceId;
         const modelIdOverride = params.overrides?.elevenlabs?.modelId;
         const voiceSettings = {
@@ -1186,6 +1253,7 @@ export async function textToSpeech(params: {
         audioBuffer = await openaiTTS({
           text: params.text,
           apiKey,
+          baseUrl: config.openai.baseUrl,
           model: openaiModelOverride ?? config.openai.model,
           voice: openaiVoiceOverride ?? config.openai.voice,
           responseFormat: output.openai,
@@ -1241,8 +1309,12 @@ export async function maybeApplyTtsToPayload(params: {
   });
   if (autoMode === "off") return params.payload;
 
+  const defaultProvider = getTtsProvider(config, prefsPath);
   const text = params.payload.text ?? "";
-  const directives = parseTtsDirectives(text, config.modelOverrides);
+  const directives = parseTtsDirectives(text, config.modelOverrides, {
+    defaultProvider,
+    openaiBaseUrl: config.openai.baseUrl,
+  });
   if (directives.warnings.length > 0) {
     logVerbose(`TTS: ignored directive overrides (${directives.warnings.join("; ")})`);
   }
