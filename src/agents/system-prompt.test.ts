@@ -310,6 +310,16 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("/status shows Reasoning");
   });
 
+  it("includes /plan mode instructions", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/clawd",
+    });
+
+    expect(prompt).toContain("## Plan Mode (/plan)");
+    expect(prompt).toContain("If the user message starts with /plan");
+    expect(prompt).toContain("plans/<timestamp>-<slug>/");
+  });
+
   it("builds runtime line with agent and channel details", () => {
     const line = buildRuntimeLine(
       {

@@ -558,6 +558,27 @@ export function buildAgentSystemPrompt(params: {
     );
   }
 
+  // Plan mode is conversational but stateful: compile a messy goal into a structured artifact.
+  if (!isMinimal) {
+    lines.push(
+      "## Plan Mode (/plan)",
+      "If the user message starts with /plan, enter *planning mode*.",
+      "- Treat everything after /plan as the goal.",
+      "- Ask targeted follow-up questions (one at a time) to remove ambiguity.",
+      "- Persist state in the workspace so planning can resume without losing context.",
+      "",
+      "Artifacts:",
+      "- Create a directory plans/<timestamp>-<slug>/ in the workspace.",
+      "- Maintain plans/<id>/answers.json (incremental) and plans/<id>/plan.md (human-readable).",
+      "- Optionally create plans/<id>/plan.json (structured) when helpful.",
+      "",
+      "Rules:",
+      "- Be token-efficient: do not restate the entire plan on every turn; ask the next question.",
+      "- When enough information is collected, produce a crisp plan with milestones + next actions.",
+      "",
+    );
+  }
+
   lines.push(
     "## Runtime",
     buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
