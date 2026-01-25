@@ -28,6 +28,7 @@ Docs: https://docs.clawd.bot
 - Diagnostics: add diagnostic flags for targeted debug logs (config + env override). https://docs.clawd.bot/diagnostics/flags
 
 ### Fixes
+- Gemini CLI OAuth: auto-detect client id from installed CLI and harden discovery paths. (#1773) Thanks @benostein.
 - Matrix: decrypt E2EE media attachments with preflight size guard. (#1744) Thanks @araa47.
 - Gateway: allow Control UI token-only auth to skip device pairing even when device identity is present (`gateway.controlUi.allowInsecureAuth`). (#1679) Thanks @steipete.
 - Gateway: include inline config env vars in service install environments. (#1735) Thanks @Seredeep.

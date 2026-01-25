@@ -20,7 +20,7 @@ clawdbot models auth login --provider google-gemini-cli --set-default
 
 ## Requirements
 
-Requires the Gemini CLI to be installed (credentials are extracted automatically):
+If the Gemini CLI is installed, Clawdbot extracts the OAuth client ID automatically.
 
 ```bash
 brew install gemini-cli

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, normalize } from "node:path";
 
 const CLIENT_ID_KEYS = ["CLAWDBOT_GEMINI_OAUTH_CLIENT_ID", "GEMINI_CLI_OAUTH_CLIENT_ID"];
 const CLIENT_SECRET_KEYS = [
@@ -48,7 +48,9 @@ function resolveEnv(keys: string[]): string | undefined {
   return undefined;
 }
 
-let cachedGeminiCliCredentials: { clientId: string; clientSecret: string } | null = null;
+type GeminiCliClientConfig = { clientId: string; clientSecret?: string };
+
+let cachedGeminiCliCredentials: GeminiCliClientConfig | null = null;
 
 /** @internal */
 export function clearCredentialsCache(): void {
@@ -56,44 +58,147 @@ export function clearCredentialsCache(): void {
 }
 
 /** Extracts OAuth credentials from the installed Gemini CLI's bundled oauth2.js. */
-export function extractGeminiCliCredentials(): { clientId: string; clientSecret: string } | null {
+export function extractGeminiCliCredentials(): GeminiCliClientConfig | null {
   if (cachedGeminiCliCredentials) return cachedGeminiCliCredentials;
 
   try {
-    const geminiPath = findInPath("gemini");
-    if (!geminiPath) return null;
+    const oauthPath = findGeminiCliOAuthPath();
+    if (!oauthPath) return null;
 
-    const resolvedPath = realpathSync(geminiPath);
-    const geminiCliDir = dirname(dirname(resolvedPath));
-
-    const searchPaths = [
-      join(geminiCliDir, "node_modules", "@google", "gemini-cli-core", "dist", "src", "code_assist", "oauth2.js"),
-      join(geminiCliDir, "node_modules", "@google", "gemini-cli-core", "dist", "code_assist", "oauth2.js"),
-    ];
-
-    let content: string | null = null;
-    for (const p of searchPaths) {
-      if (existsSync(p)) {
-        content = readFileSync(p, "utf8");
-        break;
-      }
-    }
-    if (!content) {
-      const found = findFile(geminiCliDir, "oauth2.js", 10);
-      if (found) content = readFileSync(found, "utf8");
-    }
-    if (!content) return null;
-
-    const idMatch = content.match(/(\d+-[a-z0-9]+\.apps\.googleusercontent\.com)/);
+    const content = readFileSync(oauthPath, "utf8");
+    const idMatch = content.match(/(\d+-[a-z0-9]+\.apps\.googleusercontent\.com)/i);
     const secretMatch = content.match(/(GOCSPX-[A-Za-z0-9_-]+)/);
-    if (idMatch && secretMatch) {
-      cachedGeminiCliCredentials = { clientId: idMatch[1], clientSecret: secretMatch[1] };
+    if (idMatch) {
+      cachedGeminiCliCredentials = { clientId: idMatch[1], clientSecret: secretMatch?.[1] };
       return cachedGeminiCliCredentials;
     }
   } catch {
     // Gemini CLI not installed or extraction failed
   }
   return null;
+}
+
+function findGeminiCliOAuthPath(): string | null {
+  const geminiPath = findInPath("gemini");
+  if (!geminiPath) return null;
+
+  for (const root of getGeminiCliRoots(geminiPath)) {
+    const searchPaths = [
+      join(root, "node_modules", "@google", "gemini-cli-core", "dist", "src", "code_assist", "oauth2.js"),
+      join(root, "node_modules", "@google", "gemini-cli-core", "dist", "code_assist", "oauth2.js"),
+    ];
+    for (const p of searchPaths) {
+      if (existsSync(p)) return p;
+    }
+    if (shouldSearchRoot(root)) {
+      const found = findFile(root, "oauth2.js", 8);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function getGeminiCliRoots(geminiPath: string): string[] {
+  const roots = new Set<string>();
+  const resolved = safeRealpath(geminiPath);
+  for (const p of [geminiPath, resolved].filter(Boolean) as string[]) {
+    for (const root of extractGeminiCliRootsFromFile(p)) {
+      roots.add(root);
+    }
+    const fromPath = extractGeminiCliRootFromPath(p);
+    if (fromPath) roots.add(fromPath);
+  }
+
+  for (const globalRoot of getGlobalNodeModulesRoots()) {
+    const candidate = join(globalRoot, "@google", "gemini-cli");
+    if (existsSync(candidate)) roots.add(candidate);
+  }
+
+  return [...roots].filter((root) => existsSync(root));
+}
+
+function extractGeminiCliRootsFromFile(filePath: string): string[] {
+  const roots: string[] = [];
+  try {
+    const content = readFileSync(filePath, "utf8");
+    if (!content.includes("gemini-cli")) return roots;
+
+    const dir = dirname(filePath);
+    const regex = /["']([^"'\\r\\n]*@google[\\/]+gemini-cli[\\/]+dist[\\/]+index\\.js)["']/gi;
+    for (const match of content.matchAll(regex)) {
+      const resolved = resolveShimPath(dir, match[1]);
+      const root = extractGeminiCliRootFromPath(resolved);
+      if (root) roots.push(root);
+    }
+  } catch {
+    // ignore non-text files or missing paths
+  }
+  return roots;
+}
+
+function resolveShimPath(baseDir: string, rawPath: string): string {
+  let candidate = rawPath
+    .replace(/%~?dp0%/gi, baseDir)
+    .replace(/\$PSScriptRoot/gi, baseDir)
+    .replace(/__dirname/g, baseDir);
+
+  if (!isAbsolute(candidate)) {
+    candidate = join(baseDir, candidate);
+  }
+  return normalize(candidate);
+}
+
+function extractGeminiCliRootFromPath(pathValue: string): string | null {
+  const normalized = pathValue.replace(/\\/g, "/");
+  const marker = "/@google/gemini-cli/";
+  const idx = normalized.indexOf(marker);
+  if (idx === -1) return null;
+  return normalize(`${normalized.slice(0, idx)}${marker.slice(0, -1)}`);
+}
+
+function safeRealpath(pathValue: string): string | null {
+  try {
+    return realpathSync(pathValue);
+  } catch {
+    return null;
+  }
+}
+
+function getGlobalNodeModulesRoots(): string[] {
+  const roots = new Set<string>();
+  const prefix = process.env.npm_config_prefix ?? process.env.NPM_CONFIG_PREFIX ?? process.env.PREFIX;
+
+  if (prefix) {
+    if (process.platform === "win32") {
+      roots.add(join(prefix, "node_modules"));
+    } else {
+      roots.add(join(prefix, "lib", "node_modules"));
+    }
+  }
+
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA;
+    if (appData) roots.add(join(appData, "npm", "node_modules"));
+  } else {
+    roots.add("/usr/local/lib/node_modules");
+    roots.add("/opt/homebrew/lib/node_modules");
+  }
+
+  const pnpmHome = process.env.PNPM_HOME;
+  if (pnpmHome) {
+    roots.add(join(pnpmHome, "global", "5", "node_modules"));
+    roots.add(join(pnpmHome, "global", "4", "node_modules"));
+  }
+
+  return [...roots].filter((root) => existsSync(root));
+}
+
+function shouldSearchRoot(root: string): boolean {
+  const normalized = root.replace(/\\/g, "/");
+  if (normalized === "/" || /^[A-Za-z]:\/?$/.test(normalized)) return false;
+  const segments = normalized.split("/").filter(Boolean);
+  return segments.length >= 3;
 }
 
 function findInPath(name: string): string | null {
@@ -110,10 +215,10 @@ function findInPath(name: string): string | null {
 function findFile(dir: string, name: string, depth: number): string | null {
   if (depth <= 0) return null;
   try {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, e.name);
-      if (e.isFile() && e.name === name) return p;
-      if (e.isDirectory() && !e.name.startsWith(".")) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isFile() && entry.name === name) return p;
+      if (entry.isDirectory() && !entry.name.startsWith(".")) {
         const found = findFile(p, name, depth - 1);
         if (found) return found;
       }
@@ -132,13 +237,13 @@ function resolveOAuthClientConfig(): { clientId: string; clientSecret?: string }
 
   // 2. Try to extract from installed Gemini CLI
   const extracted = extractGeminiCliCredentials();
-  if (extracted) {
+  if (extracted?.clientId) {
     return extracted;
   }
 
   // 3. No credentials available
   throw new Error(
-    "Gemini CLI not found. Install it first: brew install gemini-cli (or npm install -g @google/gemini-cli), or set GEMINI_CLI_OAUTH_CLIENT_ID.",
+    "Gemini CLI credentials not found. Install it first: brew install gemini-cli (or npm install -g @google/gemini-cli), or set GEMINI_CLI_OAUTH_CLIENT_ID.",
   );
 }
 
