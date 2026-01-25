@@ -26,6 +26,7 @@ Docs: https://docs.clawd.bot
 - Diagnostics: add diagnostic flags for targeted debug logs (config + env override). https://docs.clawd.bot/diagnostics/flags
 
 ### Fixes
+- macOS: rearm gateway receive loop before push handling to avoid node invoke stalls. (#1752) Thanks @ngutman.
 - Gateway: include inline config env vars in service install environments. (#1735) Thanks @Seredeep.
 - BlueBubbles: route phone-number targets to DMs, avoid leaking routing IDs, and auto-create missing DMs (Private API required). (#1751) Thanks @tyler6204. https://docs.clawd.bot/channels/bluebubbles
 - BlueBubbles: keep part-index GUIDs in reply tags when short IDs are missing.

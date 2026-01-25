@@ -427,8 +427,8 @@ public actor GatewayChannelActor {
                 Task { await self.handleReceiveFailure(err) }
             case let .success(msg):
                 Task {
-                    await self.handle(msg)
                     await self.listen()
+                    await self.handle(msg)
                 }
             }
         }
@@ -617,29 +617,6 @@ public actor GatewayChannelActor {
             return try self.encoder.encode(payload)
         }
         return Data() // Should not happen, but tolerate empty payloads.
-    }
-
-    public func send(method: String, params: [String: AnyCodable]?) async throws {
-        try await self.connectOrThrow(context: "gateway connect")
-        let payload = try self.encodeRequest(method: method, params: params, kind: "send")
-        guard let task = self.task else {
-            throw NSError(
-                domain: "Gateway",
-                code: 5,
-                userInfo: [NSLocalizedDescriptionKey: "gateway socket unavailable"])
-        }
-        do {
-            try await task.send(.data(payload.data))
-        } catch {
-            let wrapped = self.wrap(error, context: "gateway send \(method)")
-            self.connected = false
-            self.task?.cancel(with: .goingAway, reason: nil)
-            Task { [weak self] in
-                guard let self else { return }
-                await self.scheduleReconnect()
-            }
-            throw wrapped
-        }
     }
 
     // Wrap low-level URLSession/WebSocket errors with context so UI can surface them.
