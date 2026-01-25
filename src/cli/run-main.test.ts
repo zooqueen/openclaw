@@ -1,37 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { rewriteUpdateFlagArgv } from "./run-main.js";
+const registerSubCliByName = vi.fn(async () => true);
+const parseAsync = vi.fn(async () => undefined);
+const buildProgram = vi.fn(() => ({ parseAsync }));
 
-describe("rewriteUpdateFlagArgv", () => {
-  it("leaves argv unchanged when --update is absent", () => {
-    const argv = ["node", "entry.js", "status"];
-    expect(rewriteUpdateFlagArgv(argv)).toBe(argv);
+vi.mock("../infra/dotenv.js", () => ({ loadDotEnv: vi.fn() }));
+vi.mock("../infra/env.js", () => ({ normalizeEnv: vi.fn() }));
+vi.mock("../infra/path-env.js", () => ({ ensureClawdbotCliOnPath: vi.fn() }));
+vi.mock("../infra/runtime-guard.js", () => ({ assertSupportedRuntime: vi.fn() }));
+vi.mock("../infra/errors.js", () => ({ formatUncaughtError: vi.fn(() => "error") }));
+vi.mock("../infra/unhandled-rejections.js", () => ({ installUnhandledRejectionHandler: vi.fn() }));
+vi.mock("../logging.js", () => ({ enableConsoleCapture: vi.fn() }));
+vi.mock("./program.js", () => ({ buildProgram }));
+vi.mock("./program/register.subclis.js", () => ({ registerSubCliByName }));
+vi.mock("./route.js", () => ({ tryRouteCli: vi.fn(async () => false) }));
+
+const { runCli } = await import("./run-main.js");
+
+describe("runCli", () => {
+  afterEach(() => {
+    registerSubCliByName.mockClear();
+    parseAsync.mockClear();
+    buildProgram.mockClear();
   });
 
-  it("rewrites --update into the update command", () => {
-    expect(rewriteUpdateFlagArgv(["node", "entry.js", "--update"])).toEqual([
-      "node",
-      "entry.js",
-      "update",
-    ]);
-  });
+  it("registers the primary subcommand before parsing", async () => {
+    const argv = ["/usr/bin/node-22", "/opt/clawdbot/entry.js", "gateway", "--port", "18789"];
 
-  it("preserves global flags that appear before --update", () => {
-    expect(rewriteUpdateFlagArgv(["node", "entry.js", "--profile", "p", "--update"])).toEqual([
-      "node",
-      "entry.js",
-      "--profile",
-      "p",
-      "update",
-    ]);
-  });
+    await runCli(argv);
 
-  it("keeps update options after the rewritten command", () => {
-    expect(rewriteUpdateFlagArgv(["node", "entry.js", "--update", "--json"])).toEqual([
-      "node",
-      "entry.js",
-      "update",
-      "--json",
-    ]);
+    expect(registerSubCliByName).toHaveBeenCalledTimes(1);
+    expect(registerSubCliByName).toHaveBeenCalledWith(expect.any(Object), "gateway");
+    expect(parseAsync).toHaveBeenCalledWith(argv);
   });
 });

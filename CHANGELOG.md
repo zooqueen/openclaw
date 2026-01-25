@@ -34,6 +34,7 @@ Docs: https://docs.clawd.bot
 - Voice Call: return stream TwiML for outbound conversation calls on initial Twilio webhook. (#1634)
 - Google Chat: tighten email allowlist matching, typing cleanup, media caps, and onboarding/docs/tests. (#1635) Thanks @iHildy.
 - Google Chat: normalize space targets without double `spaces/` prefix.
+- CLI: register lazy subcommands before parse so non-help invocations work. (#1683) Thanks @grrowl.
 
 ## 2026.1.23-1
 
