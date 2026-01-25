@@ -1,3 +1,9 @@
+---
+summary: "Use Venice AI privacy-focused models in Clawdbot"
+read_when:
+  - You want privacy-focused inference in Clawdbot
+  - You want Venice AI setup guidance
+---
 # Venice AI Provider
 
 Venice AI provides privacy-focused AI inference with support for uncensored models and access to major proprietary models through their anonymized proxy. All inference is private by default—no training on your data, no logging.
@@ -20,6 +26,7 @@ Venice offers two privacy levels — understanding this is key to choosing your 
 - **Streaming**: ✅ Supported on all models
 - **Function calling**: ✅ Supported on select models (check model capabilities)
 - **Vision**: ✅ Supported on models with vision capability
+- **No hard rate limits**: Fair-use throttling may apply for extreme usage
 
 ## Setup
 
@@ -54,8 +61,7 @@ This will:
 ```bash
 clawdbot onboard --non-interactive \
   --auth-choice venice-api-key \
-  --token "vapi_xxxxxxxxxxxx" \
-  --token-provider venice
+  --venice-api-key "vapi_xxxxxxxxxxxx"
 ```
 
 ### 3. Verify Setup
@@ -83,6 +89,12 @@ List all available models:
 ```bash
 clawdbot models list | grep venice
 ```
+
+## Configure via `clawdbot configure`
+
+1. Run `clawdbot configure`
+2. Select **Model/auth**
+3. Choose **Venice AI**
 
 ## Which Model Should I Use?
 
@@ -201,6 +213,36 @@ The Venice model catalog updates dynamically. Run `clawdbot models list` to see 
 ### Connection issues
 
 Venice API is at `https://api.venice.ai/api/v1`. Ensure your network allows HTTPS connections.
+
+## Config file example
+
+```json5
+{
+  env: { VENICE_API_KEY: "vapi_..." },
+  agents: { defaults: { model: { primary: "venice/llama-3.3-70b" } } },
+  models: {
+    mode: "merge",
+    providers: {
+      venice: {
+        baseUrl: "https://api.venice.ai/api/v1",
+        apiKey: "${VENICE_API_KEY}",
+        api: "openai-completions",
+        models: [
+          {
+            id: "llama-3.3-70b",
+            name: "Llama 3.3 70B",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 131072,
+            maxTokens: 8192
+          }
+        ]
+      }
+    }
+  }
+}
+```
 
 ## Links
 

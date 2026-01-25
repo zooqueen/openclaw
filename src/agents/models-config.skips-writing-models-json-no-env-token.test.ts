@@ -51,12 +51,14 @@ describe("models-config", () => {
       const previousMinimax = process.env.MINIMAX_API_KEY;
       const previousMoonshot = process.env.MOONSHOT_API_KEY;
       const previousSynthetic = process.env.SYNTHETIC_API_KEY;
+      const previousVenice = process.env.VENICE_API_KEY;
       delete process.env.COPILOT_GITHUB_TOKEN;
       delete process.env.GH_TOKEN;
       delete process.env.GITHUB_TOKEN;
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MOONSHOT_API_KEY;
       delete process.env.SYNTHETIC_API_KEY;
+      delete process.env.VENICE_API_KEY;
 
       try {
         vi.resetModules();
@@ -85,6 +87,8 @@ describe("models-config", () => {
         else process.env.MOONSHOT_API_KEY = previousMoonshot;
         if (previousSynthetic === undefined) delete process.env.SYNTHETIC_API_KEY;
         else process.env.SYNTHETIC_API_KEY = previousSynthetic;
+        if (previousVenice === undefined) delete process.env.VENICE_API_KEY;
+        else process.env.VENICE_API_KEY = previousVenice;
       }
     });
   });
@@ -169,6 +173,44 @@ describe("models-config", () => {
       } finally {
         if (prevKey === undefined) delete process.env.SYNTHETIC_API_KEY;
         else process.env.SYNTHETIC_API_KEY = prevKey;
+      }
+    });
+  });
+
+  it("adds venice provider when VENICE_API_KEY is set", async () => {
+    await withTempHome(async () => {
+      vi.resetModules();
+      const prevKey = process.env.VENICE_API_KEY;
+      const prevVitest = process.env.VITEST;
+      process.env.VENICE_API_KEY = "vapi-venice-test";
+      process.env.VITEST = "1";
+      try {
+        const { ensureClawdbotModelsJson } = await import("./models-config.js");
+        const { resolveClawdbotAgentDir } = await import("./agent-paths.js");
+
+        await ensureClawdbotModelsJson({});
+
+        const modelPath = path.join(resolveClawdbotAgentDir(), "models.json");
+        const raw = await fs.readFile(modelPath, "utf8");
+        const parsed = JSON.parse(raw) as {
+          providers: Record<
+            string,
+            {
+              baseUrl?: string;
+              apiKey?: string;
+              models?: Array<{ id: string }>;
+            }
+          >;
+        };
+        expect(parsed.providers.venice?.baseUrl).toBe("https://api.venice.ai/api/v1");
+        expect(parsed.providers.venice?.apiKey).toBe("VENICE_API_KEY");
+        const ids = parsed.providers.venice?.models?.map((model) => model.id);
+        expect(ids).toContain("llama-3.3-70b");
+      } finally {
+        if (prevKey === undefined) delete process.env.VENICE_API_KEY;
+        else process.env.VENICE_API_KEY = prevKey;
+        if (prevVitest === undefined) delete process.env.VITEST;
+        else process.env.VITEST = prevVitest;
       }
     });
   });

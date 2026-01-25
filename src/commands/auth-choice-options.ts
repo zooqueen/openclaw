@@ -68,12 +68,6 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["synthetic-api-key"],
   },
   {
-    value: "venice",
-    label: "Venice AI",
-    hint: "Privacy-focused (uncensored models)",
-    choices: ["venice-api-key"],
-  },
-  {
     value: "google",
     label: "Google",
     hint: "Gemini API key + OAuth",
@@ -114,6 +108,12 @@ const AUTH_CHOICE_GROUP_DEFS: {
     label: "OpenCode Zen",
     hint: "API key",
     choices: ["opencode-zen"],
+  },
+  {
+    value: "venice",
+    label: "Venice AI",
+    hint: "Privacy-focused (uncensored models)",
+    choices: ["venice-api-key"],
   },
 ];
 
@@ -198,11 +198,6 @@ export function buildAuthChoiceOptions(params: {
   options.push({ value: "kimi-code-api-key", label: "Kimi Code API key" });
   options.push({ value: "synthetic-api-key", label: "Synthetic API key" });
   options.push({
-    value: "venice-api-key",
-    label: "Venice AI API key",
-    hint: "Privacy-focused inference (uncensored models)",
-  });
-  options.push({
     value: "github-copilot",
     label: "GitHub Copilot (GitHub device login)",
     hint: "Uses GitHub device flow",
@@ -231,6 +226,11 @@ export function buildAuthChoiceOptions(params: {
     value: "opencode-zen",
     label: "OpenCode Zen (multi-model proxy)",
     hint: "Claude, GPT, Gemini via opencode.ai/zen",
+  });
+  options.push({
+    value: "venice-api-key",
+    label: "Venice AI API key",
+    hint: "Privacy-focused inference (uncensored models)",
   });
   options.push({ value: "minimax-api", label: "MiniMax M2.1" });
   options.push({

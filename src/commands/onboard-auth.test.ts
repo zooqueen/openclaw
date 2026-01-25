@@ -15,9 +15,13 @@ import {
   applyOpenrouterProviderConfig,
   applySyntheticConfig,
   applySyntheticProviderConfig,
+  applyVeniceConfig,
+  applyVeniceProviderConfig,
   OPENROUTER_DEFAULT_MODEL_REF,
   SYNTHETIC_DEFAULT_MODEL_ID,
   SYNTHETIC_DEFAULT_MODEL_REF,
+  VENICE_DEFAULT_MODEL_ID,
+  VENICE_DEFAULT_MODEL_REF,
   setMinimaxApiKey,
   writeOAuthCredentials,
 } from "./onboard-auth.js";
@@ -340,6 +344,52 @@ describe("applySyntheticConfig", () => {
     const ids = cfg.models?.providers?.synthetic?.models.map((m) => m.id);
     expect(ids).toContain("old-model");
     expect(ids).toContain(SYNTHETIC_DEFAULT_MODEL_ID);
+  });
+});
+
+describe("applyVeniceConfig", () => {
+  it("adds venice provider with correct settings", () => {
+    const cfg = applyVeniceConfig({});
+    expect(cfg.models?.providers?.venice).toMatchObject({
+      baseUrl: "https://api.venice.ai/api/v1",
+      api: "openai-completions",
+    });
+  });
+
+  it("sets correct primary model", () => {
+    const cfg = applyVeniceConfig({});
+    expect(cfg.agents?.defaults?.model?.primary).toBe(VENICE_DEFAULT_MODEL_REF);
+  });
+
+  it("merges existing venice provider models", () => {
+    const cfg = applyVeniceProviderConfig({
+      models: {
+        providers: {
+          venice: {
+            baseUrl: "https://old.example.com",
+            apiKey: "old-key",
+            api: "anthropic-messages",
+            models: [
+              {
+                id: "old-model",
+                name: "Old",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 1000,
+                maxTokens: 100,
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(cfg.models?.providers?.venice?.baseUrl).toBe("https://api.venice.ai/api/v1");
+    expect(cfg.models?.providers?.venice?.api).toBe("openai-completions");
+    expect(cfg.models?.providers?.venice?.apiKey).toBe("old-key");
+    const ids = cfg.models?.providers?.venice?.models.map((m) => m.id);
+    expect(ids).toContain("old-model");
+    expect(ids).toContain(VENICE_DEFAULT_MODEL_ID);
   });
 });
 

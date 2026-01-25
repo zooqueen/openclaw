@@ -155,6 +155,12 @@ describe("cli program (smoke)", () => {
         field: "syntheticApiKey",
       },
       {
+        authChoice: "venice-api-key",
+        flag: "--venice-api-key",
+        key: "vapi-venice-test",
+        field: "veniceApiKey",
+      },
+      {
         authChoice: "zai-api-key",
         flag: "--zai-api-key",
         key: "sk-zai-test",

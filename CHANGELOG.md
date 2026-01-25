@@ -8,6 +8,7 @@ Docs: https://docs.clawd.bot
 - Ollama: provider discovery + docs. (#1606) Thanks @abhaymundhara. https://docs.clawd.bot/providers/ollama
 
 ### Changes
+- Models: add Venice AI provider support (onboarding, non-interactive auth, docs). (#1666) Thanks @jonisjongithub. https://docs.clawd.bot/providers/venice
 - Docs: expand FAQ (migration, scheduling, concurrency, model recommendations, OpenAI subscription auth, Pi sizing, hackable install, docs SSL workaround).
 - Docs: add verbose installer troubleshooting guidance.
 - Docs: update Fly.io guide notes.
