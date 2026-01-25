@@ -131,11 +131,11 @@ export async function buildCrossContextDecoration(params: {
       targetId: params.toolContext.currentChannelId,
       accountId: params.accountId ?? undefined,
     })) ?? params.toolContext.currentChannelId;
+  // Don't force group formatting here; currentChannelId can be a DM or a group.
   const originLabel = formatTargetDisplay({
     channel: params.channel,
     target: params.toolContext.currentChannelId,
     display: currentName,
-    kind: "group",
   });
   const prefixTemplate = markerConfig?.prefix ?? "[from {channel}] ";
   const suffixTemplate = markerConfig?.suffix ?? "";
