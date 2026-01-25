@@ -77,6 +77,7 @@ const DEFAULT_OUTPUT = {
 
 export type ResolvedTtsConfig = {
   enabled: boolean;
+  onlyWhenInboundAudio: boolean;
   mode: TtsMode;
   provider: TtsProvider;
   providerSource: "config" | "default";
@@ -222,6 +223,7 @@ export function resolveTtsConfig(cfg: ClawdbotConfig): ResolvedTtsConfig {
   const edgeOutputFormat = raw.edge?.outputFormat?.trim();
   return {
     enabled: raw.enabled ?? false,
+    onlyWhenInboundAudio: raw.onlyWhenInboundAudio ?? false,
     mode: raw.mode ?? "final",
     provider: raw.provider ?? "edge",
     providerSource,
@@ -285,11 +287,17 @@ export function buildTtsSystemPromptHint(cfg: ClawdbotConfig): string | undefine
   if (!isTtsEnabled(config, prefsPath)) return undefined;
   const maxLength = getTtsMaxLength(prefsPath);
   const summarize = isSummarizationEnabled(prefsPath) ? "on" : "off";
+  const inboundAudioHint = config.onlyWhenInboundAudio
+    ? "Only use TTS when the user's last message includes audio/voice."
+    : undefined;
   return [
     "Voice (TTS) is enabled.",
+    inboundAudioHint,
     `Keep spoken text ≤${maxLength} chars to avoid auto-summary (summary ${summarize}).`,
     "Use [[tts:...]] and optional [[tts:text]]...[[/tts:text]] to control voice/expressiveness.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function readPrefs(prefsPath: string): TtsUserPrefs {
@@ -1156,10 +1164,12 @@ export async function maybeApplyTtsToPayload(params: {
   cfg: ClawdbotConfig;
   channel?: string;
   kind?: "tool" | "block" | "final";
+  inboundAudio?: boolean;
 }): Promise<ReplyPayload> {
   const config = resolveTtsConfig(params.cfg);
   const prefsPath = resolveTtsPrefsPath(config);
   if (!isTtsEnabled(config, prefsPath)) return params.payload;
+  if (config.onlyWhenInboundAudio && params.inboundAudio !== true) return params.payload;
 
   const mode = config.mode ?? "final";
   if (mode === "final" && params.kind && params.kind !== "final") return params.payload;

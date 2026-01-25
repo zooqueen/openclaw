@@ -161,6 +161,7 @@ export const TtsModeSchema = z.enum(["final", "all"]);
 export const TtsConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
+    onlyWhenInboundAudio: z.boolean().optional(),
     mode: TtsModeSchema.optional(),
     provider: TtsProviderSchema.optional(),
     summaryModel: z.string().optional(),

@@ -165,6 +165,19 @@ Full schema is in [Gateway configuration](/gateway/configuration).
 }
 ```
 
+### Only reply with audio after an inbound voice note
+
+```json5
+{
+  messages: {
+    tts: {
+      enabled: true,
+      onlyWhenInboundAudio: true
+    }
+  }
+}
+```
+
 ### Disable auto-summary for long replies
 
 ```json5
@@ -186,6 +199,7 @@ Then run:
 ### Notes on fields
 
 - `enabled`: master toggle (default `false`; local prefs can override).
+- `onlyWhenInboundAudio`: only auto-send TTS when the last inbound message includes audio/voice.
 - `mode`: `"final"` (default) or `"all"` (includes tool/block replies).
 - `provider`: `"elevenlabs"`, `"openai"`, or `"edge"` (fallback is automatic).
 - If `provider` is **unset**, Clawdbot prefers `openai` (if key), then `elevenlabs` (if key),

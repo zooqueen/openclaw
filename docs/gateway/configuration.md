@@ -1540,6 +1540,7 @@ voice notes; other channels send MP3 audio.
 
 Notes:
 - `messages.tts.enabled` can be overridden by local user prefs (see `/tts on`, `/tts off`).
+- `onlyWhenInboundAudio` limits auto-TTS to replies where the last inbound message includes audio/voice.
 - `prefsPath` stores local overrides (enabled/provider/limit/summarize).
 - `maxTextLength` is a hard cap for TTS input; summaries are truncated to fit.
 - `summaryModel` overrides `agents.defaults.model.primary` for auto-summary.

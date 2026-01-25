@@ -21,6 +21,35 @@ export type DispatchFromConfigResult = {
   counts: Record<ReplyDispatchKind, number>;
 };
 
+const AUDIO_PLACEHOLDER_RE = /^<media:audio>(\s*\([^)]*\))?$/i;
+const AUDIO_HEADER_RE = /^\[Audio\]/i;
+
+const normalizeMediaType = (value: string): string => value.split(";")[0]?.trim().toLowerCase();
+
+const isInboundAudioContext = (ctx: FinalizedMsgContext): boolean => {
+  const rawTypes = [
+    typeof ctx.MediaType === "string" ? ctx.MediaType : undefined,
+    ...(Array.isArray(ctx.MediaTypes) ? ctx.MediaTypes : []),
+  ].filter(Boolean) as string[];
+  const types = rawTypes.map((type) => normalizeMediaType(type));
+  if (types.some((type) => type === "audio" || type.startsWith("audio/"))) return true;
+
+  const body =
+    typeof ctx.BodyForCommands === "string"
+      ? ctx.BodyForCommands
+      : typeof ctx.CommandBody === "string"
+        ? ctx.CommandBody
+        : typeof ctx.RawBody === "string"
+          ? ctx.RawBody
+          : typeof ctx.Body === "string"
+            ? ctx.Body
+            : "";
+  const trimmed = body.trim();
+  if (!trimmed) return false;
+  if (AUDIO_PLACEHOLDER_RE.test(trimmed)) return true;
+  return AUDIO_HEADER_RE.test(trimmed);
+};
+
 export async function dispatchReplyFromConfig(params: {
   ctx: FinalizedMsgContext;
   cfg: ClawdbotConfig;
@@ -80,6 +109,8 @@ export async function dispatchReplyFromConfig(params: {
     recordProcessed("skipped", { reason: "duplicate" });
     return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
   }
+
+  const inboundAudio = isInboundAudioContext(ctx);
 
   const hookRunner = getGlobalHookRunner();
   if (hookRunner?.hasHooks("message_received")) {
@@ -223,6 +254,7 @@ export async function dispatchReplyFromConfig(params: {
               cfg,
               channel: ttsChannel,
               kind: "tool",
+              inboundAudio,
             });
             if (shouldRouteToOriginating) {
               await sendPayloadAsync(ttsPayload);
@@ -239,6 +271,7 @@ export async function dispatchReplyFromConfig(params: {
               cfg,
               channel: ttsChannel,
               kind: "block",
+              inboundAudio,
             });
             if (shouldRouteToOriginating) {
               await sendPayloadAsync(ttsPayload, context?.abortSignal);
@@ -262,6 +295,7 @@ export async function dispatchReplyFromConfig(params: {
         cfg,
         channel: ttsChannel,
         kind: "final",
+        inboundAudio,
       });
       if (shouldRouteToOriginating && originatingChannel && originatingTo) {
         // Route final reply to originating channel.

@@ -4,7 +4,7 @@ import { completeSimple } from "@mariozechner/pi-ai";
 
 import { getApiKeyForModel } from "../agents/model-auth.js";
 import { resolveModel } from "../agents/pi-embedded-runner/model.js";
-import { _test, getTtsProvider, resolveTtsConfig } from "./tts.js";
+import * as tts from "./tts.js";
 
 vi.mock("@mariozechner/pi-ai", () => ({
   completeSimple: vi.fn(),
@@ -36,6 +36,8 @@ vi.mock("../agents/model-auth.js", () => ({
   })),
   requireApiKey: vi.fn((auth: { apiKey?: string }) => auth.apiKey ?? ""),
 }));
+
+const { _test, resolveTtsConfig, maybeApplyTtsToPayload, getTtsProvider } = tts;
 
 const {
   isValidVoiceId,
@@ -429,6 +431,57 @@ describe("tts", () => {
           expect(provider).toBe("edge");
         },
       );
+    });
+  });
+
+  describe("maybeApplyTtsToPayload", () => {
+    const baseCfg = {
+      agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
+      messages: { tts: { enabled: true, onlyWhenInboundAudio: true } },
+    };
+
+    it("skips auto-TTS when inbound audio gating is on and the message is not audio", async () => {
+      const prevPrefs = process.env.CLAWDBOT_TTS_PREFS;
+      process.env.CLAWDBOT_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      const spy = vi.spyOn(tts, "textToSpeech").mockResolvedValue({
+        success: false,
+        error: "nope",
+      });
+
+      const payload = { text: "Hello world" };
+      const result = await maybeApplyTtsToPayload({
+        payload,
+        cfg: baseCfg,
+        kind: "final",
+        inboundAudio: false,
+      });
+
+      expect(result).toBe(payload);
+      expect(spy).not.toHaveBeenCalled();
+
+      spy.mockRestore();
+      process.env.CLAWDBOT_TTS_PREFS = prevPrefs;
+    });
+
+    it("attempts auto-TTS when inbound audio gating is on and the message is audio", async () => {
+      const prevPrefs = process.env.CLAWDBOT_TTS_PREFS;
+      process.env.CLAWDBOT_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      const spy = vi.spyOn(tts, "textToSpeech").mockResolvedValue({
+        success: false,
+        error: "nope",
+      });
+
+      await maybeApplyTtsToPayload({
+        payload: { text: "Hello world" },
+        cfg: baseCfg,
+        kind: "final",
+        inboundAudio: true,
+      });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      spy.mockRestore();
+      process.env.CLAWDBOT_TTS_PREFS = prevPrefs;
     });
   });
 });
