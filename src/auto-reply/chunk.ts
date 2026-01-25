@@ -116,19 +116,34 @@ export function resolveChunkMode(
  */
 export function chunkByNewline(text: string, maxLineLength: number): string[] {
   if (!text) return [];
+  if (maxLineLength <= 0) return text.trim() ? [text] : [];
   const lines = text.split("\n");
   const chunks: string[] = [];
+  let pendingBlankLines = 0;
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) continue; // skip empty lines
+    if (!trimmed) {
+      pendingBlankLines += 1;
+      continue;
+    }
 
-    if (trimmed.length <= maxLineLength) {
-      chunks.push(trimmed);
-    } else {
-      // Long line: fall back to length-based chunking
-      const subChunks = chunkText(trimmed, maxLineLength);
-      chunks.push(...subChunks);
+    const maxPrefix = Math.max(0, maxLineLength - 1);
+    const cappedBlankLines = pendingBlankLines > 0 ? Math.min(pendingBlankLines, maxPrefix) : 0;
+    const prefix = cappedBlankLines > 0 ? "\n".repeat(cappedBlankLines) : "";
+    pendingBlankLines = 0;
+
+    if (trimmed.length + prefix.length <= maxLineLength) {
+      chunks.push(prefix + trimmed);
+      continue;
+    }
+
+    const firstLimit = Math.max(1, maxLineLength - prefix.length);
+    const first = trimmed.slice(0, firstLimit);
+    chunks.push(prefix + first);
+    const remaining = trimmed.slice(firstLimit);
+    if (remaining) {
+      chunks.push(...chunkText(remaining, maxLineLength));
     }
   }
 

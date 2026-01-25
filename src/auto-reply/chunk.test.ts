@@ -246,16 +246,22 @@ describe("chunkByNewline", () => {
     expect(chunks).toEqual(["Line one", "Line two", "Line three"]);
   });
 
-  it("filters empty lines", () => {
+  it("preserves blank lines by folding into the next chunk", () => {
     const text = "Line one\n\n\nLine two\n\nLine three";
     const chunks = chunkByNewline(text, 1000);
-    expect(chunks).toEqual(["Line one", "Line two", "Line three"]);
+    expect(chunks).toEqual(["Line one", "\n\nLine two", "\nLine three"]);
   });
 
   it("trims whitespace from lines", () => {
     const text = "  Line one  \n  Line two  ";
     const chunks = chunkByNewline(text, 1000);
     expect(chunks).toEqual(["Line one", "Line two"]);
+  });
+
+  it("preserves leading blank lines on the first chunk", () => {
+    const text = "\n\nLine one\nLine two";
+    const chunks = chunkByNewline(text, 1000);
+    expect(chunks).toEqual(["\n\nLine one", "Line two"]);
   });
 
   it("falls back to length-based for long lines", () => {
