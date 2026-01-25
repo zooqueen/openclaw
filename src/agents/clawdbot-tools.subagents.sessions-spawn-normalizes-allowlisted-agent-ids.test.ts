@@ -87,6 +87,52 @@ describe("clawdbot-tools: subagents", () => {
     });
     expect(childSessionKey?.startsWith("agent:research:subagent:")).toBe(true);
   });
+
+  it("sessions_spawn honors requesterAgentIdOverride for cron sessions", async () => {
+    resetSubagentRegistryForTests();
+    callGatewayMock.mockReset();
+    configOverride = {
+      session: {
+        mainKey: "main",
+        scope: "per-sender",
+      },
+      agents: {
+        list: [
+          {
+            id: "cron-owner",
+            subagents: {
+              allowAgents: ["research"],
+            },
+          },
+        ],
+      },
+    };
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string; params?: unknown };
+      if (request.method === "agent") {
+        return { runId: "run-2", status: "accepted", acceptedAt: 5200 };
+      }
+      return {};
+    });
+
+    const tool = createClawdbotTools({
+      agentSessionKey: "cron:job-1",
+      requesterAgentIdOverride: "cron-owner",
+      agentChannel: "whatsapp",
+    }).find((candidate) => candidate.name === "sessions_spawn");
+    if (!tool) throw new Error("missing sessions_spawn tool");
+
+    const result = await tool.execute("call11", {
+      task: "do thing",
+      agentId: "research",
+    });
+
+    expect(result.details).toMatchObject({
+      status: "accepted",
+      runId: "run-2",
+    });
+  });
   it("sessions_spawn forbids cross-agent spawning when not allowed", async () => {
     resetSubagentRegistryForTests();
     callGatewayMock.mockReset();

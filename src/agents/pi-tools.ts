@@ -293,6 +293,7 @@ export function createClawdbotCodingTools(options?: {
       agentGroupChannel: options?.groupChannel ?? null,
       agentGroupSpace: options?.groupSpace ?? null,
       agentDir: options?.agentDir,
+      requesterAgentIdOverride: agentId,
       sandboxRoot,
       workspaceDir: options?.workspaceDir,
       sandboxed: !!sandbox,

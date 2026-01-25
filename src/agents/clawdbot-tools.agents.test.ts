@@ -157,4 +157,44 @@ describe("agents_list", () => {
     const research = agents?.find((agent) => agent.id === "research");
     expect(research?.configured).toBe(false);
   });
+
+  it("uses requesterAgentIdOverride when resolving allowlists", async () => {
+    configOverride = {
+      session: {
+        mainKey: "main",
+        scope: "per-sender",
+      },
+      agents: {
+        list: [
+          {
+            id: "cron-owner",
+            subagents: {
+              allowAgents: ["research"],
+            },
+          },
+          {
+            id: "research",
+            name: "Research",
+          },
+        ],
+      },
+    };
+
+    const tool = createClawdbotTools({
+      agentSessionKey: "cron:job-1",
+      requesterAgentIdOverride: "cron-owner",
+    }).find((candidate) => candidate.name === "agents_list");
+    if (!tool) throw new Error("missing agents_list tool");
+
+    const result = await tool.execute("call5", {});
+    const agents = (
+      result.details as {
+        agents?: Array<{ id: string }>;
+      }
+    ).agents;
+    expect(agents?.map((agent) => agent.id)).toEqual(["cron-owner", "research"]);
+    expect(result.details).toMatchObject({
+      requester: "cron-owner",
+    });
+  });
 });
