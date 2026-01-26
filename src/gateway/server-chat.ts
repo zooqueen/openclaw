@@ -11,9 +11,7 @@ type WebchatHeartbeatPolicy = {
   ackMaxChars: number;
 };
 
-let webchatHeartbeatPolicyCache:
-  | { policy: WebchatHeartbeatPolicy; loadedAtMs: number }
-  | undefined;
+let webchatHeartbeatPolicyCache: { policy: WebchatHeartbeatPolicy; loadedAtMs: number } | undefined;
 
 function resolveWebchatHeartbeatPolicy(): WebchatHeartbeatPolicy {
   // loadConfig() reads from disk + validates, so avoid doing it on every token stream event.
@@ -209,7 +207,7 @@ export function createAgentEventHandler({
     clientRunId: string,
     seq: number,
     jobState: "done" | "error",
-    error: unknown | undefined,
+    error: unknown,
     agentRunId: string,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
