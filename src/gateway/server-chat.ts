@@ -39,9 +39,19 @@ function resolveWebchatHeartbeatPolicy(): WebchatHeartbeatPolicy {
   return policy;
 }
 
-function shouldSuppressHeartbeatBroadcast(runId: string, text: string | undefined): boolean {
+function resolveHeartbeatContextIsHeartbeat(runId: string, clientRunId: string): boolean {
+  const clientContext = getAgentRunContext(clientRunId);
+  if (clientContext?.isHeartbeat !== undefined) return clientContext.isHeartbeat;
   const runContext = getAgentRunContext(runId);
-  if (!runContext?.isHeartbeat) return false;
+  return Boolean(runContext?.isHeartbeat);
+}
+
+function shouldSuppressHeartbeatBroadcast(
+  runId: string,
+  clientRunId: string,
+  text: string | undefined,
+): boolean {
+  if (!resolveHeartbeatContextIsHeartbeat(runId, clientRunId)) return false;
 
   const policy = resolveWebchatHeartbeatPolicy();
   if (policy.showOk) return false;
@@ -164,14 +174,6 @@ export function createAgentEventHandler({
   resolveSessionKeyForRun,
   clearAgentRunContext,
 }: AgentEventHandlerOptions) {
-  const webchatHeartbeatShowOk = resolveWebchatHeartbeatShowOk();
-
-  const shouldSuppressHeartbeatBroadcast = (agentRunId: string): boolean => {
-    const runContext = getAgentRunContext(agentRunId);
-    if (!runContext?.isHeartbeat) return false;
-    return !webchatHeartbeatShowOk;
-  };
-
   const emitChatDelta = (
     sessionKey: string,
     clientRunId: string,
@@ -195,12 +197,8 @@ export function createAgentEventHandler({
         timestamp: now,
       },
     };
-<<<<<<< HEAD
-    // Suppress webchat broadcast for heartbeat runs when showOk is false
-    if (!shouldSuppressHeartbeatBroadcast(agentRunId)) {
-=======
-    if (!shouldSuppressHeartbeatBroadcast(clientRunId, text)) {
->>>>>>> 3f72ad7bd (fix(webchat): suppress heartbeat ok broadcasts; stabilize audit/status tests)
+
+    if (!shouldSuppressHeartbeatBroadcast(agentRunId, clientRunId, text)) {
       broadcast("chat", payload, { dropIfSlow: true });
     }
     nodeSendToSession(sessionKey, "chat", payload);
@@ -231,12 +229,8 @@ export function createAgentEventHandler({
             }
           : undefined,
       };
-<<<<<<< HEAD
-      // Suppress webchat broadcast for heartbeat runs when showOk is false
-      if (!shouldSuppressHeartbeatBroadcast(agentRunId)) {
-=======
-      if (!shouldSuppressHeartbeatBroadcast(clientRunId, text)) {
->>>>>>> 3f72ad7bd (fix(webchat): suppress heartbeat ok broadcasts; stabilize audit/status tests)
+
+      if (!shouldSuppressHeartbeatBroadcast(agentRunId, clientRunId, text)) {
         broadcast("chat", payload);
       }
       nodeSendToSession(sessionKey, "chat", payload);
