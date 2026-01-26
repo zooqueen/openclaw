@@ -280,22 +280,63 @@ The Gateway multiplexes **WebSocket + HTTP** on a single port:
 
 Bind mode controls where the Gateway listens:
 - `gateway.bind: "loopback"` (default): only local clients can connect.
-- Non-loopback binds (`"lan"`, `"tailnet"`, `"custom"`) expand the attack surface. Only use them with `gateway.auth` enabled and a real firewall.
+- Non-loopback binds (`"lan"`, `"tailnet"`, `"custom"`) expand the attack surface. Only use them with a shared token/password and a real firewall.
 
 Rules of thumb:
 - Prefer Tailscale Serve over LAN binds (Serve keeps the Gateway on loopback, and Tailscale handles access).
 - If you must bind to LAN, firewall the port to a tight allowlist of source IPs; do not port-forward it broadly.
 - Never expose the Gateway unauthenticated on `0.0.0.0`.
 
+### 0.4.1) mDNS/Bonjour discovery (information disclosure)
+
+The Gateway broadcasts its presence via mDNS (`_clawdbot-gw._tcp` on port 5353) for local device discovery. In full mode, this includes TXT records that may expose operational details:
+
+- `cliPath`: full filesystem path to the CLI binary (reveals username and install location)
+- `sshPort`: advertises SSH availability on the host
+- `displayName`, `lanHost`: hostname information
+
+**Operational security consideration:** Broadcasting infrastructure details makes reconnaissance easier for anyone on the local network. Even "harmless" info like filesystem paths and SSH availability helps attackers map your environment.
+
+**Recommendations:**
+
+1. **Minimal mode** (default, recommended for exposed gateways): omit sensitive fields from mDNS broadcasts:
+   ```json5
+   {
+     discovery: {
+       mdns: { mode: "minimal" }
+     }
+   }
+   ```
+
+2. **Disable entirely** if you don't need local device discovery:
+   ```json5
+   {
+     discovery: {
+       mdns: { mode: "off" }
+     }
+   }
+   ```
+
+3. **Full mode** (opt-in): include `cliPath` + `sshPort` in TXT records:
+   ```json5
+   {
+     discovery: {
+       mdns: { mode: "full" }
+     }
+   }
+   ```
+
+4. **Environment variable** (alternative): set `CLAWDBOT_DISABLE_BONJOUR=1` to disable mDNS without config changes.
+
+In minimal mode, the Gateway still broadcasts enough for device discovery (`role`, `gatewayPort`, `transport`) but omits `cliPath` and `sshPort`. Apps that need CLI path information can fetch it via the authenticated WebSocket connection instead.
+
 ### 0.5) Lock down the Gateway WebSocket (local auth)
 
-Gateway auth is **only** enforced when you set `gateway.auth`. If it’s unset,
-loopback WS clients are unauthenticated — any local process can connect and call
-`config.apply`.
+Gateway auth is **required by default**. If no token/password is configured,
+the Gateway refuses WebSocket connections (fail‑closed).
 
-The onboarding wizard now generates a token by default (even for loopback) so
-local clients must authenticate. If you skip the wizard or remove auth, you’re
-back to open loopback.
+The onboarding wizard generates a token by default (even for loopback) so
+local clients must authenticate.
 
 Set a token so **all** WS clients must authenticate:
 
@@ -333,9 +374,11 @@ Rotation checklist (token/password):
 
 When `gateway.auth.allowTailscale` is `true` (default for Serve), Clawdbot
 accepts Tailscale Serve identity headers (`tailscale-user-login`) as
-authentication. This only triggers for requests that hit loopback and include
-`x-forwarded-for`, `x-forwarded-proto`, and `x-forwarded-host` as injected by
-Tailscale.
+authentication. Clawdbot verifies the identity by resolving the
+`x-forwarded-for` address through the local Tailscale daemon (`tailscale whois`)
+and matching it to the header. This only triggers for requests that hit loopback
+and include `x-forwarded-for`, `x-forwarded-proto`, and `x-forwarded-host` as
+injected by Tailscale.
 
 **Security rule:** do not forward these headers from your own reverse proxy. If
 you terminate TLS or proxy in front of the gateway, disable

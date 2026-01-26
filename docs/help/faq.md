@@ -1452,7 +1452,7 @@ Have Bot A send a message to Bot B, then let Bot B reply as usual.
 
 **CLI bridge (generic):** run a script that calls the other Gateway with
 `clawdbot agent --message ... --deliver`, targeting a chat where the other bot
-listens. If one bot is on Railway/VPS, point your CLI at that remote Gateway
+listens. If one bot is on a remote VPS, point your CLI at that remote Gateway
 via SSH/Tailscale (see [Remote access](/gateway/remote)).
 
 Example pattern (run from a machine that can reach the target Gateway):
