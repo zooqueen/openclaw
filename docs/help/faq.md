@@ -567,6 +567,7 @@ We keep a **hosting hub** with the common providers. Pick one and follow the gui
 
 - [VPS hosting](/vps) (all providers in one place)
 - [Railway](/railway) (one‑click, browser‑based setup)
+- [Northflank](/northflank) (one‑click, browser‑based setup)
 - [Fly.io](/platforms/fly)
 - [Hetzner](/platforms/hetzner)
 - [exe.dev](/platforms/exe-dev)

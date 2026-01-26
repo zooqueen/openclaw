@@ -12,6 +12,7 @@ deployments work at a high level.
 ## Pick a provider
 
 - **Railway** (one‑click + browser setup): [Railway](/railway)
+- **Northflank** (one‑click + browser setup): [Northflank](/northflank)
 - **Fly.io**: [Fly.io](/platforms/fly)
 - **Hetzner (Docker)**: [Hetzner](/platforms/hetzner)
 - **GCP (Compute Engine)**: [GCP](/platforms/gcp)
