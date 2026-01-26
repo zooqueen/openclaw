@@ -12,6 +12,7 @@ import {
   SYNTHETIC_BASE_URL,
   SYNTHETIC_MODEL_CATALOG,
 } from "./synthetic-models.js";
+import { discoverVeniceModels, VENICE_BASE_URL } from "./venice-models.js";
 
 type ModelsConfig = NonNullable<ClawdbotConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
@@ -340,6 +341,15 @@ function buildSyntheticProvider(): ProviderConfig {
   };
 }
 
+async function buildVeniceProvider(): Promise<ProviderConfig> {
+  const models = await discoverVeniceModels();
+  return {
+    baseUrl: VENICE_BASE_URL,
+    api: "openai-completions",
+    models,
+  };
+}
+
 async function buildOllamaProvider(): Promise<ProviderConfig> {
   const models = await discoverOllamaModels();
   return {
@@ -383,6 +393,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "synthetic", store: authStore });
   if (syntheticKey) {
     providers.synthetic = { ...buildSyntheticProvider(), apiKey: syntheticKey };
+  }
+
+  const veniceKey =
+    resolveEnvApiKeyVarName("venice") ??
+    resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
+  if (veniceKey) {
+    providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
   }
 
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");

@@ -156,10 +156,12 @@ export const MarkdownConfigSchema = z
   .strict()
   .optional();
 
-export const TtsProviderSchema = z.enum(["elevenlabs", "openai"]);
+export const TtsProviderSchema = z.enum(["elevenlabs", "openai", "edge"]);
 export const TtsModeSchema = z.enum(["final", "all"]);
+export const TtsAutoSchema = z.enum(["off", "always", "inbound", "tagged"]);
 export const TtsConfigSchema = z
   .object({
+    auto: TtsAutoSchema.optional(),
     enabled: z.boolean().optional(),
     mode: TtsModeSchema.optional(),
     provider: TtsProviderSchema.optional(),
@@ -204,6 +206,21 @@ export const TtsConfigSchema = z
         apiKey: z.string().optional(),
         model: z.string().optional(),
         voice: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    edge: z
+      .object({
+        enabled: z.boolean().optional(),
+        voice: z.string().optional(),
+        lang: z.string().optional(),
+        outputFormat: z.string().optional(),
+        pitch: z.string().optional(),
+        rate: z.string().optional(),
+        volume: z.string().optional(),
+        saveSubtitles: z.boolean().optional(),
+        proxy: z.string().optional(),
+        timeoutMs: z.number().int().min(1000).max(120000).optional(),
       })
       .strict()
       .optional(),
@@ -450,6 +467,26 @@ export const ToolsMediaSchema = z
     image: ToolsMediaUnderstandingSchema.optional(),
     audio: ToolsMediaUnderstandingSchema.optional(),
     video: ToolsMediaUnderstandingSchema.optional(),
+  })
+  .strict()
+  .optional();
+
+export const LinkModelSchema = z
+  .object({
+    type: z.literal("cli").optional(),
+    command: z.string().min(1),
+    args: z.array(z.string()).optional(),
+    timeoutSeconds: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export const ToolsLinksSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    scope: MediaUnderstandingScopeSchema,
+    maxLinks: z.number().int().positive().optional(),
+    timeoutSeconds: z.number().int().positive().optional(),
+    models: z.array(LinkModelSchema).optional(),
   })
   .strict()
   .optional();

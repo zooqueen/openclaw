@@ -31,6 +31,24 @@ See also: [Health checks](/gateway/health) and [Logging](/logging).
 
 ## Common Issues
 
+### No API key found for provider "anthropic"
+
+This means the **agent’s auth store is empty** or missing Anthropic credentials.
+Auth is **per agent**, so a new agent won’t inherit the main agent’s keys.
+
+Fix options:
+- Re-run onboarding and choose **Anthropic** for that agent.
+- Or paste a setup-token on the **gateway host**:
+  ```bash
+  clawdbot models auth setup-token --provider anthropic
+  ```
+- Or copy `auth-profiles.json` from the main agent dir to the new agent dir.
+
+Verify:
+```bash
+clawdbot models status
+```
+
 ### OAuth token refresh failed (Anthropic Claude subscription)
 
 This means the stored Anthropic OAuth token expired and the refresh failed.
@@ -196,7 +214,7 @@ the Gateway likely refused to bind.
 - Fix: run `clawdbot doctor` to update it (or `clawdbot gateway install --force` for a full rewrite).
 
 **If `Last gateway error:` mentions “refusing to bind … without auth”**
-- You set `gateway.bind` to a non-loopback mode (`lan`/`tailnet`/`custom`, or `auto` when loopback is unavailable) but left auth off.
+- You set `gateway.bind` to a non-loopback mode (`lan`/`tailnet`/`custom`, or `auto` when loopback is unavailable) but didn’t configure auth.
 - Fix: set `gateway.auth.mode` + `gateway.auth.token` (or export `CLAWDBOT_GATEWAY_TOKEN`) and restart the service.
 
 **If `clawdbot gateway status` says `bind=tailnet` but no tailnet interface was found**
