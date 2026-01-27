@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 const MINIMAX_OAUTH_BASE_URL = "https://api.minimax.io";
-const MINIMAX_OAUTH_DEVICE_CODE_ENDPOINT = `${MINIMAX_OAUTH_BASE_URL}/oauth/code`;
+const MINIMAX_OAUTH_CODE_ENDPOINT = `${MINIMAX_OAUTH_BASE_URL}/oauth/code`;
 const MINIMAX_OAUTH_TOKEN_ENDPOINT = `${MINIMAX_OAUTH_BASE_URL}/oauth/token`;
 const MINIMAX_OAUTH_CLIENT_ID = "78257093-7e40-4613-99e0-527b14b39113";
 const MINIMAX_OAUTH_SCOPE = "group_id profile model.completion";
@@ -14,6 +14,7 @@ export type MiniMaxDeviceAuthorization = {
   interval?: number;
   has_benefit: boolean;
   benefit_message: string;
+  state: string;
 };
 
 export type MiniMaxOAuthToken = {
@@ -36,14 +37,18 @@ function toFormUrlEncoded(data: Record<string, string>): string {
     .join("&");
 }
 
-function generatePkce(): { verifier: string; challenge: string } {
+function generatePkce(): { verifier: string; challenge: string; state: string } {
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
+  const state = randomBytes(16).toString("base64url");
+  return { verifier, challenge, state };
 }
 
-async function requestDeviceCode(params: { challenge: string }): Promise<MiniMaxDeviceAuthorization> {
-  const response = await fetch(MINIMAX_OAUTH_DEVICE_CODE_ENDPOINT, {
+async function requestOAuthCode(params: {
+  challenge: string;
+  state: string;
+}): Promise<MiniMaxDeviceAuthorization> {
+  const response = await fetch(MINIMAX_OAUTH_CODE_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -55,6 +60,7 @@ async function requestDeviceCode(params: { challenge: string }): Promise<MiniMax
       scope: MINIMAX_OAUTH_SCOPE,
       code_challenge: params.challenge,
       code_challenge_method: "S256",
+      state: params.state,
     }),
   });
 
@@ -70,10 +76,15 @@ async function requestDeviceCode(params: { challenge: string }): Promise<MiniMax
         "MiniMax device authorization returned an incomplete payload (missing user_code or verification_uri).",
     );
   }
+  if (payload.state !== params.state) {
+    throw new Error(
+      "MiniMax OAuth state mismatch: possible CSRF attack or session corruption.",
+    );
+  }
   return payload;
 }
 
-async function pollDeviceToken(params: {
+async function pollOAuthToken(params: {
   userCode: string;
   verifier: string;
 }): Promise<DeviceTokenResult> {
@@ -142,14 +153,14 @@ export async function loginMiniMaxPortalOAuth(params: {
   note: (message: string, title?: string) => Promise<void>;
   progress: { update: (message: string) => void; stop: (message?: string) => void };
 }): Promise<MiniMaxOAuthToken> {
-  const { verifier, challenge } = generatePkce();
-  const device = await requestDeviceCode({ challenge });
-  const verificationUrl = device.verification_uri;
+  const { verifier, challenge, state } = generatePkce();
+  const oauth = await requestOAuthCode({ challenge, state });
+  const verificationUrl = oauth.verification_uri;
 
   await params.note(
     [
       `Open ${verificationUrl} to approve access.`,
-      `If prompted, enter the code ${device.user_code}.`,
+      `If prompted, enter the code ${oauth.user_code}.`,
     ].join("\n"),
     "MiniMax OAuth",
   );
@@ -161,13 +172,13 @@ export async function loginMiniMaxPortalOAuth(params: {
   }
 
   const start = Date.now();
-  let pollIntervalMs = device.interval ? device.interval * 1000 : 2000;
-  const timeoutMs = device.expires_in * 1000;
+  let pollIntervalMs = oauth.interval ? oauth.interval * 1000 : 2000;
+  const timeoutMs = oauth.expires_in * 1000;
 
   while (Date.now() - start < timeoutMs) {
     params.progress.update("Waiting for MiniMax OAuth approval…");
-    const result = await pollDeviceToken({
-      userCode: device.user_code,
+    const result = await pollOAuthToken({
+      userCode: oauth.user_code,
       verifier,
     });
 

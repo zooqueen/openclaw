@@ -5,16 +5,10 @@ import { loginMiniMaxPortalOAuth } from "./oauth.js";
 const PROVIDER_ID = "minimax-portal";
 const PROVIDER_LABEL = "MiniMax";
 const DEFAULT_MODEL = "MiniMax-M2.1";
-const DEFAULT_BASE_URL = "https://api.minimax.io/v1";
+const DEFAULT_BASE_URL = "https://api.minimax.io/anthropic";
 const DEFAULT_CONTEXT_WINDOW = 200000;
 const DEFAULT_MAX_TOKENS = 8192;
 const OAUTH_PLACEHOLDER = "minimax-portal-oauth";
-
-function normalizeBaseUrl(value: string | undefined): string {
-  const raw = value?.trim() || DEFAULT_BASE_URL;
-  const withProtocol = raw.startsWith("http") ? raw : `https://${raw}`;
-  return withProtocol.endsWith("/v1") ? withProtocol : `${withProtocol.replace(/\/+$/, "")}/v1`;
-}
 
 function buildModelDefinition(params: { id: string; name: string; input: Array<"text" | "image"> }) {
   return {
@@ -41,10 +35,10 @@ const minimaxPortalPlugin = {
       aliases: ["minimax"],
       auth: [
         {
-          id: "device",
+          id: "oauth",
           label: "MiniMax OAuth",
-          hint: "Device code login",
-          kind: "device_code",
+          hint: "User code login",
+          kind: "user_code",
           run: async (ctx) => {
             const progress = ctx.prompter.progress("Starting MiniMax OAuth…");
             try {
@@ -57,7 +51,7 @@ const minimaxPortalPlugin = {
               progress.stop("MiniMax OAuth complete");
 
               const profileId = `${PROVIDER_ID}:default`;
-              const baseUrl = normalizeBaseUrl(result.resourceUrl);
+              const baseUrl = result.resourceUrl || DEFAULT_BASE_URL;
 
               return {
                 profiles: [
