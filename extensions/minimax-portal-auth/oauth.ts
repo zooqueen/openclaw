@@ -7,7 +7,7 @@ const MINIMAX_OAUTH_CLIENT_ID = "78257093-7e40-4613-99e0-527b14b39113";
 const MINIMAX_OAUTH_SCOPE = "group_id profile model.completion";
 const MINIMAX_OAUTH_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:user_code";
 
-export type MiniMaxDeviceAuthorization = {
+export type MiniMaxOAuthAuthorization = {
   user_code: string;
   verification_uri: string;
   expires_in: number;
@@ -24,9 +24,9 @@ export type MiniMaxOAuthToken = {
   resourceUrl?: string;
 };
 
-type TokenPending = { status: "pending"; slowDown?: boolean };
+type TokenPending = { status: "pending"; message?: string };
 
-type DeviceTokenResult =
+type TokenResult =
   | { status: "success"; token: MiniMaxOAuthToken }
   | TokenPending
   | { status: "error"; message: string };
@@ -47,7 +47,7 @@ function generatePkce(): { verifier: string; challenge: string; state: string } 
 async function requestOAuthCode(params: {
   challenge: string;
   state: string;
-}): Promise<MiniMaxDeviceAuthorization> {
+}): Promise<MiniMaxOAuthAuthorization> {
   const response = await fetch(MINIMAX_OAUTH_CODE_ENDPOINT, {
     method: "POST",
     headers: {
@@ -56,6 +56,7 @@ async function requestOAuthCode(params: {
       "x-request-id": randomUUID(),
     },
     body: toFormUrlEncoded({
+      response_type:"code",
       client_id: MINIMAX_OAUTH_CLIENT_ID,
       scope: MINIMAX_OAUTH_SCOPE,
       code_challenge: params.challenge,
@@ -66,14 +67,14 @@ async function requestOAuthCode(params: {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`MiniMax device authorization failed: ${text || response.statusText}`);
+    throw new Error(`MiniMax OAuth authorization failed: ${text || response.statusText}`);
   }
 
-  const payload = (await response.json()) as MiniMaxDeviceAuthorization & { error?: string };
+  const payload = (await response.json()) as MiniMaxOAuthAuthorization & { error?: string };
   if (!payload.user_code || !payload.verification_uri) {
     throw new Error(
       payload.error ??
-        "MiniMax device authorization returned an incomplete payload (missing user_code or verification_uri).",
+        "MiniMax OAuth authorization returned an incomplete payload (missing user_code or verification_uri).",
     );
   }
   if (payload.state !== params.state) {
@@ -87,7 +88,7 @@ async function requestOAuthCode(params: {
 async function pollOAuthToken(params: {
   userCode: string;
   verifier: string;
-}): Promise<DeviceTokenResult> {
+}): Promise<TokenResult> {
   const response = await fetch(MINIMAX_OAUTH_TOKEN_ENDPOINT, {
     method: "POST",
     headers: {
@@ -103,37 +104,34 @@ async function pollOAuthToken(params: {
   });
 
   if (!response.ok) {
-    let payload: { error?: string; error_description?: string } | undefined;
+    let payload: {
+      status?: string;
+      base_resp?: { status_code?: number; status_msg?: string };
+    } | undefined;
     try {
-      payload = (await response.json()) as { error?: string; error_description?: string };
+      payload = (await response.json()) as typeof payload;
     } catch {
-      const text = await response.text();
-      return { status: "error", message: text || response.statusText };
+      return { status: "error", message: response.statusText };
     }
-
-    if (payload?.error === "authorization_pending") {
-      return { status: "pending" };
-    }
-
-    if (payload?.error === "slow_down") {
-      return { status: "pending", slowDown: true };
-    }
-
     return {
       status: "error",
-      message: payload?.error_description || payload?.error || response.statusText,
+      message: payload?.base_resp?.status_msg ?? response.statusText,
     };
   }
 
   const tokenPayload = (await response.json()) as {
+    status: string;
     access_token?: string | null;
     refresh_token?: string | null;
-    expires_in?: number | null;
+    expired_in?: number | null;
     token_type?: string;
     resource_url?: string;
   };
+  if (tokenPayload.status != "success") {
+    return { status: "pending", message: "current user code is not authorized" };
+  }
 
-  if (!tokenPayload.access_token || !tokenPayload.refresh_token || !tokenPayload.expires_in) {
+  if (!tokenPayload.access_token || !tokenPayload.refresh_token || !tokenPayload.expired_in) {
     return { status: "error", message: "MiniMax OAuth returned incomplete token payload." };
   }
 
@@ -142,7 +140,7 @@ async function pollOAuthToken(params: {
     token: {
       access: tokenPayload.access_token,
       refresh: tokenPayload.refresh_token,
-      expires: Date.now() + tokenPayload.expires_in * 1000,
+      expires: Date.now() + tokenPayload.expired_in * 1000,
       resourceUrl: tokenPayload.resource_url,
     },
   };
@@ -157,13 +155,14 @@ export async function loginMiniMaxPortalOAuth(params: {
   const oauth = await requestOAuthCode({ challenge, state });
   const verificationUrl = oauth.verification_uri;
 
-  await params.note(
-    [
-      `Open ${verificationUrl} to approve access.`,
-      `If prompted, enter the code ${oauth.user_code}.`,
-    ].join("\n"),
-    "MiniMax OAuth",
-  );
+  const noteLines = [
+    `Open ${verificationUrl} to approve access.`,
+    `If prompted, enter the code ${oauth.user_code}.`,
+  ];
+  if (oauth.has_benefit && oauth.benefit_message) {
+    noteLines.push("", oauth.benefit_message);
+  }
+  await params.note(noteLines.join("\n"), "MiniMax OAuth");
 
   try {
     await params.openUrl(verificationUrl);
@@ -190,7 +189,7 @@ export async function loginMiniMaxPortalOAuth(params: {
       throw new Error(`MiniMax OAuth failed: ${result.message}`);
     }
 
-    if (result.status === "pending" && result.slowDown) {
+    if (result.status === "pending") {
       pollIntervalMs = Math.min(pollIntervalMs * 1.5, 10000);
     }
 
