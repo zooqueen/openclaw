@@ -1,11 +1,30 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-const MINIMAX_OAUTH_BASE_URL = "https://api.minimax.io";
-const MINIMAX_OAUTH_CODE_ENDPOINT = `${MINIMAX_OAUTH_BASE_URL}/oauth/code`;
-const MINIMAX_OAUTH_TOKEN_ENDPOINT = `${MINIMAX_OAUTH_BASE_URL}/oauth/token`;
-const MINIMAX_OAUTH_CLIENT_ID = "78257093-7e40-4613-99e0-527b14b39113";
+export type MiniMaxRegion = "cn" | "global";
+
+const MINIMAX_OAUTH_CONFIG = {
+  cn: {
+    baseUrl: "https://api.minimaxi.com",
+    clientId: "78257093-7e40-4613-99e0-527b14b39113",
+  },
+  global: {
+    baseUrl: "https://api.minimax.io",
+    clientId: "78257093-7e40-4613-99e0-527b14b39113",
+  },
+} as const;
+
 const MINIMAX_OAUTH_SCOPE = "group_id profile model.completion";
 const MINIMAX_OAUTH_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:user_code";
+
+function getOAuthEndpoints(region: MiniMaxRegion) {
+  const config = MINIMAX_OAUTH_CONFIG[region];
+  return {
+    codeEndpoint: `${config.baseUrl}/oauth/code`,
+    tokenEndpoint: `${config.baseUrl}/oauth/token`,
+    clientId: config.clientId,
+    baseUrl: config.baseUrl,
+  };
+}
 
 export type MiniMaxOAuthAuthorization = {
   user_code: string;
@@ -47,8 +66,10 @@ function generatePkce(): { verifier: string; challenge: string; state: string } 
 async function requestOAuthCode(params: {
   challenge: string;
   state: string;
+  region: MiniMaxRegion;
 }): Promise<MiniMaxOAuthAuthorization> {
-  const response = await fetch(MINIMAX_OAUTH_CODE_ENDPOINT, {
+  const endpoints = getOAuthEndpoints(params.region);
+  const response = await fetch(endpoints.codeEndpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -56,8 +77,8 @@ async function requestOAuthCode(params: {
       "x-request-id": randomUUID(),
     },
     body: toFormUrlEncoded({
-      response_type:"code",
-      client_id: MINIMAX_OAUTH_CLIENT_ID,
+      response_type: "code",
+      client_id: endpoints.clientId,
       scope: MINIMAX_OAUTH_SCOPE,
       code_challenge: params.challenge,
       code_challenge_method: "S256",
@@ -88,8 +109,10 @@ async function requestOAuthCode(params: {
 async function pollOAuthToken(params: {
   userCode: string;
   verifier: string;
+  region: MiniMaxRegion;
 }): Promise<TokenResult> {
-  const response = await fetch(MINIMAX_OAUTH_TOKEN_ENDPOINT, {
+  const endpoints = getOAuthEndpoints(params.region);
+  const response = await fetch(endpoints.tokenEndpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -97,7 +120,7 @@ async function pollOAuthToken(params: {
     },
     body: toFormUrlEncoded({
       grant_type: MINIMAX_OAUTH_GRANT_TYPE,
-      client_id: MINIMAX_OAUTH_CLIENT_ID,
+      client_id: endpoints.clientId,
       user_code: params.userCode,
       code_verifier: params.verifier,
     }),
@@ -150,9 +173,11 @@ export async function loginMiniMaxPortalOAuth(params: {
   openUrl: (url: string) => Promise<void>;
   note: (message: string, title?: string) => Promise<void>;
   progress: { update: (message: string) => void; stop: (message?: string) => void };
+  region?: MiniMaxRegion;
 }): Promise<MiniMaxOAuthToken> {
+  const region = params.region ?? "global";
   const { verifier, challenge, state } = generatePkce();
-  const oauth = await requestOAuthCode({ challenge, state });
+  const oauth = await requestOAuthCode({ challenge, state, region });
   const verificationUrl = oauth.verification_uri;
 
   const noteLines = [
@@ -179,6 +204,7 @@ export async function loginMiniMaxPortalOAuth(params: {
     const result = await pollOAuthToken({
       userCode: oauth.user_code,
       verifier,
+      region,
     });
 
     if (result.status === "success") {
