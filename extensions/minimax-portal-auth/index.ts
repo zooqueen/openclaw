@@ -110,7 +110,7 @@ function createOAuthHandler(region: MiniMaxRegion) {
 const minimaxPortalPlugin = {
   id: "minimax-portal-auth",
   name: "MiniMax OAuth",
-  description: "OAuth flow for MiniMax (free-tier) models",
+  description: "OAuth flow for MiniMax models",
   configSchema: emptyPluginConfigSchema(),
   register(api) {
     api.registerProvider({
@@ -129,7 +129,7 @@ const minimaxPortalPlugin = {
         {
           id: "oauth-cn",
           label: "MiniMax OAuth (CN)",
-          hint: "CN endpoint - api.minimax.chat",
+          hint: "CN endpoint - api.minimaxi.com",
           kind: "user_code",
           run: createOAuthHandler("cn"),
         },

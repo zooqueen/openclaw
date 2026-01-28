@@ -1,0 +1,11 @@
+{
+  "name": "@moltbot/minimax-portal-auth",
+  "version": "2026.1.27",
+  "type": "module",
+  "description": "Moltbot MiniMax Portal OAuth provider plugin",
+  "moltbot": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

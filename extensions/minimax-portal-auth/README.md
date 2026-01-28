@@ -1,38 +1,33 @@
-# MiniMax OAuth (Clawdbot plugin)
+# MiniMax OAuth (Moltbot plugin)
 
-OAuth provider plugin for **MiniMax** (free-tier OAuth).
+OAuth provider plugin for **MiniMax** (OAuth).
 
 ## Enable
 
 Bundled plugins are disabled by default. Enable this one:
 
 ```bash
-clawdbot plugins enable minimax-portal-auth
+moltbot plugins enable minimax-portal-auth
 ```
 
 Restart the Gateway after enabling.
 
+```bash
+moltbot gateway restart
+```
+
 ## Authenticate
 
-### Global Endpoint (global user)
-
-Uses `api.minimax.io`:
-
 ```bash
-clawdbot models auth login --provider minimax-portal --set-default
+moltbot models auth login --provider minimax-portal --set-default
 ```
 
-### China Endpoint
+You will be prompted to select an endpoint:
 
-Uses `api.minimaxi.com`:
-
-```bash
-clawdbot models auth login --provider minimax-portal --auth-id oauth-cn --set-default
-```
+- **Global** - International users, optimized for overseas access (`api.minimax.io`)
+- **China** - Optimized for users in China (`api.minimaxi.com`)
 
 ## Notes
 
 - MiniMax OAuth uses a device-code login flow.
 - Tokens auto-refresh; re-run login if refresh fails or access is revoked.
-- Global endpoint: `api.minimax.io` (default)
-- China endpoint: `api.minimax.chat` (use `--auth-id oauth-cn`)
