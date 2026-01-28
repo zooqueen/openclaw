@@ -29,10 +29,8 @@ function getOAuthEndpoints(region: MiniMaxRegion) {
 export type MiniMaxOAuthAuthorization = {
   user_code: string;
   verification_uri: string;
-  expires_in: number;
+  expired_in: number;
   interval?: number;
-  has_benefit: boolean;
-  benefit_message: string;
   state: string;
 };
 
@@ -41,6 +39,7 @@ export type MiniMaxOAuthToken = {
   refresh: string;
   expires: number;
   resourceUrl?: string;
+  notification_message?: string;
 };
 
 type TokenPending = { status: "pending"; message?: string };
@@ -127,6 +126,7 @@ async function pollOAuthToken(params: {
   });
 
   if (!response.ok) {
+    const text = await response.text();
     let payload: {
       status?: string;
       base_resp?: { status_code?: number; status_msg?: string };
@@ -134,11 +134,11 @@ async function pollOAuthToken(params: {
     try {
       payload = (await response.json()) as typeof payload;
     } catch {
-      return { status: "error", message: response.statusText };
+      return { status: "error", message: text || "MiniMax OAuth failed to parse response.",};
     }
     return {
       status: "error",
-      message: payload?.base_resp?.status_msg ?? response.statusText,
+      message: text || "MiniMax OAuth failed to parse response.",
     };
   }
 
@@ -149,7 +149,13 @@ async function pollOAuthToken(params: {
     expired_in?: number | null;
     token_type?: string;
     resource_url?: string;
+    notification_message?: string;
   };
+
+  if (tokenPayload.status === "error") {
+    return { status: "error", message: "An error occurred. Please try again later"};
+  }
+  
   if (tokenPayload.status != "success") {
     return { status: "pending", message: "current user code is not authorized" };
   }
@@ -163,8 +169,9 @@ async function pollOAuthToken(params: {
     token: {
       access: tokenPayload.access_token,
       refresh: tokenPayload.refresh_token,
-      expires: Date.now() + tokenPayload.expired_in * 1000,
+      expires: tokenPayload.expired_in,
       resourceUrl: tokenPayload.resource_url,
+      notification_message: tokenPayload.notification_message,
     },
   };
 }
@@ -183,10 +190,8 @@ export async function loginMiniMaxPortalOAuth(params: {
   const noteLines = [
     `Open ${verificationUrl} to approve access.`,
     `If prompted, enter the code ${oauth.user_code}.`,
+    `Interval: ${oauth.interval ?? "default (2000ms)"}, Expires in: ${oauth.expired_in}ms`,
   ];
-  if (oauth.has_benefit && oauth.benefit_message) {
-    noteLines.push("", oauth.benefit_message);
-  }
   await params.note(noteLines.join("\n"), "MiniMax OAuth");
 
   try {
@@ -195,17 +200,26 @@ export async function loginMiniMaxPortalOAuth(params: {
     // Fall back to manual copy/paste if browser open fails.
   }
 
-  const start = Date.now();
-  let pollIntervalMs = oauth.interval ? oauth.interval * 1000 : 2000;
-  const timeoutMs = oauth.expires_in * 1000;
+  let pollIntervalMs = oauth.interval ? oauth.interval : 2000;
+  const expireTimeMs = oauth.expired_in;
 
-  while (Date.now() - start < timeoutMs) {
+
+  while (Date.now() < expireTimeMs) {
     params.progress.update("Waiting for MiniMax OAuth approval…");
     const result = await pollOAuthToken({
       userCode: oauth.user_code,
       verifier,
       region,
     });
+
+    // // Debug: print poll result
+    // await params.note(
+    //   `status: ${result.status}` +
+    //     (result.status === "success" ? `\ntoken: ${JSON.stringify(result.token, null, 2)}` : "") +
+    //     (result.status === "error" ? `\nmessage: ${result.message}` : "") +
+    //     (result.status === "pending" && result.message ? `\nmessage: ${result.message}` : ""),
+    //   "MiniMax OAuth Poll Result",
+    // );
 
     if (result.status === "success") {
       return result.token;

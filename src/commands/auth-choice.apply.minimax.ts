@@ -31,11 +31,20 @@ export async function applyAuthChoiceMiniMax(
     );
   };
   if (params.authChoice === "minimax-portal") {
+    // Let user choose between Global/CN endpoints
+    const endpoint = await params.prompter.select({
+      message: "Select MiniMax endpoint",
+      options: [
+        { value: "oauth", label: "Global", hint: "OAuth for international users" },
+        { value: "oauth-cn", label: "CN", hint: "OAuth for users in China" },
+      ],
+    });
+
     return await applyAuthChoicePluginProvider(params, {
       authChoice: "minimax-portal",
       pluginId: "minimax-portal-auth",
       providerId: "minimax-portal",
-      methodId: "device",
+      methodId: endpoint as string,
       label: "MiniMax",
     });
   }

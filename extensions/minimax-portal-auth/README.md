@@ -29,5 +29,5 @@ You will be prompted to select an endpoint:
 
 ## Notes
 
-- MiniMax OAuth uses a device-code login flow.
-- Tokens auto-refresh; re-run login if refresh fails or access is revoked.
+- MiniMax OAuth uses a user-code login flow.
+- Currently, OAuth login is supported only for the Coding plan

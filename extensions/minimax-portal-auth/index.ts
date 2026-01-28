@@ -44,6 +44,10 @@ function createOAuthHandler(region: MiniMaxRegion) {
 
       progress.stop("MiniMax OAuth complete");
 
+      if (result.notification_message) {
+        await ctx.prompter.note(result.notification_message, "MiniMax OAuth");
+      }
+
       const profileId = `${PROVIDER_ID}:default`;
       const baseUrl = result.resourceUrl || defaultBaseUrl;
 
@@ -85,7 +89,8 @@ function createOAuthHandler(region: MiniMaxRegion) {
           agents: {
             defaults: {
               models: {
-                "MiniMax-M2.1": { alias: "minimax" },
+                "MiniMax-M2.1": { alias: "minimax-m2.1" },
+                "MiniMax-M2.1-lightning": { alias: "minimax-m2.1-lightning" },
               },
             },
           },
@@ -94,10 +99,12 @@ function createOAuthHandler(region: MiniMaxRegion) {
         notes: [
           "MiniMax OAuth tokens auto-refresh. Re-run login if refresh fails or access is revoked.",
           `Base URL defaults to ${defaultBaseUrl}. Override models.providers.${PROVIDER_ID}.baseUrl if needed.`,
+          ...(result.notification_message ? [result.notification_message] : []),
         ],
       };
     } catch (err) {
-      progress.stop("MiniMax OAuth failed");
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      progress.stop(`MiniMax OAuth failed: ${errorMsg}`);
       await ctx.prompter.note(
         "If OAuth fails, verify your MiniMax account has portal access and try again.",
         "MiniMax OAuth",
