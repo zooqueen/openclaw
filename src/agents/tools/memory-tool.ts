@@ -1,7 +1,9 @@
 import { Type } from "@sinclair/typebox";
 
 import type { OpenClawConfig } from "../../config/config.js";
+import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import { getMemorySearchManager } from "../../memory/index.js";
+import type { MemorySearchResult } from "../../memory/types.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveMemorySearchConfig } from "../memory-search.js";
 import type { AnyAgentTool } from "./common.js";
@@ -52,17 +54,21 @@ export function createMemorySearchTool(options: {
         return jsonResult({ results: [], disabled: true, error });
       }
       try {
-        const results = await manager.search(query, {
+        const citationsMode = resolveMemoryCitationsMode(cfg);
+        const includeCitations = citationsMode !== "off";
+        const rawResults = await manager.search(query, {
           maxResults,
           minScore,
           sessionKey: options.agentSessionKey,
         });
         const status = manager.status();
+        const results = decorateCitations(rawResults, includeCitations);
         return jsonResult({
           results,
           provider: status.provider,
           model: status.model,
           fallback: status.fallback,
+          citations: citationsMode,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -117,4 +123,29 @@ export function createMemoryGetTool(options: {
       }
     },
   };
+}
+
+function resolveMemoryCitationsMode(cfg: OpenClawConfig): MemoryCitationsMode {
+  const mode = cfg.memory?.citations;
+  if (mode === "on" || mode === "off" || mode === "auto") return mode;
+  return "auto";
+}
+
+function decorateCitations(results: MemorySearchResult[], include: boolean): MemorySearchResult[] {
+  if (!include) {
+    return results.map((entry) => ({ ...entry, citation: undefined }));
+  }
+  return results.map((entry) => {
+    const citation = formatCitation(entry);
+    const snippet = `${entry.snippet.trim()}\n\nSource: ${citation}`;
+    return { ...entry, citation, snippet };
+  });
+}
+
+function formatCitation(entry: MemorySearchResult): string {
+  const lineRange =
+    entry.startLine === entry.endLine
+      ? `#L${entry.startLine}`
+      : `#L${entry.startLine}-L${entry.endLine}`;
+  return `${entry.path}${lineRange}`;
 }

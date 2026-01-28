@@ -46,17 +46,13 @@ import { searchKeyword, searchVector } from "./manager-search.js";
 import { ensureMemoryIndexSchema } from "./memory-schema.js";
 import { requireNodeSqlite } from "./sqlite.js";
 import { loadSqliteVecExtension } from "./sqlite-vec.js";
-
-type MemorySource = "memory" | "sessions";
-
-export type MemorySearchResult = {
-  path: string;
-  startLine: number;
-  endLine: number;
-  score: number;
-  snippet: string;
-  source: MemorySource;
-};
+import type {
+  MemoryProviderStatus,
+  MemorySearchManager,
+  MemorySearchResult,
+  MemorySource,
+  MemorySyncProgressUpdate,
+} from "./types.js";
 
 type MemoryIndexMeta = {
   model: string;
@@ -74,12 +70,6 @@ type SessionFileEntry = {
   size: number;
   hash: string;
   content: string;
-};
-
-type MemorySyncProgressUpdate = {
-  completed: number;
-  total: number;
-  label?: string;
 };
 
 type MemorySyncProgressState = {
@@ -116,7 +106,7 @@ const INDEX_CACHE = new Map<string, MemoryIndexManager>();
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
 
-export class MemoryIndexManager {
+export class MemoryIndexManager implements MemorySearchManager {
   private readonly cacheKey: string;
   private readonly cfg: OpenClawConfig;
   private readonly agentId: string;
@@ -473,40 +463,7 @@ export class MemoryIndexManager {
     return { text: slice.join("\n"), path: relPath };
   }
 
-  status(): {
-    files: number;
-    chunks: number;
-    dirty: boolean;
-    workspaceDir: string;
-    dbPath: string;
-    provider: string;
-    model: string;
-    requestedProvider: string;
-    sources: MemorySource[];
-    extraPaths: string[];
-    sourceCounts: Array<{ source: MemorySource; files: number; chunks: number }>;
-    cache?: { enabled: boolean; entries?: number; maxEntries?: number };
-    fts?: { enabled: boolean; available: boolean; error?: string };
-    fallback?: { from: string; reason?: string };
-    vector?: {
-      enabled: boolean;
-      available?: boolean;
-      extensionPath?: string;
-      loadError?: string;
-      dims?: number;
-    };
-    batch?: {
-      enabled: boolean;
-      failures: number;
-      limit: number;
-      wait: boolean;
-      concurrency: number;
-      pollIntervalMs: number;
-      timeoutMs: number;
-      lastError?: string;
-      lastProvider?: string;
-    };
-  } {
+  status(): MemoryProviderStatus {
     const sourceFilter = this.buildSourceFilter();
     const files = this.db
       .prepare(`SELECT COUNT(*) as c FROM files WHERE 1=1${sourceFilter.sql}`)
@@ -550,9 +507,10 @@ export class MemoryIndexManager {
       return sources.map((source) => Object.assign({ source }, bySource.get(source)!));
     })();
     return {
+      backend: "builtin",
       files: files?.c ?? 0,
       chunks: chunks?.c ?? 0,
-      dirty: this.dirty,
+      dirty: this.dirty || this.sessionsDirty,
       workspaceDir: this.workspaceDir,
       dbPath: this.settings.store.path,
       provider: this.provider.id,

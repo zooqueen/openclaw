@@ -13,6 +13,8 @@ Status: stable.
 - Gateway: warn on hook tokens via query params; document header auth preference. (#2200) Thanks @YuriNachos.
 - Gateway: add dangerous Control UI device auth bypass flag + audit warnings. (#2248)
 - Doctor: warn on gateway exposure without auth. (#2016) Thanks @Alex-Alaniz.
+- Memory: add optional QMD-backed memory backend with fallbacks to the existing Markdown index. Thanks @vgnsh.
+- Memory: export session transcripts into QMD when enabled; honor `memory.citations` when formatting snippets.
 - Web UI: keep sub-agent announce replies visible in WebChat. (#1977) Thanks @andrescardonas7.
 - Browser: route browser control via gateway/node; remove standalone browser control command and control URL config.
 - Browser: route `browser.request` via node proxies when available; honor proxy timeouts; derive browser ports from `gateway.port`.
