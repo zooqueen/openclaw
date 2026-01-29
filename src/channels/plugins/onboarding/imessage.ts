@@ -86,6 +86,7 @@ async function promptIMessageAllowFrom(params: {
   const existing = resolved.config.allowFrom ?? [];
   await params.prompter.note(
     [
+      "Legacy iMessage integration via imsg (deprecated). New setups: use BlueBubbles.",
       "Allowlist iMessage DMs by handle or chat target.",
       "Examples:",
       "- +15555550123",
@@ -93,7 +94,7 @@ async function promptIMessageAllowFrom(params: {
       "- chat_id:123",
       "- chat_guid:... or chat_identifier:...",
       "Multiple entries: comma-separated.",
-      `Docs: ${formatDocsLink("/imessage", "imessage")}`,
+      `Docs: ${formatDocsLink("/channels/imessage", "imessage")}`,
     ].join("\n"),
     "iMessage allowlist",
   );
@@ -239,11 +240,13 @@ export const imessageOnboardingAdapter: ChannelOnboardingAdapter = {
 
     await prompter.note(
       [
-        "This is still a work in progress.",
+        "Legacy iMessage integration via imsg (deprecated).",
+        "New setups: use BlueBubbles instead.",
         "Ensure Moltbot has Full Disk Access to Messages DB.",
         "Grant Automation permission for Messages when prompted.",
         "List chats with: imsg chats --limit 20",
-        `Docs: ${formatDocsLink("/imessage", "imessage")}`,
+        `Docs (legacy): ${formatDocsLink("/channels/imessage", "imessage")}`,
+        `Docs (recommended): ${formatDocsLink("/channels/bluebubbles", "bluebubbles")}`,
       ].join("\n"),
       "iMessage next steps",
     );

@@ -1313,7 +1313,9 @@ Reaction notification modes:
 - `all`: all reactions on all messages.
 - `allowlist`: reactions from `channels.signal.reactionAllowlist` on all messages (empty list disables).
 
-### `channels.imessage` (imsg CLI)
+### `channels.imessage` (legacy: imsg CLI)
+
+**Deprecated for new setups.** Prefer **iMessage (BlueBubbles)**: [/channels/bluebubbles](/channels/bluebubbles).
 
 Moltbot spawns `imsg rpc` (JSON-RPC over stdio). No daemon or port required.
 

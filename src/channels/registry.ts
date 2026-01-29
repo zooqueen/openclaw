@@ -91,11 +91,11 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
   imessage: {
     id: "imessage",
     label: "iMessage",
-    selectionLabel: "iMessage (imsg)",
-    detailLabel: "iMessage",
+    selectionLabel: "iMessage (legacy: imsg)",
+    detailLabel: "iMessage (legacy)",
     docsPath: "/channels/imessage",
     docsLabel: "imessage",
-    blurb: "this is still a work in progress.",
+    blurb: "legacy iMessage integration via imsg CLI (deprecated; prefer BlueBubbles).",
     systemImage: "message.fill",
   },
 };

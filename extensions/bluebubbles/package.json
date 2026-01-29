@@ -9,12 +9,12 @@
     ],
     "channel": {
       "id": "bluebubbles",
-      "label": "BlueBubbles",
-      "selectionLabel": "BlueBubbles (macOS app)",
-      "detailLabel": "BlueBubbles",
+      "label": "iMessage (BlueBubbles)",
+      "selectionLabel": "iMessage (BlueBubbles \u2014 recommended)",
+      "detailLabel": "iMessage (BlueBubbles)",
       "docsPath": "/channels/bluebubbles",
       "docsLabel": "bluebubbles",
-      "blurb": "iMessage via the BlueBubbles mac app + REST API.",
+      "blurb": "recommended iMessage integration via the BlueBubbles macOS server + REST API.",
       "aliases": [
         "bb"
       ],
@@ -22,7 +22,10 @@
         "imessage"
       ],
       "systemImage": "bubble.left.and.text.bubble.right",
-      "order": 75
+      "order": 75,
+      "selectionExtras": [
+        "https://bluebubbles.app"
+      ]
     },
     "install": {
       "npmSpec": "@moltbot/bluebubbles",

@@ -1,11 +1,13 @@
 ---
 name: imsg
-description: iMessage/SMS CLI for listing chats, history, watch, and sending.
+description: (Deprecated) iMessage/SMS via imsg CLI (legacy). Use BlueBubbles for new setups.
 homepage: https://imsg.to
 metadata: {"moltbot":{"emoji":"📨","os":["darwin"],"requires":{"bins":["imsg"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/imsg","bins":["imsg"],"label":"Install imsg (brew)"}]}}
 ---
 
-# imsg
+# imsg (legacy)
+
+**Deprecated for new setups.** Prefer **iMessage (BlueBubbles)** for the Moltbot iMessage integration.
 
 Use `imsg` to read and send Messages.app iMessage/SMS on macOS.
 

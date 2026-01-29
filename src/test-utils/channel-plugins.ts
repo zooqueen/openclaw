@@ -31,7 +31,7 @@ export const createIMessageTestPlugin = (params?: {
   meta: {
     id: "imessage",
     label: "iMessage",
-    selectionLabel: "iMessage (imsg)",
+    selectionLabel: "iMessage (legacy: imsg)",
     docsPath: "/channels/imessage",
     blurb: "iMessage test stub.",
     aliases: ["imsg"],

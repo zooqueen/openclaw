@@ -1,11 +1,12 @@
 ---
-summary: "iMessage support via imsg (JSON-RPC over stdio), setup, and chat_id routing"
+summary: "Legacy iMessage support via imsg (JSON-RPC over stdio). Deprecated for new setups; prefer BlueBubbles."
 read_when:
   - Setting up iMessage support
   - Debugging iMessage send/receive
 ---
-# iMessage (imsg)
+# iMessage (legacy: imsg)
 
+> **Deprecated for new setups.** Prefer **[iMessage (BlueBubbles)](/channels/bluebubbles)**.
 
 Status: external CLI integration. Gateway spawns `imsg rpc` (JSON-RPC over stdio).
 

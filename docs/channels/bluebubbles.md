@@ -5,9 +5,9 @@ read_when:
   - Troubleshooting webhook pairing
   - Configuring iMessage on macOS
 ---
-# BlueBubbles (macOS REST)
+# iMessage (BlueBubbles)
 
-Status: bundled plugin that talks to the BlueBubbles macOS server over HTTP. **Recommended for iMessage integration** due to its richer API and easier setup compared to the legacy imsg channel.
+Status: bundled plugin that talks to the BlueBubbles macOS server over HTTP. **Recommended iMessage integration** due to its richer API and easier setup compared to the legacy imsg channel.
 
 ## Overview
 - Runs on macOS via the BlueBubbles helper app ([bluebubbles.app](https://bluebubbles.app)).
@@ -37,6 +37,74 @@ Status: bundled plugin that talks to the BlueBubbles macOS server over HTTP. **R
    ```
 4. Point BlueBubbles webhooks to your gateway (example: `https://your-gateway-host:3000/bluebubbles-webhook?password=<password>`).
 5. Start the gateway; it will register the webhook handler and start pairing.
+
+## Keep BlueBubbles running (recommended)
+
+If the BlueBubbles Server app quits or the Mac sleeps, iMessage delivery, webhooks, and advanced actions will stop.
+
+### Prevent sleep
+On macOS (especially VMs), ensure the machine stays awake:
+- One-time: `caffeinate -dims`
+- Permanent: configure your VM/host power settings (or a LaunchAgent that runs `caffeinate`).
+
+### launchd keepalive (re-open BlueBubbles every 5 minutes)
+This LaunchAgent periodically re-opens BlueBubbles + Messages in the background.
+
+1) Create a script at `~/.clawdbot/scripts/keepalive-bluebubbles.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# App names vary across builds; try both.
+open -gj -a "BlueBubbles" || open -gj -a "BlueBubbles Server" || true
+open -gj -a "Messages" || true
+```
+
+2) Make it executable:
+
+```bash
+chmod +x ~/.clawdbot/scripts/keepalive-bluebubbles.sh
+```
+
+3) Create a LaunchAgent at `~/Library/LaunchAgents/com.moltbot.bluebubbles.keepalive.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.moltbot.bluebubbles.keepalive</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>-lc</string>
+      <string>~/.clawdbot/scripts/keepalive-bluebubbles.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- IMPORTANT: 300 seconds (5 minutes), not 600 -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/com.moltbot.bluebubbles.keepalive.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/com.moltbot.bluebubbles.keepalive.err</string>
+  </dict>
+</plist>
+```
+
+4) Load it:
+
+```bash
+launchctl load -w ~/Library/LaunchAgents/com.moltbot.bluebubbles.keepalive.plist
+launchctl list | rg bluebubbles
+```
 
 ## Onboarding
 BlueBubbles is available in the interactive setup wizard:

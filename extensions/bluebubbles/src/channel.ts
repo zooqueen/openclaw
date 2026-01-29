@@ -38,14 +38,15 @@ import { sendBlueBubblesMedia } from "./media-send.js";
 
 const meta = {
   id: "bluebubbles",
-  label: "BlueBubbles",
-  selectionLabel: "BlueBubbles (macOS app)",
-  detailLabel: "BlueBubbles",
+  label: "iMessage (BlueBubbles)",
+  selectionLabel: "iMessage (BlueBubbles — recommended)",
+  detailLabel: "iMessage (BlueBubbles)",
   docsPath: "/channels/bluebubbles",
   docsLabel: "bluebubbles",
-  blurb: "iMessage via the BlueBubbles mac app + REST API.",
+  blurb: "recommended iMessage integration via the BlueBubbles macOS server + REST API.",
   systemImage: "bubble.left.and.text.bubble.right",
   aliases: ["bb"],
+  selectionExtras: ["https://bluebubbles.app"],
   order: 75,
   preferOver: ["imessage"],
 };

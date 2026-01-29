@@ -385,6 +385,41 @@ export async function setupChannels(
       };
     });
 
+  const reorderEntriesByPreferOver = <T extends { id: ChannelChoice; meta: ChannelMeta }>(
+    entries: T[],
+  ): T[] => {
+    const resolved = [...entries];
+    // Prefer-over ordering is a lightweight partial ordering used to make recommended
+    // providers show up before legacy ones (for example BlueBubbles over imessage).
+    for (let pass = 0; pass < 25; pass += 1) {
+      const indexById = new Map<string, number>();
+      for (let i = 0; i < resolved.length; i += 1) {
+        indexById.set(String(resolved[i]?.meta?.id ?? resolved[i]?.id), i);
+      }
+      let changed = false;
+      for (const entry of resolved) {
+        const preferOver = entry.meta.preferOver ?? [];
+        if (!Array.isArray(preferOver) || preferOver.length === 0) continue;
+        const entryKey = String(entry.meta.id ?? entry.id);
+        const entryIndex = indexById.get(entryKey);
+        if (entryIndex === undefined) continue;
+        for (const otherId of preferOver) {
+          const otherKey = String(otherId);
+          const otherIndex = indexById.get(otherKey);
+          if (otherIndex === undefined) continue;
+          if (entryIndex > otherIndex) {
+            resolved.splice(entryIndex, 1);
+            resolved.splice(otherIndex, 0, entry);
+            changed = true;
+            break;
+          }
+        }
+        if (changed) break;
+      }
+      if (!changed) break;
+    }
+    return resolved;
+  };
   const getChannelEntries = () => {
     const core = listChatChannels();
     const installed = listChannelPlugins();
@@ -405,10 +440,12 @@ export async function setupChannels(
         metaById.set(entry.id, entry.meta);
       }
     }
-    const entries = Array.from(metaById, ([id, meta]) => ({
-      id: id as ChannelChoice,
-      meta,
-    }));
+    const entries = reorderEntriesByPreferOver(
+      Array.from(metaById, ([id, meta]) => ({
+        id: id as ChannelChoice,
+        meta,
+      })),
+    );
     return {
       entries,
       catalog,

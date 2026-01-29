@@ -11,9 +11,13 @@ It does not define which tools exist; Moltbot provides built-in tools internally
 
 ## Examples
 
-### imsg
-- Send an iMessage/SMS: describe who/what, confirm before sending.
-- Prefer short messages; avoid sending secrets.
+### iMessage (BlueBubbles)
+- Preferred iMessage integration. Confirm before sending.
+- If you need history/search: use the BlueBubbles REST API (chat/query, message/query).
+
+### imsg (legacy)
+- Legacy iMessage/SMS integration on macOS. Deprecated for new setups.
+- Confirm before sending; avoid sending secrets.
 
 ### sag
 - Text-to-speech: specify voice, target speaker/room, and whether to stream.

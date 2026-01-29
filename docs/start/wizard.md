@@ -123,7 +123,7 @@ Tip: `--json` does **not** imply non-interactive mode. Use `--non-interactive` (
   - Google Chat: service account JSON + webhook audience.
   - Mattermost (plugin): bot token + base URL.
    - Signal: optional `signal-cli` install + account config.
-   - iMessage: local `imsg` CLI path + DB access.
+   - iMessage: BlueBubbles server URL + password (recommended) or legacy local `imsg` CLI path + DB access.
   - DM security: default is pairing. First DM sends a code; approve via `moltbot pairing approve <channel> <code>` or use allowlists.
 
 6) **Daemon install**

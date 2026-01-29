@@ -89,7 +89,8 @@ git commit -m "Add Clawd workspace"
 - **camsnap** — Capture frames, clips, or motion alerts from RTSP/ONVIF security cams.
 - **oracle** — OpenAI-ready agent CLI with session replay and browser control.
 - **eightctl** — Control your sleep, from the terminal.
-- **imsg** — Send, read, stream iMessage & SMS.
+- **imessage-bluebubbles** — iMessage via BlueBubbles (recommended): history/search/send/attachments.
+- **imsg** — (legacy) Send, read, stream iMessage & SMS via imsg CLI.
 - **wacli** — WhatsApp CLI: sync, search, send.
 - **discord** — Discord actions: react, stickers, polls. Use `user:<id>` or `channel:<id>` targets (bare numeric ids are ambiguous).
 - **gog** — Google Suite CLI: Gmail, Calendar, Drive, Contacts.
