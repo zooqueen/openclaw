@@ -171,6 +171,7 @@ export function buildAuthChoiceOptions(params: {
     hint: "Uses the bundled Gemini CLI auth plugin",
   });
   options.push({ value: "zai-api-key", label: "Z.AI (GLM 4.7) API key" });
+<<<<<<< HEAD
   options.push({
     value: "xiaomi-api-key",
     label: "Xiaomi API key",

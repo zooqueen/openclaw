@@ -9,10 +9,14 @@ const DEFAULT_BASE_URL_CN = "https://api.minimaxi.com/anthropic";
 const DEFAULT_BASE_URL_GLOBAL = "https://api.minimax.io/anthropic";
 const DEFAULT_CONTEXT_WINDOW = 200000;
 const DEFAULT_MAX_TOKENS = 8192;
-const OAUTH_PLACEHOLDER = "minimax-portal-oauth";
+const OAUTH_PLACEHOLDER = "minimax-oauth";
 
 function getDefaultBaseUrl(region: MiniMaxRegion): string {
   return region === "cn" ? DEFAULT_BASE_URL_CN : DEFAULT_BASE_URL_GLOBAL;
+}
+
+function modelRef(modelId: string): string {
+  return `${PROVIDER_ID}/${modelId}`;
 }
 
 function buildModelDefinition(params: { id: string; name: string; input: Array<"text" | "image"> }) {
@@ -89,13 +93,13 @@ function createOAuthHandler(region: MiniMaxRegion) {
           agents: {
             defaults: {
               models: {
-                "MiniMax-M2.1": { alias: "minimax-m2.1" },
-                "MiniMax-M2.1-lightning": { alias: "minimax-m2.1-lightning" },
+                [modelRef("MiniMax-M2.1")]: { alias: "minimax-m2.1" },
+                [modelRef("MiniMax-M2.1-lightning")]: { alias: "minimax-m2.1-lightning" },
               },
             },
           },
         },
-        defaultModel: DEFAULT_MODEL,
+        defaultModel: modelRef(DEFAULT_MODEL),
         notes: [
           "MiniMax OAuth tokens auto-refresh. Re-run login if refresh fails or access is revoked.",
           `Base URL defaults to ${defaultBaseUrl}. Override models.providers.${PROVIDER_ID}.baseUrl if needed.`,
