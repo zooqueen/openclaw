@@ -14,7 +14,7 @@ const log = createSubsystemLogger("agents/auth-profiles");
 const CLAUDE_CLI_CREDENTIALS_RELATIVE_PATH = ".claude/.credentials.json";
 const CODEX_CLI_AUTH_FILENAME = "auth.json";
 const QWEN_CLI_CREDENTIALS_RELATIVE_PATH = ".qwen/oauth_creds.json";
-const MINIMax_CLI_CREDENTIALS_RELATIVE_PATH = ".minimax/oauth_creds.json";
+const MINIMAX_CLI_CREDENTIALS_RELATIVE_PATH = ".minimax/oauth_creds.json";
 
 const CLAUDE_CLI_KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CLAUDE_CLI_KEYCHAIN_ACCOUNT = "Claude Code";
@@ -115,7 +115,7 @@ function resolveQwenCliCredentialsPath(homeDir?: string) {
 
 function resolveMiniMaxCliCredentialsPath(homeDir?: string) {
   const baseDir = homeDir ?? resolveUserPath("~");
-  return path.join(baseDir, MINIMax_CLI_CREDENTIALS_RELATIVE_PATH);
+  return path.join(baseDir, MINIMAX_CLI_CREDENTIALS_RELATIVE_PATH);
 }
 
 function computeCodexKeychainAccount(codexHome: string) {
