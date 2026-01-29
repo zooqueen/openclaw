@@ -42,8 +42,8 @@ MiniMax highlights these improvements in M2.1:
 Enable the bundled OAuth plugin and authenticate:
 
 ```bash
-moltbot plugins enable minimax-portal-auth
-moltbot gateway restart
+moltbot plugins enable minimax-portal-auth  # skip if already enabled
+moltbot gateway restart  # restart if gateway is already running
 moltbot onboard --auth-choice minimax-portal
 ```
 You will be prompted to select an endpoint:
