@@ -264,7 +264,7 @@ type BlueBubblesDebounceEntry = {
  * This helps combine URL text + link preview balloon messages that BlueBubbles
  * sends as separate webhook events when no explicit inbound debounce config exists.
  */
-const DEFAULT_INBOUND_DEBOUNCE_MS = 350;
+const DEFAULT_INBOUND_DEBOUNCE_MS = 500;
 
 /**
  * Combines multiple debounced messages into a single message for processing.
@@ -363,12 +363,23 @@ function getOrCreateDebouncer(target: WebhookTarget) {
     debounceMs: resolveBlueBubblesDebounceMs(config, core),
     buildKey: (entry) => {
       const msg = entry.message;
-      // When messageId is available, use it as the key to coalesce rapid-fire webhook
-      // events for the same message (e.g., text-only then text+attachment).
-      // Otherwise fall back to chat + sender for URL balloon coalescing.
-      if (msg.messageId?.trim()) {
-        return `bluebubbles:${account.accountId}:msg:${msg.messageId}`;
+      // Prefer stable, shared identifiers to coalesce rapid-fire webhook events for the
+      // same message (e.g., text-only then text+attachment).
+      //
+      // For balloons (URL previews, stickers, etc), BlueBubbles often uses a different
+      // messageId than the originating text. When present, key by associatedMessageGuid
+      // to keep text + balloon coalescing working.
+      const balloonBundleId = msg.balloonBundleId?.trim();
+      const associatedMessageGuid = msg.associatedMessageGuid?.trim();
+      if (balloonBundleId && associatedMessageGuid) {
+        return `bluebubbles:${account.accountId}:balloon:${associatedMessageGuid}`;
       }
+
+      const messageId = msg.messageId?.trim();
+      if (messageId) {
+        return `bluebubbles:${account.accountId}:msg:${messageId}`;
+      }
+
       const chatKey =
         msg.chatGuid?.trim() ??
         msg.chatIdentifier?.trim() ??
