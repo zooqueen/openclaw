@@ -31,8 +31,12 @@ function shallowEqualOAuthCredentials(a: OAuthCredential | undefined, b: OAuthCr
 }
 
 function isExternalProfileFresh(cred: AuthProfileCredential | undefined, now: number): boolean {
-  if (!cred) return false;
-  if (cred.type !== "oauth" && cred.type !== "token") return false;
+  if (!cred) {
+    return false;
+  }
+  if (cred.type !== "oauth" && cred.type !== "token") {
+    return false;
+  }
   if (cred.provider !== "qwen-portal" && cred.provider !== "minimax-portal") {
     return false;
   }
@@ -54,7 +58,9 @@ function syncExternalCliCredentialsForProvider(
   const shouldSync =
     !existing || existing.provider !== provider || !isExternalProfileFresh(existing, now);
   const creds = shouldSync ? readCredentials() : null;
-  if (!creds) return false;
+  if (!creds) {
+    return false;
+  }
 
   const existingOAuth = existing?.type === "oauth" ? existing : undefined;
   const shouldUpdate =

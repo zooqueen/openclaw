@@ -125,24 +125,36 @@ async function pollOAuthToken(params: {
     }),
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    let payload: {
-      status?: string;
-      base_resp?: { status_code?: number; status_msg?: string };
-    } | undefined;
+  const text = await response.text();
+  let payload:
+    | {
+        status?: string;
+        base_resp?: { status_code?: number; status_msg?: string };
+      }
+    | undefined;
+  if (text) {
     try {
-      payload = (await response.json()) as typeof payload;
+      payload = JSON.parse(text) as typeof payload;
     } catch {
-      return { status: "error", message: text || "MiniMax OAuth failed to parse response.",};
+      payload = undefined;
     }
+  }
+
+  if (!response.ok) {
     return {
       status: "error",
-      message: text || "MiniMax OAuth failed to parse response.",
+      message:
+        payload?.base_resp?.status_msg ??
+        text ||
+        "MiniMax OAuth failed to parse response.",
     };
   }
 
-  const tokenPayload = (await response.json()) as {
+  if (!payload) {
+    return { status: "error", message: "MiniMax OAuth failed to parse response." };
+  }
+
+  const tokenPayload = payload as {
     status: string;
     access_token?: string | null;
     refresh_token?: string | null;

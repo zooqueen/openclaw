@@ -1,4 +1,4 @@
-# MiniMax OAuth (Moltbot plugin)
+# MiniMax OAuth (OpenClaw plugin)
 
 OAuth provider plugin for **MiniMax** (OAuth).
 
@@ -7,19 +7,19 @@ OAuth provider plugin for **MiniMax** (OAuth).
 Bundled plugins are disabled by default. Enable this one:
 
 ```bash
-moltbot plugins enable minimax-portal-auth
+openclaw plugins enable minimax-portal-auth
 ```
 
 Restart the Gateway after enabling.
 
 ```bash
-moltbot gateway restart
+openclaw gateway restart
 ```
 
 ## Authenticate
 
 ```bash
-moltbot models auth login --provider minimax-portal --set-default
+openclaw models auth login --provider minimax-portal --set-default
 ```
 
 You will be prompted to select an endpoint:

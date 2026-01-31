@@ -44,7 +44,7 @@ export async function applyAuthChoiceMiniMax(
       authChoice: "minimax-portal",
       pluginId: "minimax-portal-auth",
       providerId: "minimax-portal",
-      methodId: endpoint as string,
+      methodId: endpoint,
       label: "MiniMax",
     });
   }

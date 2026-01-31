@@ -219,15 +219,23 @@ function readQwenCliCredentials(options?: { homeDir?: string }): QwenCliCredenti
 function readMiniMaxCliCredentials(options?: { homeDir?: string }): MiniMaxCliCredential | null {
   const credPath = resolveMiniMaxCliCredentialsPath(options?.homeDir);
   const raw = loadJsonFile(credPath);
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
   const data = raw as Record<string, unknown>;
   const accessToken = data.access_token;
   const refreshToken = data.refresh_token;
   const expiresAt = data.expiry_date;
 
-  if (typeof accessToken !== "string" || !accessToken) return null;
-  if (typeof refreshToken !== "string" || !refreshToken) return null;
-  if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) return null;
+  if (typeof accessToken !== "string" || !accessToken) {
+    return null;
+  }
+  if (typeof refreshToken !== "string" || !refreshToken) {
+    return null;
+  }
+  if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) {
+    return null;
+  }
 
   return {
     type: "oauth",
