@@ -1,6 +1,12 @@
 import { formatCliCommand } from "../../cli/command-format.js";
+import type { SessionEntry } from "../../config/sessions.js";
+import {
+  resolveExecPolicyForMode,
+  type ExecMode,
+} from "../../infra/exec-approvals.js";
 import { SYSTEM_MARK, prefixSystemMessage } from "../../infra/system-message.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
+import type { InlineDirectives } from "./directive-handling.parse.js";
 import type { ElevatedLevel, ReasoningLevel } from "./directives.js";
 
 export const formatDirectiveAck = (text: string): string => {
@@ -40,6 +46,44 @@ function canPersistInternalDirective(params: {
 
 export const canPersistInternalExecDirective = canPersistInternalDirective;
 export const canPersistInternalVerboseDirective = canPersistInternalDirective;
+
+export function applyExecDirectivePersistence(params: {
+  sessionEntry: Pick<
+    SessionEntry,
+    "execHost" | "execMode" | "execSecurity" | "execAsk" | "execNode"
+  >;
+  directives: Pick<
+    InlineDirectives,
+    "execHost" | "execMode" | "execSecurity" | "execAsk" | "execNode"
+  >;
+}): boolean {
+  const { sessionEntry, directives } = params;
+  let updated = false;
+  if (directives.execHost) {
+    sessionEntry.execHost = directives.execHost;
+    updated = true;
+  }
+  if (directives.execMode) {
+    sessionEntry.execMode = directives.execMode;
+    delete sessionEntry.execSecurity;
+    delete sessionEntry.execAsk;
+    updated = true;
+  } else if (directives.execSecurity !== undefined || directives.execAsk !== undefined) {
+    const inheritedModePolicy =
+      sessionEntry.execMode !== undefined
+        ? resolveExecPolicyForMode(sessionEntry.execMode as ExecMode)
+        : undefined;
+    sessionEntry.execSecurity = directives.execSecurity ?? inheritedModePolicy?.security;
+    sessionEntry.execAsk = directives.execAsk ?? inheritedModePolicy?.ask;
+    delete sessionEntry.execMode;
+    updated = true;
+  }
+  if (directives.execNode) {
+    sessionEntry.execNode = directives.execNode;
+    updated = true;
+  }
+  return updated;
+}
 
 const formatElevatedEvent = (level: ElevatedLevel) => {
   if (level === "full") {

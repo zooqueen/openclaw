@@ -10,6 +10,8 @@ import {
   readCodexPluginConfig,
   resolveCodexAppServerRuntimeOptions,
   resolveCodexComputerUseConfig,
+  resolveOpenClawExecModeForCodexAppServer,
+  resolveOpenClawExecModeFromConfig,
   resolveCodexPluginsPolicy,
 } from "./config.js";
 
@@ -721,6 +723,235 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
       sandbox: "workspace-write",
       approvalsReviewer: "auto_review",
     });
+  });
+
+  it("maps normalized OpenClaw auto exec mode to guardian-reviewed local execution", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "auto",
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "on-request",
+      sandbox: "workspace-write",
+      approvalsReviewer: "auto_review",
+    });
+  });
+
+  it.each(["deny", "allowlist", "ask"] as const)(
+    "maps normalized OpenClaw %s exec mode away from Codex yolo",
+    (execMode) => {
+      const runtime = resolveRuntimeForTest({
+        pluginConfig: {},
+        execMode,
+      });
+
+      expectRuntimePolicy(runtime, {
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        approvalsReviewer: "user",
+      });
+    },
+  );
+
+  it("keeps normalized OpenClaw full exec mode on default Codex yolo", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "full",
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      approvalsReviewer: "user",
+    });
+  });
+
+  it("honors Codex requirements when normalized OpenClaw auto mode selects guardian", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "auto",
+      requirementsToml:
+        'allowed_sandbox_modes = ["read-only"]\nallowed_approval_policies = ["on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "on-failure",
+      sandbox: "read-only",
+      approvalsReviewer: "user",
+    });
+  });
+
+  it("uses allowed guardian fields when normalized OpenClaw auto mode forces guardian over allowed yolo", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "auto",
+      requirementsToml:
+        'allowed_sandbox_modes = ["danger-full-access", "read-only"]\nallowed_approval_policies = ["never", "on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "on-failure",
+      sandbox: "read-only",
+      approvalsReviewer: "user",
+    });
+  });
+
+  it("lets explicit app-server policy fields override normalized OpenClaw auto mode", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {
+        appServer: {
+          approvalPolicy: "never",
+          sandbox: "danger-full-access",
+          approvalsReviewer: "user",
+        },
+      },
+      execMode: "auto",
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      approvalsReviewer: "user",
+    });
+  });
+
+  it("resolves agent-scoped normalized OpenClaw exec mode for Codex app-server mapping", () => {
+    const config = {
+      tools: {
+        exec: {
+          mode: "ask",
+        },
+      },
+      agents: {
+        list: [
+          {
+            id: "Codex-Agent",
+            tools: {
+              exec: {
+                mode: "auto",
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    expect(resolveOpenClawExecModeFromConfig({ config, agentId: "codex-agent" })).toBe("auto");
+    expect(resolveOpenClawExecModeFromConfig({ config, agentId: "other-agent" })).toBe("ask");
+  });
+
+  it("keeps legacy exec security overrides ahead of normalized OpenClaw exec mode", () => {
+    expect(
+      resolveOpenClawExecModeFromConfig({
+        config: {
+          tools: {
+            exec: {
+              mode: "auto",
+            },
+          },
+          agents: {
+            list: [
+              {
+                id: "codex-agent",
+                tools: {
+                  exec: {
+                    security: "full",
+                  },
+                },
+              },
+            ],
+          },
+        },
+        agentId: "codex-agent",
+      }),
+    ).toBe("ask");
+  });
+
+  it("treats ask-only legacy overrides as normalized mode overrides", () => {
+    const config = {
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+      agents: {
+        list: [
+          {
+            id: "codex-agent",
+            tools: {
+              exec: {
+                ask: "off",
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    expect(resolveOpenClawExecModeFromConfig({ config, agentId: "codex-agent" })).toBe("allowlist");
+    const execMode = resolveOpenClawExecModeForCodexAppServer({
+      config,
+      agentId: "main",
+      execOverrides: {
+        ask: "always",
+      },
+    });
+    expect(execMode).toBe("ask");
+    expectRuntimePolicy(resolveRuntimeForTest({ execMode }), {
+      approvalPolicy: "on-request",
+      sandbox: "workspace-write",
+      approvalsReviewer: "user",
+    });
+  });
+
+  it("keeps current legacy exec security overrides ahead of configured normalized mode", () => {
+    const config = {
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+    };
+
+    expect(
+      resolveOpenClawExecModeForCodexAppServer({
+        config,
+        agentId: "main",
+        execOverrides: {
+          security: "full",
+        },
+      }),
+    ).toBe("ask");
+    expect(
+      resolveOpenClawExecModeForCodexAppServer({
+        config,
+        agentId: "main",
+        execOverrides: {
+          ask: "always",
+        },
+      }),
+    ).toBe("ask");
+    expect(
+      resolveOpenClawExecModeForCodexAppServer({
+        config,
+        agentId: "main",
+        execOverrides: {
+          security: "full",
+          ask: "off",
+        },
+      }),
+    ).toBe("full");
+    expect(
+      resolveOpenClawExecModeForCodexAppServer({
+        config,
+        agentId: "main",
+        execOverrides: {
+          mode: "auto",
+          security: "full",
+        },
+      }),
+    ).toBe("auto");
   });
 
   it("accepts the latest auto_review reviewer and legacy guardian_subagent alias", () => {

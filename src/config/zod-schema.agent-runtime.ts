@@ -562,6 +562,7 @@ const ToolExecSafeBinProfileSchema = z
 
 const ToolExecBaseShape = {
   host: z.enum(["auto", "sandbox", "gateway", "node"]).optional(),
+  mode: z.enum(["deny", "allowlist", "ask", "auto", "full"]).optional(),
   security: z.enum(["deny", "allowlist", "full"]).optional(),
   ask: z.enum(["off", "on-miss", "always"]).optional(),
   node: z.string().optional(),
@@ -571,6 +572,13 @@ const ToolExecBaseShape = {
   commandHighlighting: z.boolean().optional(),
   safeBinTrustedDirs: z.array(z.string()).optional(),
   safeBinProfiles: z.record(z.string(), ToolExecSafeBinProfileSchema).optional(),
+  reviewer: z
+    .object({
+      model: AgentModelSchema.optional(),
+      timeoutMs: z.number().int().positive().optional(),
+    })
+    .strict()
+    .optional(),
   backgroundMs: z.number().int().positive().optional(),
   timeoutSec: z.number().int().positive().optional(),
   cleanupMs: z.number().int().positive().optional(),

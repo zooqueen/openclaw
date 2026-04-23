@@ -15,6 +15,10 @@ import {
   resolveApprovalAuditTrustPath,
   requiresExecApproval,
 } from "../infra/exec-approvals.js";
+import {
+  defaultExecAutoReviewer,
+  type ExecAutoReviewer,
+} from "../infra/exec-auto-review.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
 import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
@@ -48,6 +52,7 @@ import type {
   ExecApprovalFollowupOutcome,
   ExecToolDetails,
 } from "./bash-tools.exec-types.js";
+import { failedTextResult } from "./tools/common.js";
 
 export type ProcessGatewayAllowlistParams = {
   command: string;
@@ -60,6 +65,8 @@ export type ProcessGatewayAllowlistParams = {
   defaultTimeoutSec: number;
   security: ExecSecurity;
   ask: ExecAsk;
+  autoReview?: boolean;
+  autoReviewer?: ExecAutoReviewer;
   safeBins: Set<string>;
   safeBinProfiles: Readonly<Record<string, SafeBinProfile>>;
   strictInlineEval?: boolean;
@@ -510,6 +517,58 @@ export async function processGatewayAllowlist(
   }
 
   if (requiresAsk) {
+    const canAutoReviewApprovalMiss =
+      params.autoReview === true &&
+      hostAsk !== "always" &&
+      !requiresAllowlistPlanApproval &&
+      !requiresHeredocApproval &&
+      !requiresInlineEvalApproval &&
+      !requiresSecurityAuditSuppressionApproval;
+    if (canAutoReviewApprovalMiss) {
+      const reviewer = params.autoReviewer ?? defaultExecAutoReviewer;
+      const decision = await reviewer({
+        command: params.command,
+        argv: allowlistEval.segments[0]?.argv,
+        cwd: params.workdir,
+        envKeys: Object.keys(params.requestedEnv ?? {}).toSorted(),
+        host: "gateway",
+        reason: requiresInlineEvalApproval ? "strict-inline-eval" : "approval-required",
+        analysis: {
+          parsed: analysisOk,
+          allowlistMatched: allowlistSatisfied,
+          durableApprovalMatched: durableApprovalSatisfied,
+          inlineEval: requiresInlineEvalApproval,
+        },
+        agent: {
+          id: params.agentId,
+          sessionKey: params.sessionKey,
+        },
+      });
+      if (decision.decision === "allow-once") {
+        recordMatchedAllowlistUse(
+          resolveApprovalAuditTrustPath(
+            allowlistEval.segments[0]?.resolution ?? null,
+            params.workdir,
+          ),
+        );
+        return {
+          execCommandOverride: enforcedCommand,
+          allowWithoutEnforcedCommand: enforcedCommand === undefined,
+        };
+      }
+      if (decision.decision === "deny") {
+        return {
+          pendingResult: failedTextResult(`exec auto-review denied command: ${decision.rationale}`, {
+            status: "failed",
+            exitCode: null,
+            durationMs: 0,
+            aggregated: "",
+            cwd: params.workdir,
+          }),
+        };
+      }
+    }
+
     const requestArgs = buildDefaultExecApprovalRequestArgs({
       warnings: params.warnings,
       approvalRunningNoticeMs: params.approvalRunningNoticeMs,

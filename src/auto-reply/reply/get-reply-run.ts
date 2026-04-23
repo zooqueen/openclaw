@@ -96,7 +96,7 @@ type InternalGetReplyOptions = GetReplyOptions & {
 };
 
 type AgentDefaults = NonNullable<OpenClawConfig["agents"]>["defaults"];
-type ExecOverrides = Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
+type ExecOverrides = Pick<ExecToolDefaults, "host" | "mode" | "security" | "ask" | "node">;
 
 export function resolvePromptSilentReplyConversationType(params: {
   ctx: Pick<
@@ -241,6 +241,7 @@ export function buildExecOverridePromptHint(params: {
   }
   const parts = [
     exec?.host ? `host=${exec.host}` : undefined,
+    exec?.mode ? `mode=${exec.mode}` : undefined,
     exec?.security ? `security=${exec.security}` : undefined,
     exec?.ask ? `ask=${exec.ask}` : undefined,
     exec?.node ? `node=${exec.node}` : undefined,

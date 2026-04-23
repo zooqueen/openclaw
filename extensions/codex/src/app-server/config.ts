@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname as readHostName } from "node:os";
-import { detectWindowsSpawnCommandInlineArgs } from "openclaw/plugin-sdk/windows-spawn";
+import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import { z } from "zod";
 import type { CodexSandboxPolicy, CodexServiceTier } from "./protocol.js";
 
@@ -12,6 +12,15 @@ const WINDOWS_CODEX_REQUIREMENTS_SUFFIX = "\\OpenAI\\Codex\\requirements.toml";
 
 type CodexAppServerTransportMode = "stdio" | "websocket";
 type CodexAppServerPolicyMode = "yolo" | "guardian";
+type OpenClawExecMode = "deny" | "allowlist" | "ask" | "auto" | "full";
+type OpenClawExecSecurity = "deny" | "allowlist" | "full";
+type OpenClawExecAsk = "off" | "on-miss" | "always";
+type OpenClawExecPolicy = {
+  mode?: OpenClawExecMode;
+  security: OpenClawExecSecurity;
+  ask: OpenClawExecAsk;
+  touched: boolean;
+};
 type CodexAppServerDefaultPolicy = {
   mode: CodexAppServerPolicyMode;
   approvalPolicy?: CodexAppServerApprovalPolicy;
@@ -359,6 +368,7 @@ export function resolveCodexPluginsPolicy(pluginConfig?: unknown): ResolvedCodex
 export function resolveCodexAppServerRuntimeOptions(
   params: {
     pluginConfig?: unknown;
+    execMode?: OpenClawExecMode;
     env?: NodeJS.ProcessEnv;
     requirementsToml?: string | null;
     requirementsPath?: string;
@@ -388,18 +398,23 @@ export function resolveCodexAppServerRuntimeOptions(
   const url = readNonEmptyString(config.url);
   const explicitPolicyMode =
     resolvePolicyMode(config.mode) ?? resolvePolicyMode(env.OPENCLAW_CODEX_APP_SERVER_MODE);
+  const normalizedPolicyMode = resolveCodexPolicyModeForOpenClawExecMode(params.execMode);
+  const forceUserReviewer =
+    params.execMode !== undefined && params.execMode !== "auto" && params.execMode !== "full";
   const defaultPolicy = explicitPolicyMode
     ? undefined
     : resolveDefaultCodexAppServerPolicy({
         transport,
         env,
+        forceGuardian: normalizedPolicyMode === "guardian",
+        forceUserReviewer,
         requirementsToml: params.requirementsToml,
         requirementsPath: params.requirementsPath,
         readRequirementsFile: params.readRequirementsFile,
         platform: params.platform,
         hostName: params.hostName,
       });
-  const policyMode = explicitPolicyMode ?? defaultPolicy?.mode ?? "yolo";
+  const policyMode = explicitPolicyMode ?? normalizedPolicyMode ?? defaultPolicy?.mode ?? "yolo";
   const serviceTier = normalizeCodexServiceTier(config.serviceTier);
   if (transport === "websocket" && !url) {
     throw new Error(
@@ -607,6 +622,8 @@ function resolvePolicyMode(value: unknown): CodexAppServerPolicyMode | undefined
 
 function resolveDefaultCodexAppServerPolicy(params: {
   transport: CodexAppServerTransportMode;
+  forceGuardian?: boolean;
+  forceUserReviewer?: boolean;
   env?: NodeJS.ProcessEnv;
   requirementsToml?: string | null;
   requirementsPath?: string;
@@ -619,7 +636,17 @@ function resolveDefaultCodexAppServerPolicy(params: {
   }
   const content = readCodexRequirementsToml(params);
   if (content === undefined) {
-    return { mode: "yolo" };
+    if (!params.forceGuardian) {
+      return { mode: "yolo" };
+    }
+    return {
+      mode: "guardian",
+      approvalPolicy: selectGuardianApprovalPolicy(undefined),
+      approvalsReviewer: params.forceUserReviewer
+        ? selectUserApprovalsReviewer(undefined)
+        : selectGuardianApprovalsReviewer(undefined),
+      sandbox: selectGuardianSandbox(undefined),
+    };
   }
   const allowedSandboxModes = parseAllowedSandboxModesFromCodexRequirements(
     content,
@@ -633,13 +660,15 @@ function resolveDefaultCodexAppServerPolicy(params: {
     allowedApprovalPolicies === undefined || allowedApprovalPolicies.has("never");
   const yoloReviewerAllowed =
     allowedApprovalsReviewers === undefined || allowedApprovalsReviewers.has("user");
-  if (yoloSandboxAllowed && yoloApprovalAllowed && yoloReviewerAllowed) {
+  if (!params.forceGuardian && yoloSandboxAllowed && yoloApprovalAllowed && yoloReviewerAllowed) {
     return { mode: "yolo" };
   }
   return {
     mode: "guardian",
     approvalPolicy: selectGuardianApprovalPolicy(allowedApprovalPolicies),
-    approvalsReviewer: selectGuardianApprovalsReviewer(allowedApprovalsReviewers),
+    approvalsReviewer: params.forceUserReviewer
+      ? selectUserApprovalsReviewer(allowedApprovalsReviewers)
+      : selectGuardianApprovalsReviewer(allowedApprovalsReviewers),
     sandbox: selectGuardianSandbox(allowedSandboxModes),
   };
 }
@@ -917,6 +946,21 @@ function selectGuardianApprovalsReviewer(
   return "auto_review";
 }
 
+function selectUserApprovalsReviewer(
+  allowedApprovalsReviewers: Set<CodexAppServerApprovalsReviewer> | undefined,
+): CodexAppServerApprovalsReviewer {
+  if (allowedApprovalsReviewers === undefined || allowedApprovalsReviewers.has("user")) {
+    return "user";
+  }
+  if (allowedApprovalsReviewers.has("guardian_subagent")) {
+    return "guardian_subagent";
+  }
+  if (allowedApprovalsReviewers.has("auto_review")) {
+    return "auto_review";
+  }
+  return "user";
+}
+
 function selectGuardianSandbox(
   allowedSandboxModes: Set<CodexAppServerSandboxMode> | undefined,
 ): CodexAppServerSandboxMode {
@@ -950,6 +994,143 @@ function resolveSandbox(value: unknown): CodexAppServerSandboxMode | undefined {
 function resolveApprovalsReviewer(value: unknown): CodexAppServerApprovalsReviewer | undefined {
   return value === "auto_review" || value === "guardian_subagent" || value === "user"
     ? value
+    : undefined;
+}
+
+export function resolveOpenClawExecModeFromConfig(params: {
+  config?: unknown;
+  agentId?: string;
+}): OpenClawExecMode | undefined {
+  const root = readRecord(params.config);
+  const globalExec = readRecord(readRecord(root?.tools)?.exec);
+  const globalPolicy = applyOpenClawExecPolicyLayer(createDefaultOpenClawExecPolicy(), globalExec);
+  const agentId = params.agentId?.trim();
+  if (!agentId) {
+    return globalPolicy.touched ? globalPolicy.mode : undefined;
+  }
+  const agents = readRecord(root?.agents);
+  const agentList = Array.isArray(agents?.list) ? agents.list : [];
+  const normalizedAgentId = normalizeAgentId(agentId);
+  const agentEntry = agentList.find((entry) => {
+    const id = readRecord(entry)?.id;
+    return typeof id === "string" && normalizeAgentId(id) === normalizedAgentId;
+  });
+  const agentExec = readRecord(readRecord(readRecord(agentEntry)?.tools)?.exec);
+  const agentPolicy = applyOpenClawExecPolicyLayer(globalPolicy, agentExec);
+  return agentPolicy.touched ? agentPolicy.mode : undefined;
+}
+
+export function resolveOpenClawExecModeForCodexAppServer(params: {
+  execOverrides?: {
+    mode?: unknown;
+    security?: unknown;
+    ask?: unknown;
+  };
+  config?: unknown;
+  agentId?: string;
+}): OpenClawExecMode | undefined {
+  const baseMode = resolveOpenClawExecModeFromConfig({
+    config: params.config,
+    agentId: params.agentId,
+  });
+  const basePolicy = baseMode
+    ? { ...resolveOpenClawExecPolicyForMode(baseMode), touched: true }
+    : createDefaultOpenClawExecPolicy();
+  const overridePolicy = applyOpenClawExecPolicyLayer(basePolicy, params.execOverrides);
+  return overridePolicy.touched ? overridePolicy.mode : undefined;
+}
+
+function resolveCodexPolicyModeForOpenClawExecMode(
+  mode: OpenClawExecMode | undefined,
+): CodexAppServerPolicyMode | undefined {
+  if (!mode || mode === "full") {
+    return undefined;
+  }
+  return "guardian";
+}
+
+function createDefaultOpenClawExecPolicy(): OpenClawExecPolicy {
+  return {
+    security: "full",
+    ask: "off",
+    touched: false,
+  };
+}
+
+function applyOpenClawExecPolicyLayer(
+  base: OpenClawExecPolicy,
+  exec?: { mode?: unknown; security?: unknown; ask?: unknown },
+): OpenClawExecPolicy {
+  if (!exec) {
+    return base;
+  }
+  const mode = readExecMode(exec.mode);
+  if (mode !== undefined) {
+    return {
+      ...resolveOpenClawExecPolicyForMode(mode),
+      touched: true,
+    };
+  }
+  const security = readExecSecurity(exec.security);
+  const ask = readExecAsk(exec.ask);
+  if (security === undefined && ask === undefined) {
+    return base;
+  }
+  const nextSecurity = security ?? base.security;
+  const nextAsk = ask ?? base.ask;
+  return {
+    mode: resolveOpenClawExecModeFromPolicy({ security: nextSecurity, ask: nextAsk }),
+    security: nextSecurity,
+    ask: nextAsk,
+    touched: true,
+  };
+}
+
+function resolveOpenClawExecPolicyForMode(mode: OpenClawExecMode): Omit<OpenClawExecPolicy, "touched"> {
+  switch (mode) {
+    case "deny":
+      return { mode, security: "deny", ask: "off" };
+    case "allowlist":
+      return { mode, security: "allowlist", ask: "off" };
+    case "ask":
+    case "auto":
+      return { mode, security: "allowlist", ask: "on-miss" };
+    case "full":
+      return { mode, security: "full", ask: "off" };
+  }
+  const exhaustiveMode: never = mode;
+  return exhaustiveMode;
+}
+
+function resolveOpenClawExecModeFromPolicy(params: {
+  security: OpenClawExecSecurity;
+  ask: OpenClawExecAsk;
+}): OpenClawExecMode {
+  if (params.security === "deny") {
+    return "deny";
+  }
+  if (params.security === "allowlist" && params.ask === "off") {
+    return "allowlist";
+  }
+  if (params.security === "full" && params.ask === "off") {
+    return "full";
+  }
+  return "ask";
+}
+
+function readExecMode(value: unknown): OpenClawExecMode | undefined {
+  return value === "deny" ||
+    value === "allowlist" ||
+    value === "ask" ||
+    value === "auto" ||
+    value === "full"
+    ? value
+    : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
@@ -1011,6 +1192,14 @@ function readBooleanEnv(value: string | undefined): boolean | undefined {
     return false;
   }
   return undefined;
+}
+
+function readExecSecurity(value: unknown): OpenClawExecSecurity | undefined {
+  return value === "deny" || value === "allowlist" || value === "full" ? value : undefined;
+}
+
+function readExecAsk(value: unknown): OpenClawExecAsk | undefined {
+  return value === "off" || value === "on-miss" || value === "always" ? value : undefined;
 }
 
 function readNumberEnv(value: string | undefined): number | undefined {

@@ -19,6 +19,7 @@ import { isThinkingLevelSupported, resolveSupportedThinkingLevel } from "../thin
 import { resolveModelSelectionFromDirective } from "./directive-handling.model-selection.js";
 import type { InlineDirectives } from "./directive-handling.parse.js";
 import {
+  applyExecDirectivePersistence,
   canPersistInternalExecDirective,
   canPersistInternalVerboseDirective,
   enqueueModeSwitchEvents,
@@ -214,22 +215,7 @@ export async function persistInlineDirectives(params: {
       updated = true;
     }
     if (directives.hasExecDirective && directives.hasExecOptions && allowInternalExecPersistence) {
-      if (directives.execHost) {
-        sessionEntry.execHost = directives.execHost;
-        updated = true;
-      }
-      if (directives.execSecurity) {
-        sessionEntry.execSecurity = directives.execSecurity;
-        updated = true;
-      }
-      if (directives.execAsk) {
-        sessionEntry.execAsk = directives.execAsk;
-        updated = true;
-      }
-      if (directives.execNode) {
-        sessionEntry.execNode = directives.execNode;
-        updated = true;
-      }
+      updated = applyExecDirectivePersistence({ sessionEntry, directives }) || updated;
     }
 
     const modelDirective =

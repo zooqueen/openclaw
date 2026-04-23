@@ -5,8 +5,16 @@ import { type ReplyExecOverrides, resolveReplyExecOverrides } from "./get-reply-
 
 const AGENT_EXEC_DEFAULTS = {
   host: "node",
+  mode: "ask",
   security: "allowlist",
   ask: "always",
+  node: "worker-alpha",
+} as const satisfies ReplyExecOverrides;
+const AGENT_MODE_DEFAULTS = {
+  host: "node",
+  mode: "ask",
+  security: undefined,
+  ask: undefined,
   node: "worker-alpha",
 } as const satisfies ReplyExecOverrides;
 
@@ -26,25 +34,28 @@ describe("reply exec overrides", () => {
         sessionEntry: createSessionEntry(),
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
-    ).toEqual(AGENT_EXEC_DEFAULTS);
+    ).toEqual(AGENT_MODE_DEFAULTS);
   });
 
   it("prefers inline exec directives, then persisted session overrides, then agent defaults", () => {
     const sessionEntry = createSessionEntry({
       execHost: "gateway",
+      execMode: "auto",
       execSecurity: "deny",
     });
 
     expect(
       resolveReplyExecOverrides({
-        directives: parseInlineDirectives("/exec host=auto security=full"),
+        directives: parseInlineDirectives("/exec host=auto mode=full security=full"),
         sessionEntry,
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
     ).toEqual({
-      ...AGENT_EXEC_DEFAULTS,
       host: "auto",
-      security: "full",
+      mode: "full",
+      security: undefined,
+      ask: undefined,
+      node: "worker-alpha",
     });
 
     expect(
@@ -54,9 +65,11 @@ describe("reply exec overrides", () => {
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
     ).toEqual({
-      ...AGENT_EXEC_DEFAULTS,
       host: "gateway",
-      security: "deny",
+      mode: "auto",
+      security: undefined,
+      ask: undefined,
+      node: "worker-alpha",
     });
   });
 
@@ -74,10 +87,109 @@ describe("reply exec overrides", () => {
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
     ).toEqual({
-      ...AGENT_EXEC_DEFAULTS,
       host: "gateway",
+      mode: undefined,
       security: "full",
       ask: "always",
+      node: "worker-alpha",
+    });
+  });
+
+  it("does not carry lower-scope mode through a narrower legacy policy override", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec security=deny"),
+        sessionEntry: createSessionEntry({
+          execMode: "auto",
+        }),
+        agentExecDefaults: AGENT_EXEC_DEFAULTS,
+      }),
+    ).toMatchObject({
+      mode: undefined,
+      security: "deny",
+      ask: "on-miss",
+    });
+
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("run a command"),
+        sessionEntry: createSessionEntry({
+          execAsk: "always",
+        }),
+        agentExecDefaults: AGENT_EXEC_DEFAULTS,
+      }),
+    ).toMatchObject({
+      mode: undefined,
+      security: "allowlist",
+      ask: "always",
+    });
+
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("run a command"),
+        sessionEntry: createSessionEntry({
+          execSecurity: "full",
+        }),
+        agentExecDefaults: {
+          ...AGENT_EXEC_DEFAULTS,
+          mode: "auto",
+          security: undefined,
+          ask: undefined,
+        },
+      }),
+    ).toMatchObject({
+      mode: undefined,
+      security: "full",
+      ask: "on-miss",
+    });
+  });
+
+  it("materializes mode policy before applying partial inline legacy overrides", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec ask=off"),
+        sessionEntry: createSessionEntry({
+          execMode: "auto",
+        }),
+        agentExecDefaults: undefined,
+      }),
+    ).toMatchObject({
+      mode: undefined,
+      security: "allowlist",
+      ask: "off",
+    });
+
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec security=full"),
+        sessionEntry: createSessionEntry({
+          execMode: "auto",
+        }),
+        agentExecDefaults: undefined,
+      }),
+    ).toMatchObject({
+      mode: undefined,
+      security: "full",
+      ask: "on-miss",
+    });
+  });
+
+  it("drops legacy policy fields when an inline exec mode is present", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec mode=full security=deny ask=always"),
+        sessionEntry: createSessionEntry({
+          execSecurity: "deny",
+          execAsk: "always",
+        }),
+        agentExecDefaults: AGENT_EXEC_DEFAULTS,
+      }),
+    ).toEqual({
+      host: "node",
+      mode: "full",
+      security: undefined,
+      ask: undefined,
+      node: "worker-alpha",
     });
   });
 });

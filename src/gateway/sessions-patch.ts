@@ -24,7 +24,11 @@ import {
 } from "../auto-reply/thinking.js";
 import type { SessionEntry } from "../config/sessions.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { normalizeExecTarget } from "../infra/exec-approvals.js";
+import {
+  normalizeExecMode,
+  normalizeExecTarget,
+  resolveExecPolicyForMode,
+} from "../infra/exec-approvals.js";
 import {
   isAcpSessionKey,
   isSubagentSessionKey,
@@ -450,6 +454,12 @@ export async function applySessionsPatchToStore(params: {
     }
   }
 
+  const patchSetsExecMode =
+    "execMode" in patch && patch.execMode !== null && patch.execMode !== undefined;
+  const inheritedExecMode = normalizeExecMode(next.execMode);
+  const inheritedExecModePolicy =
+    inheritedExecMode !== null ? resolveExecPolicyForMode(inheritedExecMode) : undefined;
+
   if ("execSecurity" in patch) {
     const raw = patch.execSecurity;
     if (raw === null) {
@@ -459,7 +469,28 @@ export async function applySessionsPatchToStore(params: {
       if (!normalized) {
         return invalid('invalid execSecurity (use "deny"|"allowlist"|"full")');
       }
-      next.execSecurity = normalized;
+      if (!patchSetsExecMode) {
+        next.execSecurity = normalized;
+        if (!("execAsk" in patch) && inheritedExecModePolicy) {
+          next.execAsk = inheritedExecModePolicy.ask;
+        }
+        delete next.execMode;
+      }
+    }
+  }
+
+  if ("execMode" in patch) {
+    const raw = patch.execMode;
+    if (raw === null) {
+      delete next.execMode;
+    } else if (raw !== undefined) {
+      const normalized = normalizeExecMode(raw);
+      if (!normalized) {
+        return invalid('invalid execMode (use "deny"|"allowlist"|"ask"|"auto"|"full")');
+      }
+      next.execMode = normalized;
+      delete next.execSecurity;
+      delete next.execAsk;
     }
   }
 
@@ -472,7 +503,13 @@ export async function applySessionsPatchToStore(params: {
       if (!normalized) {
         return invalid('invalid execAsk (use "off"|"on-miss"|"always")');
       }
-      next.execAsk = normalized;
+      if (!patchSetsExecMode) {
+        if (!("execSecurity" in patch) && inheritedExecModePolicy) {
+          next.execSecurity = inheritedExecModePolicy.security;
+        }
+        next.execAsk = normalized;
+        delete next.execMode;
+      }
     }
   }
 

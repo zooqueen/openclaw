@@ -11,6 +11,7 @@ import {
   loadExecApprovals,
   maxAsk,
   requireValidExecTarget,
+  resolveExecModePolicy,
 } from "../infra/exec-approvals.js";
 import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
 import { sanitizeHostExecEnvWithDiagnostics } from "../infra/host-env-security.js";
@@ -33,6 +34,7 @@ import { describeExecTool } from "./bash-tools.descriptions.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import { renderExecOutputText } from "./bash-tools.exec-output.js";
+import { createModelExecAutoReviewer } from "./exec-auto-reviewer.js";
 import {
   DEFAULT_MAX_OUTPUT,
   DEFAULT_PATH,
@@ -1274,6 +1276,13 @@ export function createExecTool(
   const agentId =
     defaults?.agentId ??
     (parsedAgentSession ? resolveAgentIdFromSessionKey(defaults?.sessionKey) : undefined);
+  const autoReviewer =
+    defaults?.autoReviewer ??
+    createModelExecAutoReviewer({
+      cfg: defaults?.config,
+      agentId,
+      reviewer: defaults?.reviewer,
+    });
 
   return {
     name: "exec",
@@ -1397,15 +1406,20 @@ export function createExecTool(
       const approvalDefaults = loadExecApprovals().defaults;
       const configuredSecurity =
         defaults?.security ?? approvalDefaults?.security ?? (host === "sandbox" ? "deny" : "full");
-      let security = configuredSecurity;
+      const modePolicy = resolveExecModePolicy({
+        mode: defaults?.mode,
+        security: configuredSecurity,
+        ask: defaults?.ask ?? approvalDefaults?.ask ?? "off",
+      });
+      let security = modePolicy.security;
       if (elevatedRequested && elevatedMode === "full") {
         security = "full";
       }
       // Keep local exec defaults in sync with exec-approvals.json when tools.exec.* is unset.
-      const configuredAsk = defaults?.ask ?? approvalDefaults?.ask ?? "off";
       const requestedAsk = normalizeExecAsk(params.ask);
-      let ask = maxAsk(configuredAsk, requestedAsk ?? configuredAsk);
       const bypassApprovals = elevatedRequested && elevatedMode === "full";
+      let ask = maxAsk(modePolicy.ask, requestedAsk ?? modePolicy.ask);
+      const autoReview = modePolicy.autoReview && !requestedAsk && !bypassApprovals;
       if (bypassApprovals) {
         ask = "off";
       }
@@ -1538,6 +1552,8 @@ export function createExecTool(
           agentId,
           security,
           ask,
+          autoReview,
+          autoReviewer,
           strictInlineEval: defaults?.strictInlineEval,
           commandHighlighting: defaults?.commandHighlighting,
           trigger: defaults?.trigger,
@@ -1567,6 +1583,8 @@ export function createExecTool(
           defaultTimeoutSec,
           security,
           ask,
+          autoReview,
+          autoReviewer,
           safeBins,
           safeBinProfiles,
           strictInlineEval: defaults?.strictInlineEval,

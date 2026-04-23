@@ -14,6 +14,7 @@ export function createEmptyInlineDirectives(): InlineDirectives {
     hasExecDirective: false,
     hasExecOptions: false,
     invalidExecHost: false,
+    invalidExecMode: false,
     invalidExecSecurity: false,
     invalidExecAsk: false,
     invalidExecNode: false,

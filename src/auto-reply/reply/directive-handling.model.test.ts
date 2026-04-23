@@ -1836,6 +1836,71 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
     expect(sessionEntry.execAsk).toBe("always");
     expect(sessionEntry.execNode).toBe("worker-1");
   });
+
+  it("clears legacy exec fields when persisting a normalized mode directive", async () => {
+    const directives = parseInlineDirectives("/exec mode=auto");
+    const sessionEntry = createSessionEntry({
+      execSecurity: "full",
+      execAsk: "always",
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+    await handleDirectiveOnly(
+      createHandleParams({
+        directives,
+        sessionEntry,
+        sessionStore,
+        surface: "webchat",
+        gatewayClientScopes: ["operator.admin"],
+      }),
+    );
+
+    expect(sessionEntry.execMode).toBe("auto");
+    expect(sessionEntry.execSecurity).toBeUndefined();
+    expect(sessionEntry.execAsk).toBeUndefined();
+  });
+
+  it("materializes mode-derived policy when persisting directive-only legacy exec fields", async () => {
+    const directives = parseInlineDirectives("/exec ask=off");
+    const sessionEntry = createSessionEntry({
+      execMode: "auto",
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+    await handleDirectiveOnly(
+      createHandleParams({
+        directives,
+        sessionEntry,
+        sessionStore,
+        surface: "webchat",
+        gatewayClientScopes: ["operator.admin"],
+      }),
+    );
+
+    expect(sessionEntry.execMode).toBeUndefined();
+    expect(sessionEntry.execSecurity).toBe("allowlist");
+    expect(sessionEntry.execAsk).toBe("off");
+  });
+
+  it("does not acknowledge legacy exec fields ignored by a normalized mode directive", async () => {
+    const directives = parseInlineDirectives("/exec mode=auto security=deny ask=always");
+    const sessionEntry = createSessionEntry();
+    const sessionStore = { [sessionKey]: sessionEntry };
+    const result = await handleDirectiveOnly(
+      createHandleParams({
+        directives,
+        sessionEntry,
+        sessionStore,
+        surface: "webchat",
+        gatewayClientScopes: ["operator.admin"],
+      }),
+    );
+
+    expect(result?.text).toContain("Exec defaults set (mode=auto).");
+    expect(result?.text).not.toContain("security=deny");
+    expect(result?.text).not.toContain("ask=always");
+    expect(sessionEntry.execMode).toBe("auto");
+    expect(sessionEntry.execSecurity).toBeUndefined();
+    expect(sessionEntry.execAsk).toBeUndefined();
+  });
 });
 
 describe("persistInlineDirectives internal exec scope gate", () => {
@@ -1854,6 +1919,33 @@ describe("persistInlineDirectives internal exec scope gate", () => {
     const sessionEntry = await persistInternalOperatorWriteDirective("/verbose full");
 
     expect(sessionEntry.verboseLevel).toBeUndefined();
+  });
+
+  it("clears legacy exec fields when persisting a normalized mode directive", async () => {
+    const sessionEntry = await persistInternalOperatorWriteDirective("/exec mode=auto", {
+      sessionEntry: createSessionEntry({
+        execSecurity: "full",
+        execAsk: "always",
+      }),
+      gatewayClientScopes: ["operator.admin"],
+    });
+
+    expect(sessionEntry.execMode).toBe("auto");
+    expect(sessionEntry.execSecurity).toBeUndefined();
+    expect(sessionEntry.execAsk).toBeUndefined();
+  });
+
+  it("materializes mode-derived policy when persisting legacy exec fields", async () => {
+    const sessionEntry = await persistInternalOperatorWriteDirective("/exec security=full", {
+      sessionEntry: createSessionEntry({
+        execMode: "auto",
+      }),
+      gatewayClientScopes: ["operator.admin"],
+    });
+
+    expect(sessionEntry.execMode).toBeUndefined();
+    expect(sessionEntry.execSecurity).toBe("full");
+    expect(sessionEntry.execAsk).toBe("on-miss");
   });
 
   it("treats internal provider context as authoritative over external surface metadata", async () => {
