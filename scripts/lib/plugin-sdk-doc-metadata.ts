@@ -104,6 +104,9 @@ export const pluginSdkDocMetadata = {
   "reply-payload": {
     category: "utilities",
   },
+  "persistent-keyed-store": {
+    category: "utilities",
+  },
   testing: {
     category: "utilities",
   },
