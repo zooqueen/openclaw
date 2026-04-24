@@ -2431,7 +2431,10 @@ function parseAgentPayloadTexts(stdout) {
       : [];
     return [...directTexts, ...payloadTexts];
   } catch {
-    return stdout.trim() ? [stdout] : [];
+    const finalTextMatches = [
+      ...stdout.matchAll(/"(?:finalAssistantVisibleText|finalAssistantRawText)"\s*:\s*"([^"]*)"/gu),
+    ].map((match) => match[1]);
+    return finalTextMatches.length > 0 ? finalTextMatches : stdout.trim() ? [stdout] : [];
   }
 }
 
