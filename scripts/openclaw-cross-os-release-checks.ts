@@ -2418,8 +2418,12 @@ function parseAgentPayloadTexts(stdout) {
     const directTexts = [
       payload?.finalAssistantVisibleText,
       payload?.finalAssistantRawText,
+      payload?.meta?.finalAssistantVisibleText,
+      payload?.meta?.finalAssistantRawText,
       payload?.result?.finalAssistantVisibleText,
       payload?.result?.finalAssistantRawText,
+      payload?.result?.meta?.finalAssistantVisibleText,
+      payload?.result?.meta?.finalAssistantRawText,
     ].filter((text): text is string => typeof text === "string");
     const entries = Array.isArray(payload?.payloads)
       ? payload.payloads
@@ -2432,7 +2436,9 @@ function parseAgentPayloadTexts(stdout) {
     return [...directTexts, ...payloadTexts];
   } catch {
     const finalTextMatches = [
-      ...stdout.matchAll(/"(?:finalAssistantVisibleText|finalAssistantRawText)"\s*:\s*"([^"]*)"/gu),
+      ...stdout.matchAll(
+        /"(?:finalAssistantVisibleText|finalAssistantRawText|text)"\s*:\s*"([^"]*)"/gu,
+      ),
     ].map((match) => match[1]);
     return finalTextMatches.length > 0 ? finalTextMatches : stdout.trim() ? [stdout] : [];
   }
