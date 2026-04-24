@@ -89,7 +89,6 @@ export async function hasProviderStaticCatalogForFilter(params: {
     onlyPluginIds: scopedPluginIds,
     includeUntrustedWorkspacePlugins: false,
     requireCompleteDiscoveryEntryCoverage: true,
-    discoveryEntriesOnly: true,
   });
   return providers.some(
     (provider) =>
@@ -159,7 +158,6 @@ export async function loadProviderCatalogModelsForList(params: {
       onlyPluginIds: scopedPluginIds,
       includeUntrustedWorkspacePlugins: false,
       requireCompleteDiscoveryEntryCoverage: params.staticOnly === true,
-      discoveryEntriesOnly: params.staticOnly === true,
     })
   ).filter(
     (provider) =>

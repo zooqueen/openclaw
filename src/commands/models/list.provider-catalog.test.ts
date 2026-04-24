@@ -162,7 +162,6 @@ describe("loadProviderCatalogModelsForList", () => {
       expect.objectContaining({
         onlyPluginIds: ["moonshot"],
         requireCompleteDiscoveryEntryCoverage: true,
-        discoveryEntriesOnly: true,
       }),
     );
   });
@@ -206,7 +205,6 @@ describe("loadProviderCatalogModelsForList", () => {
       expect.objectContaining({
         onlyPluginIds: ["ollama"],
         requireCompleteDiscoveryEntryCoverage: true,
-        discoveryEntriesOnly: true,
       }),
     );
   });

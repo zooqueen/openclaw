@@ -135,16 +135,17 @@ export async function modelsListCommand(
           return;
         }
         rows.length = 0;
+        const fallbackRegistry = modelRegistry as ModelRegistry | undefined;
         rowContext = buildRowContext(false);
         seenKeys = appendDiscoveredRows({
           rows,
-          models: modelRegistry?.getAll() ?? [],
+          models: fallbackRegistry?.getAll() ?? [],
           context: rowContext,
         });
-        if (modelRegistry) {
+        if (fallbackRegistry) {
           await appendCatalogSupplementRows({
             rows,
-            modelRegistry,
+            modelRegistry: fallbackRegistry,
             context: rowContext,
             seenKeys,
           });
