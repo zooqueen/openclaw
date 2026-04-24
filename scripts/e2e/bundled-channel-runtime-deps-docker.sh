@@ -14,6 +14,7 @@ RUN_UPDATE_SCENARIO="${OPENCLAW_BUNDLED_CHANNEL_UPDATE_SCENARIO:-1}"
 RUN_ROOT_OWNED_SCENARIO="${OPENCLAW_BUNDLED_CHANNEL_ROOT_OWNED_SCENARIO:-1}"
 RUN_SETUP_ENTRY_SCENARIO="${OPENCLAW_BUNDLED_CHANNEL_SETUP_ENTRY_SCENARIO:-1}"
 RUN_LOAD_FAILURE_SCENARIO="${OPENCLAW_BUNDLED_CHANNEL_LOAD_FAILURE_SCENARIO:-1}"
+CHANNEL_ONLY="${OPENCLAW_BUNDLED_CHANNEL_ONLY:-}"
 
 docker_e2e_build_or_reuse "$IMAGE_NAME" bundled-channel-deps "$ROOT_DIR/scripts/e2e/Dockerfile" "$ROOT_DIR" "$DOCKER_TARGET"
 
@@ -255,6 +256,7 @@ stop_gateway() {
 }
 
 wait_for_gateway_health() {
+  local log_file="${1:-}"
   for _ in $(seq 1 120); do
     if openclaw gateway health --url "ws://127.0.0.1:$PORT" --token "$TOKEN" --json >/dev/null 2>&1; then
       return 0
@@ -262,6 +264,9 @@ wait_for_gateway_health() {
     sleep 0.25
   done
   echo "timed out waiting for gateway health" >&2
+  if [ -n "$log_file" ]; then
+    cat "$log_file" >&2
+  fi
   return 1
 }
 
@@ -362,14 +367,14 @@ assert_no_install_stage() {
 echo "Starting baseline gateway with OpenAI configured..."
 write_config baseline
 start_gateway "/tmp/openclaw-$CHANNEL-baseline.log"
-wait_for_gateway_health
+wait_for_gateway_health "/tmp/openclaw-$CHANNEL-baseline.log"
 stop_gateway
 assert_no_dep_sentinel "$CHANNEL" "$DEP_SENTINEL"
 
 echo "Enabling $CHANNEL by config edit, then restarting gateway..."
 write_config "$CHANNEL"
 start_gateway "/tmp/openclaw-$CHANNEL-first.log"
-wait_for_gateway_health
+wait_for_gateway_health "/tmp/openclaw-$CHANNEL-first.log"
 assert_installed_once "/tmp/openclaw-$CHANNEL-first.log" "$CHANNEL" "$DEP_SENTINEL"
 assert_dep_sentinel "$CHANNEL" "$DEP_SENTINEL"
 assert_no_install_stage "$CHANNEL"
@@ -378,7 +383,7 @@ stop_gateway
 
 echo "Restarting gateway again; $CHANNEL deps must stay installed..."
 start_gateway "/tmp/openclaw-$CHANNEL-second.log"
-wait_for_gateway_health
+wait_for_gateway_health "/tmp/openclaw-$CHANNEL-second.log"
 assert_not_installed "/tmp/openclaw-$CHANNEL-second.log" "$CHANNEL"
 assert_no_install_stage "$CHANNEL"
 assert_channel_status "$CHANNEL"
@@ -1228,12 +1233,21 @@ EOF
   rm -f "$run_log"
 }
 
+run_channel_scenario_if_selected() {
+  local channel="$1"
+  local dep_sentinel="$2"
+  if [ -n "$CHANNEL_ONLY" ] && [ "$CHANNEL_ONLY" != "$channel" ]; then
+    return 0
+  fi
+  run_channel_scenario "$channel" "$dep_sentinel"
+}
+
 if [ "$RUN_CHANNEL_SCENARIOS" != "0" ]; then
-  run_channel_scenario telegram grammy
-  run_channel_scenario discord discord-api-types
-  run_channel_scenario slack @slack/web-api
-  run_channel_scenario feishu @larksuiteoapi/node-sdk
-  run_channel_scenario memory-lancedb @lancedb/lancedb
+  run_channel_scenario_if_selected telegram grammy
+  run_channel_scenario_if_selected discord discord-api-types
+  run_channel_scenario_if_selected slack @slack/web-api
+  run_channel_scenario_if_selected feishu @larksuiteoapi/node-sdk
+  run_channel_scenario_if_selected memory-lancedb @lancedb/lancedb
 fi
 if [ "$RUN_UPDATE_SCENARIO" != "0" ]; then
   run_update_scenario
