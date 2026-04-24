@@ -2448,7 +2448,9 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
         manifestRecord.setupSource
       ) {
         const setupRegistration = resolveSetupChannelRegistration(mod, {
-          installRuntimeDeps: shouldInstallBundledRuntimeDeps && enableState.enabled,
+          installRuntimeDeps:
+            shouldInstallBundledRuntimeDeps &&
+            (enableState.enabled || forceSetupOnlyChannelPlugins),
         });
         if (setupRegistration.loadError) {
           recordPluginError({
