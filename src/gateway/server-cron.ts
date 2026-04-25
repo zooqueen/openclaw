@@ -34,6 +34,11 @@ import { SsrFBlockedError } from "../infra/net/ssrf.js";
 import { deliverOutboundPayloads } from "../infra/outbound/deliver.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { getChildLogger } from "../logging.js";
+import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
+import type {
+  PluginHookCronChangedEvent,
+  PluginHookGatewayContext,
+} from "../plugins/hook-types.js";
 import { normalizeAgentId, toAgentStoreSessionKey } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
 import {
@@ -271,6 +276,20 @@ export function buildGatewayCronService(params: {
   const sessionStorePath = resolveSessionStorePath(defaultAgentId);
   const warnedLegacyWebhookJobs = new Set<string>();
 
+  const runCronChangedHook = (evt: PluginHookCronChangedEvent) => {
+    const hookRunner = getGlobalHookRunner();
+    if (!hookRunner?.hasHooks("cron_changed")) {
+      return;
+    }
+    const hookCtx: PluginHookGatewayContext = {
+      config: params.cfg,
+      getCron: () => cron,
+    };
+    void hookRunner.runCronChanged(evt, hookCtx).catch((err) => {
+      cronLogger.warn({ err: String(err), jobId: evt.jobId }, "cron_changed hook failed");
+    });
+  };
+
   const cron = new CronService({
     storePath,
     cronEnabled,
@@ -416,10 +435,28 @@ export function buildGatewayCronService(params: {
     log: getChildLogger({ module: "cron", storePath }),
     onEvent: (evt) => {
       params.broadcast("cron", evt, { dropIfSlow: true });
+      const job = cron.getJob(evt.jobId);
+      runCronChangedHook({
+        action: evt.action,
+        jobId: evt.jobId,
+        ...(job ? { job } : {}),
+        ...(evt.runAtMs !== undefined ? { runAtMs: evt.runAtMs } : {}),
+        ...(evt.durationMs !== undefined ? { durationMs: evt.durationMs } : {}),
+        ...(evt.status !== undefined ? { status: evt.status } : {}),
+        ...(evt.error !== undefined ? { error: evt.error } : {}),
+        ...(evt.summary !== undefined ? { summary: evt.summary } : {}),
+        ...(evt.delivered !== undefined ? { delivered: evt.delivered } : {}),
+        ...(evt.deliveryStatus !== undefined ? { deliveryStatus: evt.deliveryStatus } : {}),
+        ...(evt.deliveryError !== undefined ? { deliveryError: evt.deliveryError } : {}),
+        ...(evt.sessionId !== undefined ? { sessionId: evt.sessionId } : {}),
+        ...(evt.sessionKey !== undefined ? { sessionKey: evt.sessionKey } : {}),
+        ...(evt.nextRunAtMs !== undefined ? { nextRunAtMs: evt.nextRunAtMs } : {}),
+        ...(evt.model !== undefined ? { model: evt.model } : {}),
+        ...(evt.provider !== undefined ? { provider: evt.provider } : {}),
+      });
       if (evt.action === "finished") {
         const webhookToken = normalizeOptionalString(params.cfg.cron?.webhookToken);
         const legacyWebhook = normalizeOptionalString(params.cfg.cron?.webhook);
-        const job = cron.getJob(evt.jobId);
         const legacyNotify = (job as { notify?: unknown } | undefined)?.notify === true;
         const webhookTarget = resolveCronWebhookTarget({
           delivery:

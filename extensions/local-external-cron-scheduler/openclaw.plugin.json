@@ -1,0 +1,37 @@
+{
+  "id": "local-external-cron-scheduler",
+  "enabledByDefault": false,
+  "name": "Local External Cron Scheduler",
+  "description": "Optional local file sync for external wake schedulers that run OpenClaw cron jobs with --due.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable local external scheduler sync. Defaults to false."
+      },
+      "statePath": {
+        "type": "string",
+        "description": "Path to write scheduler state JSON. Defaults to ~/.openclaw/external-cron-scheduler/jobs.json."
+      },
+      "instanceId": {
+        "type": "string",
+        "description": "Stable instance id included in the scheduler state. Defaults to local."
+      },
+      "commandTemplate": {
+        "type": "string",
+        "description": "Command template rendered for each job. Supports {jobId}."
+      },
+      "leadTimeMs": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Milliseconds before nextRunAtMs that the external scheduler should wake. Defaults to 0."
+      },
+      "includeDisabled": {
+        "type": "boolean",
+        "description": "Include disabled cron jobs in startup sync. Defaults to false."
+      }
+    }
+  }
+}

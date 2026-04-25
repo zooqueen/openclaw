@@ -1,0 +1,12 @@
+{
+  "name": "@openclaw/local-external-cron-scheduler",
+  "version": "2026.4.20",
+  "private": true,
+  "description": "Optional local external cron scheduler sync plugin for OpenClaw.",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
