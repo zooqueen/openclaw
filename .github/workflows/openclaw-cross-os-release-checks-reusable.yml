@@ -430,35 +430,37 @@ jobs:
           OPENCLAW_DISCORD_SMOKE_BOT_TOKEN: ${{ secrets.OPENCLAW_DISCORD_SMOKE_BOT_TOKEN }}
           OPENCLAW_DISCORD_SMOKE_GUILD_ID: ${{ secrets.OPENCLAW_DISCORD_SMOKE_GUILD_ID }}
           OPENCLAW_DISCORD_SMOKE_CHANNEL_ID: ${{ secrets.OPENCLAW_DISCORD_SMOKE_CHANNEL_ID }}
-          CANDIDATE_FILE_NAME: ${{ needs.prepare.outputs.candidate_file_name }}
+          OPENCLAW_RELEASE_CHECK_OS: ${{ matrix.os_id }}
+          OPENCLAW_RELEASE_CHECK_RUNNER: ${{ matrix.runner }}
+          CANDIDATE_TGZ: ${{ runner.temp }}/openclaw-cross-os-release-checks/candidate/${{ needs.prepare.outputs.candidate_file_name }}
           CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate_version }}
           SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
           BASELINE_SPEC: ${{ needs.prepare.outputs.baseline_spec }}
           PREVIOUS_VERSION: ${{ inputs.previous_version }}
-          BASELINE_FILE_NAME: ${{ needs.prepare.outputs.baseline_file_name }}
+          BASELINE_TGZ: ${{ runner.temp }}/openclaw-cross-os-release-checks/baseline/${{ needs.prepare.outputs.baseline_file_name }}
           PROVIDER: ${{ inputs.provider }}
-          RELEASE_SUITE: ${{ matrix.suite }}
-          TARGET_REF: ${{ inputs.ref }}
-          ARTIFACT_NAME: ${{ matrix.artifact_name }}
-          OPENCLAW_RELEASE_CHECK_OS: ${{ matrix.os_id }}
-          OPENCLAW_RELEASE_CHECK_RUNNER: ${{ matrix.runner }}
+          MODE: ${{ matrix.lane }}
+          SUITE: ${{ matrix.suite }}
+          REF: ${{ inputs.ref }}
+          OUTPUT_DIR: ${{ runner.temp }}/openclaw-cross-os-release-checks/${{ matrix.artifact_name }}-${{ matrix.suite }}
         run: |
           DISCORD_ARGS=()
           if [[ -n "${OPENCLAW_DISCORD_SMOKE_BOT_TOKEN}" ]] && [[ -n "${OPENCLAW_DISCORD_SMOKE_GUILD_ID}" ]] && [[ -n "${OPENCLAW_DISCORD_SMOKE_CHANNEL_ID}" ]]; then
             DISCORD_ARGS+=(--run-discord-roundtrip true)
           fi
           pnpm dlx "tsx@${TSX_VERSION}" workflow/scripts/openclaw-cross-os-release-checks.ts \
-            --candidate-tgz "$RUNNER_TEMP/openclaw-cross-os-release-checks/candidate/${CANDIDATE_FILE_NAME}" \
+            --candidate-tgz "${CANDIDATE_TGZ}" \
             --candidate-version "${CANDIDATE_VERSION}" \
             --source-sha "${SOURCE_SHA}" \
             --baseline-spec "${BASELINE_SPEC}" \
             --previous-version "${PREVIOUS_VERSION}" \
-            --baseline-tgz "$RUNNER_TEMP/openclaw-cross-os-release-checks/baseline/${BASELINE_FILE_NAME}" \
+            --baseline-tgz "${BASELINE_TGZ}" \
             --provider "${PROVIDER}" \
-            --suite "${RELEASE_SUITE}" \
-            --ref "${TARGET_REF}" \
+            --mode "${MODE}" \
+            --suite "${SUITE}" \
+            --ref "${REF}" \
             "${DISCORD_ARGS[@]}" \
-            --output-dir "$RUNNER_TEMP/openclaw-cross-os-release-checks/${ARTIFACT_NAME}-${RELEASE_SUITE}"
+            --output-dir "${OUTPUT_DIR}"
 
       - name: Summarize release checks
         if: always()
