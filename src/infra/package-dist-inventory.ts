@@ -27,6 +27,13 @@ const OMITTED_DIST_SUBTREE_PATTERNS = [
   /^dist\/extensions\/node_modules(?:\/|$)/u,
   /^dist\/extensions\/[^/]+\/node_modules(?:\/|$)/u,
   /^dist\/extensions\/[^/]+\/\.openclaw-runtime-deps-[^/]+(?:\/|$)/u,
+  // Bundled-runtime-deps install staging dirs are created on-the-fly during
+  // plugin activation and only persist between an install attempt and its
+  // commit. They MUST NOT trigger "unexpected packaged dist file" verifier
+  // errors. Matches both the bare `.openclaw-install-stage` (used by
+  // bundled-runtime-deps.ts) and the `mkdtemp`-suffixed variants like
+  // `.openclaw-install-stage-AbC123` (used by install-package-dir.ts). (#71752)
+  /^dist\/extensions\/[^/]+\/\.openclaw-install-stage(?:-[^/]+)?(?:\/|$)/u,
   /^dist\/extensions\/qa-matrix(?:\/|$)/u,
   new RegExp(`^dist/plugin-sdk/extensions/${LEGACY_QA_LAB_DIR}(?:/|$)`, "u"),
 ] as const;

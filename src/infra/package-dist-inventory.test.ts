@@ -152,6 +152,49 @@ describe("package dist inventory", () => {
       ]);
     });
   });
+  it("ignores .openclaw-install-stage* staging dirs created by bundled-runtime-deps install (#71752)", async () => {
+    await withTempDir({ prefix: "openclaw-dist-inventory-stage-" }, async (packageRoot) => {
+      // Seed a real dist file so writePackageDistInventory has something to track.
+      const realFile = path.join(packageRoot, "dist", "real-AbC123.js");
+      await fs.mkdir(path.dirname(realFile), { recursive: true });
+      await fs.writeFile(realFile, "export {};\n", "utf8");
+      await writePackageDistInventory(packageRoot);
+
+      // Now create staging-dir artifacts under bundled extension paths. These
+      // appear during plugin runtime-deps install and must NOT be treated as
+      // unexpected packaged dist files.
+      const bareStageFile = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "brave",
+        ".openclaw-install-stage",
+        "node_modules",
+        "typebox",
+        "build",
+        "compile",
+        "code.mjs",
+      );
+      const tempStageFile = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "browser",
+        ".openclaw-install-stage-AbC123",
+        "node_modules",
+        "playwright-core",
+        "package.json",
+      );
+      await fs.mkdir(path.dirname(bareStageFile), { recursive: true });
+      await fs.writeFile(bareStageFile, "// staged\n", "utf8");
+      await fs.mkdir(path.dirname(tempStageFile), { recursive: true });
+      await fs.writeFile(tempStageFile, "{}", "utf8");
+
+      // Verifier should still report no errors — staging dirs are skipped.
+      await expect(collectPackageDistInventoryErrors(packageRoot)).resolves.toEqual([]);
+    });
+  });
+
   it("fails closed when the inventory is missing", async () => {
     await withTempDir({ prefix: "openclaw-dist-inventory-missing-" }, async (packageRoot) => {
       await fs.mkdir(path.join(packageRoot, "dist"), { recursive: true });
