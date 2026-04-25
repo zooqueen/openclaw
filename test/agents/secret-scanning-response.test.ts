@@ -208,4 +208,82 @@ describe("secret-scanning response workflow script", () => {
     const postRequests = requests.filter((request) => request.method === "POST");
     expect(postRequests).toHaveLength(0);
   });
+
+  it("skips authors outside the rollout allowlist", async () => {
+    const tempDir = createTempDir("openclaw-secret-scan-response-");
+    const eventPath = path.join(tempDir, "event.json");
+    fs.writeFileSync(eventPath, JSON.stringify({ alert: { number: 9 } }), "utf8");
+
+    const requests = [] as Array<{ method: string; pathname: string; body: string }>;
+
+    await withServer(
+      async (req, res) => {
+        const url = new URL(req.url || "/", "http://127.0.0.1");
+        const chunks = [] as Buffer[];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const body = Buffer.concat(chunks).toString("utf8");
+        requests.push({ method: req.method || "GET", pathname: url.pathname, body });
+
+        res.setHeader("content-type", "application/json");
+
+        if (
+          req.method === "GET" &&
+          url.pathname === "/repos/openclaw/openclaw/secret-scanning/alerts/9"
+        ) {
+          res.end(JSON.stringify({ number: 9, state: "open" }));
+          return;
+        }
+
+        if (
+          req.method === "GET" &&
+          url.pathname === "/repos/openclaw/openclaw/secret-scanning/alerts/9/locations"
+        ) {
+          res.end(
+            JSON.stringify([
+              {
+                type: "issue_comment",
+                details: {
+                  issue_comment_url: "/repos/openclaw/openclaw/issues/comments/2009",
+                },
+              },
+            ]),
+          );
+          return;
+        }
+
+        if (
+          req.method === "GET" &&
+          url.pathname === "/repos/openclaw/openclaw/issues/comments/2009"
+        ) {
+          res.end(
+            JSON.stringify({
+              html_url: "https://github.com/openclaw/openclaw/issues/59#issuecomment-2009",
+              user: { login: "someone-else" },
+            }),
+          );
+          return;
+        }
+
+        res.statusCode = 404;
+        res.end(JSON.stringify({ message: `Unhandled ${req.method} ${url.pathname}` }));
+      },
+      async (baseUrl) => {
+        await runScript(
+          {
+            GITHUB_TOKEN: "test-token",
+            GITHUB_EVENT_PATH: eventPath,
+            GITHUB_REPOSITORY: "openclaw/openclaw",
+            SECRET_SCANNING_API_BASE_URL: baseUrl,
+            SECRET_SCANNING_ALLOWED_AUTHORS: "wangshu94",
+          },
+          tempDir,
+        );
+      },
+    );
+
+    const postRequests = requests.filter((request) => request.method === "POST");
+    expect(postRequests).toHaveLength(0);
+  });
 });

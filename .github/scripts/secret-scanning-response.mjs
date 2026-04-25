@@ -6,6 +6,12 @@ import process from "node:process";
 const apiBaseUrl = process.env.SECRET_SCANNING_API_BASE_URL || "https://api.github.com";
 const token = process.env.GITHUB_TOKEN;
 const repository = process.env.SECRET_SCANNING_REPOSITORY || process.env.GITHUB_REPOSITORY;
+const allowedAuthors = new Set(
+  (process.env.SECRET_SCANNING_ALLOWED_AUTHORS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 function fail(message) {
   console.error(`error: ${message}`);
@@ -103,6 +109,16 @@ function normalizeAuthor(login) {
     return null;
   }
   return login;
+}
+
+function isAllowedAuthor(login) {
+  if (allowedAuthors.size === 0) {
+    return true;
+  }
+  if (!login) {
+    return false;
+  }
+  return allowedAuthors.has(login.toLowerCase());
 }
 
 function buildNotificationBody({ alertNumber, authors }) {
@@ -208,6 +224,12 @@ async function main() {
     const target = await fetchLocationTarget(location);
     if (!target?.issueNumber) {
       console.log(`Skipping unsupported or unresolved location type: ${location.type}`);
+      continue;
+    }
+    if (!isAllowedAuthor(target.author)) {
+      console.log(
+        `Skipping target #${target.issueNumber}: author not in allowlist for alert #${alertNumber}`,
+      );
       continue;
     }
 
