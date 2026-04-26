@@ -67,6 +67,20 @@ describe("config compaction settings", () => {
     expect(compaction?.reserveTokensFloor).toBe(9000);
   });
 
+  it("defaults post-compaction transcript truncation on", () => {
+    const compaction = materializeCompactionConfig({});
+
+    expect(compaction?.truncateAfterCompaction).toBe(true);
+  });
+
+  it("preserves an explicit post-compaction transcript truncation opt-out", () => {
+    const compaction = materializeCompactionConfig({
+      truncateAfterCompaction: false,
+    });
+
+    expect(compaction?.truncateAfterCompaction).toBe(false);
+  });
+
   it("preserves recent turn safeguard values during materialization", () => {
     const compaction = materializeCompactionConfig({
       mode: "safeguard",

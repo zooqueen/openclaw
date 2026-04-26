@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeAgentAssistantMessage } from "../test-helpers/agent-message-fixtures.js";
 import { truncateSessionAfterCompaction } from "./session-truncation.js";
 
@@ -125,6 +125,41 @@ describe("truncateSessionAfterCompaction", () => {
     const archiveSize = (await fs.stat(archivePath)).size;
     const truncatedSize = (await fs.stat(sessionFile)).size;
     expect(archiveSize).toBeGreaterThan(truncatedSize);
+  });
+
+  it("truncates without opening the full transcript through SessionManager", async () => {
+    const dir = await createTmpDir();
+    const sm = SessionManager.create(dir, dir);
+    const largeText = "x".repeat(100_000);
+
+    sm.appendMessage({ role: "user", content: largeText, timestamp: 1 });
+    sm.appendMessage(makeAssistant(largeText, 2));
+    sm.appendMessage({ role: "user", content: largeText, timestamp: 3 });
+    sm.appendMessage(makeAssistant(largeText, 4));
+
+    const branch = sm.getBranch();
+    const firstKeptId = branch[branch.length - 1].id;
+    sm.appendCompaction("Summary of large history.", firstKeptId, 50_000);
+    sm.appendMessage({ role: "user", content: "next task", timestamp: 5 });
+
+    const sessionFile = sm.getSessionFile()!;
+    const bytesBefore = (await fs.stat(sessionFile)).size;
+    const openSpy = vi.spyOn(SessionManager, "open").mockImplementation(() => {
+      throw new Error("unexpected eager SessionManager.open");
+    });
+
+    let result: Awaited<ReturnType<typeof truncateSessionAfterCompaction>>;
+    try {
+      result = await truncateSessionAfterCompaction({ sessionFile });
+    } finally {
+      openSpy.mockRestore();
+    }
+
+    expect(result.truncated).toBe(true);
+    expect(result.bytesAfter).toBeLessThan(bytesBefore);
+    expect(SessionManager.open(sessionFile).buildSessionContext().messages.length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("handles multiple compaction cycles (#39953)", async () => {

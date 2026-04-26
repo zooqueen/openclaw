@@ -194,6 +194,7 @@ import {
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
+import { truncateSessionAfterCompaction } from "../session-truncation.js";
 import { resolveEmbeddedRunSkillEntries } from "../skills-runtime.js";
 import {
   describeEmbeddedAgentStreamStrategy,
@@ -1215,6 +1216,31 @@ export async function runEmbeddedAttempt(
         .stat(params.sessionFile)
         .then(() => true)
         .catch(() => false);
+      if (
+        hadSessionFile &&
+        params.config &&
+        params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false
+      ) {
+        try {
+          const heartbeatSummary = resolveHeartbeatSummaryForAgent(params.config, sessionAgentId);
+          const truncResult = await truncateSessionAfterCompaction({
+            sessionFile: params.sessionFile,
+            ackMaxChars: heartbeatSummary.ackMaxChars,
+            heartbeatPrompt: heartbeatSummary.prompt,
+          });
+          if (truncResult.truncated) {
+            log.info(
+              `[session-truncation] pre-open cleanup removed ${truncResult.entriesRemoved} entries ` +
+                `(sessionKey=${params.sessionKey ?? params.sessionId})`,
+            );
+          }
+        } catch (err) {
+          log.warn("[session-truncation] pre-open cleanup failed", {
+            errorMessage: formatErrorMessage(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
+        }
+      }
 
       const transcriptPolicy = resolveAttemptTranscriptPolicy({
         runtimePlan: params.runtimePlan,

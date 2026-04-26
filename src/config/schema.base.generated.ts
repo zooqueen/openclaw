@@ -4992,7 +4992,7 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                     type: "boolean",
                     title: "Truncate After Compaction",
                     description:
-                      "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: false.",
+                      "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: true.",
                   },
                   notifyUser: {
                     type: "boolean",
@@ -26857,7 +26857,7 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
     },
     "agents.defaults.compaction.truncateAfterCompaction": {
       label: "Truncate After Compaction",
-      help: "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: false.",
+      help: "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: true.",
       tags: ["advanced"],
     },
     "agents.defaults.compaction.notifyUser": {

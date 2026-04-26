@@ -1168,7 +1168,10 @@ export async function compactEmbeddedPiSessionDirect(
             firstKeptEntryId: effectiveFirstKeptEntryId,
           });
           // Truncate session file to remove compacted entries (#39953)
-          if (params.config?.agents?.defaults?.compaction?.truncateAfterCompaction) {
+          if (
+            params.config &&
+            params.config.agents?.defaults?.compaction?.truncateAfterCompaction !== false
+          ) {
             try {
               const heartbeatSummary = resolveHeartbeatSummaryForAgent(
                 params.config,

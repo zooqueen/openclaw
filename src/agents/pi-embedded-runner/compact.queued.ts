@@ -10,6 +10,7 @@ import {
   type CapturedCompactionCheckpointSnapshot,
 } from "../../gateway/session-compaction-checkpoints.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { resolveHeartbeatSummaryForAgent } from "../../infra/heartbeat-summary.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { ProviderRuntimeModel } from "../../plugins/provider-runtime-model.types.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
@@ -31,6 +32,7 @@ import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
 import { readPiModelContextTokens } from "./model-context-tokens.js";
 import { resolveModelAsync } from "./model.js";
+import { truncateSessionAfterCompaction } from "./session-truncation.js";
 import type { EmbeddedPiCompactResult } from "./types.js";
 
 /**
@@ -201,6 +203,32 @@ export async function compactEmbeddedPiSession(
             sessionKey: params.sessionKey,
             sessionFile: params.sessionFile,
           });
+        }
+        if (
+          result.ok &&
+          result.compacted &&
+          params.config &&
+          params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false
+        ) {
+          try {
+            const heartbeatSummary = resolveHeartbeatSummaryForAgent(params.config, sessionAgentId);
+            const truncResult = await truncateSessionAfterCompaction({
+              sessionFile: params.sessionFile,
+              ackMaxChars: heartbeatSummary.ackMaxChars,
+              heartbeatPrompt: heartbeatSummary.prompt,
+            });
+            if (truncResult.truncated) {
+              log.info(
+                `[compaction] post-compaction truncation removed ${truncResult.entriesRemoved} entries ` +
+                  `(sessionKey=${params.sessionKey ?? params.sessionId})`,
+              );
+            }
+          } catch (err) {
+            log.warn("[compaction] post-compaction truncation failed", {
+              errorMessage: formatErrorMessage(err),
+              errorStack: err instanceof Error ? err.stack : undefined,
+            });
+          }
         }
         if (
           result.ok &&
