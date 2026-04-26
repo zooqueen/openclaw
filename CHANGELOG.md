@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Memory Wiki/CLI: route bridge-mode `wiki status`, `wiki doctor`, and `wiki bridge import` through Gateway RPC when active memory public artifacts are required, while keeping artifact-disabled and non-bridge configs local. Fixes #65722, #65976, #66082, #67979, #68828, #69019, #70181, #70242, and #70842; carries forward #71479 and #67208. Thanks @moorsecopers99, @vincentkoc, @leonardsellem, @sahilsatralkar, and @prasad-yashdeep.
 - Gateway/Bonjour: keep @homebridge/ciao cancellation handlers registered across advertiser restarts so late probing cancellations cannot crash Linux and other mDNS-churned gateways. Thanks @codex.
 - Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`. Thanks @codex.
 - Plugins/CLI: prefer native require for compiled bundled plugin JavaScript before jiti so read-only config, status, device, and node commands avoid unnecessary transform overhead on slow hosts. Fixes #62842. Thanks @Effet.

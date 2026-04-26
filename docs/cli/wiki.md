@@ -68,6 +68,12 @@ Inspect current vault mode, health, and Obsidian CLI availability.
 Use this first when you are unsure whether the vault is initialized, bridge mode
 is healthy, or Obsidian integration is available.
 
+When bridge mode reads active memory public artifacts, this command routes
+through Gateway RPC so it sees the same runtime memory plugin state as the
+Gateway. Use `--url`, `--token`, and `--timeout` when targeting a non-default
+Gateway. Non-bridge configs and bridge configs with memory artifact reads
+disabled stay local/offline.
+
 ### `wiki doctor`
 
 Run wiki health checks and surface configuration or vault problems.
@@ -77,6 +83,9 @@ Typical issues include:
 - bridge mode enabled without public memory artifacts
 - invalid or missing vault layout
 - missing external Obsidian CLI when Obsidian mode is expected
+
+When bridge mode reads active memory public artifacts, this command uses the
+same Gateway RPC routing as `wiki status`.
 
 ### `wiki init`
 
@@ -167,6 +176,12 @@ source pages.
 
 Use this in `bridge` mode when you want the latest exported memory artifacts
 pulled into the wiki vault.
+
+When `bridge.readMemoryArtifacts` is enabled, import runs through Gateway RPC so
+the command reads runtime-owned public artifacts instead of a CLI-only plugin
+load. Pass `--url`, `--token`, or `--timeout` when the default Gateway discovery
+is not enough. If bridge memory artifact reads are disabled, the command keeps
+the local no-op/offline path.
 
 ### `wiki unsafe-local import`
 

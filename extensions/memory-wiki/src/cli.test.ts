@@ -3,7 +3,21 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerWikiCli, runWikiChatGptImport, runWikiChatGptRollback } from "./cli.js";
+
+const gatewayRuntimeMock = vi.hoisted(() => ({
+  callGatewayFromCli: vi.fn(),
+}));
+
+vi.mock("openclaw/plugin-sdk/browser-node-runtime", () => gatewayRuntimeMock);
+
+import {
+  registerWikiCli,
+  runWikiBridgeImport,
+  runWikiChatGptImport,
+  runWikiChatGptRollback,
+  runWikiDoctor,
+  runWikiStatus,
+} from "./cli.js";
 import type { MemoryWikiPluginConfig } from "./config.js";
 import { parseWikiMarkdown, renderWikiMarkdown } from "./markdown.js";
 import { createMemoryWikiTestHarness } from "./test-helpers.js";
@@ -24,6 +38,7 @@ describe("memory-wiki cli", () => {
   });
 
   beforeEach(() => {
+    gatewayRuntimeMock.callGatewayFromCli.mockReset();
     vi.spyOn(process.stdout, "write").mockImplementation(
       (() => true) as typeof process.stdout.write,
     );
@@ -193,6 +208,139 @@ cli note
     await program.parseAsync(["wiki", "doctor", "--json"], { from: "user" });
 
     expect(process.exitCode).toBe(1);
+  });
+
+  it("routes bridge artifact status, doctor, and import through gateway rpc", async () => {
+    const { config } = await createCliVault({
+      config: {
+        vaultMode: "bridge",
+        bridge: { enabled: true, readMemoryArtifacts: true },
+      },
+    });
+    const status = {
+      vaultMode: "bridge",
+      renderMode: "native",
+      vaultPath: config.vault.path,
+      vaultExists: true,
+      bridge: config.bridge,
+      bridgePublicArtifactCount: 2,
+      obsidianCli: {
+        enabled: false,
+        requested: false,
+        available: false,
+        command: null,
+      },
+      unsafeLocal: {
+        allowPrivateMemoryCoreAccess: false,
+        pathCount: 0,
+      },
+      pageCounts: {
+        entity: 0,
+        concept: 0,
+        source: 2,
+        synthesis: 0,
+        report: 0,
+      },
+      sourceCounts: {
+        native: 0,
+        bridge: 2,
+        bridgeEvents: 0,
+        unsafeLocal: 0,
+        other: 0,
+      },
+      warnings: [],
+    };
+    const doctor = {
+      healthy: true,
+      warningCount: 0,
+      status,
+      fixes: [],
+    };
+    const importResult = {
+      importedCount: 1,
+      updatedCount: 1,
+      skippedCount: 0,
+      removedCount: 0,
+      artifactCount: 2,
+      workspaces: 1,
+      pagePaths: ["sources/memory-bridge-alpha.md"],
+      indexesRefreshed: true,
+      indexUpdatedFiles: ["index.md"],
+      indexRefreshReason: "import-changed",
+    };
+    gatewayRuntimeMock.callGatewayFromCli
+      .mockResolvedValueOnce(status)
+      .mockResolvedValueOnce(doctor)
+      .mockResolvedValueOnce(importResult);
+
+    await runWikiStatus({
+      config,
+      json: true,
+      gateway: { url: "ws://127.0.0.1:18789", token: "test-token", timeout: "4000" },
+    });
+    await runWikiDoctor({
+      config,
+      json: true,
+      gateway: { url: "ws://127.0.0.1:18789", token: "test-token", timeout: "4000" },
+    });
+    await runWikiBridgeImport({
+      config,
+      json: true,
+      gateway: { url: "ws://127.0.0.1:18789", token: "test-token", timeout: "4000" },
+    });
+
+    expect(gatewayRuntimeMock.callGatewayFromCli).toHaveBeenNthCalledWith(
+      1,
+      "wiki.status",
+      {
+        url: "ws://127.0.0.1:18789",
+        token: "test-token",
+        timeout: "4000",
+        json: true,
+      },
+      {},
+      { expectFinal: false },
+    );
+    expect(gatewayRuntimeMock.callGatewayFromCli).toHaveBeenNthCalledWith(
+      2,
+      "wiki.doctor",
+      {
+        url: "ws://127.0.0.1:18789",
+        token: "test-token",
+        timeout: "4000",
+        json: true,
+      },
+      {},
+      { expectFinal: false },
+    );
+    expect(gatewayRuntimeMock.callGatewayFromCli).toHaveBeenNthCalledWith(
+      3,
+      "wiki.bridge.import",
+      {
+        url: "ws://127.0.0.1:18789",
+        token: "test-token",
+        timeout: "4000",
+        json: true,
+      },
+      {},
+      { expectFinal: false },
+    );
+  });
+
+  it("keeps bridge artifact-disabled status and import on the local path", async () => {
+    const { config } = await createCliVault({
+      config: {
+        vaultMode: "bridge",
+        bridge: { enabled: true, readMemoryArtifacts: false },
+      },
+    });
+
+    const status = await runWikiStatus({ config, json: true });
+    const importResult = await runWikiBridgeImport({ config, json: true });
+
+    expect(status.bridgePublicArtifactCount).toBeNull();
+    expect(importResult.artifactCount).toBe(0);
+    expect(gatewayRuntimeMock.callGatewayFromCli).not.toHaveBeenCalled();
   });
 
   it("imports ChatGPT exports with dry-run, apply, and rollback", async () => {

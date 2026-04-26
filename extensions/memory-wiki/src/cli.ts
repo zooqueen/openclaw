@@ -26,9 +26,14 @@ import {
   runObsidianSearch,
 } from "./obsidian.js";
 import { getMemoryWikiPage, searchMemoryWiki } from "./query.js";
-import { syncMemoryWikiImportedSources } from "./source-sync.js";
+import {
+  syncMemoryWikiImportedSources,
+  type MemoryWikiImportedSourceSyncResult,
+} from "./source-sync.js";
 import {
   buildMemoryWikiDoctorReport,
+  type MemoryWikiDoctorReport,
+  type MemoryWikiStatus,
   renderMemoryWikiDoctor,
   renderMemoryWikiStatus,
   resolveMemoryWikiStatus,
@@ -37,11 +42,11 @@ import { initializeMemoryWikiVault } from "./vault.js";
 
 type WikiStatusCommandOptions = {
   json?: boolean;
-};
+} & GatewayRpcOpts;
 
 type WikiDoctorCommandOptions = {
   json?: boolean;
-};
+} & GatewayRpcOpts;
 
 type WikiInitCommandOptions = {
   json?: boolean;
@@ -98,7 +103,7 @@ type WikiApplyMetadataCommandOptions = {
 
 type WikiBridgeImportCommandOptions = {
   json?: boolean;
-};
+} & GatewayRpcOpts;
 
 type WikiUnsafeLocalImportCommandOptions = {
   json?: boolean;
@@ -130,6 +135,14 @@ type WikiObsidianDailyCommandOptions = {
   json?: boolean;
 };
 
+type GatewayRpcOpts = {
+  url?: string;
+  token?: string;
+  timeout?: string;
+  expectFinal?: boolean;
+  json?: boolean;
+};
+
 function isResolvedMemoryWikiConfig(
   config: MemoryWikiPluginConfig | ResolvedMemoryWikiConfig | undefined,
 ): config is ResolvedMemoryWikiConfig {
@@ -145,6 +158,26 @@ function isResolvedMemoryWikiConfig(
 
 function writeOutput(output: string, writer: Pick<NodeJS.WriteStream, "write"> = process.stdout) {
   writer.write(output.endsWith("\n") ? output : `${output}\n`);
+}
+
+function shouldRouteBridgeMemoryArtifactsThroughGateway(config: ResolvedMemoryWikiConfig): boolean {
+  return (
+    config.vaultMode === "bridge" && config.bridge.enabled && config.bridge.readMemoryArtifacts
+  );
+}
+
+async function callWikiGateway<T>(
+  method: "wiki.status" | "wiki.doctor" | "wiki.bridge.import",
+  opts: GatewayRpcOpts | undefined,
+  json: boolean | undefined,
+): Promise<T> {
+  const { callGatewayFromCli } = await import("openclaw/plugin-sdk/browser-node-runtime");
+  return (await callGatewayFromCli(
+    method,
+    { ...(opts ?? {}), json },
+    {},
+    { expectFinal: false },
+  )) as T;
 }
 
 function normalizeCliStringList(values?: string[]): string[] | undefined {
@@ -238,6 +271,14 @@ function addWikiSearchConfigOptions<T extends Command>(command: T): T {
     );
 }
 
+function addWikiGatewayClientOptions<T extends Command>(command: T): T {
+  return command
+    .option("--url <url>", "Gateway WebSocket URL (defaults to gateway.remote.url when configured)")
+    .option("--token <token>", "Gateway token (if required)")
+    .option("--timeout <ms>", "Timeout in ms", "30000")
+    .option("--expect-final", "Wait for final response (agent)", false);
+}
+
 function addWikiApplyMutationOptions<T extends Command>(command: T): T {
   return command
     .option("--source-id <id>", "Source id", collectCliValues)
@@ -253,8 +294,21 @@ export async function runWikiStatus(params: {
   config: ResolvedMemoryWikiConfig;
   appConfig?: OpenClawConfig;
   json?: boolean;
+  gateway?: GatewayRpcOpts;
   stdout?: Pick<NodeJS.WriteStream, "write">;
 }) {
+  if (shouldRouteBridgeMemoryArtifactsThroughGateway(params.config)) {
+    const status = await callWikiGateway<MemoryWikiStatus>(
+      "wiki.status",
+      params.gateway,
+      params.json,
+    );
+    writeOutput(
+      params.json ? JSON.stringify(status, null, 2) : renderMemoryWikiStatus(status),
+      params.stdout,
+    );
+    return status;
+  }
   await syncMemoryWikiImportedSources({ config: params.config, appConfig: params.appConfig });
   const status = await resolveMemoryWikiStatus(params.config, {
     appConfig: params.appConfig,
@@ -270,8 +324,24 @@ export async function runWikiDoctor(params: {
   config: ResolvedMemoryWikiConfig;
   appConfig?: OpenClawConfig;
   json?: boolean;
+  gateway?: GatewayRpcOpts;
   stdout?: Pick<NodeJS.WriteStream, "write">;
 }) {
+  if (shouldRouteBridgeMemoryArtifactsThroughGateway(params.config)) {
+    const report = await callWikiGateway<MemoryWikiDoctorReport>(
+      "wiki.doctor",
+      params.gateway,
+      params.json,
+    );
+    if (!report.healthy) {
+      process.exitCode = 1;
+    }
+    writeOutput(
+      params.json ? JSON.stringify(report, null, 2) : renderMemoryWikiDoctor(report),
+      params.stdout,
+    );
+    return report;
+  }
   await syncMemoryWikiImportedSources({ config: params.config, appConfig: params.appConfig });
   const report = buildMemoryWikiDoctorReport(
     await resolveMemoryWikiStatus(params.config, {
@@ -503,8 +573,23 @@ export async function runWikiBridgeImport(params: {
   config: ResolvedMemoryWikiConfig;
   appConfig?: OpenClawConfig;
   json?: boolean;
+  gateway?: GatewayRpcOpts;
   stdout?: Pick<NodeJS.WriteStream, "write">;
 }) {
+  if (shouldRouteBridgeMemoryArtifactsThroughGateway(params.config)) {
+    return runWikiCommandWithSummary({
+      json: params.json,
+      stdout: params.stdout,
+      run: () =>
+        callWikiGateway<MemoryWikiImportedSourceSyncResult>(
+          "wiki.bridge.import",
+          params.gateway,
+          params.json,
+        ),
+      render: (value) =>
+        `Bridge import synced ${value.artifactCount} artifacts across ${value.workspaces} workspaces (${value.importedCount} new, ${value.updatedCount} updated, ${value.skippedCount} unchanged, ${value.removedCount} removed). Indexes ${value.indexesRefreshed ? `refreshed (${value.indexUpdatedFiles.length} files)` : `not refreshed (${value.indexRefreshReason})`}.`,
+    });
+  }
   return runWikiCommandWithSummary({
     json: params.json,
     stdout: params.stdout,
@@ -671,21 +756,22 @@ export function registerWikiCli(
     : resolveMemoryWikiConfig(pluginConfig);
   const wiki = program.command("wiki").description("Inspect and initialize the memory wiki vault");
 
-  wiki
-    .command("status")
-    .description("Show wiki vault status")
-    .option("--json", "Print JSON")
-    .action(async (opts: WikiStatusCommandOptions) => {
-      await runWikiStatus({ config, appConfig, json: opts.json });
-    });
+  const status = addWikiGatewayClientOptions(
+    wiki.command("status").description("Show wiki vault status").option("--json", "Print JSON"),
+  );
+  status.action(async (opts: WikiStatusCommandOptions) => {
+    await runWikiStatus({ config, appConfig, json: opts.json, gateway: opts });
+  });
 
-  wiki
-    .command("doctor")
-    .description("Audit wiki vault setup and report actionable fixes")
-    .option("--json", "Print JSON")
-    .action(async (opts: WikiDoctorCommandOptions) => {
-      await runWikiDoctor({ config, appConfig, json: opts.json });
-    });
+  const doctor = addWikiGatewayClientOptions(
+    wiki
+      .command("doctor")
+      .description("Audit wiki vault setup and report actionable fixes")
+      .option("--json", "Print JSON"),
+  );
+  doctor.action(async (opts: WikiDoctorCommandOptions) => {
+    await runWikiDoctor({ config, appConfig, json: opts.json, gateway: opts });
+  });
 
   wiki
     .command("init")
@@ -814,13 +900,15 @@ export function registerWikiCli(
   const bridge = wiki
     .command("bridge")
     .description("Import public memory artifacts into the wiki vault");
-  bridge
-    .command("import")
-    .description("Sync bridge-backed memory artifacts into wiki source pages")
-    .option("--json", "Print JSON")
-    .action(async (opts: WikiBridgeImportCommandOptions) => {
-      await runWikiBridgeImport({ config, appConfig, json: opts.json });
-    });
+  const bridgeImport = addWikiGatewayClientOptions(
+    bridge
+      .command("import")
+      .description("Sync bridge-backed memory artifacts into wiki source pages")
+      .option("--json", "Print JSON"),
+  );
+  bridgeImport.action(async (opts: WikiBridgeImportCommandOptions) => {
+    await runWikiBridgeImport({ config, appConfig, json: opts.json, gateway: opts });
+  });
 
   const unsafeLocal = wiki
     .command("unsafe-local")

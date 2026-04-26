@@ -383,6 +383,13 @@ openclaw wiki bridge import
 openclaw wiki obsidian status
 ```
 
+For bridge vaults that read active memory public artifacts, `wiki status`,
+`wiki doctor`, and `wiki bridge import` call the Gateway RPC methods registered
+by the running `memory-wiki` plugin. That keeps bridge reads aligned with the
+runtime active memory plugin; use the commands' `--url`, `--token`, and
+`--timeout` options for a non-default Gateway. Non-bridge vaults and bridge
+vaults with `bridge.readMemoryArtifacts: false` continue to work locally.
+
 See [CLI: wiki](/cli/wiki) for the full command reference.
 
 ## Obsidian support
