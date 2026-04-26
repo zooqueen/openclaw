@@ -13,6 +13,7 @@ import type { ConnectParams, ErrorShape, RequestFrame } from "../protocol/index.
 import type { GatewayBroadcastFn, GatewayBroadcastToConnIdsFn } from "../server-broadcast-types.js";
 import type { ChannelRuntimeSnapshot } from "../server-channel-runtime.types.js";
 import type { DedupeEntry } from "../server-shared.js";
+import type { GatewayHealthRefreshOptions } from "../server/health-state.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -44,7 +45,7 @@ export type GatewayRequestContext = {
   pluginApprovalManager?: ExecApprovalManager<PluginApprovalRequestPayload>;
   loadGatewayModelCatalog: () => Promise<ModelCatalogEntry[]>;
   getHealthCache: () => HealthSummary | null;
-  refreshHealthSnapshot: (opts?: { probe?: boolean }) => Promise<HealthSummary>;
+  refreshHealthSnapshot: (opts?: GatewayHealthRefreshOptions) => Promise<HealthSummary>;
   logHealth: { error: (message: string) => void };
   logGateway: SubsystemLogger;
   incrementPresenceVersion: () => number;

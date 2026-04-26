@@ -12,6 +12,7 @@ import {
 } from "./server-constants.js";
 import type { DedupeEntry } from "./server-shared.js";
 import { formatError } from "./server-utils.js";
+import type { GatewayHealthRefreshOptions } from "./server/health-state.js";
 import { setBroadcastHealthUpdate } from "./server/health-state.js";
 
 export function startGatewayMaintenanceTimers(params: {
@@ -26,7 +27,7 @@ export function startGatewayMaintenanceTimers(params: {
   nodeSendToAllSubscribed: (event: string, payload: unknown) => void;
   getPresenceVersion: () => number;
   getHealthVersion: () => number;
-  refreshGatewayHealthSnapshot: (opts?: { probe?: boolean }) => Promise<HealthSummary>;
+  refreshGatewayHealthSnapshot: (opts?: GatewayHealthRefreshOptions) => Promise<HealthSummary>;
   logHealth: { error: (msg: string) => void };
   dedupe: Map<string, DedupeEntry>;
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;

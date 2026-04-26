@@ -1,6 +1,8 @@
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { projectSafeChannelAccountSnapshotFields } from "../channels/account-snapshot-fields.js";
 import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
 import { listReadOnlyChannelPluginsForConfig } from "../channels/plugins/read-only.js";
+import { buildChannelAccountSnapshot } from "../channels/plugins/status.js";
 import type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 import type { ChannelAccountSnapshot } from "../channels/plugins/types.public.js";
 import { inspectReadOnlyChannelAccount } from "../channels/read-only-account-inspect.js";
@@ -8,6 +10,7 @@ import { withProgress } from "../cli/progress.js";
 import { resolveStorePath } from "../config/sessions/paths.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
+import type { ChannelRuntimeSnapshot } from "../gateway/server-channel-runtime.types.js";
 import { info } from "../globals.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import { formatErrorMessage } from "../infra/errors.js";
@@ -251,9 +254,86 @@ async function resolveHealthAccountContext(params: {
   return { account, enabled, configured, diagnostics };
 }
 
+function resolveHealthRuntimeSnapshot(params: {
+  runtimeSnapshot?: ChannelRuntimeSnapshot;
+  channelId: string;
+  accountId: string;
+  defaultAccountId: string;
+}): ChannelAccountSnapshot | undefined {
+  const accounts = params.runtimeSnapshot?.channelAccounts[params.channelId];
+  const direct = accounts?.[params.accountId];
+  if (direct) {
+    return direct;
+  }
+  const channelDefault = params.runtimeSnapshot?.channels[params.channelId];
+  return params.accountId === params.defaultAccountId ? channelDefault : undefined;
+}
+
+function reconcileHealthAccountSnapshot(params: {
+  snapshot: ChannelAccountSnapshot;
+  account: unknown;
+  enabled: boolean;
+  configured: boolean;
+  runtimeSnapshot?: ChannelAccountSnapshot;
+}) {
+  const accountFields = projectSafeChannelAccountSnapshotFields(params.account);
+  Object.assign(params.snapshot, {
+    ...accountFields,
+    ...params.snapshot,
+  });
+
+  const tokenSource = accountFields.tokenSource;
+  if (
+    tokenSource &&
+    (params.snapshot.tokenSource === undefined || params.snapshot.tokenSource === "none")
+  ) {
+    params.snapshot.tokenSource = tokenSource;
+  }
+
+  if (params.snapshot.enabled === undefined) {
+    params.snapshot.enabled = params.enabled;
+  }
+  if (
+    params.snapshot.configured === undefined ||
+    (params.configured && params.snapshot.configured === false)
+  ) {
+    params.snapshot.configured = params.configured;
+  }
+
+  const runtime = params.runtimeSnapshot;
+  if (!runtime) {
+    return;
+  }
+  if (runtime.configured === true && params.snapshot.configured === false) {
+    params.snapshot.configured = true;
+  }
+  const runtimeKeys = [
+    "running",
+    "lastStartAt",
+    "lastStopAt",
+    "lastError",
+    "connected",
+    "restartPending",
+    "reconnectAttempts",
+    "lastConnectedAt",
+    "lastDisconnect",
+    "lastEventAt",
+    "lastTransportActivityAt",
+    "healthState",
+    "lastInboundAt",
+    "lastOutboundAt",
+  ] as const;
+  for (const key of runtimeKeys) {
+    if (runtime[key] !== undefined) {
+      params.snapshot[key] = runtime[key] as never;
+    }
+  }
+}
+
 export async function getHealthSnapshot(params?: {
   timeoutMs?: number;
   probe?: boolean;
+  runtimeSnapshot?: ChannelRuntimeSnapshot;
 }): Promise<HealthSummary> {
   const timeoutMs = params?.timeoutMs;
   const { loadConfig } = await loadConfigModule();
@@ -362,11 +442,26 @@ export async function getHealthSnapshot(params?: {
         debugHealth("probe.bot", { channel: plugin.id, accountId, username: bot.username });
       }
 
-      const snapshot: ChannelAccountSnapshot = {
+      const runtimeSnapshot = resolveHealthRuntimeSnapshot({
+        runtimeSnapshot: params?.runtimeSnapshot,
+        channelId: plugin.id,
         accountId,
+        defaultAccountId,
+      });
+      const snapshot = await buildChannelAccountSnapshot({
+        plugin,
+        cfg,
+        accountId,
+        runtime: runtimeSnapshot,
+        probe,
+      });
+      reconcileHealthAccountSnapshot({
+        snapshot,
+        account,
         enabled,
         configured,
-      };
+        runtimeSnapshot,
+      });
       if (probe !== undefined) {
         snapshot.probe = probe;
       }

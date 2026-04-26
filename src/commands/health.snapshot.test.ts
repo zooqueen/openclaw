@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
+import type { ChannelId } from "../channels/plugins/types.public.js";
+import type { ChannelRuntimeSnapshot } from "../gateway/server-channel-runtime.types.js";
 import { createPluginRecord } from "../plugins/status.test-helpers.js";
 import type { HealthSummary } from "./health.js";
 
@@ -13,6 +15,9 @@ let setActivePluginRegistry: typeof import("../plugins/runtime.js").setActivePlu
 let createChannelTestPluginBase: typeof import("../test-utils/channel-plugins.js").createChannelTestPluginBase;
 let createTestRegistry: typeof import("../test-utils/channel-plugins.js").createTestRegistry;
 let getHealthSnapshot: typeof import("./health.js").getHealthSnapshot;
+let readOnlyPluginsForTest: () => Array<
+  Pick<ChannelPlugin, "id" | "meta" | "capabilities" | "config" | "status">
+>;
 
 type TelegramHealthAccount = {
   accountId: string;
@@ -52,7 +57,7 @@ async function loadFreshHealthModulesForTest() {
     logoutWeb: vi.fn(),
   }));
   vi.doMock("../channels/plugins/read-only.js", () => ({
-    listReadOnlyChannelPluginsForConfig: () => [createTelegramHealthPlugin()],
+    listReadOnlyChannelPluginsForConfig: () => readOnlyPluginsForTest(),
   }));
 
   const [pluginsRuntime, channelTestUtils, health] = await Promise.all([
@@ -295,6 +300,68 @@ function createTelegramHealthPlugin(): Pick<
   };
 }
 
+function buildTokenHealthSummary(snapshot: {
+  accountId: string;
+  configured?: boolean | null;
+  tokenSource?: string | null;
+  running?: boolean | null;
+  lastStartAt?: number | null;
+  lastStopAt?: number | null;
+  lastError?: string | null;
+  probe?: unknown;
+  lastProbeAt?: number | null;
+}) {
+  return {
+    accountId: snapshot.accountId,
+    configured: snapshot.configured ?? false,
+    tokenSource: snapshot.tokenSource ?? "none",
+    running: snapshot.running ?? false,
+    lastStartAt: snapshot.lastStartAt ?? null,
+    lastStopAt: snapshot.lastStopAt ?? null,
+    lastError: snapshot.lastError ?? null,
+    probe: snapshot.probe,
+    lastProbeAt: snapshot.lastProbeAt ?? null,
+  };
+}
+
+function createTokenHealthPlugin(
+  id: ChannelId,
+  tokenSource: string,
+): Pick<ChannelPlugin, "id" | "meta" | "capabilities" | "config" | "status"> {
+  const resolveAccount = () => ({
+    accountId: "default",
+    enabled: true,
+    configured: true,
+    tokenSource,
+  });
+  return {
+    ...createChannelTestPluginBase({ id, label: id }),
+    config: {
+      listAccountIds: () => ["default"],
+      resolveAccount,
+      inspectAccount: resolveAccount,
+      isConfigured: () => true,
+    },
+    status: {
+      buildAccountSnapshot: ({ account, runtime, probe }) => {
+        const record = account as ReturnType<typeof resolveAccount>;
+        return {
+          accountId: record.accountId,
+          enabled: record.enabled,
+          configured: record.configured,
+          tokenSource: record.tokenSource,
+          running: runtime?.running ?? false,
+          lastStartAt: runtime?.lastStartAt ?? null,
+          lastStopAt: runtime?.lastStopAt ?? null,
+          lastError: runtime?.lastError ?? null,
+          probe,
+        };
+      },
+      buildChannelSummary: ({ snapshot }) => buildTokenHealthSummary(snapshot),
+    },
+  };
+}
+
 describe("getHealthSnapshot", () => {
   beforeAll(async () => {
     ({
@@ -306,6 +373,7 @@ describe("getHealthSnapshot", () => {
   });
 
   beforeEach(() => {
+    readOnlyPluginsForTest = () => [createTelegramHealthPlugin()];
     setActivePluginRegistry(
       createTestRegistry([
         { pluginId: "telegram", plugin: createTelegramHealthPlugin(), source: "test" },
@@ -367,6 +435,60 @@ describe("getHealthSnapshot", () => {
         error: "failed to install bundled runtime deps: ENOSPC",
       },
     ]);
+  });
+
+  it("reconciles token channel summaries with live gateway runtime state", async () => {
+    testConfig = { session: { store: "/tmp/x" } };
+    testStore = {};
+    const channelIds: ChannelId[] = ["discord", "telegram", "slack"];
+    readOnlyPluginsForTest = () =>
+      channelIds.map((channelId) =>
+        createTokenHealthPlugin(channelId, channelId === "telegram" ? "env" : "config"),
+      );
+    setActivePluginRegistry(
+      createTestRegistry(
+        channelIds.map((channelId) => ({
+          pluginId: channelId,
+          plugin: createTokenHealthPlugin(channelId, "config"),
+          source: "test",
+        })),
+      ),
+    );
+
+    const runtimeSnapshot = {
+      channels: {},
+      channelAccounts: Object.fromEntries(
+        channelIds.map((channelId, index) => [
+          channelId,
+          {
+            default: {
+              accountId: "default",
+              configured: true,
+              running: true,
+              lastStartAt: 1000 + index,
+              lastStopAt: null,
+              lastError: null,
+            },
+          },
+        ]),
+      ),
+    } satisfies ChannelRuntimeSnapshot;
+
+    const snap = await getHealthSnapshot({
+      probe: false,
+      runtimeSnapshot,
+    });
+
+    for (const channelId of channelIds) {
+      const summary = snap.channels[channelId];
+      expect(summary?.configured).toBe(true);
+      expect(summary?.running).toBe(true);
+      expect(summary?.lastStartAt).toBeGreaterThanOrEqual(1000);
+      expect(summary?.lastStopAt).toBeNull();
+      expect(summary?.tokenSource).not.toBe("none");
+      expect(summary?.accounts?.default?.running).toBe(true);
+      expect(summary?.accounts?.default?.tokenSource).not.toBe("none");
+    }
   });
 
   it("skips telegram probe when not configured", async () => {

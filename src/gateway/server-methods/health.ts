@@ -15,13 +15,17 @@ export const healthHandlers: GatewayRequestHandlers = {
     const cached = getHealthCache();
     if (!wantsProbe && cached && now - cached.ts < HEALTH_REFRESH_INTERVAL_MS) {
       respond(true, cached, undefined, { cached: true });
-      void refreshHealthSnapshot({ probe: false }).catch((err) =>
-        logHealth.error(`background health refresh failed: ${formatError(err)}`),
-      );
+      void refreshHealthSnapshot({
+        probe: false,
+        runtimeSnapshot: context.getRuntimeSnapshot(),
+      }).catch((err) => logHealth.error(`background health refresh failed: ${formatError(err)}`));
       return;
     }
     try {
-      const snap = await refreshHealthSnapshot({ probe: wantsProbe });
+      const snap = await refreshHealthSnapshot({
+        probe: wantsProbe,
+        runtimeSnapshot: context.getRuntimeSnapshot(),
+      });
       respond(true, snap, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));

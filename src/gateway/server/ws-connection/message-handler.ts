@@ -109,7 +109,6 @@ import {
   getHealthCache,
   getHealthVersion,
   incrementPresenceVersion,
-  refreshGatewayHealthSnapshot,
 } from "../health-state.js";
 import { resolveSharedGatewaySessionGeneration } from "../ws-shared-generation.js";
 import type { GatewayWsClient } from "../ws-types.js";
@@ -1475,9 +1474,11 @@ export function attachGatewayWsMessageHandler(params: {
           presence: snapshot.presence.length,
           stateVersion: snapshot.stateVersion.presence,
         });
-        void refreshGatewayHealthSnapshot({ probe: true }).catch((err) =>
-          logHealth.error(`post-connect health refresh failed: ${formatError(err)}`),
-        );
+        void buildRequestContext()
+          .refreshHealthSnapshot({ probe: true })
+          .catch((err) =>
+            logHealth.error(`post-connect health refresh failed: ${formatError(err)}`),
+          );
         return;
       }
 
