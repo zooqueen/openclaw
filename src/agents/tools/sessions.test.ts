@@ -644,6 +644,48 @@ describe("sessions_send gating", () => {
     expect(callGatewayMock.mock.calls[0]?.[0]).toMatchObject({ method: "sessions.resolve" });
   });
 
+  it("prefers sessionKey when redundant label hints are present", async () => {
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string; params?: Record<string, unknown> };
+      if (request.method === "sessions.list") {
+        return {
+          path: "/tmp/sessions.json",
+          sessions: [{ key: MAIN_AGENT_SESSION_KEY, kind: "direct" }],
+        };
+      }
+      if (request.method === "agent") {
+        return { runId: "run-explicit-session-key", acceptedAt: 123 };
+      }
+      throw new Error(`unexpected gateway method: ${request.method ?? "unknown"}`);
+    });
+    const tool = createMainSessionsSendTool();
+
+    const result = await tool.execute("call-redundant-target", {
+      sessionKey: MAIN_AGENT_SESSION_KEY,
+      label: "stale-label",
+      agentId: "other-agent",
+      message: "hello exact session",
+      timeoutSeconds: 0,
+    });
+
+    expect(result.details).toMatchObject({
+      status: "accepted",
+      runId: "run-explicit-session-key",
+      sessionKey: MAIN_AGENT_SESSION_KEY,
+    });
+    expect(callGatewayMock).toHaveBeenCalledTimes(2);
+    expect(callGatewayMock.mock.calls.map((call) => call[0])).not.toContainEqual(
+      expect.objectContaining({ method: "sessions.resolve" }),
+    );
+    expect(callGatewayMock.mock.calls[1]?.[0]).toMatchObject({
+      method: "agent",
+      params: {
+        sessionKey: MAIN_AGENT_SESSION_KEY,
+        message: "hello exact session",
+      },
+    });
+  });
+
   it("blocks cross-agent sends when tools.agentToAgent.enabled is false", async () => {
     const tool = createMainSessionsSendTool();
 
