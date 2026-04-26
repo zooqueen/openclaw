@@ -1,8 +1,7 @@
-name: openclaw-codeql-javascript-typescript
+name: openclaw-codeql-javascript-typescript-core
 
 paths:
   - src
-  - extensions
   - ui/src
   - skills
 
