@@ -15,8 +15,12 @@ type ScopedSessionSelection = {
   lastActiveSessionKey: string;
 };
 
-type PersistedUiSettings = Omit<UiSettings, "token" | "sessionKey" | "lastActiveSessionKey"> & {
+type PersistedUiSettings = Omit<
+  UiSettings,
+  "token" | "tokenGatewayUrl" | "sessionKey" | "lastActiveSessionKey"
+> & {
   token?: never;
+  tokenGatewayUrl?: never;
   sessionKey?: string;
   lastActiveSessionKey?: string;
   sessionsByGateway?: Record<string, ScopedSessionSelection>;
@@ -53,6 +57,7 @@ function snapBorderRadius(value: number): BorderRadiusStop {
 export type UiSettings = {
   gatewayUrl: string;
   token: string;
+  tokenGatewayUrl?: string;
   sessionKey: string;
   lastActiveSessionKey: string;
   theme: ThemeName;
@@ -126,6 +131,19 @@ function tokenSessionKeyForGateway(gatewayUrl: string): string {
   return `${TOKEN_SESSION_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
 }
 
+export function isGatewayTokenScopedToGateway(
+  settings: Pick<UiSettings, "gatewayUrl" | "token" | "tokenGatewayUrl">,
+): boolean {
+  const token = normalizeOptionalString(settings.token);
+  if (!token) {
+    return false;
+  }
+  const tokenGatewayUrl = normalizeOptionalString(settings.tokenGatewayUrl) ?? settings.gatewayUrl;
+  return (
+    normalizeGatewayTokenScope(tokenGatewayUrl) === normalizeGatewayTokenScope(settings.gatewayUrl)
+  );
+}
+
 function resolveScopedSessionSelection(
   gatewayUrl: string,
   parsed: PersistedUiSettings,
@@ -191,9 +209,11 @@ export function loadSettings(): UiSettings {
   const { pageUrl: pageDerivedUrl, effectiveUrl: defaultUrl } = deriveDefaultGatewayUrl();
   const storage = getSafeLocalStorage();
 
+  const defaultToken = loadSessionToken(defaultUrl);
   const defaults: UiSettings = {
     gatewayUrl: defaultUrl,
-    token: loadSessionToken(defaultUrl),
+    token: defaultToken,
+    ...(defaultToken ? { tokenGatewayUrl: defaultUrl } : {}),
     sessionKey: "main",
     lastActiveSessionKey: "main",
     theme: "claw",
@@ -227,10 +247,12 @@ export function loadSettings(): UiSettings {
       (parsed as { theme?: unknown }).theme,
       (parsed as { themeMode?: unknown }).themeMode,
     );
+    const token = loadSessionToken(gatewayUrl);
     const settings = {
       gatewayUrl,
       // Gateway auth is intentionally in-memory only; scrub any legacy persisted token on load.
-      token: loadSessionToken(gatewayUrl),
+      token,
+      ...(token ? { tokenGatewayUrl: gatewayUrl } : {}),
       sessionKey: scopedSessionSelection.sessionKey,
       lastActiveSessionKey: scopedSessionSelection.lastActiveSessionKey,
       theme: theme === "custom" && !customTheme ? "claw" : theme,
@@ -342,7 +364,7 @@ export function saveLocalAssistantIdentity(next: LocalAssistantIdentity) {
 }
 
 function persistSettings(next: UiSettings) {
-  persistSessionToken(next.gatewayUrl, next.token);
+  persistSessionToken(next.tokenGatewayUrl ?? next.gatewayUrl, next.token);
   const storage = getSafeLocalStorage();
   const scope = normalizeGatewayTokenScope(next.gatewayUrl);
   const scopedKey = settingsKeyForGateway(next.gatewayUrl);

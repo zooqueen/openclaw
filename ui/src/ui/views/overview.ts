@@ -268,7 +268,9 @@ export function renderOverview(props: OverviewProps) {
                 props.onSettingsChange({
                   ...props.settings,
                   gatewayUrl: v,
-                  token: v.trim() === props.settings.gatewayUrl.trim() ? props.settings.token : "",
+                  tokenGatewayUrl: props.settings.token.trim()
+                    ? (props.settings.tokenGatewayUrl ?? props.settings.gatewayUrl)
+                    : undefined,
                 });
               }}
               placeholder="ws://100.x.y.z:18789"
@@ -287,7 +289,13 @@ export function renderOverview(props: OverviewProps) {
                       .value=${props.settings.token}
                       @input=${(e: Event) => {
                         const v = (e.target as HTMLInputElement).value;
-                        props.onSettingsChange({ ...props.settings, token: v });
+                        props.onSettingsChange({
+                          ...props.settings,
+                          token: v,
+                          tokenGatewayUrl: v.trim()
+                            ? props.settings.gatewayUrl
+                            : props.settings.tokenGatewayUrl,
+                        });
                       }}
                       placeholder="OPENCLAW_GATEWAY_TOKEN"
                     />

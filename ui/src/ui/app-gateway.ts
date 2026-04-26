@@ -57,7 +57,7 @@ import {
 } from "./gateway.ts";
 import { GatewayBrowserClient } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
-import type { UiSettings } from "./storage.ts";
+import { isGatewayTokenScopedToGateway, type UiSettings } from "./storage.ts";
 import type {
   AgentsListResult,
   PresenceEntry,
@@ -283,9 +283,12 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
     gatewayUrl: host.settings.gatewayUrl,
     serverVersion: host.serverVersion,
   });
+  const scopedToken = isGatewayTokenScopedToGateway(host.settings)
+    ? host.settings.token.trim()
+    : "";
   const client = new GatewayBrowserClient({
     url: host.settings.gatewayUrl,
-    token: host.settings.token.trim() ? host.settings.token : undefined,
+    token: scopedToken || undefined,
     password: host.password.trim() ? host.password : undefined,
     clientName: "openclaw-control-ui",
     clientVersion,

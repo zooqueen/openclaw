@@ -308,7 +308,7 @@ describe("control UI routing", () => {
     expect(container.scrollTop).toBe(targetScrollTop);
   });
 
-  it("hydrates hash tokens, restores same-tab refreshes, and clears after gateway changes", async () => {
+  it("hydrates hash tokens, restores same-tab refreshes, and keeps URL edits scoped", async () => {
     const app = mountApp("/ui/overview#token=abc123");
     await app.updateComplete;
 
@@ -324,6 +324,7 @@ describe("control UI routing", () => {
     await refreshed.updateComplete;
 
     expect(refreshed.settings.token).toBe("abc123");
+    const originalGatewayUrl = refreshed.settings.gatewayUrl;
     expect(JSON.parse(localStorage.getItem("openclaw.control.settings.v1") ?? "{}").token).toBe(
       undefined,
     );
@@ -337,7 +338,11 @@ describe("control UI routing", () => {
     await refreshed.updateComplete;
 
     expect(refreshed.settings.gatewayUrl).toBe("wss://other-gateway.example/openclaw");
-    expect(refreshed.settings.token).toBe("");
+    expect(refreshed.settings.token).toBe("abc123");
+    expect(refreshed.settings.tokenGatewayUrl).toBe(originalGatewayUrl);
+    expect(
+      sessionStorage.getItem("openclaw.control.token.v1:wss://other-gateway.example/openclaw"),
+    ).toBeNull();
   });
 
   it("keeps a hash token pending until the gateway URL change is confirmed", async () => {

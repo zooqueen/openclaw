@@ -12,7 +12,7 @@ type GatewayClientMock = {
   start: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   request: ReturnType<typeof vi.fn>;
-  options: { clientVersion?: string };
+  options: { clientVersion?: string; token?: string; url?: string };
   emitHello: (hello?: GatewayHelloOk) => void;
   emitClose: (info: {
     code: number;
@@ -66,7 +66,11 @@ vi.mock("./gateway.ts", async (importOriginal) => {
         start: this.start,
         stop: this.stop,
         request: this.request,
-        options: { clientVersion: this.opts.clientVersion },
+        options: {
+          clientVersion: this.opts.clientVersion,
+          token: (this.opts as { token?: string }).token,
+          url: (this.opts as { url?: string }).url,
+        },
         emitHello: (hello) => {
           this.opts.onHello?.(
             hello ?? {
@@ -230,6 +234,40 @@ describe("connectGateway", () => {
     expect(gatewayClientInstances).toHaveLength(3);
     expect(secondClient.stop).toHaveBeenCalledTimes(1);
     expect(host.lastError).toBeNull();
+  });
+
+  it("omits the gateway token when URL edits move it outside its recorded scope", () => {
+    const host = createHost();
+    host.settings = {
+      ...host.settings,
+      gatewayUrl: "wss://other-gateway.example/openclaw",
+      token: "abc123",
+      tokenGatewayUrl: "wss://gateway.example/openclaw",
+    };
+
+    connectGateway(host);
+
+    expect(gatewayClientInstances[0]?.options).toMatchObject({
+      url: "wss://other-gateway.example/openclaw",
+      token: undefined,
+    });
+  });
+
+  it("sends the gateway token when the token scope still matches the active URL", () => {
+    const host = createHost();
+    host.settings = {
+      ...host.settings,
+      gatewayUrl: "wss://gateway.example/openclaw/",
+      token: "abc123",
+      tokenGatewayUrl: "wss://gateway.example/openclaw",
+    };
+
+    connectGateway(host);
+
+    expect(gatewayClientInstances[0]?.options).toMatchObject({
+      url: "wss://gateway.example/openclaw/",
+      token: "abc123",
+    });
   });
 
   it("ignores stale client onEvent callbacks after reconnect", () => {
