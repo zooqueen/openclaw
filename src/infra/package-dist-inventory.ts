@@ -120,7 +120,67 @@ export async function collectPackageDistInventory(packageRoot: string): Promise<
   return await collectRelativeFiles(path.join(packageRoot, "dist"), packageRoot);
 }
 
+const INSTALL_STAGE_DEBRIS_DIR_PATTERN = /^\.openclaw-install-stage(?:-[^/]+)?$/u;
+
+export async function collectBundledRuntimeDepsStagingDebrisPaths(
+  packageRoot: string,
+): Promise<string[]> {
+  const extensionsDir = path.join(packageRoot, "dist", "extensions");
+  let extensionEntries: import("node:fs").Dirent[];
+  try {
+    extensionEntries = await fs.readdir(extensionsDir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  const debris: string[] = [];
+  for (const extensionEntry of extensionEntries) {
+    if (!extensionEntry.isDirectory()) {
+      continue;
+    }
+    const extensionPath = path.join(extensionsDir, extensionEntry.name);
+    let stagingEntries: import("node:fs").Dirent[];
+    try {
+      stagingEntries = await fs.readdir(extensionPath, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+    for (const stagingEntry of stagingEntries) {
+      if (!INSTALL_STAGE_DEBRIS_DIR_PATTERN.test(stagingEntry.name)) {
+        continue;
+      }
+      debris.push(
+        normalizeRelativePath(
+          path.relative(packageRoot, path.join(extensionPath, stagingEntry.name)),
+        ),
+      );
+    }
+  }
+  return debris.toSorted((left, right) => left.localeCompare(right));
+}
+
+export async function assertNoBundledRuntimeDepsStagingDebris(packageRoot: string): Promise<void> {
+  const debris = await collectBundledRuntimeDepsStagingDebrisPaths(packageRoot);
+  if (debris.length === 0) {
+    return;
+  }
+  // Reject pre-populated bundled-runtime-deps staging dirs at release/package
+  // time: the runtime verifier ignores them as legitimate post-install debris,
+  // but a tarball that ships them under dist/extensions/*/ is a supply-chain
+  // hazard — a staged package.json/node_modules under .openclaw-install-stage*
+  // would otherwise be respected by the next plugin install. (#71752)
+  throw new Error(
+    `unexpected bundled-runtime-deps install staging debris in package dist: ${debris.join(", ")}`,
+  );
+}
+
 export async function writePackageDistInventory(packageRoot: string): Promise<string[]> {
+  await assertNoBundledRuntimeDepsStagingDebris(packageRoot);
   const inventory = [
     ...new Set([
       ...(await collectPackageDistInventory(packageRoot)),

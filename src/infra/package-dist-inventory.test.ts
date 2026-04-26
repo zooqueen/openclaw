@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { withTempDir } from "../test-helpers/temp-dir.js";
 import {
+  assertNoBundledRuntimeDepsStagingDebris,
+  collectBundledRuntimeDepsStagingDebrisPaths,
   collectPackageDistInventoryErrors,
   PACKAGE_DIST_INVENTORY_RELATIVE_PATH,
   collectPackageDistInventory,
@@ -192,6 +194,60 @@ describe("package dist inventory", () => {
 
       // Verifier should still report no errors — staging dirs are skipped.
       await expect(collectPackageDistInventoryErrors(packageRoot)).resolves.toEqual([]);
+    });
+  });
+
+  it("rejects pre-populated install-stage debris at publish time (#71752 follow-up)", async () => {
+    await withTempDir({ prefix: "openclaw-dist-inventory-stage-publish-" }, async (packageRoot) => {
+      const realFile = path.join(packageRoot, "dist", "real-AbC123.js");
+      await fs.mkdir(path.dirname(realFile), { recursive: true });
+      await fs.writeFile(realFile, "export {};\n", "utf8");
+
+      const tarballSeededStagePackageJson = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "evil",
+        ".openclaw-install-stage",
+        "package.json",
+      );
+      await fs.mkdir(path.dirname(tarballSeededStagePackageJson), { recursive: true });
+      await fs.writeFile(tarballSeededStagePackageJson, "{}", "utf8");
+
+      await expect(collectBundledRuntimeDepsStagingDebrisPaths(packageRoot)).resolves.toEqual([
+        "dist/extensions/evil/.openclaw-install-stage",
+      ]);
+      await expect(assertNoBundledRuntimeDepsStagingDebris(packageRoot)).rejects.toThrow(
+        /unexpected bundled-runtime-deps install staging debris/,
+      );
+      await expect(writePackageDistInventory(packageRoot)).rejects.toThrow(
+        /unexpected bundled-runtime-deps install staging debris/,
+      );
+
+      const suffixedSeed = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "browser",
+        ".openclaw-install-stage-AbC123",
+        "node_modules",
+        "playwright-core",
+        "package.json",
+      );
+      await fs.mkdir(path.dirname(suffixedSeed), { recursive: true });
+      await fs.writeFile(suffixedSeed, "{}", "utf8");
+      await expect(collectBundledRuntimeDepsStagingDebrisPaths(packageRoot)).resolves.toEqual([
+        "dist/extensions/browser/.openclaw-install-stage-AbC123",
+        "dist/extensions/evil/.openclaw-install-stage",
+      ]);
+    });
+  });
+
+  it("treats a missing dist/extensions tree as no debris", async () => {
+    await withTempDir({ prefix: "openclaw-dist-inventory-no-extensions-" }, async (packageRoot) => {
+      await fs.mkdir(path.join(packageRoot, "dist"), { recursive: true });
+      await expect(collectBundledRuntimeDepsStagingDebrisPaths(packageRoot)).resolves.toEqual([]);
+      await expect(assertNoBundledRuntimeDepsStagingDebris(packageRoot)).resolves.toBeUndefined();
     });
   });
 
