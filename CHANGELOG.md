@@ -7,24 +7,24 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Auto-reply: poison inbound message dedupe after replay-unsafe provider/runtime failures so retries stay safe before visible progress but cannot duplicate messages after block output, tool side effects, or session progress. Fixes #69303; keeps #58549 and #64606 as duplicate validation. Thanks @martingarramon, @NikolaFC, and @zeroth-blip.
-- Gateway/Bonjour: keep @homebridge/ciao cancellation handlers registered across advertiser restarts so late probing cancellations cannot crash Linux and other mDNS-churned gateways. Thanks @codex.
-- Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`. Thanks @codex.
+- Gateway/Bonjour: keep @homebridge/ciao cancellation handlers registered across advertiser restarts so late probing cancellations cannot crash Linux and other mDNS-churned gateways.
+- Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`.
 - Plugins/CLI: prefer native require for compiled bundled plugin JavaScript before jiti so read-only config, status, device, and node commands avoid unnecessary transform overhead on slow hosts. Fixes #62842. Thanks @Effet.
 - Plugins/compat: inventory doctor-side deprecation migrations separately from runtime plugin compatibility so release sweeps preserve needed repairs while enforcing dated removal windows. Thanks @vincentkoc.
 - Plugins/compat: add missing dated compatibility records for legacy extension-api, memory registration, provider hook/type aliases, runtime aliases, channel SDK helpers, and approval/test utility shims. Thanks @vincentkoc.
-- Plugins/CLI: refresh the persisted registry after managed plugin files are removed so ClawHub uninstall cannot leave stale `plugins list` entries. Thanks @codex.
-- Plugins/CLI: make plugin install and uninstall config writes conflict-aware, clear stale denylist entries on explicit reinstall/removal, and delete managed plugin files only after config/index commit succeeds. Thanks @codex.
-- Plugins: fail `plugins update` when tracked plugin or hook updates error, keep bundled runtime-dependency repair behind restrictive allowlists, and reject package installs with unloadable extension entries. Thanks @codex.
+- Plugins/CLI: refresh the persisted registry after managed plugin files are removed so ClawHub uninstall cannot leave stale `plugins list` entries.
+- Plugins/CLI: make plugin install and uninstall config writes conflict-aware, clear stale denylist entries on explicit reinstall/removal, and delete managed plugin files only after config/index commit succeeds.
+- Plugins: fail `plugins update` when tracked plugin or hook updates error, keep bundled runtime-dependency repair behind restrictive allowlists, and reject package installs with unloadable extension entries.
 - WebChat/Control UI: support non-video file attachments in chat uploads while preserving the existing image attachment path and MIME-sniff fallback for generic image uploads. (#70947) Thanks @IAMSamuelRodda.
 - Gateway/chat: keep duplicate attachment-backed `chat.send` retries with the same idempotency key on the documented in-flight path so aborts still target the real active run. Fixes #70139. Thanks @Feelw00.
-- Plugins: share package entrypoint resolution between install and discovery, reject mismatched `runtimeExtensions`, and cache bundled runtime-dependency manifest reads during scans. Thanks @codex.
+- Plugins: share package entrypoint resolution between install and discovery, reject mismatched `runtimeExtensions`, and cache bundled runtime-dependency manifest reads during scans.
 - WhatsApp/Web: keep quiet but healthy linked-device sessions connected by basing the watchdog on WhatsApp Web transport activity, while retaining a longer app-silence cap so frame activity cannot mask a stuck session forever. Fixes #70678; carries forward the focused #71466 approach and keeps #63939 as related configurable-timeout follow-up. Thanks @vincentkoc and @oromeis.
 
 ## 2026.4.26
 
 ### Fixes
 
-- Plugins/CLI: let flag-driven `openclaw channels add` install the selected channel plugin from its default source without opening an interactive prompt, fixing published npm Telegram setup in stdin-closed automation. Thanks @codex.
+- Plugins/CLI: let flag-driven `openclaw channels add` install the selected channel plugin from its default source without opening an interactive prompt, fixing published npm Telegram setup in stdin-closed automation.
 - Onboarding/setup: keep first-run config reads, plugin compatibility notices, and post-model sanity checks on cold metadata paths unless the user chooses to browse all models, avoiding full plugin/runtime catalog work between prompts. Thanks @shakkernerd.
 - Onboarding/auth: run manifest-owned provider auth choices through scoped setup providers so selecting OpenAI Codex browser/device auth no longer loads every provider runtime before OAuth starts. Thanks @shakkernerd.
 - Onboarding/auth: keep the post-auth default-model policy lookup on manifest/setup metadata so the next prompt appears without loading broad provider runtime. Thanks @shakkernerd.
@@ -122,21 +122,21 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Auto-reply: poison inbound message dedupe after replay-unsafe provider/runtime failures so retries stay safe before visible progress but cannot duplicate messages after block output, tool side effects, or session progress. Fixes #69303; keeps #58549 and #64606 as duplicate validation. Thanks @martingarramon, @NikolaFC, and @zeroth-blip.
-- Agents/OpenAI: keep Responses web search compatible with minimal thinking by raising `web_search` requests to the lowest supported reasoning effort instead of sending a rejected minimal payload. Thanks @codex.
-- Agents/tools: honor the `bundle-mcp` allowlist token when deciding whether bundled MCP tools are available, so restricted tool policies can still enable bundled MCP without exposing unrelated tools. Thanks @codex.
+- Agents/OpenAI: keep Responses web search compatible with minimal thinking by raising `web_search` requests to the lowest supported reasoning effort instead of sending a rejected minimal payload.
+- Agents/tools: honor the `bundle-mcp` allowlist token when deciding whether bundled MCP tools are available, so restricted tool policies can still enable bundled MCP without exposing unrelated tools.
 - Agents/model fallback: jump directly to a known later live-session model redirect instead of walking unrelated fallback candidates, while preserving the already-landed live-session/fallback loop guard. Fixes #57471; related loop family already closed via #58496. Thanks @yuxiaoyang2007-prog.
 - Skills/memory: restore Chokidar v5 hot reloads by watching concrete skill and memory roots with filters, including SKILL.md removals and deleted skill folders without broad workspace recursion. Fixes #27404, #33585, and #41606. Thanks @shelvenzhou, @08820048, and @rocke2020.
 - Discord/gateway: count failed health-monitor restart attempts toward cooldown and hourly caps, and evict stale account lifecycle state during channel reloads so repeated Discord gateway recovery cannot loop on old status. Fixes #38596. (#40413) Thanks @jellyAI-dev and @vashquez.
-- Plugins/CLI: let flag-driven `openclaw channels add` install the selected channel plugin from its default source without opening an interactive prompt, fixing published npm Telegram setup in stdin-closed automation. Thanks @codex.
-- Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`. Thanks @codex.
+- Plugins/CLI: let flag-driven `openclaw channels add` install the selected channel plugin from its default source without opening an interactive prompt, fixing published npm Telegram setup in stdin-closed automation.
+- Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`.
 - Plugins/CLI: prefer native require for compiled bundled plugin JavaScript before jiti so read-only config, status, device, and node commands avoid unnecessary transform overhead on slow hosts. Fixes #62842. Thanks @Effet.
 - Plugins/compat: inventory doctor-side deprecation migrations separately from runtime plugin compatibility so release sweeps preserve needed repairs while enforcing dated removal windows. Thanks @vincentkoc.
 - Plugins/compat: add missing dated compatibility records for legacy extension-api, memory registration, provider hook/type aliases, runtime aliases, channel SDK helpers, and approval/test utility shims. Thanks @vincentkoc.
-- Plugins/CLI: refresh the persisted registry after managed plugin files are removed so ClawHub uninstall cannot leave stale `plugins list` entries. Thanks @codex.
-- Plugins/CLI: make plugin install and uninstall config writes conflict-aware, clear stale denylist entries on explicit reinstall/removal, and delete managed plugin files only after config/index commit succeeds. Thanks @codex.
-- Plugins: fail `plugins update` when tracked plugin or hook updates error, keep bundled runtime-dependency repair behind restrictive allowlists, and reject package installs with unloadable extension entries. Thanks @codex.
+- Plugins/CLI: refresh the persisted registry after managed plugin files are removed so ClawHub uninstall cannot leave stale `plugins list` entries.
+- Plugins/CLI: make plugin install and uninstall config writes conflict-aware, clear stale denylist entries on explicit reinstall/removal, and delete managed plugin files only after config/index commit succeeds.
+- Plugins: fail `plugins update` when tracked plugin or hook updates error, keep bundled runtime-dependency repair behind restrictive allowlists, and reject package installs with unloadable extension entries.
 - Gateway/chat: keep duplicate attachment-backed `chat.send` retries with the same idempotency key on the documented in-flight path so aborts still target the real active run. Fixes #70139. Thanks @Feelw00.
-- Plugins: share package entrypoint resolution between install and discovery, reject mismatched `runtimeExtensions`, and cache bundled runtime-dependency manifest reads during scans. Thanks @codex.
+- Plugins: share package entrypoint resolution between install and discovery, reject mismatched `runtimeExtensions`, and cache bundled runtime-dependency manifest reads during scans.
 - WhatsApp/Web: keep quiet but healthy linked-device sessions connected by basing the watchdog on WhatsApp Web transport activity, while retaining a longer app-silence cap so frame activity cannot mask a stuck session forever. Fixes #70678; carries forward the focused #71466 approach and keeps #63939 as related configurable-timeout follow-up. Thanks @vincentkoc and @oromeis.
 - Onboarding/setup: keep first-run config reads, plugin compatibility notices, and post-model sanity checks on cold metadata paths unless the user chooses to browse all models, avoiding full plugin/runtime catalog work between prompts. Thanks @shakkernerd.
 - Onboarding/auth: run manifest-owned provider auth choices through scoped setup providers so selecting OpenAI Codex browser/device auth no longer loads every provider runtime before OAuth starts. Thanks @shakkernerd.
@@ -150,7 +150,7 @@ Docs: https://docs.openclaw.ai
 - CLI/update: run package post-update doctor with `--fix` so package updates repair config migrations before restart. Thanks @shakkernerd.
 - CLI/update: retry failed npm global updates with `--omit=optional` and ignore the superseded first failure when the fallback succeeds. Thanks @shakkernerd.
 - Plugins/uninstall: migrate and reset `plugins.slots.contextEngine` alongside memory slots when plugin ids change or selected plugins are removed. Thanks @shakkernerd.
-- Agents/Discord: keep raw `Agent failed before reply` runner failures out of Discord group/channel chats and show detailed runner errors in direct chats only when `/verbose` is enabled. Thanks @codex.
+- Agents/Discord: keep raw `Agent failed before reply` runner failures out of Discord group/channel chats and show detailed runner errors in direct chats only when `/verbose` is enabled.
 - UI/Windows: quote resolved pnpm `.cmd` launcher paths before spawning UI install/build/test commands so Node installs under `C:\Program Files` no longer fail as `C:\Program`. Fixes #45275. Thanks @Kobevictor, @stoppieboy, and @iubns.
 - Codex/agent: translate `--thinking minimal` to `low` for modern Codex models (gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.2) at request build time so the first turn is accepted instead of paying a wasted call + retry-with-low fallback. Older Codex models still receive `minimal` directly. Fixes #71946. Thanks @hclsys.
 - Plugins/uninstall: remove tracked plugin files from their recorded managed extensions root even when the current state directory points somewhere else, so `openclaw plugins uninstall --force` does not leave the plugin discoverable. Thanks @shakkernerd.
@@ -252,7 +252,7 @@ Docs: https://docs.openclaw.ai
 - macOS/remote SSH: keep discovered gateway hosts in `gateway.remote.sshTarget` while pinning SSH transport URLs to the local loopback tunnel, so browser automation does not regress into blocked non-loopback `ws://` endpoints. Fixes #67336.
 - Gateway/proxy: bootstrap env proxy dispatching from direct Gateway startup so provider and plugin network requests honor `HTTPS_PROXY`/`HTTP_PROXY` before the first embedded agent attempt runs. (#71833) Thanks @mjamiv.
 - Plugins/runtime deps: verify clean npm installs actually place requested bundled runtime packages in the managed install root, reporting exact missing specs instead of a false successful repair. (#71883) Thanks @Solvely-Colin.
-- Plugins/discovery: ignore stale `plugins.load.paths` aliases that point back at packaged bundled plugin directories and have doctor remove them, keeping bundled plugins on the runtime-deps staging path. Thanks @codex.
+- Plugins/discovery: ignore stale `plugins.load.paths` aliases that point back at packaged bundled plugin directories and have doctor remove them, keeping bundled plugins on the runtime-deps staging path.
 - Models/LM Studio: preserve `@iq*` quant suffixes in model refs and provider matching so `/model lmstudio/...@iq3_xxs` keeps the exact LM Studio variant. Fixes #71474. (#71486) Thanks @Bartok9, @XinwuC, and @Sanjays2402.
 - Matrix/cron: preserve the live Matrix delivery target when creating implicit announce reminder jobs so mixed-case room IDs are not reconstructed from lowercased session keys. Fixes #71798.
 - Feishu: accept Schema 2.0 card action callbacks that report `context.open_chat_id` instead of legacy `context.chat_id`, so button callbacks no longer drop as malformed. Fixes #71670. Thanks @eddy1068.
@@ -4610,7 +4610,7 @@ Docs: https://docs.openclaw.ai
 - Slack/Allowlist channels: match channel IDs case-insensitively during channel allowlist resolution so lowercase config keys (for example `c0abc12345`) correctly match Slack runtime IDs (`C0ABC12345`) under `groupPolicy: "allowlist"`, preventing silent channel-event drops. (#26878) Thanks @lbo728.
 - Discord/Typing indicator: prevent stuck typing indicators by sealing channel typing keepalive callbacks after idle/cleanup and ensuring Discord dispatch always marks typing idle even if preview-stream cleanup fails. (#26295) Thanks @ngutman.
 - Channels/Typing indicator: guard typing keepalive start callbacks after idle/cleanup close so post-close ticks cannot re-trigger stale typing indicators. (#26325) Thanks @win4r.
-- Followups/Typing indicator: ensure followup turns mark dispatch idle on every exit path (including `NO_REPLY`, empty payloads, and agent errors) so typing keepalive cleanup always runs and channel typing indicators do not get stuck after queued/silent followups. (#26881) Thanks @codexGW.
+- Followups/Typing indicator: ensure followup turns mark dispatch idle on every exit path (including `NO_REPLY`, empty payloads, and agent errors) so typing keepalive cleanup always runs and channel typing indicators do not get stuck after queued/silent followups. (#26881)
 - Voice-call/TTS tools: hide the `tts` tool when the message provider is `voice`, preventing voice-call runs from selecting self-playback TTS and falling into silent no-output loops. (#27025).
 - Agents/Tools: normalize non-standard plugin tool results that omit `content` so embedded runs no longer crash with `Cannot read properties of undefined (reading 'filter')` after tool completion (including `tesseramemo_query`). (#27007).
 - Agents/Tool-call dispatch: trim whitespace-padded tool names in both transcript repair and live streamed embedded-runner responses so exact-match tool lookup no longer fails with `Tool .. not found` for model outputs like `" read "`. (#27094) Thanks @openperf and @Sid-Qin.
