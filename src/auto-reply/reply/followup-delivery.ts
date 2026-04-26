@@ -79,14 +79,18 @@ export function resolveFollowupDeliveryPayloads(params: {
       : originMatchingMessagingToolSends.flatMap((target) =>
           target.sentText?.trim() ? [target.sentText] : [],
         );
+  const dedupeMessagingToolPayloads =
+    originMatchingMessagingToolSends.length > 0 || (params.sentTargets?.length ?? 0) === 0;
   const dedupedPayloads = filterMessagingToolDuplicates({
     payloads: replyTaggedPayloads,
     sentTexts,
   });
-  const mediaFilteredPayloads = filterMessagingToolMediaDuplicates({
-    payloads: dedupedPayloads,
-    sentMediaUrls: params.sentMediaUrls ?? [],
-  });
+  const mediaFilteredPayloads = dedupeMessagingToolPayloads
+    ? filterMessagingToolMediaDuplicates({
+        payloads: dedupedPayloads,
+        sentMediaUrls: params.sentMediaUrls ?? [],
+      })
+    : dedupedPayloads;
   const suppressMessagingToolReplies = shouldSuppressMessagingToolReplies({
     messageProvider: replyToChannel,
     messagingToolSentTargets: params.sentTargets,
