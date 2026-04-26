@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveDiscordPrivilegedIntentsFromFlags } from "./probe.js";
+import {
+  fetchDiscordApplicationSummary,
+  resolveDiscordPrivilegedIntentsFromFlags,
+} from "./probe.js";
+import { urlToString } from "./test-http-helpers.js";
 
 describe("resolveDiscordPrivilegedIntentsFromFlags", () => {
   it("reports disabled when no bits set", () => {
@@ -35,5 +39,22 @@ describe("resolveDiscordPrivilegedIntentsFromFlags", () => {
       guildMembers: "enabled",
       messageContent: "enabled",
     });
+  });
+
+  it("retries application metadata HTML rate limits before returning no summary", async () => {
+    let calls = 0;
+    const fetcher = async (url: Request | URL | string) => {
+      expect(urlToString(url)).toBe("https://discord.com/api/v10/oauth2/applications/@me");
+      calls += 1;
+      return new Response("<html><title>Error 1015</title><body>rate limited</body></html>", {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      });
+    };
+
+    const summary = await fetchDiscordApplicationSummary("token", 5000, fetcher);
+
+    expect(summary).toBeUndefined();
+    expect(calls).toBe(3);
   });
 });

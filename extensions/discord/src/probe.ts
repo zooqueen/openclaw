@@ -2,6 +2,7 @@ import type { BaseProbeResult } from "openclaw/plugin-sdk/channel-contract";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { resolveFetch } from "openclaw/plugin-sdk/fetch-runtime";
 import { fetchWithTimeout } from "openclaw/plugin-sdk/text-runtime";
+import { fetchDiscord } from "./api.js";
 import { normalizeDiscordToken } from "./token.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -40,14 +41,27 @@ async function fetchDiscordApplicationMe(
   fetcher: typeof fetch,
 ): Promise<{ id?: string; flags?: number } | undefined> {
   try {
-    const appResponse = await fetchDiscordApplicationMeResponse(token, timeoutMs, fetcher);
-    if (!appResponse || !appResponse.ok) {
+    const normalized = normalizeDiscordToken(token, "channels.discord.token");
+    if (!normalized) {
       return undefined;
     }
-    return (await appResponse.json()) as { id?: string; flags?: number };
+    return await fetchDiscord<{ id?: string; flags?: number }>(
+      "/oauth2/applications/@me",
+      normalized,
+      createTimeoutFetch(timeoutMs, fetcher),
+    );
   } catch {
     return undefined;
   }
+}
+
+function createTimeoutFetch(timeoutMs: number, fetcher: typeof fetch): typeof fetch {
+  const fetchImpl = getResolvedFetch(fetcher);
+  return async (input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    return await fetchWithTimeout(url, init ?? {}, timeoutMs, fetchImpl);
+  };
 }
 
 async function fetchDiscordApplicationMeResponse(

@@ -12,6 +12,8 @@ const DISCORD_API_RETRY_DEFAULTS = {
   maxDelayMs: 30_000,
   jitter: 0.1,
 };
+const DISCORD_HTML_RATE_LIMIT_RETRY_AFTER_SECONDS = 30;
+const DISCORD_ERROR_DETAIL_MAX_CHARS = 240;
 
 type DiscordApiErrorPayload = {
   message?: string;
@@ -50,7 +52,14 @@ function parseRetryAfterSeconds(text: string, response: Response): number | unde
     return undefined;
   }
   const parsed = Number(header);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  const parsedDateMs = Date.parse(header);
+  if (!Number.isFinite(parsedDateMs)) {
+    return undefined;
+  }
+  return Math.max(0, (parsedDateMs - Date.now()) / 1000);
 }
 
 function formatRetryAfterSeconds(value: number | undefined): string | undefined {
@@ -61,6 +70,35 @@ function formatRetryAfterSeconds(value: number | undefined): string | undefined 
   return `${rounded}s`;
 }
 
+function isHtmlResponseText(text: string): boolean {
+  const trimmed = text.trimStart().slice(0, 500).toLowerCase();
+  return (
+    trimmed.startsWith("<!doctype html") ||
+    trimmed.startsWith("<html") ||
+    /<title[\s>]/.test(trimmed) ||
+    /<body[\s>]/.test(trimmed)
+  );
+}
+
+function summarizeHtmlResponseText(text: string): string {
+  const withoutScripts = text
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ");
+  const withoutTags = withoutScripts.replace(/<[^>]+>/g, " ");
+  const normalized = withoutTags
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "HTML response";
+  }
+  const suffix = normalized.length > DISCORD_ERROR_DETAIL_MAX_CHARS ? "..." : "";
+  return `HTML response: ${normalized.slice(0, DISCORD_ERROR_DETAIL_MAX_CHARS)}${suffix}`;
+}
+
 function formatDiscordApiErrorText(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -68,6 +106,9 @@ function formatDiscordApiErrorText(text: string): string | undefined {
   }
   const payload = parseDiscordApiErrorPayload(trimmed);
   if (!payload) {
+    if (isHtmlResponseText(trimmed)) {
+      return summarizeHtmlResponseText(trimmed);
+    }
     const looksJson = trimmed.startsWith("{") && trimmed.endsWith("}");
     return looksJson ? "unknown error" : trimmed;
   }
@@ -118,7 +159,11 @@ export async function fetchDiscord<T>(
         const text = await res.text().catch(() => "");
         const detail = formatDiscordApiErrorText(text);
         const suffix = detail ? `: ${detail}` : "";
-        const retryAfter = res.status === 429 ? parseRetryAfterSeconds(text, res) : undefined;
+        const parsedRetryAfter = res.status === 429 ? parseRetryAfterSeconds(text, res) : undefined;
+        const retryAfter =
+          parsedRetryAfter === undefined && res.status === 429 && isHtmlResponseText(text)
+            ? DISCORD_HTML_RATE_LIMIT_RETRY_AFTER_SECONDS
+            : parsedRetryAfter;
         throw new DiscordApiError(
           `Discord API ${path} failed (${res.status})${suffix}`,
           res.status,

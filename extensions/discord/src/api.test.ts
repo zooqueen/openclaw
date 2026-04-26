@@ -1,6 +1,6 @@
 import { withFetchPreconnect } from "openclaw/plugin-sdk/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchDiscord } from "./api.js";
+import { DiscordApiError, fetchDiscord } from "./api.js";
 import { jsonResponse } from "./test-http-helpers.js";
 
 describe("fetchDiscord", () => {
@@ -44,6 +44,64 @@ describe("fetchDiscord", () => {
         retry: { attempts: 1 },
       }),
     ).rejects.toThrow("Discord API /users/@me/guilds failed (404): Not Found");
+  });
+
+  it("sanitizes Cloudflare HTML rate limits and honors Retry-After", async () => {
+    const html = `<!doctype html>
+      <html>
+        <head><title>Error 1015</title><style>.hidden{display:none}</style></head>
+        <body><h1>You are being rate limited</h1><script>alert("token")</script></body>
+      </html>`;
+    const fetcher = withFetchPreconnect(
+      async () =>
+        new Response(html, {
+          status: 429,
+          headers: { "Retry-After": "7" },
+        }),
+    );
+
+    let error: unknown;
+    try {
+      await fetchDiscord("/users/@me/guilds", "test", fetcher, {
+        retry: { attempts: 1 },
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeInstanceOf(DiscordApiError);
+    expect((error as DiscordApiError).retryAfter).toBe(7);
+    const message = String(error);
+    expect(message).toContain("Discord API /users/@me/guilds failed (429)");
+    expect(message).toContain("HTML response:");
+    expect(message).toContain("Error 1015");
+    expect(message).toContain("You are being rate limited");
+    expect(message).not.toContain("<html");
+    expect(message).not.toContain("<script");
+    expect(message).not.toContain("alert");
+  });
+
+  it("uses a conservative cooldown for application metadata HTML rate limits", async () => {
+    const fetcher = withFetchPreconnect(
+      async () =>
+        new Response("<html><title>Error 1015</title><body>rate limited</body></html>", {
+          status: 429,
+        }),
+    );
+
+    let error: unknown;
+    try {
+      await fetchDiscord("/oauth2/applications/@me", "test", fetcher, {
+        retry: { attempts: 1 },
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeInstanceOf(DiscordApiError);
+    expect((error as DiscordApiError).retryAfter).toBe(30);
+    expect(String(error)).toContain("Discord API /oauth2/applications/@me failed (429)");
+    expect(String(error)).not.toContain("<body>");
   });
 
   it("retries rate limits before succeeding", async () => {
