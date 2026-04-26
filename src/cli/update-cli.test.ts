@@ -22,6 +22,18 @@ const readPackageName = vi.fn();
 const readPackageVersion = vi.fn();
 const resolveGlobalManager = vi.fn();
 const serviceLoaded = vi.fn();
+const readGatewayServiceState = vi.fn(async (args: { env?: NodeJS.ProcessEnv } = {}) => {
+  const env = args.env ?? process.env;
+  const loaded = Boolean(await serviceLoaded({ env }));
+  return {
+    installed: loaded,
+    loaded,
+    running: false,
+    env,
+    command: loaded ? { command: ["openclaw", "gateway", "start"] } : null,
+    runtime: undefined,
+  };
+});
 const prepareRestartScript = vi.fn();
 const runRestartScript = vi.fn();
 const mockedRunDaemonInstall = vi.fn();
@@ -164,6 +176,8 @@ vi.mock("../plugins/installed-plugin-index-records.js", async (importOriginal) =
 });
 
 vi.mock("../daemon/service.js", () => ({
+  readGatewayServiceState: (_service: unknown, args?: { env?: NodeJS.ProcessEnv }) =>
+    readGatewayServiceState(args),
   resolveGatewayService: vi.fn(() => ({
     isLoaded: (...args: unknown[]) => serviceLoaded(...args),
     readRuntime: (...args: unknown[]) => serviceReadRuntime(...args),
@@ -543,16 +557,18 @@ describe("update-cli", () => {
   });
 
   it("keeps downgrade post-update work in the current process", async () => {
-    setupUpdatedRootRefresh({
-      gatewayUpdateImpl: async () =>
-        makeOkUpdateResult({
-          mode: "npm",
-          root: createCaseDir("openclaw-downgraded-root"),
-          before: { version: "2026.4.14" },
-          after: { version: "2026.4.10" },
-        }),
-    });
+    const downgradedRoot = createCaseDir("openclaw-downgraded-root");
+    mockPackageInstallStatus(downgradedRoot);
+    pathExists.mockImplementation(async (candidate: string) =>
+      [path.join(downgradedRoot, "dist", "entry.js")].includes(candidate),
+    );
     readPackageVersion.mockResolvedValue("2026.4.14");
+    serviceLoaded.mockResolvedValue(true);
+    vi.mocked(fetchNpmPackageTargetStatus).mockResolvedValue({
+      target: "2026.4.10",
+      version: "2026.4.10",
+      nodeEngine: ">=22.14.0",
+    });
     vi.mocked(resolveNpmChannelTag).mockResolvedValue({
       tag: "latest",
       version: "2026.4.10",
@@ -579,8 +595,7 @@ describe("update-cli", () => {
     expect(spawn).not.toHaveBeenCalled();
     expect(syncPluginsForUpdateChannel).toHaveBeenCalled();
     expect(updateNpmInstalledPlugins).toHaveBeenCalled();
-    expect(runDaemonInstall).toHaveBeenCalled();
-    expect(probeGateway).toHaveBeenCalled();
+    expect(runRestartScript).toHaveBeenCalled();
     expect(defaultRuntime.exit).not.toHaveBeenCalledWith(1);
   });
 
@@ -1865,27 +1880,35 @@ describe("update-cli", () => {
   ] as const)("updateCommand service refresh behavior: $name", runUpdateCliScenario);
 
   it("fails a package update when service env refresh cannot complete", async () => {
-    const tempDir = createCaseDir("openclaw-update");
-    mockPackageInstallStatus(tempDir);
+    const { entrypoints, root } = setupUpdatedRootRefresh();
     serviceLoaded.mockResolvedValue(true);
-    vi.mocked(runDaemonInstall).mockRejectedValueOnce(new Error("refresh failed"));
+    vi.mocked(runCommandWithTimeout).mockResolvedValueOnce({
+      stdout: "",
+      stderr: "refresh failed",
+      code: 1,
+      signal: null,
+      killed: false,
+      termination: "exit",
+    });
 
     await updateCommand({ yes: true });
 
-    expect(runDaemonInstall).toHaveBeenCalledWith({
-      force: true,
-      json: undefined,
-    });
+    expect(runCommandWithTimeout).toHaveBeenCalledWith(
+      [expect.stringMatching(/node/), entrypoints[0], "gateway", "install", "--force"],
+      expect.objectContaining({ cwd: root, timeoutMs: 60_000 }),
+    );
     expect(runRestartScript).not.toHaveBeenCalled();
     expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
   });
 
   it("fails a JSON package update when fallback restart leaves the old gateway running", async () => {
+    const updatedRoot = createCaseDir("openclaw-updated-root");
     setupUpdatedRootRefresh({
+      entrypoints: [path.join(updatedRoot, "dist", "entry.js")],
       gatewayUpdateImpl: async () =>
         makeOkUpdateResult({
           mode: "npm",
-          root: createCaseDir("openclaw-updated-root"),
+          root: updatedRoot,
           before: { version: "2026.4.23" },
           after: { version: "2026.4.24" },
         }),
@@ -1911,7 +1934,16 @@ describe("update-cli", () => {
     await updateCommand({ yes: true, json: true });
 
     expect(runRestartScript).not.toHaveBeenCalled();
-    expect(runDaemonRestart).toHaveBeenCalled();
+    expect(runCommandWithTimeout).toHaveBeenCalledWith(
+      [
+        expect.stringMatching(/node/),
+        expect.stringContaining(path.join("openclaw-updated-root")),
+        "gateway",
+        "restart",
+        "--json",
+      ],
+      expect.objectContaining({ timeoutMs: 60_000 }),
+    );
     expect(probeGateway).toHaveBeenCalledWith(expect.objectContaining({ includeDetails: true }));
     expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
     expect(defaultRuntime.writeJson).not.toHaveBeenCalled();
@@ -1927,22 +1959,24 @@ describe("update-cli", () => {
   });
 
   it("fails a package update when the restarted gateway reports activated plugin load errors", async () => {
+    const updatedRoot = createCaseDir("openclaw-updated-root");
     setupUpdatedRootRefresh({
+      entrypoints: [path.join(updatedRoot, "dist", "entry.js")],
       gatewayUpdateImpl: async () =>
         makeOkUpdateResult({
           mode: "npm",
-          root: createCaseDir("openclaw-updated-root"),
-          before: { version: "2026.4.23" },
-          after: { version: "2026.4.24" },
+          root: updatedRoot,
+          before: { version: "2026.4.24" },
+          after: { version: "2026.4.23" },
         }),
     });
-    readPackageVersion.mockResolvedValue("2026.4.24");
+    readPackageVersion.mockResolvedValue("2026.4.23");
     serviceLoaded.mockResolvedValue(true);
     probeGateway.mockResolvedValue({
       ok: true,
       close: null,
       server: {
-        version: "2026.4.24",
+        version: "2026.4.23",
         connId: "updated-gateway",
       },
       auth: { role: "operator", scopes: ["operator.read"], capability: "read_only" },

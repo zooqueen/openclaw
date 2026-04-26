@@ -393,7 +393,7 @@ const releasePathChunks = {
   "package-update": [
     npmLane(
       "install-e2e",
-      "OPENCLAW_INSTALL_TAG=beta OPENCLAW_E2E_MODELS=both pnpm test:install:e2e",
+      'OPENCLAW_INSTALL_TAG="${OPENCLAW_RELEASE_INSTALL_TAG:-beta}" OPENCLAW_INSTALL_PACKAGE_TGZ="${OPENCLAW_RELEASE_PACKAGE_TGZ:-}" OPENCLAW_E2E_MODELS=both pnpm test:install:e2e',
       {
         resources: ["service"],
         weight: 4,

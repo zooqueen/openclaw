@@ -7,6 +7,7 @@ source "$ROOT_DIR/scripts/lib/docker-e2e-image.sh"
 IMAGE_NAME="$(docker_e2e_resolve_image "openclaw-npm-telegram-live-e2e" OPENCLAW_NPM_TELEGRAM_LIVE_E2E_IMAGE)"
 DOCKER_TARGET="${OPENCLAW_NPM_TELEGRAM_DOCKER_TARGET:-build}"
 PACKAGE_SPEC="${OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC:-openclaw@beta}"
+PACKAGE_TGZ="${OPENCLAW_NPM_TELEGRAM_PACKAGE_TGZ:-}"
 OUTPUT_DIR="${OPENCLAW_NPM_TELEGRAM_OUTPUT_DIR:-.artifacts/qa-e2e/npm-telegram-live}"
 
 resolve_credential_source() {
@@ -40,11 +41,48 @@ validate_openclaw_package_spec() {
   if [[ "$spec" =~ ^openclaw@(beta|latest|[0-9]{4}\.[1-9][0-9]*\.[1-9][0-9]*(-[1-9][0-9]*|-beta\.[1-9][0-9]*)?)$ ]]; then
     return 0
   fi
-  echo "OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC must be openclaw@beta, openclaw@latest, or an exact OpenClaw release version; got: $spec" >&2
+  if [[ "$spec" =~ ^https?://.+\.tgz($|\?) ]]; then
+    return 0
+  fi
+  echo "OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC must be openclaw@beta, openclaw@latest, an exact OpenClaw release version, or an http(s) .tgz URL; got: $spec" >&2
   exit 1
 }
 
-validate_openclaw_package_spec "$PACKAGE_SPEC"
+resolve_local_tarball_path() {
+  local spec="$1"
+  node -e '
+const path = require("node:path");
+const { fileURLToPath } = require("node:url");
+const spec = process.argv[1];
+if (spec.startsWith("file:")) {
+  process.stdout.write(fileURLToPath(spec));
+} else {
+  process.stdout.write(path.resolve(spec));
+}
+' "$spec"
+}
+
+PACKAGE_MOUNT_ARGS=()
+CONTAINER_PACKAGE_SPEC="$PACKAGE_SPEC"
+if [[ -n "$PACKAGE_TGZ" ]]; then
+  PACKAGE_TGZ="$(resolve_local_tarball_path "$PACKAGE_TGZ")"
+  if [[ ! -f "$PACKAGE_TGZ" ]]; then
+    echo "OPENCLAW_NPM_TELEGRAM_PACKAGE_TGZ does not exist: $PACKAGE_TGZ" >&2
+    exit 1
+  fi
+  CONTAINER_PACKAGE_SPEC="/tmp/openclaw-npm-telegram-candidate.tgz"
+  PACKAGE_MOUNT_ARGS=(-v "$PACKAGE_TGZ:$CONTAINER_PACKAGE_SPEC:ro")
+elif [[ "$PACKAGE_SPEC" == file:* || "$PACKAGE_SPEC" == /* || "$PACKAGE_SPEC" == ./* || "$PACKAGE_SPEC" == ../* ]]; then
+  PACKAGE_TGZ="$(resolve_local_tarball_path "$PACKAGE_SPEC")"
+  if [[ ! -f "$PACKAGE_TGZ" ]]; then
+    echo "OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC local tarball does not exist: $PACKAGE_TGZ" >&2
+    exit 1
+  fi
+  CONTAINER_PACKAGE_SPEC="/tmp/openclaw-npm-telegram-candidate.tgz"
+  PACKAGE_MOUNT_ARGS=(-v "$PACKAGE_TGZ:$CONTAINER_PACKAGE_SPEC:ro")
+else
+  validate_openclaw_package_spec "$PACKAGE_SPEC"
+fi
 
 docker_e2e_build_or_reuse "$IMAGE_NAME" npm-telegram-live "$ROOT_DIR/scripts/e2e/Dockerfile" "$ROOT_DIR" "$DOCKER_TARGET"
 
@@ -60,7 +98,7 @@ fi
 
 docker_env=(
   -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-  -e OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC="$PACKAGE_SPEC"
+  -e OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC="$CONTAINER_PACKAGE_SPEC"
   -e OPENCLAW_NPM_TELEGRAM_OUTPUT_DIR="$OUTPUT_DIR"
   -e OPENCLAW_NPM_TELEGRAM_FAST="${OPENCLAW_NPM_TELEGRAM_FAST:-1}"
 )
@@ -121,11 +159,12 @@ run_logged() {
   >"$run_log"
 }
 
-echo "Running published npm Telegram live Docker E2E ($PACKAGE_SPEC)..."
+echo "Running npm Telegram live Docker E2E ($PACKAGE_SPEC)..."
 run_logged docker run --rm \
   -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-  -e OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC="$PACKAGE_SPEC" \
+  -e OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC="$CONTAINER_PACKAGE_SPEC" \
   -v "$npm_prefix_host:/npm-global" \
+  "${PACKAGE_MOUNT_ARGS[@]}" \
   -i "$IMAGE_NAME" bash -s <<'EOF'
 set -euo pipefail
 
@@ -200,4 +239,4 @@ trap - ERR
 node --import tsx scripts/e2e/npm-telegram-live-runner.ts
 EOF
 
-echo "published npm Telegram live Docker E2E passed ($PACKAGE_SPEC)"
+echo "npm Telegram live Docker E2E passed ($PACKAGE_SPEC)"

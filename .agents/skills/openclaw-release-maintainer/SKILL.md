@@ -51,17 +51,21 @@ Use this skill for release and publish-time workflow. Keep ordinary development 
   and no GitHub release/prerelease exists for the tag; after retagging, push the
   updated tag intentionally and rerun npm preflight because older preflight
   artifacts are tied to the previous tag SHA.
-- For a beta release train, run the fast local preflight first, publish the
-  beta to npm `beta`, then run the expensive published-package roster focused
-  on install/update/Docker/Parallels/NPM Telegram. If anything fails, fix it on
-  the release branch, commit/push/pull, increment beta number, and repeat. Run
-  the full expensive roster at least once before stable/latest promotion; for
-  later beta attempts, rerun only lanes whose evidence changed unless the fix
-  touches broad release, install/update, plugin, Docker, Parallels, or live QA
-  behavior. After each beta is published, scan current `main` once for critical
-  fixes that landed after the release branch cut and backport only important
-  low-risk fixes. Operators may authorize up to 4 autonomous beta attempts;
-  after 4 failed beta attempts, stop and report.
+- For a beta release train, run the fast local preflight first, then create a
+  local/preflight npm tarball and run the expensive release roster against that
+  exact tarball before publishing anything to npm. Focus the roster on
+  install/update/Docker/Parallels/NPM Telegram. If anything fails before npm
+  publish, fix it on the release branch, commit/push/pull, and rerun preflight;
+  beta-only tags may be moved only when the operator explicitly approves and
+  the matching npm version is still unpublished. Publish the beta only after
+  the tarball proof is good enough. Run the full expensive roster at least once
+  before stable/latest promotion; for later attempts, rerun only lanes whose
+  evidence changed unless the fix touches broad release, install/update,
+  plugin, Docker, Parallels, or live QA behavior. After each beta is published,
+  scan current `main` once for critical fixes that landed after the release
+  branch cut and backport only important low-risk fixes. Operators may
+  authorize up to 4 autonomous beta attempts; after 4 failed attempts, stop and
+  report.
 - Use `/changelog` before version/tag preparation so the top changelog section
   is deduped and ordered by user impact.
 - Do not create beta-specific `CHANGELOG.md` headings. Beta releases use the
