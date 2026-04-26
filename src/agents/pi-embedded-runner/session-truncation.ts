@@ -1,4 +1,4 @@
-import { once } from "node:events";
+import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -38,8 +38,6 @@ export async function truncateSessionAfterCompaction(params: {
   sessionFile: string;
   /** Optional path to archive the pre-truncation file. */
   archivePath?: string;
-  ackMaxChars?: number;
-  heartbeatPrompt?: string;
 }): Promise<TruncationResult> {
   const { sessionFile } = params;
 
@@ -160,7 +158,7 @@ export async function truncateSessionAfterCompaction(params: {
     }
   }
 
-  const tmpFile = `${sessionFile}.truncate-tmp`;
+  const tmpFile = createTruncationTmpFile(sessionFile);
   try {
     const rewrite = await rewriteSessionFile({
       sessionFile,
@@ -235,19 +233,21 @@ function normalizeEntryMeta(value: unknown): SessionEntryMeta | null {
 
 async function forEachJsonlLine(
   filePath: string,
-  callback: (line: string) => Promise<void> | void,
+  callback: (line: string, lineNumber: number) => Promise<void> | void,
 ): Promise<void> {
   const stream = createReadStream(filePath, { encoding: "utf-8" });
   const lines = readline.createInterface({
     input: stream,
     crlfDelay: Number.POSITIVE_INFINITY,
   });
+  let lineNumber = 0;
   try {
     for await (const line of lines) {
+      lineNumber++;
       if (!line.trim()) {
         continue;
       }
-      await callback(line);
+      await callback(line, lineNumber);
     }
   } finally {
     lines.close();
@@ -261,13 +261,8 @@ async function scanSessionFile(sessionFile: string): Promise<SessionFileScanResu
   let headerLine: string | null = null;
 
   try {
-    await forEachJsonlLine(sessionFile, (line) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        return;
-      }
+    await forEachJsonlLine(sessionFile, (line, lineNumber) => {
+      const parsed = parseJsonlLine(line, lineNumber);
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -311,7 +306,12 @@ function resolveKeptParentId(params: {
   entryById: Map<string, SessionEntryMeta>;
 }): string | null {
   let parentId = params.parentId;
+  const seen = new Set<string>();
   while (parentId !== null && params.removedIds.has(parentId)) {
+    if (seen.has(parentId)) {
+      return null;
+    }
+    seen.add(parentId);
     const parent = params.entryById.get(parentId);
     parentId = parent?.parentId ?? null;
   }
@@ -320,7 +320,45 @@ function resolveKeptParentId(params: {
 
 async function writeLine(stream: NodeJS.WritableStream, line: string): Promise<void> {
   if (!stream.write(`${line}\n`, "utf-8")) {
-    await once(stream, "drain");
+    await waitForDrain(stream);
+  }
+}
+
+function waitForDrain(stream: NodeJS.WritableStream): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      stream.removeListener("drain", onDrain);
+      stream.removeListener("error", onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (err: unknown) => {
+      cleanup();
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    stream.once("drain", onDrain);
+    stream.once("error", onError);
+  });
+}
+
+function createTruncationTmpFile(sessionFile: string): string {
+  return path.join(
+    path.dirname(sessionFile),
+    `.${path.basename(sessionFile)}.${randomUUID()}.truncate-tmp`,
+  );
+}
+
+function parseJsonlLine(line: string, lineNumber: number): unknown {
+  try {
+    return JSON.parse(line);
+  } catch (err) {
+    throw new Error(
+      `Malformed JSONL in session transcript at line ${lineNumber}: ${formatErrorMessage(err)}`,
+      { cause: err },
+    );
   }
 }
 
@@ -331,7 +369,12 @@ async function rewriteSessionFile(params: {
   removedIds: Set<string>;
   entryById: Map<string, SessionEntryMeta>;
 }): Promise<{ entriesAfter: number; bytesAfter: number }> {
-  const output = createWriteStream(params.tmpFile, { encoding: "utf-8", mode: 0o600 });
+  const output = createWriteStream(params.tmpFile, {
+    encoding: "utf-8",
+    flags: "wx",
+    mode: 0o600,
+  });
+  const outputFinished = finished(output);
   let entriesAfter = 0;
   let bytesAfter = 0;
 
@@ -339,13 +382,8 @@ async function rewriteSessionFile(params: {
     await writeLine(output, params.headerLine);
     bytesAfter += Buffer.byteLength(`${params.headerLine}\n`, "utf-8");
 
-    await forEachJsonlLine(params.sessionFile, async (line) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        return;
-      }
+    await forEachJsonlLine(params.sessionFile, async (line, lineNumber) => {
+      const parsed = parseJsonlLine(line, lineNumber);
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -374,7 +412,7 @@ async function rewriteSessionFile(params: {
     });
   } finally {
     output.end();
-    await finished(output);
+    await outputFinished;
   }
 
   return { entriesAfter, bytesAfter };

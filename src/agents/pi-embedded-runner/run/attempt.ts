@@ -354,6 +354,7 @@ export {
 };
 
 const MAX_BTW_SNAPSHOT_MESSAGES = 100;
+const preOpenTruncationCheckedSessionFiles = new Set<string>();
 
 export function resolveUnknownToolGuardThreshold(loopDetection?: {
   enabled?: boolean;
@@ -1219,14 +1220,13 @@ export async function runEmbeddedAttempt(
       if (
         hadSessionFile &&
         params.config &&
-        params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false
+        params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false &&
+        !preOpenTruncationCheckedSessionFiles.has(path.resolve(params.sessionFile))
       ) {
+        const preOpenTruncationSessionFile = path.resolve(params.sessionFile);
         try {
-          const heartbeatSummary = resolveHeartbeatSummaryForAgent(params.config, sessionAgentId);
           const truncResult = await truncateSessionAfterCompaction({
             sessionFile: params.sessionFile,
-            ackMaxChars: heartbeatSummary.ackMaxChars,
-            heartbeatPrompt: heartbeatSummary.prompt,
           });
           if (truncResult.truncated) {
             log.info(
@@ -1239,6 +1239,8 @@ export async function runEmbeddedAttempt(
             errorMessage: formatErrorMessage(err),
             errorStack: err instanceof Error ? err.stack : undefined,
           });
+        } finally {
+          preOpenTruncationCheckedSessionFiles.add(preOpenTruncationSessionFile);
         }
       }
 

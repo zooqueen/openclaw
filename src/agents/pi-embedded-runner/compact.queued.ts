@@ -10,7 +10,6 @@ import {
   type CapturedCompactionCheckpointSnapshot,
 } from "../../gateway/session-compaction-checkpoints.js";
 import { formatErrorMessage } from "../../infra/errors.js";
-import { resolveHeartbeatSummaryForAgent } from "../../infra/heartbeat-summary.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { ProviderRuntimeModel } from "../../plugins/provider-runtime-model.types.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
@@ -211,11 +210,8 @@ export async function compactEmbeddedPiSession(
           params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false
         ) {
           try {
-            const heartbeatSummary = resolveHeartbeatSummaryForAgent(params.config, sessionAgentId);
             const truncResult = await truncateSessionAfterCompaction({
               sessionFile: params.sessionFile,
-              ackMaxChars: heartbeatSummary.ackMaxChars,
-              heartbeatPrompt: heartbeatSummary.prompt,
             });
             if (truncResult.truncated) {
               log.info(

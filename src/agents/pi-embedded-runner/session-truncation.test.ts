@@ -107,6 +107,79 @@ describe("truncateSessionAfterCompaction", () => {
     expect(second.truncated).toBe(false);
   });
 
+  it("fails closed on malformed transcript lines", async () => {
+    const dir = await createTmpDir();
+    const sessionFile = createSessionWithCompaction(dir);
+    const before = await fs.readFile(sessionFile, "utf-8");
+    await fs.appendFile(sessionFile, "not-json\n", "utf-8");
+
+    const result = await truncateSessionAfterCompaction({ sessionFile });
+
+    expect(result.truncated).toBe(false);
+    expect(result.reason).toContain("Malformed JSONL");
+    expect(await fs.readFile(sessionFile, "utf-8")).toBe(`${before}not-json\n`);
+  });
+
+  it("breaks cyclic removed-parent chains while re-parenting kept entries", async () => {
+    const dir = await createTmpDir();
+    const sessionFile = path.join(dir, "cyclic.jsonl");
+    const now = new Date().toISOString();
+    await fs.writeFile(
+      sessionFile,
+      [
+        { type: "session", version: 3, id: "session", timestamp: now, cwd: dir },
+        {
+          type: "message",
+          id: "a",
+          parentId: "b",
+          timestamp: now,
+          message: { role: "user", content: "a", timestamp: 1 },
+        },
+        {
+          type: "message",
+          id: "b",
+          parentId: "a",
+          timestamp: now,
+          message: { role: "assistant", content: "b", timestamp: 2 },
+        },
+        {
+          type: "message",
+          id: "c",
+          parentId: "b",
+          timestamp: now,
+          message: { role: "user", content: "c", timestamp: 3 },
+        },
+        {
+          type: "compaction",
+          id: "compact",
+          parentId: "c",
+          timestamp: now,
+          summary: "summarized cyclic prefix",
+          firstKeptEntryId: "c",
+          tokensBefore: 100,
+        },
+        {
+          type: "message",
+          id: "after",
+          parentId: "compact",
+          timestamp: now,
+          message: { role: "user", content: "after", timestamp: 4 },
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n") + "\n",
+      "utf-8",
+    );
+
+    const result = await truncateSessionAfterCompaction({ sessionFile });
+
+    expect(result.truncated).toBe(true);
+    const smAfter = SessionManager.open(sessionFile);
+    const kept = smAfter.getEntry("c");
+    expect(kept?.parentId).toBeNull();
+    expect(smAfter.buildSessionContext().messages.length).toBeGreaterThan(0);
+  });
+
   it("archives original file when archivePath is provided (#39953)", async () => {
     const dir = await createTmpDir();
     const sessionFile = createSessionWithCompaction(dir);
