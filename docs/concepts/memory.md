@@ -112,6 +112,11 @@ important facts in the conversation that are not yet written to a file, they
 will be saved automatically before the summary happens.
 </Tip>
 
+For sandboxed agents, memory flushes can write to writable workspaces. With
+`workspaceAccess: "none"`, OpenClaw writes memory into the isolated sandbox
+workspace; with `workspaceAccess: "ro"`, memory flush is skipped because the
+workspace is read-only.
+
 ## Dreaming
 
 Dreaming is an optional background consolidation pass for memory. It collects

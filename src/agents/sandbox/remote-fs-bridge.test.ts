@@ -126,6 +126,39 @@ describe("remote sandbox fs bridge", () => {
     },
   );
 
+  it.runIf(process.platform !== "win32")(
+    "allows writes into the isolated workspace when workspaceAccess is none",
+    async () => {
+      await withTempDir("openclaw-remote-fs-bridge-none-write-", async (stateDir) => {
+        const workspaceDir = path.join(stateDir, "sandbox-workspace");
+        const agentWorkspaceDir = path.join(stateDir, "agent-workspace");
+        await fs.mkdir(workspaceDir, { recursive: true });
+        await fs.mkdir(agentWorkspaceDir, { recursive: true });
+
+        const { calls, runtime } = createLocalRemoteRuntime({
+          remoteWorkspaceDir: workspaceDir,
+          remoteAgentWorkspaceDir: agentWorkspaceDir,
+        });
+        const bridge = createRemoteShellSandboxFsBridge({
+          sandbox: createSandbox({
+            workspaceAccess: "none",
+            workspaceDir,
+            agentWorkspaceDir,
+          }),
+          runtime,
+        });
+
+        await expect(
+          bridge.writeFile({ filePath: "memory/notes.md", data: "hello" }),
+        ).resolves.toBeUndefined();
+        expect(await fs.readFile(path.join(workspaceDir, "memory", "notes.md"), "utf8")).toBe(
+          "hello",
+        );
+        expect(calls.some((call) => call.args?.[0] === "write")).toBe(true);
+      });
+    },
+  );
+
   it.runIf(process.platform !== "win32")("rejects symlink escapes while reading", async () => {
     await withTempDir("openclaw-remote-fs-bridge-", async (stateDir) => {
       const workspaceDir = path.join(stateDir, "workspace");

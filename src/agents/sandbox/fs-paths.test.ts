@@ -89,6 +89,44 @@ describe("resolveSandboxFsPathWithMounts", () => {
     expect(resolved.writable).toBe(true);
   });
 
+  it("marks isolated workspaceAccess none workspaces writable", () => {
+    const sandbox = createSandbox({
+      workspaceAccess: "none",
+      workspaceDir: "/tmp/openclaw-sandbox-workspace",
+      agentWorkspaceDir: "/tmp/openclaw-agent-workspace",
+    });
+    const mounts = buildSandboxFsMounts(sandbox);
+    const resolved = resolveSandboxFsPathWithMounts({
+      filePath: "memory/notes.md",
+      cwd: sandbox.workspaceDir,
+      defaultWorkspaceRoot: sandbox.workspaceDir,
+      defaultContainerRoot: sandbox.containerWorkdir,
+      mounts,
+    });
+
+    expect(mounts.map((mount) => mount.source)).toEqual(["workspace"]);
+    expect(resolved.containerPath).toBe("/workspace/memory/notes.md");
+    expect(resolved.writable).toBe(true);
+  });
+
+  it("keeps workspaceAccess ro workspace paths read-only", () => {
+    const sandbox = createSandbox({
+      workspaceAccess: "ro",
+      workspaceDir: "/tmp/openclaw-sandbox-workspace",
+      agentWorkspaceDir: "/tmp/openclaw-agent-workspace",
+    });
+    const mounts = buildSandboxFsMounts(sandbox);
+    const resolved = resolveSandboxFsPathWithMounts({
+      filePath: "memory/notes.md",
+      cwd: sandbox.workspaceDir,
+      defaultWorkspaceRoot: sandbox.workspaceDir,
+      defaultContainerRoot: sandbox.containerWorkdir,
+      mounts,
+    });
+
+    expect(resolved.writable).toBe(false);
+  });
+
   it("preserves legacy sandbox-root error for outside paths", () => {
     const sandbox = createSandbox();
     const mounts = buildSandboxFsMounts(sandbox);

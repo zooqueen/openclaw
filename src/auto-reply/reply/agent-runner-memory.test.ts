@@ -238,6 +238,48 @@ describe("runMemoryFlushIfNeeded", () => {
     expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
   });
 
+  it("allows memory flush for sandbox workspaceAccess none", async () => {
+    const sessionEntry: SessionEntry = {
+      sessionId: "session",
+      updatedAt: Date.now(),
+      totalTokens: 80_000,
+      compactionCount: 1,
+    };
+
+    await runMemoryFlushIfNeeded({
+      cfg: {
+        agents: {
+          defaults: {
+            sandbox: {
+              mode: "non-main",
+              scope: "agent",
+              workspaceAccess: "none",
+            },
+            compaction: {
+              memoryFlush: {},
+            },
+          },
+        },
+      },
+      followupRun: createTestFollowupRun({
+        sessionKey: "agent:main:main",
+        runtimePolicySessionKey: "agent:main:telegram:default:direct:12345",
+      }),
+      sessionCtx: { Provider: "telegram" } as unknown as TemplateContext,
+      defaultModel: "anthropic/claude-opus-4-6",
+      agentCfgContextTokens: 100_000,
+      resolvedVerboseLevel: "off",
+      sessionEntry,
+      sessionStore: { "agent:main:main": sessionEntry },
+      sessionKey: "agent:main:main",
+      runtimePolicySessionKey: "agent:main:telegram:default:direct:12345",
+      isHeartbeat: false,
+      replyOperation: createReplyOperation(),
+    });
+
+    expect(runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+  });
+
   it("passes runtime policy session key to preflight compaction sandbox resolution", async () => {
     const sessionFile = path.join(rootDir, "session.jsonl");
     await fs.writeFile(

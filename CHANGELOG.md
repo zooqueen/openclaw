@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Sandbox/memory: keep `workspaceAccess: "none"` isolated `/workspace` mounts writable, recreate stale sandbox/browser containers through the mount-format hash, and allow memory flush to write into that isolated workspace while preserving `ro` as read-only. Fixes #37634 and covers #59613 and #65316. Thanks @aisakataiga1215.
 - ACP: route server logs to stderr before Gateway config/bootstrap work so ACP stdout remains JSON-RPC only for IDE integrations. Fixes #49060. Thanks @Hollychou924.
 - Logging: propagate internal request trace scopes through Gateway HTTP requests and WebSocket frames so file logs, diagnostic events, agent run traces, model-call traces, OTEL spans, and trusted provider `traceparent` headers share a correlatable `traceId` without logging raw request or model content. Fixes #40353. Thanks @liangruochong44-ui.
 - Diagnostics/OTEL: capture privacy-safe model-call request payload bytes, streamed response bytes, first-response latency, and total duration in diagnostic events, plugin hooks, stability snapshots, and OTEL model-call spans/metrics without logging raw model content. Fixes #33832. Thanks @wwh830.

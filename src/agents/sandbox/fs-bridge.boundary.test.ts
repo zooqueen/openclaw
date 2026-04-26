@@ -30,6 +30,28 @@ describe("sandbox fs bridge boundary validation", () => {
     expect(mockedExecDockerRaw).not.toHaveBeenCalled();
   });
 
+  it("allows writes into the isolated workspace when workspaceAccess is none", async () => {
+    await withTempDir("openclaw-fs-bridge-none-write-", async (stateDir) => {
+      const workspaceDir = path.join(stateDir, "sandbox-workspace");
+      const agentWorkspaceDir = path.join(stateDir, "agent-workspace");
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.mkdir(agentWorkspaceDir, { recursive: true });
+
+      const bridge = createSandboxFsBridge({
+        sandbox: createSandbox({
+          workspaceAccess: "none",
+          workspaceDir,
+          agentWorkspaceDir,
+        }),
+      });
+
+      await expect(
+        bridge.writeFile({ filePath: "memory/notes.md", data: "hello" }),
+      ).resolves.toBeUndefined();
+      expect(findCallByDockerArg(1, "write")).toBeDefined();
+    });
+  });
+
   it("allows mkdirp for existing in-boundary subdirectories", async () => {
     await expectMkdirpAllowsExistingDirectory();
   });
