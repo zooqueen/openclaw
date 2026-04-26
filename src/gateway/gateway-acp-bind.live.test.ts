@@ -290,7 +290,7 @@ async function bindConversationAndWait(params: {
     if (runtime?.probeAvailability) {
       await runtime.probeAvailability().catch(() => {});
     }
-    if (!(backend?.healthy?.() ?? false)) {
+    if (!backend || (backend.healthy && !backend.healthy())) {
       if (runtime?.doctor && (attempt === 1 || attempt % 6 === 0)) {
         const report = await runtime.doctor().catch((error) => ({
           message: error instanceof Error ? error.message : String(error),
