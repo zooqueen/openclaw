@@ -93,6 +93,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Plugins/CLI: let flag-driven `openclaw channels add` install the selected channel plugin from its default source without opening an interactive prompt, fixing published npm Telegram setup in stdin-closed automation. Thanks @codex.
 - Plugins/startup: load the default `memory-core` slot during Gateway startup when permitted so active-memory recall can call `memory_search` and `memory_get` without requiring an explicit `plugins.slots.memory` entry, while preserving `plugins.slots.memory: "none"`. Thanks @codex.
 - Plugins/CLI: prefer native require for compiled bundled plugin JavaScript before jiti so read-only config, status, device, and node commands avoid unnecessary transform overhead on slow hosts. Fixes #62842. Thanks @Effet.
 - Plugins/compat: inventory doctor-side deprecation migrations separately from runtime plugin compatibility so release sweeps preserve needed repairs while enforcing dated removal windows. Thanks @vincentkoc.
