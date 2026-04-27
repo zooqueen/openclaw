@@ -5,6 +5,7 @@ const HELPER_PATH = "scripts/lib/docker-build.sh";
 const DOCKER_ALL_SCHEDULER_PATH = "scripts/test-docker-all.mjs";
 const INSTALL_E2E_RUNNER_PATH = "scripts/docker/install-sh-e2e/run.sh";
 const OPENAI_WEB_SEARCH_MINIMAL_E2E_PATH = "scripts/e2e/openai-web-search-minimal-docker.sh";
+const PLUGINS_DOCKER_E2E_PATH = "scripts/e2e/plugins-docker.sh";
 const CENTRALIZED_BUILD_SCRIPTS = [
   "scripts/docker/setup.sh",
   "scripts/e2e/browser-cdp-snapshot-docker.sh",
@@ -72,8 +73,17 @@ describe("docker build helper", () => {
   it("keeps OpenAI web search smoke on one gateway agent connection", () => {
     const runner = readFileSync(OPENAI_WEB_SEARCH_MINIMAL_E2E_PATH, "utf8");
 
-    expect(runner).toContain('new URL("dist/gateway/call.js"');
-    expect(runner).toContain("expectFinal: true");
+    expect(runner).toContain('"--expect-final"');
+    expect(runner).toContain('[...gatewayArgs, "agent", "--params"');
     expect(runner).not.toContain('"agent.wait"');
+  });
+
+  it("keeps ClawHub plugin Docker smoke hermetic by default", () => {
+    const runner = readFileSync(PLUGINS_DOCKER_E2E_PATH, "utf8");
+
+    expect(runner).toContain("start_clawhub_fixture_server()");
+    expect(runner).toContain('OPENCLAW_CLAWHUB_URL="http://127.0.0.1:');
+    expect(runner).toContain("live ClawHub can rate-limit CI");
+    expect(runner).toContain('[[ -z "${OPENCLAW_CLAWHUB_URL:-}" && -z "${CLAWHUB_URL:-}" ]]');
   });
 });
