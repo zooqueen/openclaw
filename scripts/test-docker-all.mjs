@@ -41,6 +41,12 @@ const LIVE_RETRY_PATTERNS = [
   /gateway closed \(1000 normal closure\)/i,
   /ECONNRESET|ETIMEDOUT|ENOTFOUND/i,
 ];
+const LOAD_SENSITIVE_DOCKER_RETRY_PATTERNS = [
+  /gateway closed \(1000 normal closure\)/i,
+  /gateway exited before listening/i,
+  /WebSocket.*(?:closed|close|timeout|error)/i,
+  /ECONNRESET|ETIMEDOUT|EPIPE|socket hang up/i,
+];
 
 const bundledChannelLaneCommand =
   "OPENCLAW_SKIP_DOCKER_BUILD=1 OPENCLAW_BUNDLED_CHANNEL_UPDATE_SCENARIO=0 OPENCLAW_BUNDLED_CHANNEL_ROOT_OWNED_SCENARIO=0 OPENCLAW_BUNDLED_CHANNEL_SETUP_ENTRY_SCENARIO=0 OPENCLAW_BUNDLED_CHANNEL_LOAD_FAILURE_SCENARIO=0 OPENCLAW_BUNDLED_CHANNEL_DISABLED_CONFIG_SCENARIO=0 pnpm test:docker:bundled-channel-deps";
@@ -115,6 +121,19 @@ function serviceLane(name, command, options = {}) {
     resources: ["service", ...(options.resources ?? [])],
     weight: options.weight ?? 2,
   });
+}
+
+function openAiWebSearchMinimalLane() {
+  return serviceLane(
+    "openai-web-search-minimal",
+    "OPENCLAW_SKIP_DOCKER_BUILD=1 pnpm test:docker:openai-web-search-minimal",
+    {
+      retryPatterns: LOAD_SENSITIVE_DOCKER_RETRY_PATTERNS,
+      retries: 1,
+      timeoutMs: 10 * 60 * 1000,
+      weight: 4,
+    },
+  );
 }
 
 const bundledScenarioLanes = [
@@ -276,11 +295,7 @@ const lanes = [
 ];
 
 const exclusiveLanes = [
-  serviceLane(
-    "openai-web-search-minimal",
-    "OPENCLAW_SKIP_DOCKER_BUILD=1 pnpm test:docker:openai-web-search-minimal",
-    { timeoutMs: 8 * 60 * 1000 },
-  ),
+  openAiWebSearchMinimalLane(),
   liveLane(
     "live-codex-harness",
     "OPENCLAW_SKIP_DOCKER_BUILD=1 pnpm test:docker:live-codex-harness",
@@ -435,11 +450,7 @@ const releasePathChunks = {
         weight: 3,
       },
     ),
-    serviceLane(
-      "openai-web-search-minimal",
-      "OPENCLAW_SKIP_DOCKER_BUILD=1 pnpm test:docker:openai-web-search-minimal",
-      { timeoutMs: 8 * 60 * 1000 },
-    ),
+    openAiWebSearchMinimalLane(),
   ],
 };
 
