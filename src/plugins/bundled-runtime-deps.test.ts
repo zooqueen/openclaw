@@ -702,6 +702,31 @@ describe("scanBundledPluginRuntimeDeps config policy", () => {
     expect(result.conflicts).toEqual([]);
   });
 
+  it("includes runtime deps for startup-selected memory-core", () => {
+    const packageRoot = makeTempDir();
+    writeBundledPluginPackage({
+      packageRoot,
+      pluginId: "memory-core",
+      deps: { chokidar: "^5.0.0", typebox: "^1.0.0" },
+    });
+
+    const result = scanBundledPluginRuntimeDeps({
+      packageRoot,
+      config: {},
+      pluginIds: ["memory-core"],
+    });
+
+    expect(result.deps.map((dep) => `${dep.name}@${dep.version}`)).toEqual([
+      "chokidar@^5.0.0",
+      "typebox@^1.0.0",
+    ]);
+    expect(result.missing.map((dep) => `${dep.name}@${dep.version}`)).toEqual([
+      "chokidar@^5.0.0",
+      "typebox@^1.0.0",
+    ]);
+    expect(result.conflicts).toEqual([]);
+  });
+
   it("reads each bundled plugin manifest once per runtime-deps scan", () => {
     const packageRoot = makeTempDir();
     const pluginRoot = writeBundledPluginPackage({
