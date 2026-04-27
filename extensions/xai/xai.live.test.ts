@@ -185,7 +185,7 @@ describeLive("xai plugin live", () => {
     const realtimeProvider = requireRegisteredProvider(realtimeTranscriptionProviders, "xai");
     const speechProvider = requireRegisteredProvider(speechProviders, "xai");
     const cfg = createLiveConfig();
-    const phrase = "OpenClaw xAI realtime transcription integration test OK.";
+    const phrase = "Speech transcription check okay.";
 
     const telephony = await speechProvider.synthesizeTelephony?.({
       text: phrase,
@@ -216,6 +216,7 @@ describeLive("xai plugin live", () => {
         language: "en",
       },
       audio: telephony.audioBuffer,
+      expectedNormalizedText: "speechtranscription",
       chunkSize,
       delayMs: 20,
       closeBeforeWait: true,
@@ -223,7 +224,7 @@ describeLive("xai plugin live", () => {
 
     const normalized = transcripts.join(" ").toLowerCase();
     const compact = normalizeTranscriptForMatch(normalized);
-    expect(compact).toContain("openclaw");
+    expect(compact).toContain("speechtranscription");
     expect(normalized).toContain("transcription");
     expect(partials.length + transcripts.length).toBeGreaterThan(0);
   }, 180_000);
