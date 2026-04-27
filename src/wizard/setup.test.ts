@@ -520,7 +520,7 @@ describe("runSetupWizard", () => {
           found: true,
           source: "/tmp/claude-home",
           label: "Claude",
-          confidence: "high",
+          confidence: "high" as const,
         })),
       }),
     ]);
