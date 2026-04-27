@@ -26,6 +26,10 @@ import {
   buildEmbeddedCompactionRuntimeContext,
   resolveEmbeddedCompactionTarget,
 } from "./compaction-runtime-context.js";
+import {
+  rotateTranscriptAfterCompaction,
+  shouldRotateCompactionTranscript,
+} from "./compaction-successor-transcript.js";
 import { runContextEngineMaintenance } from "./context-engine-maintenance.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
@@ -158,15 +162,41 @@ export async function compactEmbeddedPiSession(
           force: params.trigger === "manual",
           runtimeContext,
         });
+        let postCompactionSessionId = params.sessionId;
+        let postCompactionSessionFile = params.sessionFile;
+        let postCompactionLeafId: string | undefined;
         if (result.ok && result.compacted) {
+          if (shouldRotateCompactionTranscript(params.config)) {
+            try {
+              const rotation = await rotateTranscriptAfterCompaction({
+                sessionManager: SessionManager.open(params.sessionFile),
+                sessionFile: params.sessionFile,
+              });
+              if (rotation.rotated) {
+                postCompactionSessionId = rotation.sessionId ?? postCompactionSessionId;
+                postCompactionSessionFile = rotation.sessionFile ?? postCompactionSessionFile;
+                postCompactionLeafId = rotation.leafId;
+                log.info(
+                  `[compaction] rotated active transcript after context-engine compaction ` +
+                    `(sessionKey=${params.sessionKey ?? params.sessionId})`,
+                );
+              }
+            } catch (err) {
+              log.warn("failed to rotate compacted transcript", {
+                errorMessage: formatErrorMessage(err),
+              });
+            }
+          }
           if (params.config && params.sessionKey && checkpointSnapshot) {
             try {
-              const postCompactionSession = SessionManager.open(params.sessionFile);
-              const postLeafId = postCompactionSession.getLeafId() ?? undefined;
+              const postLeafId =
+                postCompactionLeafId ??
+                SessionManager.open(postCompactionSessionFile).getLeafId() ??
+                undefined;
               const storedCheckpoint = await persistSessionCompactionCheckpoint({
                 cfg: params.config,
                 sessionKey: params.sessionKey,
-                sessionId: params.sessionId,
+                sessionId: postCompactionSessionId,
                 reason: resolveSessionCompactionCheckpointReason({
                   trigger: params.trigger,
                 }),
@@ -175,7 +205,7 @@ export async function compactEmbeddedPiSession(
                 firstKeptEntryId: result.result?.firstKeptEntryId,
                 tokensBefore: result.result?.tokensBefore,
                 tokensAfter: result.result?.tokensAfter,
-                postSessionFile: params.sessionFile,
+                postSessionFile: postCompactionSessionFile,
                 postLeafId,
                 postEntryId: postLeafId,
               });
@@ -188,9 +218,9 @@ export async function compactEmbeddedPiSession(
           }
           await runContextEngineMaintenance({
             contextEngine,
-            sessionId: params.sessionId,
+            sessionId: postCompactionSessionId,
             sessionKey: params.sessionKey,
-            sessionFile: params.sessionFile,
+            sessionFile: postCompactionSessionFile,
             reason: "compaction",
             runtimeContext,
           });
@@ -199,7 +229,7 @@ export async function compactEmbeddedPiSession(
           await runPostCompactionSideEffects({
             config: params.config,
             sessionKey: params.sessionKey,
-            sessionFile: params.sessionFile,
+            sessionFile: postCompactionSessionFile,
           });
         }
         if (
@@ -214,7 +244,7 @@ export async function compactEmbeddedPiSession(
                 messageCount: -1,
                 compactedCount: -1,
                 tokenCount: result.result?.tokensAfter,
-                sessionFile: params.sessionFile,
+                sessionFile: postCompactionSessionFile,
               },
               hookCtx,
             );
@@ -235,6 +265,12 @@ export async function compactEmbeddedPiSession(
                 tokensBefore: result.result.tokensBefore,
                 tokensAfter: result.result.tokensAfter,
                 details: result.result.details,
+                ...(postCompactionSessionId !== params.sessionId
+                  ? { sessionId: postCompactionSessionId }
+                  : {}),
+                ...(postCompactionSessionFile !== params.sessionFile
+                  ? { sessionFile: postCompactionSessionFile }
+                  : {}),
               }
             : undefined,
         };

@@ -951,6 +951,7 @@ export async function runEmbeddedPiAgent(
             idleTimedOut,
             timedOutDuringCompaction,
             sessionIdUsed,
+            sessionFileUsed,
             lastAssistant: sessionLastAssistant,
             currentAttemptAssistant,
           } = attempt;
@@ -1782,6 +1783,7 @@ export async function runEmbeddedPiAgent(
           });
           const agentMeta: EmbeddedPiAgentMeta = {
             sessionId: sessionIdUsed,
+            sessionFile: sessionFileUsed,
             provider: sessionLastAssistant?.provider ?? provider,
             model: sessionLastAssistant?.model ?? model.id,
             contextTokens: ctxInfo.tokens,
