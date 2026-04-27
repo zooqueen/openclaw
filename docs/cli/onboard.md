@@ -42,7 +42,9 @@ openclaw onboard --skip-bootstrap
 openclaw onboard --mode remote --remote-url wss://gateway-host:18789
 ```
 
-`--flow import` uses plugin-owned migration providers such as Hermes. It only runs against a fresh OpenClaw setup; if existing config, credentials, sessions, or workspace memory/identity files are present, reset or choose a fresh setup before importing.
+When onboarding detects a known agent home such as Claude or Hermes, it asks whether to import before showing the normal setup modes. If no source is detected, onboarding skips the migration prompt. `--flow import` and `--import-from <provider>` force the import flow for scripted runs or custom source paths.
+
+Onboarding imports only run against a fresh OpenClaw setup. If existing config, credentials, sessions, or workspace memory/identity files are present, reset or choose a fresh setup before importing.
 
 `--modern` starts the Crestodian conversational onboarding preview. Without
 `--modern`, `openclaw onboard` keeps the classic onboarding flow.
@@ -180,7 +182,7 @@ openclaw onboard --non-interactive \
   <Accordion title="Flow types">
     - `quickstart`: minimal prompts, auto-generates a gateway token.
     - `manual`: full prompts for port, bind, and auth (alias of `advanced`).
-    - `import`: runs a detected migration provider, previews the plan, then applies after confirmation.
+    - `import`: runs a selected migration provider, previews the plan, then applies after confirmation.
   </Accordion>
   <Accordion title="Provider prefiltering">
     When an auth choice implies a preferred provider, onboarding prefilters the default-model and allowlist pickers to that provider. For Volcengine and BytePlus, this also matches the coding-plan variants (`volcengine-plan/*`, `byteplus-plan/*`).
@@ -199,7 +201,7 @@ openclaw onboard --non-interactive \
     - Local onboarding DM scope behavior: [CLI setup reference](/start/wizard-cli-reference#outputs-and-internals).
     - Fastest first chat: `openclaw dashboard` (Control UI, no channel setup).
     - Custom provider: connect any OpenAI or Anthropic compatible endpoint, including hosted providers not listed. Use Unknown to auto-detect.
-    - If Hermes state is detected, onboarding offers a migration flow. Use [Migrate](/cli/migrate) for dry-run plans, overwrite mode, reports, and exact mappings.
+    - If Claude or Hermes state is detected, onboarding offers import first, then falls back to QuickStart or Manual when you choose a fresh setup. Use [Migrate](/cli/migrate) for dry-run plans, overwrite mode, reports, and exact mappings.
   </Accordion>
 </AccordionGroup>
 

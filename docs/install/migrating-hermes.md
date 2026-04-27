@@ -17,7 +17,13 @@ Imports require a fresh OpenClaw setup. If you already have local OpenClaw state
 
 <Tabs>
   <Tab title="Onboarding wizard">
-    The fastest path. The wizard detects Hermes at `~/.hermes` and shows a preview before applying.
+    The fastest path. Plain onboarding detects Hermes at `~/.hermes`, offers import first, and shows a preview before applying.
+
+    ```bash
+    openclaw onboard
+    ```
+
+    To jump directly into import:
 
     ```bash
     openclaw onboard --flow import

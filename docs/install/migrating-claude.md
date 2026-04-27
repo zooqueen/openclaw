@@ -16,7 +16,13 @@ Onboarding imports require a fresh OpenClaw setup. If you already have local Ope
 
 <Tabs>
   <Tab title="Onboarding wizard">
-    The wizard offers Claude when it detects local Claude state.
+    Plain onboarding offers Claude first when it detects local Claude state.
+
+    ```bash
+    openclaw onboard
+    ```
+
+    To jump directly into import:
 
     ```bash
     openclaw onboard --flow import
