@@ -6,6 +6,8 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- macOS Gateway: write launchd services with a state-dir `WorkingDirectory`, use a durable state-dir temp path instead of freezing macOS session `TMPDIR`, create that temp directory before bootstrap, and label abort-shaped launchd exits as `SIGABRT/abort` in status output. Fixes #53679 and #70223; refs #71848. Thanks @dlturock, @stammi922, and @palladius.
+- Memory/QMD: prefer QMD's `--mask` collection pattern flag so root memory indexing stays scoped to `MEMORY.md` instead of widening to every markdown file in the workspace. Thanks @codex.
 - Codex harness: normalize cached input tokens before session/context accounting so prompt cache reads are not double-counted in `/status`, `session_status`, or persisted `sessionEntry.totalTokens`. Fixes #69298. Thanks @richardmqq.
 - Hooks/session-memory: use the host local timezone for memory filenames, fallback timestamp slugs, and markdown headers instead of UTC dates. Fixes #46703. (#46721) Thanks @Astro-Han.
 - Feishu: extract quoted/replied interactive-card text across schema 1.0, schema 2.0, i18n, template-variable, and post-format fallback shapes without carrying broad generated/config churn from related parser experiments. (#38776, #60383, #42218, #45936) Thanks @lishuaigit, @lskun, @just2gooo, and @Br1an67.
@@ -18,6 +20,10 @@ Docs: https://docs.openclaw.ai
 - Logging/sessions: apply configured redaction patterns to persisted session transcript text and accept escaped character classes in safe custom redaction regexes, so transcript JSONL no longer keeps matching sensitive text in the clear. Fixes #42982. Thanks @panpan0000.
 - Providers/Ollama: honor `/api/show` capabilities when registering local models so non-tool Ollama models no longer receive the agent tool surface, and keep native Ollama thinking opt-in instead of enabling it by default. Fixes #64710 and duplicate #65343. Thanks @yuan-b, @netherby, @xilopaint, and @Diyforfun2026.
 - Providers/Ollama: expose native Ollama thinking effort levels so `/think max` is accepted for reasoning-capable Ollama models and maps to Ollama's highest supported `think` effort. Fixes #71584. Thanks @g0st1n.
+- Providers/Ollama: strip the active custom Ollama provider prefix before native chat and embedding requests, so custom provider ids like `ollama-spark/qwen3:32b` reach Ollama as the real model name. Fixes #72353. Thanks @maximus-dss and @hclsys.
+- Providers/Ollama: move memory embeddings to Ollama's current `/api/embed` endpoint with batched `input` requests while preserving vector normalization and custom provider auth/header overrides. Fixes #39983. Thanks @sskkcc and @LiudengZhang.
+- Providers/Ollama: route local web search through Ollama's signed `/api/experimental/web_search` daemon proxy, use hosted `/api/web_search` directly for `ollama.com`, and keep `OLLAMA_API_KEY` scoped to cloud fallback auth. Fixes #69132. Thanks @yoon1012 and @hyspacex.
+- Agents/Ollama: apply provider-owned replay turn normalization to native Ollama chat so Cloud models no longer reject non-alternating replay history in agent/Gateway runs. Fixes #71697. Thanks @ismael-81.
 - Agents/Ollama: validate explicit `--thinking max` against catalog-discovered Ollama reasoning metadata so local agent runs accept the same native thinking levels shown in the model catalog. Fixes #71584. Thanks @g0st1n.
 - Docker/QA: add observability coverage to the normal Docker aggregate so QA-lab OTEL and Prometheus diagnostics run inside Docker. Thanks @vincentkoc.
 - Auto-reply: poison inbound message dedupe after replay-unsafe provider/runtime failures so retries stay safe before visible progress but cannot duplicate messages after block output, tool side effects, or session progress. Fixes #69303; keeps #58549 and #64606 as duplicate validation. Thanks @martingarramon, @NikolaFC, and @zeroth-blip.

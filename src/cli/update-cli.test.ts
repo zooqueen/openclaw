@@ -22,10 +22,10 @@ const readPackageName = vi.fn();
 const readPackageVersion = vi.fn();
 const resolveGlobalManager = vi.fn();
 const serviceLoaded = vi.fn();
-const readGatewayServiceState = vi.fn();
 const prepareRestartScript = vi.fn();
 const runRestartScript = vi.fn();
 const mockedRunDaemonInstall = vi.fn();
+const serviceReadCommand = vi.fn();
 const serviceReadRuntime = vi.fn();
 const inspectPortUsage = vi.fn();
 const classifyPortListener = vi.fn();
@@ -165,9 +165,27 @@ vi.mock("../plugins/installed-plugin-index-records.js", async (importOriginal) =
 });
 
 vi.mock("../daemon/service.js", () => ({
-  readGatewayServiceState: (...args: unknown[]) => readGatewayServiceState(...args),
+  readGatewayServiceState: async () => {
+    const command = await serviceReadCommand();
+    const env = {
+      ...process.env,
+      ...(command && typeof command === "object" && "environment" in command
+        ? (command.environment as NodeJS.ProcessEnv | undefined)
+        : undefined),
+    };
+    const [loaded, runtime] = await Promise.all([serviceLoaded({ env }), serviceReadRuntime(env)]);
+    return {
+      installed: command !== null,
+      loaded,
+      running: runtime?.status === "running",
+      env,
+      command,
+      runtime,
+    };
+  },
   resolveGatewayService: vi.fn(() => ({
     isLoaded: (...args: unknown[]) => serviceLoaded(...args),
+    readCommand: (...args: unknown[]) => serviceReadCommand(...args),
     readRuntime: (...args: unknown[]) => serviceReadRuntime(...args),
   })),
 }));
@@ -453,22 +471,13 @@ describe("update-cli", () => {
     readPackageVersion.mockResolvedValue("1.0.0");
     resolveGlobalManager.mockResolvedValue("npm");
     serviceLoaded.mockResolvedValue(false);
+    serviceReadCommand.mockImplementation(async () =>
+      (await serviceLoaded()) ? { programArguments: ["openclaw", "gateway", "run"] } : null,
+    );
     serviceReadRuntime.mockResolvedValue({
       status: "running",
       pid: 4242,
       state: "running",
-    });
-    readGatewayServiceState.mockImplementation(async () => {
-      const loaded = Boolean(await serviceLoaded());
-      const runtime = await serviceReadRuntime();
-      return {
-        installed: loaded,
-        loaded,
-        running: runtime?.status === "running",
-        env: process.env,
-        command: loaded ? { programArguments: ["openclaw", "gateway"] } : null,
-        runtime,
-      };
     });
     prepareRestartScript.mockResolvedValue("/tmp/openclaw-restart-test.sh");
     runRestartScript.mockResolvedValue(undefined);
@@ -556,12 +565,13 @@ describe("update-cli", () => {
     expect(runDaemonRestart).not.toHaveBeenCalled();
   });
 
-  it("respawns package downgrade post-update work into the updated package root", async () => {
-    const { entrypoints } = setupUpdatedRootRefresh({
-      gatewayUpdateImpl: async (root) =>
+  it("keeps downgrade post-update work in the current process", async () => {
+    const downgradedRoot = createCaseDir("openclaw-downgraded-root");
+    setupUpdatedRootRefresh({
+      gatewayUpdateImpl: async () =>
         makeOkUpdateResult({
           mode: "npm",
-          root,
+          root: downgradedRoot,
           before: { version: "2026.4.14" },
           after: { version: "2026.4.10" },
         }),
@@ -588,14 +598,13 @@ describe("update-cli", () => {
       url: "ws://127.0.0.1:18789",
     });
 
-    await updateCommand({ yes: true, tag: "2026.4.10" });
+    await updateCommand({ yes: true, tag: "2026.4.10", restart: false });
 
-    expect(spawn).toHaveBeenCalledWith(
-      expect.stringMatching(/node/),
-      [entrypoints[0], "update", "--yes"],
-      expect.objectContaining({ stdio: "inherit" }),
-    );
+    expect(spawn).not.toHaveBeenCalled();
+    expect(syncPluginsForUpdateChannel).toHaveBeenCalled();
+    expect(updateNpmInstalledPlugins).toHaveBeenCalled();
     expect(runDaemonInstall).not.toHaveBeenCalled();
+    expect(probeGateway).not.toHaveBeenCalled();
     expect(defaultRuntime.exit).not.toHaveBeenCalledWith(1);
   });
 
@@ -1899,16 +1908,20 @@ describe("update-cli", () => {
   });
 
   it("fails a JSON package update when fallback restart leaves the old gateway running", async () => {
-    const { entrypoints } = setupUpdatedRootRefresh({
-      gatewayUpdateImpl: async (root) =>
+    const updatedRoot = createCaseDir("openclaw-updated-root");
+    const updatedEntrypoint = path.join(updatedRoot, "dist", "entry.js");
+    setupUpdatedRootRefresh({
+      entrypoints: [updatedEntrypoint],
+      gatewayUpdateImpl: async () =>
         makeOkUpdateResult({
           mode: "npm",
-          root,
+          root: updatedRoot,
           before: { version: "2026.4.23" },
           after: { version: "2026.4.24" },
         }),
     });
     prepareRestartScript.mockResolvedValue(null);
+    serviceLoaded.mockResolvedValue(true);
     probeGateway.mockResolvedValue({
       ok: true,
       close: null,
@@ -1931,8 +1944,8 @@ describe("update-cli", () => {
     expect(runRestartScript).not.toHaveBeenCalled();
     expect(runDaemonRestart).not.toHaveBeenCalled();
     expect(runCommandWithTimeout).toHaveBeenCalledWith(
-      [expect.stringMatching(/node/), entrypoints[0], "gateway", "restart", "--json"],
-      expect.any(Object),
+      [expect.stringMatching(/node/), updatedEntrypoint, "gateway", "restart", "--json"],
+      expect.objectContaining({ cwd: updatedRoot, timeoutMs: 60_000 }),
     );
     expect(probeGateway).toHaveBeenCalledWith(expect.objectContaining({ includeDetails: true }));
     expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
@@ -1949,11 +1962,14 @@ describe("update-cli", () => {
   });
 
   it("fails a package update when the restarted gateway reports activated plugin load errors", async () => {
+    const updatedRoot = createCaseDir("openclaw-updated-root");
+    const updatedEntrypoint = path.join(updatedRoot, "dist", "entry.js");
     setupUpdatedRootRefresh({
-      gatewayUpdateImpl: async (root) =>
+      entrypoints: [updatedEntrypoint],
+      gatewayUpdateImpl: async () =>
         makeOkUpdateResult({
           mode: "npm",
-          root,
+          root: updatedRoot,
           before: { version: "2026.4.23" },
           after: { version: "2026.4.24" },
         }),
