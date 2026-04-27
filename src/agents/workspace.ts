@@ -138,17 +138,13 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_MEMORY_FILENAME;
 
 export type WorkspaceBootstrapFile = {
-  name: WorkspaceBootstrapFileName;
+  name: string;
   path: string;
   content?: string;
   missing: boolean;
 };
 
-export type ExtraBootstrapLoadDiagnosticCode =
-  | "invalid-bootstrap-filename"
-  | "missing"
-  | "security"
-  | "io";
+export type ExtraBootstrapLoadDiagnosticCode = "missing" | "security" | "io";
 
 export type ExtraBootstrapLoadDiagnostic = {
   path: string;
@@ -161,18 +157,6 @@ type WorkspaceSetupState = {
   bootstrapSeededAt?: string;
   setupCompletedAt?: string;
 };
-
-/** Set of recognized bootstrap filenames for runtime validation */
-const VALID_BOOTSTRAP_NAMES: ReadonlySet<string> = new Set([
-  DEFAULT_AGENTS_FILENAME,
-  DEFAULT_SOUL_FILENAME,
-  DEFAULT_TOOLS_FILENAME,
-  DEFAULT_IDENTITY_FILENAME,
-  DEFAULT_USER_FILENAME,
-  DEFAULT_HEARTBEAT_FILENAME,
-  DEFAULT_BOOTSTRAP_FILENAME,
-  DEFAULT_MEMORY_FILENAME,
-]);
 
 async function writeFileIfMissing(filePath: string, content: string): Promise<boolean> {
   try {
@@ -197,6 +181,85 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function hasGlobPattern(value: string): boolean {
+  return value.includes("*") || value.includes("?") || value.includes("{");
+}
+
+function escapeRegexChar(value: string): string {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function globPatternToRegex(pattern: string): RegExp {
+  const normalized = pattern.replace(/\\/g, "/");
+  let source = "^";
+  for (let i = 0; i < normalized.length; i += 1) {
+    const char = normalized[i] ?? "";
+    const next = normalized[i + 1] ?? "";
+    if (char === "*") {
+      if (next === "*") {
+        if (normalized[i + 2] === "/") {
+          source += "(?:.*/)?";
+          i += 2;
+        } else {
+          source += ".*";
+          i += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+    if (char === "{") {
+      const end = normalized.indexOf("}", i + 1);
+      if (end !== -1) {
+        const alternatives = normalized
+          .slice(i + 1, end)
+          .split(",")
+          .map((part) => part.replace(/[|\\{}()[\]^$+?.*]/g, "\\$&"));
+        source += `(?:${alternatives.join("|")})`;
+        i = end;
+        continue;
+      }
+    }
+    source += escapeRegexChar(char);
+  }
+  return new RegExp(`${source}$`);
+}
+
+async function listWorkspaceFilePaths(dir: string): Promise<string[]> {
+  const result: string[] = [];
+  async function visit(relativeDir: string): Promise<void> {
+    const absoluteDir = path.join(dir, relativeDir);
+    let entries: syncFs.Dirent[];
+    try {
+      entries = await fs.readdir(absoluteDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries.toSorted((a, b) => a.name.localeCompare(b.name))) {
+      const relativePath = path.join(relativeDir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(relativePath);
+        continue;
+      }
+      if (entry.isFile()) {
+        result.push(relativePath);
+      }
+    }
+  }
+  await visit("");
+  return result;
+}
+
+function matchWorkspaceGlobPattern(files: string[], pattern: string): string[] {
+  const regex = globPatternToRegex(pattern);
+  return files.filter((file) => regex.test(file.replace(/\\/g, "/")));
 }
 
 async function fileContentDiffersFromTemplate(
@@ -706,16 +769,15 @@ export async function loadExtraBootstrapFilesWithDiagnostics(
 
   // Resolve glob patterns into concrete file paths
   const resolvedPaths = new Set<string>();
+  let workspaceFilePaths: string[] | undefined;
   for (const pattern of extraPatterns) {
-    if (pattern.includes("*") || pattern.includes("?") || pattern.includes("{")) {
-      try {
-        const matches = fs.glob(pattern, { cwd: resolvedDir });
-        for await (const m of matches) {
-          resolvedPaths.add(m);
+    if (hasGlobPattern(pattern)) {
+      workspaceFilePaths ??= await listWorkspaceFilePaths(resolvedDir);
+      const matches = matchWorkspaceGlobPattern(workspaceFilePaths, pattern);
+      if (matches.length > 0) {
+        for (const match of matches) {
+          resolvedPaths.add(match);
         }
-      } catch {
-        // glob not available or pattern error — fall back to literal
-        resolvedPaths.add(pattern);
       }
     } else {
       resolvedPaths.add(pattern);
@@ -724,25 +786,16 @@ export async function loadExtraBootstrapFilesWithDiagnostics(
 
   const files: WorkspaceBootstrapFile[] = [];
   const diagnostics: ExtraBootstrapLoadDiagnostic[] = [];
-  for (const relPath of resolvedPaths) {
+  for (const relPath of [...resolvedPaths].toSorted((a, b) => a.localeCompare(b))) {
     const filePath = path.resolve(resolvedDir, relPath);
-    // Only load files whose basename is a recognized bootstrap filename
     const baseName = path.basename(relPath);
-    if (!VALID_BOOTSTRAP_NAMES.has(baseName)) {
-      diagnostics.push({
-        path: filePath,
-        reason: "invalid-bootstrap-filename",
-        detail: `unsupported bootstrap basename: ${baseName}`,
-      });
-      continue;
-    }
     const loaded = await readWorkspaceFileWithGuards({
       filePath,
       workspaceDir: resolvedDir,
     });
     if (loaded.ok) {
       files.push({
-        name: baseName as WorkspaceBootstrapFileName,
+        name: baseName,
         path: filePath,
         content: loaded.content,
         missing: false,
