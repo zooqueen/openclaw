@@ -4,28 +4,20 @@ Docs: https://docs.openclaw.ai
 
 ## Unreleased
 
-### Changes
-
-- Plugins/models: wire manifest `modelCatalog.aliases` and `modelCatalog.suppressions` into model-catalog planning and built-in model suppression, with OpenAI stale Spark suppression now declared in the plugin manifest before runtime fallback. Thanks @shakkernerd.
-- Channels/Yuanbao: register the Tencent Yuanbao external channel plugin (`openclaw-plugin-yuanbao`) in the official channel catalog, contract suites, and community plugin docs, with a new `docs/channels/yuanbao.md` quick-start guide for WebSocket bot DMs and group chats. (#72756) Thanks @loongfay.
-- Channels/QQBot: add full group chat support (history tracking, @-mention gating, activation modes, per-group config, FIFO message queue with deliver debounce), C2C `stream_messages` streaming with a `StreamingController` lifecycle manager, unified `sendMedia` with chunked upload for large files, and refactor the engine into pipeline stages, focused outbound submodules, builtin slash-command modules, and explicit DI ports via `createEngineAdapters()`. (#70624) Thanks @cxyhhhhh.
-- Gateway/runtime: reuse the current plugin metadata snapshot for provider discovery so repeated model-provider discovery avoids rebuilding plugin manifest metadata. Thanks @shakkernerd.
-- Gateway/startup: pass the plugin metadata snapshot from config validation into plugin bootstrap so startup reuses one manifest product instead of rebuilding plugin metadata. Thanks @shakkernerd.
-
-### Fixes
-
-- Agents/LSP: terminate bundled stdio LSP process trees during runtime disposal and Gateway shutdown, so nested children such as `tsserver` do not survive stop or restart. Fixes #72357. Thanks @ai-hpc and @bittoby.
-
 ## 2026.4.26
 
 ### Changes
 
+- Channels/QQBot: add full group chat support (history tracking, @-mention gating, activation modes, per-group config, FIFO message queue with deliver debounce), C2C `stream_messages` streaming with a `StreamingController` lifecycle manager, unified `sendMedia` with chunked upload for large files, and refactor the engine into pipeline stages, focused outbound submodules, builtin slash-command modules, and explicit DI ports via `createEngineAdapters()`. (#70624) Thanks @cxyhhhhh.
+- Channels/Yuanbao: register the Tencent Yuanbao external channel plugin (`openclaw-plugin-yuanbao`) in the official channel catalog, contract suites, and community plugin docs, with a new `docs/channels/yuanbao.md` quick-start guide for WebSocket bot DMs and group chats. (#72756) Thanks @loongfay.
 - Control UI/Talk: add a generic browser realtime transport contract, Google Live browser Talk sessions with constrained ephemeral tokens, and a Gateway relay for backend-only realtime voice plugins. Thanks @VACInc.
 - CLI/models: route provider-filtered model listing through an explicit source plan so user config, installed manifest rows, Provider Index previews, and scoped runtime fallbacks keep a stable authority order without adding another catalog cache. Thanks @shakkernerd.
 - Providers: add Cerebras as a bundled plugin with onboarding, static model catalog, docs, and manifest-owned endpoint metadata.
 - Memory/OpenAI-compatible: add optional `memorySearch.inputType`, `queryInputType`, and `documentInputType` config for asymmetric embedding endpoints, including direct query embeddings and provider batch indexing. Carries forward #63313 and #60727. Thanks @HOYALIM and @prospect1314521.
 - Ollama/memory: add model-specific retrieval query prefixes for `nomic-embed-text`, `qwen3-embedding`, and `mxbai-embed-large` memory-search queries while leaving document batches unchanged. Carries forward #45013. Thanks @laolin5564.
 - Plugins/providers: move pre-runtime model-id normalization, provider endpoint host metadata, and OpenAI-compatible request-family hints into plugin manifests so core no longer carries bundled-provider routing tables.
+- Plugins/models: wire manifest `modelCatalog.aliases` and `modelCatalog.suppressions` into model-catalog planning and built-in model suppression, with OpenAI stale Spark suppression now declared in the plugin manifest before runtime fallback. Thanks @shakkernerd.
+- Gateway/startup: pass and reuse plugin metadata snapshots across config validation, plugin bootstrap, and provider discovery so startup and repeated model-provider discovery avoid rebuilding plugin manifest metadata. Thanks @shakkernerd.
 - Plugins/config: deprecate direct plugin config load/write helpers in favor of passed runtime snapshots plus transactional mutation helpers with explicit restart follow-up policy, scanner guardrails, runtime warnings, and revision-based cache invalidation.
 - Plugins/install: allow `OPENCLAW_PLUGIN_STAGE_DIR` to contain layered runtime-dependency roots, resolving read-only preinstalled deps before installing missing deps into the final writable root. Fixes #72396. Thanks @liorb-mountapps.
 - Control UI: add a raw config pending-changes diff panel that parses JSON5, redacts sensitive values until reveal, and avoids fake raw-edit callbacks when opening the panel. Refs #39831; supersedes #48621 and #46654. Thanks @JiajunBernoulli and @BunsDev.
@@ -37,6 +29,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Agents/LSP: terminate bundled stdio LSP process trees during runtime disposal and Gateway shutdown, so nested children such as `tsserver` do not survive stop or restart. Fixes #72357. Thanks @ai-hpc and @bittoby.
 - Gateway/device tokens: stop echoing rotated bearer tokens from shared/admin `device.token.rotate` responses while preserving the same-device token handoff needed by token-only clients before reconnect. (#66773) Thanks @MoerAI.
 - Control UI/Talk: keep Google Live browser sessions on the WebSocket transport instead of falling back to WebRTC, validate browser Google Live WebSocket endpoints, cap Gateway relay sessions per browser connection, and remove stale browser-native voice buttons that did not use the configured Talk/TTS provider. Thanks @BunsDev.
 - Gateway/startup: reuse config snapshot plugin manifests for startup auto-enable before plugin bootstrap plans plugin loading. Thanks @shakkernerd.
