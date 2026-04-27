@@ -137,9 +137,12 @@ function buildSuccessorEntries(params: {
 }
 
 function collectLatestStatePrefix(entries: SessionEntry[]): SessionEntry[] {
+  const customEntries: Array<{ index: number; entry: SessionEntry }> = [];
   const latestByType = new Map<string, { index: number; entry: SessionEntry }>();
   for (const [index, entry] of entries.entries()) {
-    if (
+    if (entry.type === "custom") {
+      customEntries.push({ index, entry });
+    } else if (
       entry.type === "thinking_level_change" ||
       entry.type === "model_change" ||
       entry.type === "session_info"
@@ -147,7 +150,7 @@ function collectLatestStatePrefix(entries: SessionEntry[]): SessionEntry[] {
       latestByType.set(entry.type, { index, entry });
     }
   }
-  return [...latestByType.values()]
+  return [...customEntries, ...latestByType.values()]
     .toSorted((left, right) => left.index - right.index)
     .map(({ entry }) => entry);
 }

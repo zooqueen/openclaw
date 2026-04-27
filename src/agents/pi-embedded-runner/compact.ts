@@ -113,6 +113,7 @@ import {
   resolveCompactionTimeoutMs,
 } from "./compaction-safety-timeout.js";
 import {
+  type CompactionTranscriptRotation,
   rotateTranscriptAfterCompaction,
   shouldRotateCompactionTranscript,
 } from "./compaction-successor-transcript.js";
@@ -1110,9 +1111,7 @@ export async function compactEmbeddedPiSessionDirect(
           });
           const messageCountAfter = session.messages.length;
           const compactedCount = Math.max(0, messageCountCompactionInput - messageCountAfter);
-          let transcriptRotation: Awaited<ReturnType<typeof rotateTranscriptAfterCompaction>> = {
-            rotated: false,
-          };
+          let transcriptRotation: CompactionTranscriptRotation = { rotated: false };
           if (shouldRotateCompactionTranscript(params.config)) {
             try {
               transcriptRotation = await rotateTranscriptAfterCompaction({
@@ -1120,8 +1119,9 @@ export async function compactEmbeddedPiSessionDirect(
                 sessionFile: params.sessionFile,
               });
             } catch (err) {
-              log.warn("failed to rotate compacted transcript", {
+              log.warn("[compaction] post-compaction transcript rotation failed", {
                 errorMessage: formatErrorMessage(err),
+                errorStack: err instanceof Error ? err.stack : undefined,
               });
             }
           }

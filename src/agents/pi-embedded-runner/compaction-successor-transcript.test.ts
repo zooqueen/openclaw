@@ -37,6 +37,7 @@ function createCompactedSession(sessionDir: string): {
   const manager = SessionManager.create(sessionDir, sessionDir);
   manager.appendModelChange("openai", "gpt-5.2");
   manager.appendThinkingLevelChange("medium");
+  manager.appendCustomEntry("test-extension", { cursor: "before-compaction" });
   manager.appendMessage({ role: "user", content: "old user", timestamp: 1 });
   manager.appendMessage(makeAssistant("old assistant", 2));
   const firstKeptId = manager.appendMessage({ role: "user", content: "kept user", timestamp: 3 });
@@ -74,6 +75,13 @@ describe("rotateTranscriptAfterCompaction", () => {
     });
     expect(successor.getEntries().length).toBeLessThan(originalEntryCount);
     expect(successor.getBranch()[0]?.type).toBe("model_change");
+    expect(successor.getBranch()).toContainEqual(
+      expect.objectContaining({
+        type: "custom",
+        customType: "test-extension",
+        data: { cursor: "before-compaction" },
+      }),
+    );
 
     const context = successor.buildSessionContext();
     const contextText = JSON.stringify(context.messages);
