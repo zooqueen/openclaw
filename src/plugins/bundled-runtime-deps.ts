@@ -86,6 +86,9 @@ export function materializeBundledRuntimeMirrorDistFile(
   sourcePath: string,
   targetPath: string,
 ): void {
+  if (path.resolve(sourcePath) === path.resolve(targetPath)) {
+    return;
+  }
   fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: 0o755 });
   fs.rmSync(targetPath, { recursive: true, force: true });
   try {

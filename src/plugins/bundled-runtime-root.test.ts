@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveBundledRuntimeDependencyInstallRoot } from "./bundled-runtime-deps.js";
+import {
+  materializeBundledRuntimeMirrorDistFile,
+  resolveBundledRuntimeDependencyInstallRoot,
+} from "./bundled-runtime-deps.js";
 import { prepareBundledPluginRuntimeRoot } from "./bundled-runtime-root.js";
 
 const tempRoots: string[] = [];
@@ -20,6 +23,26 @@ afterEach(() => {
 });
 
 describe("prepareBundledPluginRuntimeRoot", () => {
+  it("does not delete a plugin-owned chunk when the mirror source is already the target", () => {
+    const packageRoot = makeTempRoot();
+    const chunkPath = path.join(packageRoot, "dist", "accounts.js");
+    fs.mkdirSync(path.dirname(chunkPath), { recursive: true });
+    fs.writeFileSync(
+      chunkPath,
+      [
+        `//#region extensions/telegram/src/accounts.ts`,
+        `export const marker = "accounts";`,
+        `//#endregion`,
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    materializeBundledRuntimeMirrorDistFile(chunkPath, chunkPath);
+
+    expect(fs.readFileSync(chunkPath, "utf8")).toContain(`marker = "accounts"`);
+  });
+
   it("materializes plugin-owned root chunks in external mirrors", () => {
     const packageRoot = makeTempRoot();
     const stageDir = makeTempRoot();
