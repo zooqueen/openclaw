@@ -33,25 +33,29 @@ function makeAssistant(text: string, timestamp: number) {
 function createCompactedSession(sessionDir: string): {
   manager: SessionManager;
   sessionFile: string;
+  firstKeptId: string;
+  oldUserId: string;
 } {
   const manager = SessionManager.create(sessionDir, sessionDir);
   manager.appendModelChange("openai", "gpt-5.2");
   manager.appendThinkingLevelChange("medium");
   manager.appendCustomEntry("test-extension", { cursor: "before-compaction" });
-  manager.appendMessage({ role: "user", content: "old user", timestamp: 1 });
+  const oldUserId = manager.appendMessage({ role: "user", content: "old user", timestamp: 1 });
+  manager.appendLabelChange(oldUserId, "old bookmark");
   manager.appendMessage(makeAssistant("old assistant", 2));
   const firstKeptId = manager.appendMessage({ role: "user", content: "kept user", timestamp: 3 });
+  manager.appendLabelChange(firstKeptId, "kept bookmark");
   manager.appendMessage(makeAssistant("kept assistant", 4));
   manager.appendCompaction("Summary of old user and old assistant.", firstKeptId, 5000);
   manager.appendMessage({ role: "user", content: "post user", timestamp: 5 });
   manager.appendMessage(makeAssistant("post assistant", 6));
-  return { manager, sessionFile: manager.getSessionFile()! };
+  return { manager, sessionFile: manager.getSessionFile()!, firstKeptId, oldUserId };
 }
 
 describe("rotateTranscriptAfterCompaction", () => {
   it("creates a compacted successor transcript and leaves the archive untouched", async () => {
     const dir = await createTmpDir();
-    const { manager, sessionFile } = createCompactedSession(dir);
+    const { manager, sessionFile, firstKeptId, oldUserId } = createCompactedSession(dir);
     const originalBytes = await fs.readFile(sessionFile, "utf8");
     const originalEntryCount = manager.getEntries().length;
 
@@ -93,6 +97,8 @@ describe("rotateTranscriptAfterCompaction", () => {
     ).toBe(false);
     expect(context.model?.provider).toBe("openai");
     expect(context.thinkingLevel).toBe("medium");
+    expect(successor.getLabel(firstKeptId)).toBe("kept bookmark");
+    expect(successor.getLabel(oldUserId)).toBeUndefined();
   });
 
   it("skips sessions with no compaction entry", async () => {

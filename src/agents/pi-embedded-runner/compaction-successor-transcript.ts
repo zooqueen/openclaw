@@ -133,6 +133,13 @@ function buildSuccessorEntries(params: {
     }
     append(entry);
   }
+  const retainedIds = new Set(successorEntries.map((entry) => entry.id));
+  for (const entry of branch) {
+    if (entry.type !== "label" || !retainedIds.has(entry.targetId)) {
+      continue;
+    }
+    append(entry);
+  }
   return successorEntries;
 }
 
