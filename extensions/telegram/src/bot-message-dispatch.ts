@@ -405,8 +405,17 @@ export const dispatchTelegramMessage = async ({
       ? (replyQuoteMessageId ?? msg.message_id)
       : undefined;
   const draftMinInitialChars = DRAFT_MIN_INITIAL_CHARS;
-  // DM draft previews still duplicate briefly at materialize time.
-  const useMessagePreviewTransportForDm = threadSpec?.scope === "dm" && canStreamAnswerDraft;
+  const resolveDraftLanePreviewTransport = (
+    laneName: LaneName,
+  ): Parameters<typeof createTelegramDraftStream>[0]["previewTransport"] => {
+    if (threadSpec?.scope !== "dm") {
+      return "auto";
+    }
+    if (laneName === "answer") {
+      return "auto";
+    }
+    return canStreamAnswerDraft ? "message" : "auto";
+  };
   const mediaLocalRoots = getAgentScopedMediaLocalRoots(cfg, route.agentId);
   const archivedAnswerPreviews: ArchivedPreview[] = [];
   const archivedReasoningPreviewIds: number[] = [];
@@ -417,7 +426,7 @@ export const dispatchTelegramMessage = async ({
           chatId,
           maxChars: draftMaxChars,
           thread: threadSpec,
-          previewTransport: useMessagePreviewTransportForDm ? "message" : "auto",
+          previewTransport: resolveDraftLanePreviewTransport(laneName),
           replyToMessageId: draftReplyToMessageId,
           minInitialChars: draftMinInitialChars,
           renderText: renderDraftPreview,
