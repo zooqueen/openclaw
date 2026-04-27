@@ -1110,12 +1110,21 @@ export async function compactEmbeddedPiSessionDirect(
           });
           const messageCountAfter = session.messages.length;
           const compactedCount = Math.max(0, messageCountCompactionInput - messageCountAfter);
-          const transcriptRotation = shouldRotateCompactionTranscript(params.config)
-            ? await rotateTranscriptAfterCompaction({
+          let transcriptRotation: Awaited<ReturnType<typeof rotateTranscriptAfterCompaction>> = {
+            rotated: false,
+          };
+          if (shouldRotateCompactionTranscript(params.config)) {
+            try {
+              transcriptRotation = await rotateTranscriptAfterCompaction({
                 sessionManager,
                 sessionFile: params.sessionFile,
-              })
-            : { rotated: false as const };
+              });
+            } catch (err) {
+              log.warn("failed to rotate compacted transcript", {
+                errorMessage: formatErrorMessage(err),
+              });
+            }
+          }
           const activeSessionId = transcriptRotation.sessionId ?? params.sessionId;
           const activeSessionFile = transcriptRotation.sessionFile ?? params.sessionFile;
           const activePostLeafId = transcriptRotation.leafId ?? postCompactionLeafId;
