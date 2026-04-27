@@ -162,11 +162,14 @@ export async function compactEmbeddedPiSession(
           force: params.trigger === "manual",
           runtimeContext,
         });
-        let postCompactionSessionId = params.sessionId;
-        let postCompactionSessionFile = params.sessionFile;
+        const delegatedSessionId = result.result?.sessionId;
+        const delegatedSessionFile = result.result?.sessionFile;
+        const delegatedRotatedTranscript = Boolean(delegatedSessionId || delegatedSessionFile);
+        let postCompactionSessionId = delegatedSessionId ?? params.sessionId;
+        let postCompactionSessionFile = delegatedSessionFile ?? params.sessionFile;
         let postCompactionLeafId: string | undefined;
         if (result.ok && result.compacted) {
-          if (shouldRotateCompactionTranscript(params.config)) {
+          if (shouldRotateCompactionTranscript(params.config) && !delegatedRotatedTranscript) {
             try {
               const rotation = await rotateTranscriptAfterCompaction({
                 sessionManager: SessionManager.open(params.sessionFile),
