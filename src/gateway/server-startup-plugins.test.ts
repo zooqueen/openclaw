@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type ConfiguredDeferredChannelPluginIdsResolver =
+  typeof import("../plugins/channel-plugin-ids.js").resolveConfiguredDeferredChannelPluginIds;
+type GatewayStartupPluginIdsResolver =
+  typeof import("../plugins/channel-plugin-ids.js").resolveGatewayStartupPluginIds;
+
 const applyPluginAutoEnable = vi.hoisted(() =>
   vi.fn((params: { config: unknown }) => ({
     config: params.config,
@@ -14,14 +19,16 @@ const loadGatewayStartupPlugins = vi.hoisted(() =>
     gatewayMethods: ["ping"],
   })),
 );
-const repairBundledRuntimeDepsInstallRootAsync = vi.hoisted(() =>
-  vi.fn(async (_params: unknown) => ({})),
-);
+const repairBundledRuntimeDepsInstallRoot = vi.hoisted(() => vi.fn((_params: unknown) => ({})));
 const resolveBundledRuntimeDependencyPackageInstallRoot = vi.hoisted(() =>
   vi.fn((_packageRoot: string, _params: unknown) => "/runtime"),
 );
-const resolveConfiguredDeferredChannelPluginIds = vi.hoisted(() => vi.fn(() => []));
-const resolveGatewayStartupPluginIds = vi.hoisted(() => vi.fn(() => ["memory-core"]));
+const resolveConfiguredDeferredChannelPluginIds = vi.hoisted(() =>
+  vi.fn<ConfiguredDeferredChannelPluginIdsResolver>(() => []),
+);
+const resolveGatewayStartupPluginIds = vi.hoisted(() =>
+  vi.fn<GatewayStartupPluginIdsResolver>(() => ["memory-core"]),
+);
 const resolveOpenClawPackageRootSync = vi.hoisted(() => vi.fn((_params: unknown) => "/package"));
 const runChannelPluginStartupMaintenance = vi.hoisted(() =>
   vi.fn(async (_params: unknown) => undefined),
@@ -61,17 +68,19 @@ vi.mock("../infra/openclaw-root.js", () => ({
 }));
 
 vi.mock("../plugins/bundled-runtime-deps.js", () => ({
-  repairBundledRuntimeDepsInstallRootAsync: (params: unknown) =>
-    repairBundledRuntimeDepsInstallRootAsync(params),
+  repairBundledRuntimeDepsInstallRoot: (params: unknown) =>
+    repairBundledRuntimeDepsInstallRoot(params),
   resolveBundledRuntimeDependencyPackageInstallRoot: (packageRoot: string, params: unknown) =>
     resolveBundledRuntimeDependencyPackageInstallRoot(packageRoot, params),
   scanBundledPluginRuntimeDeps: (params: unknown) => scanBundledPluginRuntimeDeps(params),
 }));
 
 vi.mock("../plugins/channel-plugin-ids.js", () => ({
-  resolveConfiguredDeferredChannelPluginIds: (params: unknown) =>
-    resolveConfiguredDeferredChannelPluginIds(params),
-  resolveGatewayStartupPluginIds: (params: unknown) => resolveGatewayStartupPluginIds(params),
+  resolveConfiguredDeferredChannelPluginIds: (
+    ...args: Parameters<ConfiguredDeferredChannelPluginIdsResolver>
+  ) => resolveConfiguredDeferredChannelPluginIds(...args),
+  resolveGatewayStartupPluginIds: (...args: Parameters<GatewayStartupPluginIdsResolver>) =>
+    resolveGatewayStartupPluginIds(...args),
 }));
 
 vi.mock("../plugins/registry.js", () => ({
@@ -113,7 +122,7 @@ describe("prepareGatewayPluginBootstrap runtime-deps staging", () => {
     applyPluginAutoEnable.mockClear();
     initSubagentRegistry.mockClear();
     loadGatewayStartupPlugins.mockClear();
-    repairBundledRuntimeDepsInstallRootAsync.mockReset().mockResolvedValue({});
+    repairBundledRuntimeDepsInstallRoot.mockReset().mockReturnValue({});
     resolveBundledRuntimeDependencyPackageInstallRoot.mockClear();
     resolveConfiguredDeferredChannelPluginIds.mockClear().mockReturnValue([]);
     resolveGatewayStartupPluginIds.mockClear().mockReturnValue(["memory-core"]);
@@ -151,14 +160,14 @@ describe("prepareGatewayPluginBootstrap runtime-deps staging", () => {
         pluginIds: ["memory-core"],
       }),
     );
-    expect(repairBundledRuntimeDepsInstallRootAsync).toHaveBeenCalledWith(
+    expect(repairBundledRuntimeDepsInstallRoot).toHaveBeenCalledWith(
       expect.objectContaining({
         installRoot: "/runtime",
         missingSpecs: ["chokidar@^5.0.0"],
         installSpecs: expect.arrayContaining(["chokidar@^5.0.0", "typebox@^1.0.0"]),
       }),
     );
-    expect(repairBundledRuntimeDepsInstallRootAsync.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(repairBundledRuntimeDepsInstallRoot.mock.invocationCallOrder[0]).toBeLessThan(
       loadGatewayStartupPlugins.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
   });
