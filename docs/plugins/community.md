@@ -51,27 +51,14 @@ openclaw plugins install openclaw-codex-app-server
 
 ### DingTalk
 
-DingTalk robot and DEAP Agent channel by the DingTalk Real AI team. Supports
-Stream mode, AI Card streaming, images, files, and enterprise DingTalk clients.
+Enterprise robot integration using Stream mode. Supports text, images, and
+file messages via any DingTalk client.
 
-- **npm:** `@dingtalk-real-ai/dingtalk-connector`
-- **repo:** [github.com/DingTalk-Real-AI/dingtalk-openclaw-connector](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector)
-
-```bash
-openclaw plugins install @dingtalk-real-ai/dingtalk-connector
-```
-
-### Lark Feishu
-
-Official Lark/Feishu plugin for OpenClaw by the Lark Open Platform team. It
-connects OpenClaw to Lark or Feishu messages, docs, bases, calendars, tasks,
-and interactive cards.
-
-- **npm:** `@larksuite/openclaw-lark`
-- **repo:** [github.com/larksuite/openclaw-lark](https://github.com/larksuite/openclaw-lark)
+- **npm:** `@largezhou/ddingtalk`
+- **repo:** [github.com/largezhou/openclaw-dingtalk](https://github.com/largezhou/openclaw-dingtalk)
 
 ```bash
-openclaw plugins install @larksuite/openclaw-lark
+openclaw plugins install @largezhou/ddingtalk
 ```
 
 ### Lossless Claw (LCM)
@@ -129,18 +116,7 @@ when you intentionally want the Tencent-maintained standalone package.
 openclaw plugins install @tencent-connect/openclaw-qqbot
 ```
 
-### WeChat
-
-Weixin channel plugin for OpenClaw by the Tencent Weixin team.
-
-- **npm:** `@tencent-weixin/openclaw-weixin`
-- **repo:** [github.com/Tencent/openclaw-weixin](https://github.com/Tencent/openclaw-weixin)
-
-```bash
-openclaw plugins install @tencent-weixin/openclaw-weixin
-```
-
-### WeCom
+### wecom
 
 WeCom channel plugin for OpenClaw by the Tencent WeCom team. Powered by
 WeCom Bot WebSocket persistent connections, it supports direct messages & group
@@ -152,28 +128,6 @@ formatting, built-in access control, and document/meeting/messaging skills.
 
 ```bash
 openclaw plugins install @wecom/wecom-openclaw-plugin
-```
-
-### Weibo
-
-Weibo direct-message channel plugin for OpenClaw.
-
-- **npm:** `@wecode-ai/weibo-openclaw-plugin`
-- **source:** npm registry
-
-```bash
-openclaw plugins install @wecode-ai/weibo-openclaw-plugin
-```
-
-### Xiaodu
-
-Baidu Xiaodu plugin for OpenClaw smart displays and IoT home control.
-
-- **npm:** `openclaw-xiaodu`
-- **source:** npm registry
-
-```bash
-openclaw plugins install openclaw-xiaodu
 ```
 
 ### Yuanbao
