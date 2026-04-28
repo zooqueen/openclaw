@@ -47,6 +47,7 @@ const mockState = vi.hoisted(() => ({
     };
   }>,
   dispatchError: null as Error | null,
+  dispatchWait: null as Promise<void> | null,
   triggerAgentRunStart: false,
   agentRunId: "run-agent-1",
   sessionEntry: {} as Record<string, unknown>,
@@ -176,6 +177,9 @@ vi.mock("../../auto-reply/dispatch.js", () => ({
       }
       if (mockState.triggerAgentRunStart) {
         params.replyOptions?.onAgentRunStart?.(mockState.agentRunId);
+      }
+      if (mockState.dispatchWait) {
+        await mockState.dispatchWait;
       }
       if (mockState.dispatchedReplies.length > 0) {
         for (const reply of mockState.dispatchedReplies) {
@@ -516,6 +520,7 @@ describe("chat directive tag stripping for non-streaming final payloads", () => 
     mockState.finalPayload = null;
     mockState.dispatchedReplies = [];
     mockState.dispatchError = null;
+    mockState.dispatchWait = null;
     mockState.mainSessionKey = "main";
     mockState.triggerAgentRunStart = false;
     mockState.agentRunId = "run-agent-1";
@@ -1919,6 +1924,48 @@ describe("chat directive tag stripping for non-streaming final payloads", () => 
       context.broadcast as unknown as ReturnType<typeof vi.fn>
     ).mock.calls.find((call) => call[0] === "chat" && call[1]?.state === "final")?.[1];
     expect(finalBroadcast).toBeUndefined();
+  });
+
+  it("persists the accepted user turn before dispatch resolves", async () => {
+    createTranscriptFixture("openclaw-chat-send-user-transcript-before-dispatch-");
+    mockState.finalText = "ok";
+    mockState.triggerAgentRunStart = true;
+    let releaseDispatch: () => void = () => {};
+    mockState.dispatchWait = new Promise<void>((resolve) => {
+      releaseDispatch = resolve;
+    });
+    const respond = vi.fn();
+    const context = createChatContext();
+
+    try {
+      await runNonStreamingChatSend({
+        context,
+        respond,
+        idempotencyKey: "idem-user-transcript-before-dispatch",
+        message: "persist before dispatch finishes",
+        expectBroadcast: false,
+        waitFor: "none",
+      });
+
+      expect(respond).toHaveBeenCalledWith(
+        true,
+        { runId: "idem-user-transcript-before-dispatch", status: "started" },
+        undefined,
+        { runId: "idem-user-transcript-before-dispatch" },
+      );
+      expect(readTranscriptMessages()).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "persist before dispatch finishes",
+          idempotencyKey: "idem-user-transcript-before-dispatch",
+        }),
+      ]);
+    } finally {
+      releaseDispatch();
+    }
+    await waitForAssertion(() => {
+      expect(context.dedupe.has("chat:idem-user-transcript-before-dispatch")).toBe(true);
+    });
   });
 
   it("adds persisted media paths to the user transcript update", async () => {

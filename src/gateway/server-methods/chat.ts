@@ -2198,10 +2198,6 @@ export const chatHandlers: GatewayRequestHandlers = {
         client,
         logGateway: context.logGateway,
       });
-      const pluginBoundMediaFields =
-        explicitOriginTargetsPlugin && parsedImages.length > 0
-          ? resolveChatSendTranscriptMediaFields(await persistedImagesPromise)
-          : {};
       let userTranscriptPersistPromise: Promise<void> | null = null;
       const persistUserTranscriptMessage = async () => {
         if (userTranscriptPersistPromise) {
@@ -2220,7 +2216,7 @@ export const chatHandlers: GatewayRequestHandlers = {
             sessionFile: latestEntry?.sessionFile ?? entry?.sessionFile,
             agentId,
             message: parsedMessage,
-            savedImages: await persistedImagesPromise,
+            savedImages: [],
             timestamp: now,
             createIfMissing: true,
             idempotencyKey: clientRunId,
@@ -2234,6 +2230,11 @@ export const chatHandlers: GatewayRequestHandlers = {
         })();
         await userTranscriptPersistPromise;
       };
+      await persistUserTranscriptMessage();
+      const pluginBoundMediaFields =
+        explicitOriginTargetsPlugin && parsedImages.length > 0
+          ? resolveChatSendTranscriptMediaFields(await persistedImagesPromise)
+          : {};
 
       const trimmedMessage = parsedMessage.trim();
       const injectThinking = Boolean(
