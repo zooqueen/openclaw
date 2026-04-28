@@ -62,7 +62,10 @@ export async function resolvePrivateCommandRouteTargets(params: {
   return sortPrivateCommandRouteTargets({
     cfg: params.commandParams.cfg,
     originChannel,
-    targets: dedupePrivateCommandRouteTargets(targets),
+    targets: filterPrivateCommandRouteOwnerTargets({
+      cfg: params.commandParams.cfg,
+      targets: dedupePrivateCommandRouteTargets(targets),
+    }),
   });
 }
 
@@ -177,6 +180,19 @@ function sortPrivateCommandRouteTargets(params: {
       return a.index - b.index;
     })
     .map((entry) => entry.target);
+}
+
+function filterPrivateCommandRouteOwnerTargets(params: {
+  cfg: HandleCommandsParams["cfg"];
+  targets: PrivateCommandRouteTarget[];
+}): PrivateCommandRouteTarget[] {
+  return params.targets.filter(
+    (target) =>
+      resolveOwnerPreferenceIndex({
+        cfg: params.cfg,
+        target,
+      }) !== Number.MAX_SAFE_INTEGER,
+  );
 }
 
 function dedupePrivateCommandRouteTargets(

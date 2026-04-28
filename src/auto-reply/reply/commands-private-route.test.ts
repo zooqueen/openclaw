@@ -176,4 +176,35 @@ describe("resolvePrivateCommandRouteTargets", () => {
       to: "+15555550100",
     });
   });
+
+  it("does not select a same-surface exec approver unless it is also an owner route", async () => {
+    registerApprovalChannelPlugins([
+      createApprovalChannelPlugin({
+        id: "discord",
+        targets: [{ to: "non-owner-approver" }],
+      }),
+      createApprovalChannelPlugin({
+        id: "telegram",
+        targets: [{ to: "849985193" }],
+      }),
+    ]);
+
+    const targets = await resolvePrivateCommandRouteTargets({
+      commandParams: buildCommandParams({
+        commands: {
+          ownerAllowFrom: ["telegram:849985193"],
+        },
+      } as OpenClawConfig),
+      request: buildApprovalRequest(),
+    });
+
+    expect(targets).toEqual([
+      {
+        channel: "telegram",
+        to: "849985193",
+        accountId: undefined,
+        threadId: undefined,
+      },
+    ]);
+  });
 });
