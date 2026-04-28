@@ -106,6 +106,22 @@ describe("matrix live qa runtime", () => {
     }
   });
 
+  it("normalizes the Matrix QA canary timeout env", () => {
+    const previous = process.env.OPENCLAW_QA_MATRIX_CANARY_TIMEOUT_MS;
+    try {
+      process.env.OPENCLAW_QA_MATRIX_CANARY_TIMEOUT_MS = "12345";
+      expect(liveTesting.resolveMatrixQaCanaryTimeoutMs()).toBe(12345);
+      process.env.OPENCLAW_QA_MATRIX_CANARY_TIMEOUT_MS = "nope";
+      expect(liveTesting.resolveMatrixQaCanaryTimeoutMs()).toBe(90_000);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCLAW_QA_MATRIX_CANARY_TIMEOUT_MS;
+      } else {
+        process.env.OPENCLAW_QA_MATRIX_CANARY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
   it("injects a temporary Matrix account into the QA gateway config", () => {
     const baseCfg: OpenClawConfig = {
       plugins: {

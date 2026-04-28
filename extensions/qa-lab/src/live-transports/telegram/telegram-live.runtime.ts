@@ -302,6 +302,7 @@ const TELEGRAM_QA_ENV_KEYS = [
   "OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN",
   "OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN",
 ] as const;
+const DEFAULT_TELEGRAM_QA_CANARY_TIMEOUT_MS = 60_000;
 const TELEGRAM_QA_CAPTURE_CONTENT_ENV = "OPENCLAW_QA_TELEGRAM_CAPTURE_CONTENT";
 const QA_REDACT_PUBLIC_METADATA_ENV = "OPENCLAW_QA_REDACT_PUBLIC_METADATA";
 const QA_SUITE_PROGRESS_ENV = "OPENCLAW_QA_SUITE_PROGRESS";
@@ -340,6 +341,26 @@ function parseTelegramQaProgressBooleanEnv(value: string | undefined): boolean |
     return false;
   }
   return undefined;
+}
+
+function parsePositiveTelegramQaEnvMs(env: NodeJS.ProcessEnv, name: string, fallback: number) {
+  const raw = env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
+function resolveTelegramQaCanaryTimeoutMs(env: NodeJS.ProcessEnv = process.env) {
+  return parsePositiveTelegramQaEnvMs(
+    env,
+    "OPENCLAW_QA_TELEGRAM_CANARY_TIMEOUT_MS",
+    DEFAULT_TELEGRAM_QA_CANARY_TIMEOUT_MS,
+  );
 }
 
 function shouldLogTelegramQaLiveProgress(env: NodeJS.ProcessEnv = process.env) {
@@ -633,9 +654,15 @@ async function waitForObservedMessage(params: {
 async function waitForTelegramChannelRunning(
   gateway: Awaited<ReturnType<typeof startQaGatewayChild>>,
   accountId: string,
+  opts: {
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+  } = {},
 ) {
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 45_000) {
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+  const pollIntervalMs = opts.pollIntervalMs ?? 500;
+  while (Date.now() - startedAt < timeoutMs) {
     try {
       const payload = (await gateway.call(
         "channels.status",
@@ -644,20 +671,25 @@ async function waitForTelegramChannelRunning(
       )) as {
         channelAccounts?: Record<
           string,
-          Array<{ accountId?: string; running?: boolean; restartPending?: boolean }>
+          Array<{
+            accountId?: string;
+            connected?: boolean;
+            running?: boolean;
+            restartPending?: boolean;
+          }>
         >;
       };
       const accounts = payload.channelAccounts?.telegram ?? [];
       const match = accounts.find((entry) => entry.accountId === accountId);
-      if (match?.running && match.restartPending !== true) {
+      if (match?.running && match.connected === true && match.restartPending !== true) {
         return;
       }
     } catch {
       // retry
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
-  throw new Error(`telegram account "${accountId}" did not become ready`);
+  throw new Error(`telegram account "${accountId}" did not become ready and connected`);
 }
 
 function renderTelegramQaMarkdown(params: {
@@ -831,6 +863,7 @@ async function runCanary(params: {
     params.groupId,
     `/help@${params.sutUsername}`,
   );
+  const canaryTimeoutMs = resolveTelegramQaCanaryTimeoutMs();
   const requestStartedAt = new Date(requestStartedAtMs).toISOString();
   let firstUnthreadedReply:
     | Pick<TelegramObservedMessage, "messageId" | "replyToMessageId" | "text">
@@ -840,7 +873,7 @@ async function runCanary(params: {
     sutObserved = await waitForObservedMessage({
       token: params.driverToken,
       initialOffset: offset,
-      timeoutMs: 30_000,
+      timeoutMs: canaryTimeoutMs,
       observedMessages: params.observedMessages,
       observationScenarioId: "telegram-canary",
       observationScenarioTitle: "Telegram canary",
@@ -881,7 +914,7 @@ async function runCanary(params: {
     }
     throw new TelegramQaCanaryError(
       "sut_reply_timeout",
-      "SUT bot did not send any group reply after the canary command within 30s.",
+      `SUT bot did not send any group reply after the canary command within ${Math.round(canaryTimeoutMs / 1000)}s.`,
       {
         groupId: params.groupId,
         sutBotId: params.sutBotId,
@@ -1439,10 +1472,12 @@ export const __testing = {
   matchesTelegramScenarioReply,
   normalizeTelegramObservedMessage,
   parseTelegramQaProgressBooleanEnv,
+  resolveTelegramQaCanaryTimeoutMs,
   parseTelegramQaCredentialPayload,
   resolveTelegramQaRuntimeEnv,
   sanitizeTelegramQaProgressValue,
   shouldLogTelegramQaLiveProgress,
+  waitForTelegramChannelRunning,
   formatTelegramQaProgressDetails,
   renderTelegramQaMarkdown,
 };
