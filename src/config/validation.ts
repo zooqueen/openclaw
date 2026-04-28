@@ -42,10 +42,16 @@ import type { OpenClawConfig, ConfigValidationIssue } from "./types.js";
 import { coerceSecretRef } from "./types.secrets.js";
 import { OpenClawSchema } from "./zod-schema.js";
 
-const LEGACY_REMOVED_PLUGIN_IDS = new Set(["google-antigravity-auth", "google-gemini-cli-auth"]);
+const LEGACY_REMOVED_PLUGIN_IDS = new Set(["google-antigravity-auth"]);
+const LEGACY_STALE_WARN_ONLY_PLUGIN_IDS = new Set(["google-gemini-cli-auth"]);
 
 type UnknownIssueRecord = Record<string, unknown>;
 type ConfigPathSegment = string | number;
+type UnrecognizedKeysValidationIssue = {
+  code: "unrecognized_keys";
+  path?: unknown;
+  keys?: unknown;
+};
 type AllowedValuesCollection = {
   values: unknown[];
   incomplete: boolean;
@@ -92,6 +98,74 @@ function toConfigPathSegments(path: unknown): ConfigPathSegment[] {
 
 function formatConfigPath(segments: readonly ConfigPathSegment[]): string {
   return segments.join(".");
+}
+
+function isUnrecognizedKeysValidationIssue(
+  issue: unknown,
+): issue is UnrecognizedKeysValidationIssue {
+  const record = toIssueRecord(issue);
+  return record?.code === "unrecognized_keys" && Array.isArray(record.keys);
+}
+
+function resolveConfigPathTarget(
+  root: unknown,
+  pathSegments: readonly ConfigPathSegment[],
+): unknown {
+  let current = root;
+  for (const segment of pathSegments) {
+    if (typeof segment === "number") {
+      if (!Array.isArray(current) || segment < 0 || segment >= current.length) {
+        return null;
+      }
+      current = current[segment];
+      continue;
+    }
+    if (!isRecord(current)) {
+      return null;
+    }
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+      return null;
+    }
+    current = current[segment];
+  }
+  return current;
+}
+
+export function stripUnknownConfigKeysForValidation(raw: unknown): {
+  raw: unknown;
+  warnings: ConfigValidationIssue[];
+} {
+  const normalizedRaw = stripDeprecatedValidationKeys(raw);
+  const parsed = OpenClawSchema.safeParse(normalizedRaw);
+  if (parsed.success) {
+    return { raw: normalizedRaw, warnings: [] };
+  }
+
+  const next = structuredClone(normalizedRaw);
+  const warnings: ConfigValidationIssue[] = [];
+  for (const issue of parsed.error.issues) {
+    if (!isUnrecognizedKeysValidationIssue(issue)) {
+      continue;
+    }
+    const issuePath = toConfigPathSegments(issue.path);
+    const target = resolveConfigPathTarget(next, issuePath);
+    if (!isRecord(target)) {
+      continue;
+    }
+    for (const key of issue.keys) {
+      if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(target, key)) {
+        continue;
+      }
+      delete target[key];
+      const path = formatConfigPath([...issuePath, key]);
+      warnings.push({
+        path,
+        message: `Unknown config key ignored during read: ${path}. Run "openclaw doctor --fix" to remove stale config.`,
+      });
+    }
+  }
+
+  return { raw: next, warnings };
 }
 
 function asJsonSchemaLike(value: unknown): JsonSchemaLike | null {
@@ -729,6 +803,36 @@ export function validateConfigObjectWithPlugins(
   });
 }
 
+export function validateConfigObjectWithPluginsToleratingUnknownKeys(
+  raw: unknown,
+  params?: ValidateConfigWithPluginsParams,
+): ValidateConfigWithPluginsResult {
+  const strict = validateConfigObjectWithPlugins(raw, params);
+  if (strict.ok) {
+    return strict;
+  }
+
+  const stripped = stripUnknownConfigKeysForValidation(raw);
+  if (stripped.warnings.length === 0) {
+    return strict;
+  }
+
+  const tolerant = validateConfigObjectWithPlugins(stripped.raw, params);
+  if (!tolerant.ok) {
+    return {
+      ok: false,
+      issues: tolerant.issues,
+      warnings: [...stripped.warnings, ...tolerant.warnings],
+    };
+  }
+
+  return {
+    ok: true,
+    config: tolerant.config,
+    warnings: [...stripped.warnings, ...tolerant.warnings],
+  };
+}
+
 export function validateConfigObjectRawWithPlugins(
   raw: unknown,
   params?: ValidateConfigWithPluginsParams,
@@ -1166,7 +1270,7 @@ function validateConfigObjectWithPluginsBase(
       });
       return;
     }
-    if (opts?.warnOnly) {
+    if (opts?.warnOnly || LEGACY_STALE_WARN_ONLY_PLUGIN_IDS.has(pluginId)) {
       warnings.push({
         path,
         message: `plugin not found: ${pluginId} (stale config entry ignored; remove it from plugins config)`,

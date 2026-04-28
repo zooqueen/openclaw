@@ -93,6 +93,24 @@ function expectRemovedPluginWarnings(
   }
 }
 
+function expectMissingPluginWarnings(
+  result: { ok: boolean; warnings?: Array<{ path: string; message: string }> },
+  pluginId: string,
+) {
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    const message = `plugin not found: ${pluginId} (stale config entry ignored; remove it from plugins config)`;
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        { path: `plugins.entries.${pluginId}`, message },
+        { path: "plugins.allow", message },
+        { path: "plugins.deny", message },
+        { path: "plugins.slots.memory", message },
+      ]),
+    );
+  }
+}
+
 describe("config plugin validation", () => {
   let fixtureRoot = "";
   let suiteHome = "";
@@ -417,10 +435,10 @@ describe("config plugin validation", () => {
     expectRemovedPluginWarnings(res, removedId, removedId);
   });
 
-  it("warns for removed google gemini auth plugin ids instead of failing validation", async () => {
-    const removedId = "google-gemini-cli-auth";
-    const res = validateRemovedPluginConfig(removedId);
-    expectRemovedPluginWarnings(res, removedId, removedId);
+  it("warns for stale google gemini auth plugin ids without classifying them as removed", async () => {
+    const pluginId = "google-gemini-cli-auth";
+    const res = validateRemovedPluginConfig(pluginId);
+    expectMissingPluginWarnings(res, pluginId);
   });
 
   it("does not auto-allow config-loaded overrides of bundled web search plugin ids", async () => {

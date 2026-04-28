@@ -109,6 +109,8 @@ import { resolveShellEnvExpectedKeys } from "./shell-env-expected-keys.js";
 import type { OpenClawConfig, ConfigFileSnapshot, LegacyConfigIssue } from "./types.js";
 import {
   validateConfigObjectRawWithPlugins,
+  stripUnknownConfigKeysForValidation,
+  validateConfigObjectWithPluginsToleratingUnknownKeys,
   validateConfigObjectWithPlugins,
 } from "./validation.js";
 import { shouldWarnOnTouchedVersion } from "./version.js";
@@ -1550,7 +1552,7 @@ export function createConfigIO(
       if (preValidationDuplicates.length > 0) {
         throw new DuplicateAgentDirError(preValidationDuplicates);
       }
-      const validated = validateConfigObjectWithPlugins(effectiveConfigRaw, {
+      const validated = validateConfigObjectWithPluginsToleratingUnknownKeys(effectiveConfigRaw, {
         env: deps.env,
         pluginValidation: overrides.pluginValidation,
       });
@@ -1770,7 +1772,7 @@ export function createConfigIO(
         return pluginMetadataSnapshot;
       };
       const validated = await deps.measure("config.snapshot.read.validate", () =>
-        validateConfigObjectWithPlugins(effectiveConfigRaw, {
+        validateConfigObjectWithPluginsToleratingUnknownKeys(effectiveConfigRaw, {
           env: deps.env,
           pluginValidation: overrides.pluginValidation,
           loadPluginMetadataSnapshot: loadValidationPluginMetadataSnapshot,
@@ -2015,7 +2017,24 @@ export function createConfigIO(
 
     persistCandidate = applyUnsetPathsForWrite(persistCandidate as OpenClawConfig, unsetPaths);
 
-    const validated = validateConfigObjectRawWithPlugins(persistCandidate, { env: deps.env });
+    let validated = validateConfigObjectRawWithPlugins(persistCandidate, { env: deps.env });
+    if (!validated.ok) {
+      const strippedPersistCandidate = stripUnknownConfigKeysForValidation(persistCandidate);
+      if (
+        strippedPersistCandidate.warnings.length > 0 &&
+        stripUnknownConfigKeysForValidation(cfg).warnings.length === 0
+      ) {
+        const strippedValidation = validateConfigObjectRawWithPlugins(
+          strippedPersistCandidate.raw,
+          {
+            env: deps.env,
+          },
+        );
+        if (strippedValidation.ok) {
+          validated = strippedValidation;
+        }
+      }
+    }
     if (!validated.ok) {
       const issue = validated.issues[0];
       const pathLabel = issue?.path ? issue.path : "<root>";
