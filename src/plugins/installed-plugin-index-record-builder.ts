@@ -56,7 +56,7 @@ function hasRuntimeContractSurface(record: PluginManifestRecord): boolean {
  */
 function isLegacyImplicitStartupSidecar(record: PluginManifestRecord): boolean {
   return (
-    record.channels.length === 0 &&
+    (record.channels?.length ?? 0) === 0 &&
     !hasRuntimeContractSurface(record) &&
     record.activation?.onStartup === undefined
   );
