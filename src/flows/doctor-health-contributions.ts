@@ -24,6 +24,7 @@ export type DoctorHealthFlowContext = {
   cfgForPersistence: OpenClawConfig;
   sourceConfigValid: boolean;
   configPath: string;
+  env: NodeJS.ProcessEnv;
   gatewayDetails?: ReturnType<typeof buildGatewayConnectionDetails>;
   healthOk?: boolean;
   gatewayMemoryProbe?: Awaited<ReturnType<typeof probeGatewayMemoryStatus>>;
@@ -251,7 +252,7 @@ async function runBundledPluginRuntimeDepsHealth(ctx: DoctorHealthFlowContext): 
 
 async function runStateIntegrityHealth(ctx: DoctorHealthFlowContext): Promise<void> {
   const { noteStateIntegrity } = await import("../commands/doctor-state-integrity.js");
-  await noteStateIntegrity(ctx.cfg, ctx.prompter, ctx.configPath);
+  await noteStateIntegrity(ctx.cfg, ctx.prompter, ctx.configPath, { env: ctx.env });
 }
 
 async function runSessionLocksHealth(ctx: DoctorHealthFlowContext): Promise<void> {

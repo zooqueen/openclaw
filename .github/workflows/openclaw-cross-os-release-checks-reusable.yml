@@ -333,6 +333,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: ${{ inputs.candidate_artifact_name == '' && 'source/pnpm-lock.yaml' || 'workflow/pnpm-lock.yaml' }}
 
+      - name: Ensure pnpm cache path exists
+        run: mkdir -p "$(pnpm store path --silent)"
+
       - name: Build candidate artifact once
         if: inputs.candidate_artifact_name == ''
         env:

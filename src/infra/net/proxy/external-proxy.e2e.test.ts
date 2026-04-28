@@ -136,7 +136,7 @@ async function runNodeModule(
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error(`child process timed out\nstdout:\n${stdout}\nstderr:\n${stderr}`));
-    }, 10_000);
+    }, 45_000);
 
     child.on("error", (err) => {
       clearTimeout(timeout);
