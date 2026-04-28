@@ -1078,7 +1078,7 @@ gateway_listener_ready() {
 gateway_log_ready() {
   latest="\$(/bin/ls -t /tmp/openclaw/openclaw-*.log 2>/dev/null | /usr/bin/head -n 1 || true)"
   [ -n "\$latest" ] || return 1
-  /usr/bin/tail -n 160 "\$latest" | /usr/bin/grep -q 'ready ('
+  /usr/bin/tail -n 160 "\$latest" | /usr/bin/grep -Eq 'ready( \(|[[:space:]]*\$)'
 }
 gateway_smoke_ready() {
   gateway_listener_ready && gateway_log_ready
@@ -1682,7 +1682,7 @@ gateway_listener_ready() {
 gateway_log_ready() {
   latest="\$(/bin/ls -t /tmp/openclaw/openclaw-*.log 2>/dev/null | /usr/bin/head -n 1 || true)"
   [ -n "\$latest" ] || return 1
-  /usr/bin/tail -n 160 "\$latest" | /usr/bin/grep -q 'ready ('
+  /usr/bin/tail -n 160 "\$latest" | /usr/bin/grep -Eq 'ready( \(|[[:space:]]*\$)'
 }
 gateway_smoke_ready() {
   gateway_listener_ready && gateway_log_ready
