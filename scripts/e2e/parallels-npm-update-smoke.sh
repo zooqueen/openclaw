@@ -1729,7 +1729,11 @@ openclaw_version_with_retry() {
   version=""
   last_output=""
   for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    if version="\$("\$bin" --version 2>&1)"; then
+    set +e
+    version="\$("\$bin" --version 2>&1)"
+    status=\$?
+    set -e
+    if [ "\$status" -eq 0 ]; then
       printf '%s\n' "\$version"
       if [ -z "\$expected" ] || [[ "\$version" == *"\$expected"* ]]; then
         return 0
@@ -1878,7 +1882,11 @@ openclaw_version_with_retry() {
   version=""
   last_output=""
   for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    if version="\$("\$bin" --version 2>&1)"; then
+    set +e
+    version="\$("\$bin" --version 2>&1)"
+    status=\$?
+    set -e
+    if [ "\$status" -eq 0 ]; then
       printf '%s\n' "\$version"
       if [ -z "\$expected" ] || [[ "\$version" == *"\$expected"* ]]; then
         return 0
