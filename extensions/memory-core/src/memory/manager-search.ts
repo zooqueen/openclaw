@@ -8,6 +8,7 @@ import {
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
 const FTS_QUERY_TOKEN_RE = /[\p{L}\p{N}_]+/gu;
+const ASCII_TOKEN_RE = /^[a-z0-9_]+$/i;
 const SHORT_CJK_TRIGRAM_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u3131-\u3163]/u;
 const VECTOR_KNN_OVERSAMPLE_FACTOR = 8;
 
@@ -61,6 +62,20 @@ function scoreFallbackKeywordResult(params: {
 
 function escapeLikePattern(term: string): string {
   return term.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+}
+
+function searchTextContainsToken(params: { text: string; token: string }): boolean {
+  const normalizedToken = params.token.toLowerCase();
+  if (normalizedToken.length === 0) {
+    return false;
+  }
+  const textTokens = new Set(normalizeSearchTokens(params.text));
+  if (textTokens.has(normalizedToken)) {
+    return true;
+  }
+  return (
+    !ASCII_TOKEN_RE.test(normalizedToken) && params.text.toLowerCase().includes(normalizedToken)
+  );
 }
 
 function buildMatchQueryFromTerms(terms: string[]): string | null {
@@ -356,4 +371,80 @@ export async function searchKeyword(params: {
       source: row.source,
     };
   });
+}
+
+export async function searchKeywordFallback(params: {
+  db: DatabaseSync;
+  providerModel: string | undefined;
+  query: string;
+  limit: number;
+  snippetMaxChars: number;
+  sourceFilter: { sql: string; params: SearchSource[] };
+  boostFallbackRanking?: boolean;
+}): Promise<Array<SearchRowResult & { textScore: number }>> {
+  if (params.limit <= 0) {
+    return [];
+  }
+  const queryTokens = [...new Set(normalizeSearchTokens(params.query))];
+  if (queryTokens.length === 0) {
+    return [];
+  }
+
+  const modelClause = params.providerModel ? " AND model = ?" : "";
+  const modelParams = params.providerModel ? [params.providerModel] : [];
+  const tokenPrefilter = queryTokens
+    .map(() => "(text LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\')")
+    .join(" OR ");
+  const tokenPrefilterParams = queryTokens.flatMap((token) => {
+    const pattern = `%${escapeLikePattern(token)}%`;
+    return [pattern, pattern];
+  });
+  const rows = params.db
+    .prepare(
+      `SELECT id, path, source, start_line, end_line, text\n` +
+        `  FROM chunks\n` +
+        ` WHERE 1=1${modelClause}${params.sourceFilter.sql}\n` +
+        `   AND (${tokenPrefilter})`,
+    )
+    .all(...modelParams, ...params.sourceFilter.params, ...tokenPrefilterParams) as Array<{
+    id: string;
+    path: string;
+    source: SearchSource;
+    start_line: number;
+    end_line: number;
+    text: string;
+  }>;
+
+  return rows
+    .map((row) => {
+      const searchableText = `${row.path}\n${row.text}`;
+      const matches = queryTokens.every((token) =>
+        searchTextContainsToken({ text: searchableText, token }),
+      );
+      if (!matches) {
+        return null;
+      }
+      const textScore = 1;
+      const score = params.boostFallbackRanking
+        ? scoreFallbackKeywordResult({
+            query: params.query,
+            path: row.path,
+            text: row.text,
+            ftsScore: textScore,
+          })
+        : textScore;
+      return {
+        id: row.id,
+        path: row.path,
+        startLine: row.start_line,
+        endLine: row.end_line,
+        score,
+        textScore,
+        snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
+        source: row.source,
+      };
+    })
+    .filter((row): row is SearchRowResult & { textScore: number } => row !== null)
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, params.limit);
 }

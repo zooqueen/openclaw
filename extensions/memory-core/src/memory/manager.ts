@@ -43,7 +43,7 @@ import {
   resolveMemoryProviderState,
 } from "./manager-provider-state.js";
 import { resolveMemorySearchPreflight } from "./manager-search-preflight.js";
-import { searchKeyword, searchVector } from "./manager-search.js";
+import { searchKeyword, searchKeywordFallback, searchVector } from "./manager-search.js";
 import {
   collectMemoryStatusAggregate,
   resolveInitialMemoryDirty,
@@ -368,8 +368,8 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
 
     // FTS-only mode: no embedding provider available
     if (!this.provider) {
-      if (!this.fts.enabled || !this.fts.available) {
-        log.warn("memory search: no provider and FTS unavailable");
+      if (!this.fts.enabled) {
+        log.warn("memory search: no provider and keyword search disabled");
         return [];
       }
 
@@ -424,9 +424,8 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return this.selectScoredResults(sorted, maxResults, minScore, 0);
     }
 
-    // If FTS isn't available, hybrid mode cannot use keyword search; degrade to vector-only.
     const keywordResults =
-      hybrid.enabled && this.fts.enabled && this.fts.available
+      hybrid.enabled && this.fts.enabled
         ? await this.searchKeyword(cleaned, candidates, undefined, sourceFilterList).catch(() => [])
         : [];
 
@@ -436,7 +435,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       ? await this.searchVector(queryVec, candidates, sourceFilterList).catch(() => [])
       : [];
 
-    if (!hybrid.enabled || !this.fts.enabled || !this.fts.available) {
+    if (!hybrid.enabled || !this.fts.enabled) {
       return vectorResults.filter((entry) => entry.score >= minScore).slice(0, maxResults);
     }
 
@@ -540,7 +539,18 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     sourceFilterList?: MemorySource[],
   ): Promise<Array<MemorySearchResult & { id: string; textScore: number }>> {
     if (!this.fts.enabled || !this.fts.available) {
-      return [];
+      const results = await searchKeywordFallback({
+        db: this.db,
+        providerModel: this.provider?.model,
+        query,
+        limit,
+        snippetMaxChars: SNIPPET_MAX_CHARS,
+        sourceFilter: this.buildSourceFilter(undefined, sourceFilterList),
+        boostFallbackRanking: options?.boostFallbackRanking,
+      });
+      return results.map(
+        (entry) => entry as MemorySearchResult & { id: string; textScore: number },
+      );
     }
     const sourceFilter = this.buildSourceFilter(undefined, sourceFilterList);
     // In FTS-only mode (no provider), search all models; otherwise filter by current provider's model

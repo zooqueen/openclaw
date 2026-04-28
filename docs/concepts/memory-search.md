@@ -74,7 +74,9 @@ flowchart LR
 - **BM25 keyword search** finds exact matches (IDs, error strings, config
   keys).
 
-If only one path is available (no embeddings or no FTS), the other runs alone.
+If embeddings are unavailable, keyword search runs alone. If SQLite FTS5 is
+unavailable, OpenClaw falls back to exact-token keyword matching over indexed
+chunks so hybrid search can still keep a lexical side.
 
 When embeddings are unavailable, OpenClaw still uses lexical ranking over FTS results instead of falling back to raw exact-match ordering only. That degraded mode boosts chunks with stronger query-term coverage and relevant file paths, which keeps recall useful even without `sqlite-vec` or an embedding provider.
 

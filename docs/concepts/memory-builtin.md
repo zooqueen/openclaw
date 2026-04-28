@@ -11,7 +11,7 @@ a per-agent SQLite database and needs no extra dependencies to get started.
 
 ## What it provides
 
-- **Keyword search** via FTS5 full-text indexing (BM25 scoring).
+- **Keyword search** via FTS5 full-text indexing (BM25 scoring), with an exact-token fallback when the runtime SQLite build lacks FTS5.
 - **Vector search** via embeddings from any supported provider.
 - **Hybrid search** that combines both for best results.
 - **CJK support** via trigram tokenization for Chinese, Japanese, and Korean.

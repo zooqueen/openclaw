@@ -5,7 +5,7 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { describe, expect, it, vi } from "vitest";
 import { bm25RankToScore, buildFtsQuery } from "./hybrid.js";
-import { searchKeyword, searchVector } from "./manager-search.js";
+import { searchKeyword, searchKeywordFallback, searchVector } from "./manager-search.js";
 
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
@@ -176,6 +176,119 @@ describe("searchKeyword trigram fallback", () => {
     });
 
     expect(repeated[0]?.score).toBe(unique[0]?.score);
+  });
+});
+
+describe("searchKeywordFallback", () => {
+  const { DatabaseSync } = requireNodeSqlite();
+
+  function createChunkDb() {
+    const db = new DatabaseSync(":memory:");
+    ensureMemoryIndexSchema({
+      db,
+      embeddingCacheTable: "embedding_cache",
+      cacheEnabled: false,
+      ftsTable: "chunks_fts",
+      ftsEnabled: false,
+    });
+    const insertChunk = db.prepare(
+      "INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    const addChunk = (params: {
+      id: string;
+      path: string;
+      source?: string;
+      model?: string;
+      text: string;
+    }) => {
+      insertChunk.run(
+        params.id,
+        params.path,
+        params.source ?? "memory",
+        1,
+        1,
+        params.id,
+        params.model ?? "mock-embed",
+        params.text,
+        "[]",
+        1,
+      );
+    };
+    return { db, addChunk };
+  }
+
+  it("returns exact-token chunk matches when FTS5 is unavailable", async () => {
+    const { db, addChunk } = createChunkDb();
+    try {
+      addChunk({
+        id: "hit",
+        path: "memory/node-sqlite.md",
+        text: "Node sqlite throws no such module fts5 during memory indexing.",
+      });
+      addChunk({
+        id: "partial",
+        path: "memory/other.md",
+        text: "This note only mentions fts500 and should not match.",
+      });
+      addChunk({
+        id: "other-model",
+        path: "memory/node-sqlite.md",
+        model: "other-embed",
+        text: "Node sqlite no such module fts5.",
+      });
+
+      const results = await searchKeywordFallback({
+        db,
+        providerModel: "mock-embed",
+        query: "sqlite fts5",
+        limit: 10,
+        snippetMaxChars: 200,
+        sourceFilter: { sql: "", params: [] },
+      });
+
+      expect(results.map((row) => row.id)).toEqual(["hit"]);
+      expect(results[0]?.textScore).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("searches all models in provider-less keyword fallback mode", async () => {
+    const { db, addChunk } = createChunkDb();
+    try {
+      addChunk({
+        id: "local",
+        path: "memory/local.md",
+        model: "local-embed",
+        text: "Local memory can recover exact token search without fts5.",
+      });
+      addChunk({
+        id: "remote",
+        path: "memory/remote.md",
+        model: "remote-embed",
+        text: "Remote memory can recover exact token search without fts5.",
+      });
+      addChunk({
+        id: "session",
+        path: "sessions/1.md",
+        source: "sessions",
+        model: "remote-embed",
+        text: "Session memory can recover exact token search without fts5.",
+      });
+
+      const results = await searchKeywordFallback({
+        db,
+        providerModel: undefined,
+        query: "recover fts5",
+        limit: 10,
+        snippetMaxChars: 200,
+        sourceFilter: { sql: " AND source IN (?)", params: ["memory"] },
+      });
+
+      expect(results.map((row) => row.id).toSorted()).toEqual(["local", "remote"]);
+    } finally {
+      db.close();
+    }
   });
 });
 

@@ -387,7 +387,7 @@ export abstract class MemoryManagerSyncOps {
       this.fts.loadError = result.ftsError;
       // Only warn when hybrid search is enabled; otherwise this is expected noise.
       if (this.fts.enabled) {
-        log.warn(`fts unavailable: ${result.ftsError}`);
+        log.warn(`fts unavailable; using exact-token keyword fallback: ${result.ftsError}`);
       }
     }
   }
