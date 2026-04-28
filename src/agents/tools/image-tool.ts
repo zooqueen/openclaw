@@ -94,6 +94,119 @@ export const __testing = {
   },
 } as const;
 
+type ConfiguredImageModelMatch = {
+  provider: string;
+  model: string;
+};
+
+function formatConfiguredImageModelRef(provider: string, model: string): string {
+  const providerId = normalizeMediaProviderId(provider);
+  const modelId = model.trim();
+  const slash = modelId.indexOf("/");
+  const modelProvider = slash === -1 ? "" : normalizeMediaProviderId(modelId.slice(0, slash));
+  return modelProvider && modelProvider === providerId ? modelId : `${providerId}/${modelId}`;
+}
+
+function findConfiguredImageModelMatches(params: {
+  cfg?: OpenClawConfig;
+  model: string;
+}): ConfiguredImageModelMatch[] {
+  const providers = params.cfg?.models?.providers;
+  if (!providers || typeof providers !== "object") {
+    return [];
+  }
+  const wanted = params.model.trim().toLowerCase();
+  if (!wanted) {
+    return [];
+  }
+  const matches: ConfiguredImageModelMatch[] = [];
+  const seen = new Set<string>();
+  for (const [providerKey, providerCfg] of Object.entries(providers)) {
+    const provider = normalizeMediaProviderId(providerKey);
+    if (!provider) {
+      continue;
+    }
+    for (const model of providerCfg?.models ?? []) {
+      const modelId = model?.id?.trim();
+      const providerPrefixedModelId = modelId?.toLowerCase() ?? "";
+      const providerPrefix = `${provider}/`;
+      const comparableModelId = providerPrefixedModelId.startsWith(providerPrefix)
+        ? providerPrefixedModelId.slice(providerPrefix.length)
+        : providerPrefixedModelId;
+      if (
+        !modelId ||
+        (providerPrefixedModelId !== wanted && comparableModelId !== wanted) ||
+        !Array.isArray(model?.input) ||
+        !model.input.includes("image")
+      ) {
+        continue;
+      }
+      const key = `${provider}/${modelId.toLowerCase()}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      matches.push({ provider, model: modelId });
+    }
+  }
+  return matches;
+}
+
+function resolveProviderlessExplicitImageModelRef(params: {
+  cfg?: OpenClawConfig;
+  raw: string;
+}): string {
+  const ref = params.raw.trim();
+  if (!ref || ref.includes("/")) {
+    return ref;
+  }
+  const matches = findConfiguredImageModelMatches({
+    cfg: params.cfg,
+    model: ref,
+  });
+  if (matches.length === 1) {
+    const match = matches[0];
+    return formatConfiguredImageModelRef(match.provider, match.model);
+  }
+  if (matches.length > 1) {
+    const providers = matches
+      .map((match) => match.provider)
+      .toSorted()
+      .join(", ");
+    throw new Error(
+      `Image model "${ref}" is missing a provider and matches multiple image-capable configured providers (${providers}). Set agents.defaults.imageModel to a provider-qualified ref such as "${matches[0].provider}/${ref}".`,
+    );
+  }
+  throw new Error(
+    `Image model "${ref}" is missing a provider and does not match an image-capable model in models.providers. Set agents.defaults.imageModel to a provider-qualified ref such as "provider/${ref}".`,
+  );
+}
+
+function resolveExplicitImageModelConfig(params: {
+  cfg?: OpenClawConfig;
+  explicit: ImageModelConfig;
+}): ImageModelConfig {
+  const primary = params.explicit.primary?.trim()
+    ? resolveProviderlessExplicitImageModelRef({
+        cfg: params.cfg,
+        raw: params.explicit.primary,
+      })
+    : undefined;
+  const fallbacks = (params.explicit.fallbacks ?? [])
+    .map((fallback) =>
+      resolveProviderlessExplicitImageModelRef({
+        cfg: params.cfg,
+        raw: fallback,
+      }),
+    )
+    .filter((fallback) => fallback.length > 0);
+  return {
+    ...(primary ? { primary } : {}),
+    ...(fallbacks.length > 0 ? { fallbacks } : {}),
+    ...(params.explicit.timeoutMs !== undefined ? { timeoutMs: params.explicit.timeoutMs } : {}),
+  };
+}
+
 function resolveImageToolMaxTokens(modelMaxTokens: number | undefined, requestedMaxTokens = 4096) {
   if (
     typeof modelMaxTokens !== "number" ||
@@ -123,7 +236,10 @@ export function resolveImageModelConfigForTool(params: {
   // The tool description is adjusted via modelHasVision to discourage redundant usage.
   const explicit = coerceImageModelConfig(params.cfg);
   if (hasToolModelConfig(explicit)) {
-    return explicit;
+    return resolveExplicitImageModelConfig({
+      cfg: params.cfg,
+      explicit,
+    });
   }
 
   const primary = resolveDefaultModelRef(params.cfg);

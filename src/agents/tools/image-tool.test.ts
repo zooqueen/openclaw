@@ -920,6 +920,128 @@ describe("image tool implicit imageModel config", () => {
     });
   });
 
+  it("resolves providerless explicit image models from unique configured image-capable providers", async () => {
+    await withTempAgentDir(async (agentDir) => {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            imageModel: {
+              primary: "moondream",
+              fallbacks: ["qwen2.5vl:7b"],
+            },
+          },
+        },
+        models: {
+          providers: {
+            "ollama-local": {
+              baseUrl: "http://127.0.0.1:11434/v1",
+              api: "ollama",
+              models: [makeModelDefinition("ollama-local/moondream", ["text", "image"])],
+            },
+            litellm: {
+              baseUrl: "https://litellm.example.invalid/v1",
+              api: "openai-completions",
+              models: [makeModelDefinition("qwen2.5vl:7b", ["text", "image"])],
+            },
+          },
+        },
+      };
+
+      expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+        primary: "ollama-local/moondream",
+        fallbacks: ["litellm/qwen2.5vl:7b"],
+      });
+    });
+  });
+
+  it("runs providerless explicit image models on the inferred configured provider", async () => {
+    await withTempWorkspacePng(async ({ workspaceDir, imagePath }) => {
+      await withTempAgentDir(async (agentDir) => {
+        const describeImage = vi.fn(async (params: ImageDescriptionRequest) => ({
+          text: "ok",
+          model: params.model,
+        }));
+        installImageUnderstandingProviderStubs({
+          id: "ollama-local",
+          capabilities: ["image"],
+          describeImage,
+        });
+        const cfg: OpenClawConfig = {
+          agents: {
+            defaults: {
+              imageModel: { primary: "moondream" },
+            },
+          },
+          models: {
+            providers: {
+              "ollama-local": {
+                baseUrl: "http://127.0.0.1:11434/v1",
+                api: "ollama",
+                models: [makeModelDefinition("moondream", ["text", "image"])],
+              },
+            },
+          },
+        };
+
+        const tool = createRequiredImageTool({ config: cfg, agentDir, workspaceDir });
+        await expectImageToolExecOk(tool, imagePath);
+
+        expect(describeImage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "ollama-local",
+            model: "moondream",
+          }),
+        );
+      });
+    });
+  });
+
+  it("rejects ambiguous providerless explicit image models", async () => {
+    await withTempAgentDir(async (agentDir) => {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            imageModel: { primary: "moondream" },
+          },
+        },
+        models: {
+          providers: {
+            "ollama-a": {
+              baseUrl: "http://127.0.0.1:11434/v1",
+              api: "ollama",
+              models: [makeModelDefinition("moondream", ["text", "image"])],
+            },
+            "ollama-b": {
+              baseUrl: "http://127.0.0.1:11435/v1",
+              api: "ollama",
+              models: [makeModelDefinition("moondream", ["text", "image"])],
+            },
+          },
+        },
+      };
+
+      expect(() => resolveImageModelConfigForTool({ cfg, agentDir })).toThrow(
+        /Image model "moondream" is missing a provider and matches multiple image-capable configured providers \(ollama-a, ollama-b\)/,
+      );
+    });
+  });
+
+  it("rejects unknown providerless explicit image models before default-provider fallback", async () => {
+    await withTempAgentDir(async (agentDir) => {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            imageModel: { primary: "moondream" },
+          },
+        },
+      };
+
+      expect(() => resolveImageModelConfigForTool({ cfg, agentDir })).toThrow(
+        /Image model "moondream" is missing a provider and does not match an image-capable model in models\.providers/,
+      );
+    });
+  });
+
   it("keeps image tool available when primary model supports images (for explicit requests)", async () => {
     // When the primary model supports images, we still keep the tool available
     // because images are auto-injected into prompts. The tool description is
