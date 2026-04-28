@@ -85,6 +85,36 @@ describe("check-openclaw-package-tarball", () => {
     );
   });
 
+  it("rejects packaged JS imports that point at missing dist chunks", () => {
+    withTarball(
+      ["dist/cli/run-main.js"],
+      { "dist/cli/run-main.js": 'await import("../memory-state-CcqRgDZU.js");\n' },
+      (tarball) => {
+        const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
+
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(
+          "missing packaged dist import target ../memory-state-CcqRgDZU.js from dist/cli/run-main.js",
+        );
+      },
+    );
+  });
+
+  it("accepts packaged JS imports that resolve to shipped dist chunks", () => {
+    withTarball(
+      ["dist/cli/run-main.js", "dist/memory-state-DwGdReW4.js"],
+      {
+        "dist/cli/run-main.js": 'await import("../memory-state-DwGdReW4.js");\n',
+        "dist/memory-state-DwGdReW4.js": "export {};\n",
+      },
+      (tarball) => {
+        const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
+
+        expect(result.status, result.stderr).toBe(0);
+      },
+    );
+  });
+
   it("rejects local build metadata entries in package tarballs", () => {
     withTarball(
       ["dist/index.js", ...LOCAL_BUILD_METADATA_DIST_PATHS],
