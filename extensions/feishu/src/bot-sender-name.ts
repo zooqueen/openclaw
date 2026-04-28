@@ -222,7 +222,7 @@ export async function resolveFeishuSenderName(params: {
     if (permErr) {
       if (shouldSuppressPermissionErrorNotice(permErr)) {
         log(`feishu: ignoring stale permission scope error: ${permErr.message}`);
-        return {};
+        return directPermissionError ? { permissionError: directPermissionError } : {};
       }
       log(`feishu: permission error resolving sender name: code=${permErr.code}`);
       return { permissionError: permErr };

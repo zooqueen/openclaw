@@ -196,4 +196,42 @@ describe("resolveFeishuSenderName", () => {
       }),
     );
   });
+
+  it("keeps direct-member permission guidance when contact fallback hits stale contact scope", async () => {
+    const account = makeAccount("default");
+    const { client } = mockClient({
+      memberError: {
+        response: {
+          data: {
+            code: 99991672,
+            msg: "permission denied https://open.feishu.cn/app/cli_default",
+          },
+        },
+      },
+      contactError: {
+        response: {
+          data: {
+            code: 99991672,
+            msg: "permission denied: contact:contact.base:readonly https://open.feishu.cn/app/cli_default",
+          },
+        },
+      },
+    });
+    mockCreateFeishuClient.mockReturnValue(client);
+
+    const result = await resolveFeishuSenderName({
+      account,
+      senderId: "ou_sender",
+      chatId: "oc_dm",
+      chatType: "p2p",
+      log,
+    });
+
+    expect(result.permissionError).toEqual(
+      expect.objectContaining({
+        code: 99991672,
+        grantUrl: "https://open.feishu.cn/app/cli_default",
+      }),
+    );
+  });
 });
