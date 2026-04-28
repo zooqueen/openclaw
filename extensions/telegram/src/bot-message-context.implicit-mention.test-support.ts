@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildTelegramMessageContextForTest } from "./bot-message-context.test-harness.js";
 import { TELEGRAM_FORUM_SERVICE_FIELDS } from "./forum-service-message.js";
 
@@ -49,18 +49,41 @@ describe("buildTelegramMessageContext implicitMention forum service messages", (
   }
 
   it("does NOT trigger implicitMention for forum_topic_created service message", async () => {
+    const recordInboundSession = vi.fn(async () => undefined);
     // Bot auto-generated "Topic created" message carries forum_topic_created.
-    const ctx = await buildGroupReplyCtx({
-      replyToMessageText: undefined,
-      replyFromIsBot: true,
-      replyToMessageExtra: {
+    const ctx = await buildTelegramMessageContextForTest({
+      sessionRuntime: {
+        recordInboundSession,
+      },
+      message: {
+        message_id: 100,
+        chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+        date: 1700000000,
+        message_thread_id: 42,
+        from: { id: 42, first_name: "Alice" },
         forum_topic_created: { name: "New Topic", icon_color: 0x6fb9f0 },
       },
+      resolveGroupActivation: () => true,
+      resolveGroupRequireMention: () => true,
+      resolveTelegramGroupConfig: () => ({
+        groupConfig: { requireMention: true },
+        topicConfig: undefined,
+      }),
     });
 
     // With requireMention and no explicit @mention, the message should be
     // skipped (null) because implicitMention should NOT fire.
     expect(ctx).toBeNull();
+    expect(recordInboundSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionKey: "agent:main:telegram:group:-1001234567890:topic:42",
+        ctx: expect.objectContaining({
+          GroupSubject: "Forum Group",
+          MessageThreadId: 42,
+          TopicName: "New Topic",
+        }),
+      }),
+    );
   });
 
   it.each(TELEGRAM_FORUM_SERVICE_FIELDS)(

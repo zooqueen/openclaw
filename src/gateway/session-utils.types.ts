@@ -41,6 +41,7 @@ export type GatewaySessionRow = {
   lastMessagePreview?: string;
   channel?: string;
   subject?: string;
+  threadLabel?: string;
   groupChannel?: string;
   space?: string;
   chatType?: ChatType;

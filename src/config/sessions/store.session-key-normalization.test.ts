@@ -154,4 +154,95 @@ describe("session store key normalization", () => {
     expect(store[CANONICAL_KEY]?.updatedAt).toBe(existingUpdatedAt);
     expect(store[CANONICAL_KEY]?.origin?.provider).toBe("webchat");
   });
+
+  it("persists topic labels without replacing them with generic group metadata", async () => {
+    const topicKey = "agent:main:telegram:default:group:-100123:topic:42";
+    await recordSessionMetaFromInbound({
+      storePath,
+      sessionKey: topicKey,
+      ctx: {
+        Provider: "telegram",
+        Surface: "telegram",
+        ChatType: "group",
+        From: "telegram:group:-100123:topic:42",
+        To: "telegram:-100123",
+        SessionKey: topicKey,
+        GroupSubject: "Forum Group",
+        MessageThreadId: 42,
+        TopicName: "Deployments",
+      },
+    });
+
+    await recordSessionMetaFromInbound({
+      storePath,
+      sessionKey: topicKey,
+      ctx: {
+        Provider: "telegram",
+        Surface: "telegram",
+        ChatType: "group",
+        From: "telegram:group:-100123:topic:42",
+        To: "telegram:-100123",
+        SessionKey: topicKey,
+        GroupSubject: "Forum Group",
+        MessageThreadId: 42,
+      },
+    });
+
+    const store = loadSessionStore(storePath, { skipCache: true });
+    expect(store[topicKey]).toEqual(
+      expect.objectContaining({
+        subject: "Forum Group",
+        threadLabel: "Deployments",
+        displayName: "telegram:g-deployments",
+      }),
+    );
+  });
+
+  it("keeps custom display names when learning a topic label", async () => {
+    const topicKey = "agent:main:telegram:default:group:-100123:topic:99";
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          [topicKey]: {
+            sessionId: "custom-topic-session",
+            updatedAt: 1,
+            chatType: "group",
+            channel: "telegram",
+            groupId: "-100123:topic:99",
+            subject: "Forum Group",
+            displayName: "Incident War Room",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    clearSessionStoreCacheForTest();
+
+    await recordSessionMetaFromInbound({
+      storePath,
+      sessionKey: topicKey,
+      ctx: {
+        Provider: "telegram",
+        Surface: "telegram",
+        ChatType: "group",
+        From: "telegram:group:-100123:topic:99",
+        To: "telegram:-100123",
+        SessionKey: topicKey,
+        GroupSubject: "Forum Group",
+        MessageThreadId: 99,
+        TopicName: "Incidents",
+      },
+    });
+
+    const store = loadSessionStore(storePath, { skipCache: true });
+    expect(store[topicKey]).toEqual(
+      expect.objectContaining({
+        threadLabel: "Incidents",
+        displayName: "Incident War Room",
+      }),
+    );
+  });
 });

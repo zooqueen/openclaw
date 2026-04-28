@@ -51,6 +51,27 @@ const mergeOrigin = (
   return Object.keys(merged).length > 0 ? merged : undefined;
 };
 
+const resolveGeneratedGroupDisplayName = (
+  entry: SessionEntry | undefined,
+  fallback: {
+    channel: string;
+    id?: string;
+    key: string;
+  },
+): string | undefined => {
+  if (!entry) {
+    return undefined;
+  }
+  return buildGroupDisplayName({
+    provider: entry.channel ?? fallback.channel,
+    subject: entry.threadLabel ?? entry.subject,
+    groupChannel: entry.groupChannel,
+    space: entry.space,
+    id: entry.groupId ?? fallback.id,
+    key: fallback.key,
+  });
+};
+
 export function deriveSessionOrigin(
   ctx: MsgContext,
   opts?: { skipSystemEventOrigin?: boolean },
@@ -163,15 +184,32 @@ export function deriveGroupSessionPatch(params: {
     patch.space = space;
   }
 
+  const topicName = normalizeOptionalString(params.ctx.TopicName);
+  const threadLabel = topicName ?? normalizeOptionalString(params.ctx.ThreadLabel);
+  const nextThreadLabel = threadLabel ?? params.existing?.threadLabel;
+  if (threadLabel) {
+    patch.threadLabel = threadLabel;
+  }
+
   const displayName = buildGroupDisplayName({
     provider: channel,
-    subject: nextSubject ?? params.existing?.subject,
+    subject: nextThreadLabel ?? nextSubject ?? params.existing?.subject,
     groupChannel: nextGroupChannel ?? params.existing?.groupChannel,
     space: space ?? params.existing?.space,
     id: resolution.id,
     key: params.sessionKey,
   });
-  if (displayName) {
+  const previousGeneratedDisplayName = resolveGeneratedGroupDisplayName(params.existing, {
+    channel,
+    id: resolution.id,
+    key: params.sessionKey,
+  });
+  if (
+    displayName &&
+    (!params.existing?.displayName ||
+      params.existing.displayName === previousGeneratedDisplayName ||
+      params.existing.displayName === displayName)
+  ) {
     patch.displayName = displayName;
   }
 

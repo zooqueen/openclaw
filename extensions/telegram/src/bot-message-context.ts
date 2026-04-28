@@ -14,6 +14,7 @@ import { firstDefined, normalizeAllowFrom, normalizeDmAllowFromWithStore } from 
 import { resolveTelegramInboundBody } from "./bot-message-context.body.js";
 import {
   buildTelegramInboundContextPayload,
+  recordTelegramInboundSessionMetadata,
   resolveTelegramMessageContextStorePath,
 } from "./bot-message-context.session.js";
 import type { BuildTelegramMessageContextParams } from "./bot-message-context.types.js";
@@ -29,6 +30,7 @@ import {
   resolveTelegramConversationRoute,
 } from "./conversation-route.js";
 import { enforceTelegramDmAccess } from "./dm-access.js";
+import { extractTelegramForumServiceTopicName } from "./forum-service-message.js";
 import { evaluateTelegramGroupBaseAccess } from "./group-access.js";
 import {
   buildTelegramStatusReactionVariants,
@@ -417,6 +419,26 @@ export const buildTelegramMessageContext = async ({
     accountId: account.accountId,
     direction: "inbound",
   });
+
+  const serviceTopicName = extractTelegramForumServiceTopicName(msg);
+  if (serviceTopicName && isGroup && isForum && resolvedThreadId != null) {
+    await recordTelegramInboundSessionMetadata({
+      cfg,
+      agentId: route.agentId,
+      accountId: route.accountId,
+      sessionKey,
+      chatId,
+      chatTitle: msg.chat.title ?? undefined,
+      messageId: msg.message_id,
+      messageIdOverride: options?.messageIdOverride,
+      resolvedThreadId,
+      topicName: serviceTopicName,
+      sessionRuntime,
+      onRecordError: (err) => {
+        logVerbose(`telegram: failed updating forum topic session meta: ${String(err)}`);
+      },
+    });
+  }
 
   const bodyResult = await resolveTelegramInboundBody({
     cfg,

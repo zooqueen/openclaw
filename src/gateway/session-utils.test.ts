@@ -222,6 +222,28 @@ describe("gateway session utils", () => {
     });
   });
 
+  test("session rows derive topic display names from persisted thread labels", () => {
+    const row = buildGatewaySessionRow({
+      cfg: {} as OpenClawConfig,
+      storePath: "",
+      store: {},
+      key: "agent:main:telegram:default:group:-100123:topic:42",
+      entry: {
+        chatType: "group",
+        channel: "telegram",
+        groupId: "-100123:topic:42",
+        subject: "Forum Group",
+        threadLabel: "Deployments",
+      } as SessionEntry,
+    });
+
+    expect(row).toMatchObject({
+      displayName: "telegram:g-deployments",
+      subject: "Forum Group",
+      threadLabel: "Deployments",
+    });
+  });
+
   test("classifySessionKey respects chat type + prefixes", () => {
     expect(classifySessionKey("global")).toBe("global");
     expect(classifySessionKey("unknown")).toBe("unknown");
@@ -1143,6 +1165,16 @@ describe("deriveSessionTitle", () => {
       subject: "Dev Team Chat",
     } as SessionEntry;
     expect(deriveSessionTitle(entry)).toBe("Dev Team Chat");
+  });
+
+  test("falls back to thread label before subject when displayName is missing", () => {
+    const entry = {
+      sessionId: "abc123",
+      updatedAt: Date.now(),
+      subject: "Forum Group",
+      threadLabel: "Deployments",
+    } as SessionEntry;
+    expect(deriveSessionTitle(entry)).toBe("Deployments");
   });
 
   test("uses first user message when displayName and subject missing", () => {

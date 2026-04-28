@@ -23,3 +23,15 @@ export function isTelegramForumServiceMessage(msg: unknown): boolean {
     (field) => field in messageRecord && messageRecord[field] != null,
   );
 }
+
+export function extractTelegramForumServiceTopicName(msg: unknown): string | undefined {
+  if (!msg || typeof msg !== "object") {
+    return undefined;
+  }
+  const messageRecord = msg as {
+    forum_topic_created?: { name?: unknown };
+    forum_topic_edited?: { name?: unknown };
+  };
+  const rawName = messageRecord.forum_topic_created?.name ?? messageRecord.forum_topic_edited?.name;
+  return typeof rawName === "string" && rawName.trim() ? rawName.trim() : undefined;
+}

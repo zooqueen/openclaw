@@ -12,6 +12,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Telegram/forum topics: persist service-message topic names into session metadata before mention filtering can drop the update, preserve existing custom session labels, and keep Control UI session rows on topic-specific labels instead of later generic group names. Fixes #7406; carries forward #7407 and #43105. Thanks @Diaspar4u and @yzxlr.
 - Agents/models: keep per-agent primary models strict when `fallbacks` is omitted, so probe-only custom providers are not tried as hidden fallback candidates unless the agent explicitly opts in. Fixes #73332. Thanks @haumanto.
 - Cron/Telegram: preserve explicit `:topic:` delivery targets over stale session-derived thread IDs when isolated cron announces to Telegram forum topics. Carries forward #59069; refs #49704 and #43808. Thanks @roytong9.
 - Build/runtime: write the runtime-postbuild stamp after `pnpm build` writes the build stamp, so the next CLI invocation does not re-sync runtime artifacts after a successful build. Fixes #73151. Thanks @bittoby.

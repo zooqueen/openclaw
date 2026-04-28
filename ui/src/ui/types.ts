@@ -416,6 +416,7 @@ export type GatewaySessionRow = {
   displayName?: string;
   surface?: string;
   subject?: string;
+  threadLabel?: string;
   room?: string;
   space?: string;
   updatedAt: number | null;

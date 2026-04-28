@@ -70,6 +70,7 @@ const SESSION_EVENT_ROW_FIELDS = [
   "subject",
   "surface",
   "systemSent",
+  "threadLabel",
   "thinkingDefault",
   "thinkingLevel",
   "thinkingOptions",

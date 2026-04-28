@@ -211,6 +211,10 @@ export function deriveSessionTitle(
     return normalizeOptionalString(entry.displayName);
   }
 
+  if (normalizeOptionalString(entry.threadLabel)) {
+    return normalizeOptionalString(entry.threadLabel);
+  }
+
   if (normalizeOptionalString(entry.subject)) {
     return normalizeOptionalString(entry.subject);
   }
@@ -1257,6 +1261,7 @@ export function buildGatewaySessionRow(params: {
   const parsed = parseGroupKey(key);
   const channel = entry?.channel ?? parsed?.channel;
   const subject = entry?.subject;
+  const threadLabel = entry?.threadLabel;
   const groupChannel = entry?.groupChannel;
   const space = entry?.space;
   const id = parsed?.id;
@@ -1267,7 +1272,7 @@ export function buildGatewaySessionRow(params: {
     (channel
       ? buildGroupDisplayName({
           provider: channel,
-          subject,
+          subject: threadLabel ?? subject,
           groupChannel,
           space,
           id,
@@ -1447,6 +1452,7 @@ export function buildGatewaySessionRow(params: {
     lastMessagePreview,
     channel,
     subject,
+    threadLabel,
     groupChannel,
     space,
     chatType: entry?.chatType,
@@ -1512,7 +1518,7 @@ function resolveSessionListSearchDisplayName(
   }
   return buildGroupDisplayName({
     provider: channel,
-    subject: entry?.subject,
+    subject: entry?.threadLabel ?? entry?.subject,
     groupChannel: entry?.groupChannel,
     space: entry?.space,
     id: parsed?.id,

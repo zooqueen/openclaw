@@ -87,6 +87,48 @@ export async function resolveTelegramMessageContextStorePath(params: {
   });
 }
 
+export async function recordTelegramInboundSessionMetadata(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  accountId: string;
+  sessionKey: string;
+  chatId: number | string;
+  chatTitle?: string;
+  messageId: number | string;
+  messageIdOverride?: string;
+  resolvedThreadId: number;
+  topicName: string;
+  sessionRuntime?: TelegramMessageContextSessionRuntimeOverrides;
+  onRecordError?: (error: unknown) => void;
+}): Promise<void> {
+  const sessionRuntime = await loadTelegramMessageContextSessionRuntime(params.sessionRuntime);
+  const storePath = sessionRuntime.resolveStorePath(params.cfg.session?.store, {
+    agentId: params.agentId,
+  });
+  await sessionRuntime.recordInboundSession({
+    storePath,
+    sessionKey: params.sessionKey,
+    ctx: sessionRuntime.finalizeInboundContext({
+      SessionKey: params.sessionKey,
+      From: buildTelegramGroupFrom(params.chatId, params.resolvedThreadId),
+      To: `telegram:${params.chatId}`,
+      AccountId: params.accountId,
+      ChatType: "group",
+      ConversationLabel: params.topicName,
+      GroupSubject: params.chatTitle,
+      Provider: "telegram",
+      Surface: "telegram",
+      MessageSid: params.messageIdOverride ?? String(params.messageId),
+      MessageThreadId: params.resolvedThreadId,
+      IsForum: true,
+      TopicName: params.topicName,
+      OriginatingChannel: "telegram" as const,
+      OriginatingTo: `telegram:${params.chatId}:topic:${params.resolvedThreadId}`,
+    }),
+    onRecordError: params.onRecordError ?? (() => undefined),
+  });
+}
+
 export async function buildTelegramInboundContextPayload(params: {
   cfg: OpenClawConfig;
   primaryCtx: TelegramContext;

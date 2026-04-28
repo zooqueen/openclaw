@@ -286,6 +286,7 @@ export type SessionEntry = {
   channel?: string;
   groupId?: string;
   subject?: string;
+  threadLabel?: string;
   groupChannel?: string;
   space?: string;
   origin?: SessionOrigin;
