@@ -3,7 +3,12 @@ import * as grammy from "grammy";
 import { type ApiClientOptions, Bot, HttpError } from "grammy";
 import { recordChannelActivity } from "openclaw/plugin-sdk/channel-activity-runtime";
 import { isDiagnosticFlagEnabled } from "openclaw/plugin-sdk/diagnostic-runtime";
-import { formatUncaughtError } from "openclaw/plugin-sdk/error-runtime";
+import {
+  collectErrorGraphCandidates,
+  extractErrorCode,
+  formatUncaughtError,
+  readErrorName,
+} from "openclaw/plugin-sdk/error-runtime";
 import { createTelegramRetryRunner, type RetryConfig } from "openclaw/plugin-sdk/retry-runtime";
 import { createSubsystemLogger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { formatErrorMessage } from "openclaw/plugin-sdk/ssrf-runtime";
@@ -14,7 +19,7 @@ import { normalizeTelegramApiRoot } from "./api-root.js";
 import { buildTypingThreadParams } from "./bot/helpers.js";
 import type { TelegramInlineButtons } from "./button-types.js";
 import { splitTelegramCaption } from "./caption.js";
-import { resolveTelegramFetch } from "./fetch.js";
+import { resolveTelegramTransport } from "./fetch.js";
 import { renderTelegramHtmlText, splitTelegramHtmlChunks } from "./format.js";
 import { buildInlineKeyboard } from "./inline-keyboard.js";
 import {
@@ -180,7 +185,12 @@ const MESSAGE_NOT_MODIFIED_RE =
 const CHAT_NOT_FOUND_RE = /400: Bad Request: chat not found/i;
 const sendLogger = createSubsystemLogger("telegram/send");
 const diagLogger = createSubsystemLogger("telegram/diagnostic");
-const telegramClientOptionsCache = new Map<string, ApiClientOptions | undefined>();
+type TelegramClientOptionsCacheEntry = {
+  clientOptions: ApiClientOptions | undefined;
+  recoverTransport?: (reason: string) => boolean;
+  closeTransport?: () => Promise<void>;
+};
+const telegramClientOptionsCache = new Map<string, TelegramClientOptionsCacheEntry>();
 const MAX_TELEGRAM_CLIENT_OPTIONS_CACHE_SIZE = 64;
 
 function asTelegramClientFetch(
@@ -190,20 +200,45 @@ function asTelegramClientFetch(
 }
 
 export function resetTelegramClientOptionsCacheForTests(): void {
+  for (const entry of telegramClientOptionsCache.values()) {
+    void entry.closeTransport?.();
+  }
   telegramClientOptionsCache.clear();
 }
 
-function createTelegramHttpLogger(cfg: OpenClawConfig) {
+function collectTelegramFailureDetail(err: unknown): string {
+  const candidates = collectErrorGraphCandidates(err, (current) => {
+    const nested: unknown[] = [current.cause, current.reason];
+    if (Array.isArray(current.errors)) {
+      nested.push(...current.errors);
+    }
+    if (readErrorName(current) === "HttpError") {
+      nested.push(current.error);
+    }
+    return nested;
+  }).slice(0, 6);
+  const parts = candidates.map((candidate, index) => {
+    const name = readErrorName(candidate) ?? "Error";
+    const code = extractErrorCode(candidate);
+    const codeText = code ? ` code=${code}` : "";
+    return `${index}:${name}${codeText} ${formatErrorMessage(candidate)}`;
+  });
+  return redactSensitiveText(parts.join(" <- "));
+}
+
+function createTelegramRequestFailureLogger(cfg: OpenClawConfig) {
   const enabled = isDiagnosticFlagEnabled("telegram.http", cfg);
   if (!enabled) {
-    return () => {};
+    return (_params: { label: string; err: unknown; elapsedMs: number }) => {};
   }
-  return (label: string, err: unknown) => {
-    if (!(err instanceof HttpError)) {
-      return;
-    }
-    const detail = redactSensitiveText(formatUncaughtError(err.error ?? err));
-    diagLogger.warn(`telegram http error (${label}): ${detail}`);
+  return (params: { label: string; err: unknown; elapsedMs: number }) => {
+    const detail =
+      params.err instanceof HttpError
+        ? redactSensitiveText(formatUncaughtError(params.err.error ?? params.err))
+        : collectTelegramFailureDetail(params.err);
+    diagLogger.warn(
+      `telegram request failed (${params.label}, elapsedMs=${params.elapsedMs}): ${detail}`,
+    );
   };
 }
 
@@ -228,21 +263,23 @@ function buildTelegramClientOptionsCacheKey(params: {
 
 function setCachedTelegramClientOptions(
   cacheKey: string,
-  clientOptions: ApiClientOptions | undefined,
-): ApiClientOptions | undefined {
-  telegramClientOptionsCache.set(cacheKey, clientOptions);
+  entry: TelegramClientOptionsCacheEntry,
+): TelegramClientOptionsCacheEntry {
+  telegramClientOptionsCache.set(cacheKey, entry);
   if (telegramClientOptionsCache.size > MAX_TELEGRAM_CLIENT_OPTIONS_CACHE_SIZE) {
     const oldestKey = telegramClientOptionsCache.keys().next().value;
     if (oldestKey !== undefined) {
+      const oldest = telegramClientOptionsCache.get(oldestKey);
+      void oldest?.closeTransport?.();
       telegramClientOptionsCache.delete(oldestKey);
     }
   }
-  return clientOptions;
+  return entry;
 }
 
 function resolveTelegramClientOptions(
   account: ResolvedTelegramAccount,
-): ApiClientOptions | undefined {
+): TelegramClientOptionsCacheEntry {
   const timeoutSeconds =
     typeof account.config.timeoutSeconds === "number" &&
     Number.isFinite(account.config.timeoutSeconds)
@@ -257,16 +294,17 @@ function resolveTelegramClientOptions(
       })
     : null;
   if (cacheKey && telegramClientOptionsCache.has(cacheKey)) {
-    return telegramClientOptionsCache.get(cacheKey);
+    return telegramClientOptionsCache.get(cacheKey) as TelegramClientOptionsCacheEntry;
   }
 
   const proxyUrl = normalizeOptionalString(account.config.proxy);
   const proxyFetch = proxyUrl ? makeProxyFetch(proxyUrl) : undefined;
   const apiRoot = normalizeOptionalString(account.config.apiRoot);
   const normalizedApiRoot = apiRoot ? normalizeTelegramApiRoot(apiRoot) : undefined;
-  const fetchImpl = resolveTelegramFetch(proxyFetch, {
+  const transport = resolveTelegramTransport(proxyFetch, {
     network: account.config.network,
   });
+  const fetchImpl = transport.fetch;
   const clientOptions =
     fetchImpl || timeoutSeconds || normalizedApiRoot
       ? {
@@ -275,10 +313,15 @@ function resolveTelegramClientOptions(
           ...(normalizedApiRoot ? { apiRoot: normalizedApiRoot } : {}),
         }
       : undefined;
+  const entry: TelegramClientOptionsCacheEntry = {
+    clientOptions,
+    recoverTransport: transport.forceFallback,
+    closeTransport: transport.close,
+  };
   if (cacheKey) {
-    return setCachedTelegramClientOptions(cacheKey, clientOptions);
+    return setCachedTelegramClientOptions(cacheKey, entry);
   }
-  return clientOptions;
+  return entry;
 }
 
 function resolveToken(explicit: string | undefined, params: { accountId: string; token: string }) {
@@ -425,6 +468,7 @@ type TelegramApiContext = {
   cfg: OpenClawConfig;
   account: ResolvedTelegramAccount;
   api: TelegramApi;
+  recoverTransport?: (reason: string) => boolean;
 };
 
 function resolveTelegramApiContext(opts: {
@@ -439,9 +483,13 @@ function resolveTelegramApiContext(opts: {
     accountId: opts.accountId,
   });
   const token = resolveToken(opts.token, account);
+  if (opts.api) {
+    return { cfg, account, api: opts.api as TelegramApi };
+  }
   const client = resolveTelegramClientOptions(account);
-  const api = (opts.api ?? new Bot(token, client ? { client } : undefined).api) as TelegramApi;
-  return { cfg, account, api };
+  const api = new Bot(token, client.clientOptions ? { client: client.clientOptions } : undefined)
+    .api as TelegramApi;
+  return { cfg, account, api, recoverTransport: client.recoverTransport };
 }
 
 type TelegramRequestWithDiag = <T>(
@@ -456,6 +504,8 @@ function createTelegramRequestWithDiag(params: {
   retry?: RetryConfig;
   verbose?: boolean;
   shouldRetry?: (err: unknown) => boolean;
+  shouldRecoverTransport?: (err: unknown) => boolean;
+  recoverTransport?: (reason: string) => boolean;
   /** When true, the shouldRetry predicate is used exclusively without the TELEGRAM_RETRY_RE fallback. */
   strictShouldRetry?: boolean;
   useApiErrorLogging?: boolean;
@@ -467,25 +517,39 @@ function createTelegramRequestWithDiag(params: {
     ...(params.shouldRetry ? { shouldRetry: params.shouldRetry } : {}),
     ...(params.strictShouldRetry ? { strictShouldRetry: true } : {}),
   });
-  const logHttpError = createTelegramHttpLogger(params.cfg);
+  const logRequestFailure = createTelegramRequestFailureLogger(params.cfg);
   return <T>(
     fn: () => Promise<T>,
     label?: string,
     options?: { shouldLog?: (err: unknown) => boolean },
   ) => {
-    const runRequest = () => request(fn, label);
+    const requestLabel = label ?? "request";
+    const requestWithRecovery = async () => {
+      const startedAt = Date.now();
+      try {
+        return await fn();
+      } catch (err) {
+        logRequestFailure({
+          label: requestLabel,
+          err,
+          elapsedMs: Math.max(0, Date.now() - startedAt),
+        });
+        if (params.shouldRecoverTransport?.(err)) {
+          params.recoverTransport?.(`telegram-${requestLabel}-network-error`);
+        }
+        throw err;
+      }
+    };
+    const runRequest = () => request(requestWithRecovery, label);
     const call =
       params.useApiErrorLogging === false
         ? runRequest()
         : withTelegramApiErrorLogging({
-            operation: label ?? "request",
+            operation: requestLabel,
             fn: runRequest,
             ...(options?.shouldLog ? { shouldLog: options.shouldLog } : {}),
           });
-    return call.catch((err) => {
-      logHttpError(label ?? "request", err);
-      throw err;
-    });
+    return call;
   };
 }
 
@@ -563,6 +627,7 @@ function createTelegramNonIdempotentRequestWithDiag(params: {
   retry?: RetryConfig;
   verbose?: boolean;
   useApiErrorLogging?: boolean;
+  recoverTransport?: (reason: string) => boolean;
 }): TelegramRequestWithDiag {
   return createTelegramRequestWithDiag({
     cfg: params.cfg,
@@ -571,6 +636,8 @@ function createTelegramNonIdempotentRequestWithDiag(params: {
     verbose: params.verbose,
     useApiErrorLogging: params.useApiErrorLogging,
     shouldRetry: (err) => isSafeToRetrySendError(err) || isTelegramRateLimitError(err),
+    shouldRecoverTransport: (err) => isRecoverableTelegramNetworkError(err, { context: "send" }),
+    recoverTransport: params.recoverTransport,
     strictShouldRetry: true,
   });
 }
@@ -580,7 +647,7 @@ export async function sendMessageTelegram(
   text: string,
   opts: TelegramSendOpts,
 ): Promise<TelegramSendResult> {
-  const { cfg, account, api } = resolveTelegramApiContext(opts);
+  const { cfg, account, api, recoverTransport } = resolveTelegramApiContext(opts);
   const target = parseTelegramTarget(to);
   const chatId = await resolveAndPersistChatId({
     cfg,
@@ -612,6 +679,7 @@ export async function sendMessageTelegram(
     account,
     retry: opts.retry,
     verbose: opts.verbose,
+    recoverTransport,
   });
   const requestWithChatNotFound = createRequestWithChatNotFound({
     requestWithDiag,

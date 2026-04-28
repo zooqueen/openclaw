@@ -17,13 +17,26 @@ const { makeProxyFetch } = vi.hoisted(() => ({
   makeProxyFetch: vi.fn(),
 }));
 
-const { resolveTelegramFetch } = vi.hoisted(() => ({
-  resolveTelegramFetch: vi.fn(),
+const { resolveTelegramTransport, transportForceFallback } = vi.hoisted(() => ({
+  resolveTelegramTransport: vi.fn(),
+  transportForceFallback: vi.fn(),
 }));
 
 const resolveTelegramApiBase = vi.hoisted(
   () => (apiRoot?: string) => apiRoot?.trim()?.replace(/\/+$/, "") || "https://api.telegram.org",
 );
+
+const { undiciFetch } = vi.hoisted(() => ({
+  undiciFetch: vi.fn(),
+}));
+
+vi.mock("undici", () => ({
+  Agent: class {},
+  EnvHttpProxyAgent: class {},
+  ProxyAgent: class {},
+  fetch: undiciFetch,
+  setGlobalDispatcher: vi.fn(),
+}));
 
 vi.mock("openclaw/plugin-sdk/plugin-config-runtime", async () => {
   const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/plugin-config-runtime")>(
@@ -40,7 +53,7 @@ vi.mock("./proxy.js", () => ({
 }));
 
 vi.mock("./fetch.js", () => ({
-  resolveTelegramFetch,
+  resolveTelegramTransport,
   resolveTelegramApiBase,
 }));
 
@@ -57,6 +70,14 @@ vi.mock("grammy", () => ({
       public options?: { client?: { fetch?: typeof fetch; timeoutSeconds?: number } },
     ) {
       botCtorSpy(token, options);
+    }
+  },
+  HttpError: class HttpError extends Error {
+    constructor(
+      message = "HttpError",
+      public error?: unknown,
+    ) {
+      super(message);
     }
   },
   GrammyError: class GrammyError extends Error {
@@ -80,13 +101,20 @@ describe("telegram proxy client", () => {
     const proxyFetch = vi.fn();
     const fetchImpl = vi.fn();
     makeProxyFetch.mockReturnValue(proxyFetch as unknown as typeof fetch);
-    resolveTelegramFetch.mockReturnValue(fetchImpl as unknown as typeof fetch);
+    resolveTelegramTransport.mockReturnValue({
+      fetch: fetchImpl as unknown as typeof fetch,
+      sourceFetch: fetchImpl as unknown as typeof fetch,
+      forceFallback: transportForceFallback,
+      close: vi.fn(async () => undefined),
+    });
     return { proxyFetch, fetchImpl };
   };
 
   const expectProxyClient = (fetchImpl: ReturnType<typeof vi.fn>) => {
     expect(makeProxyFetch).toHaveBeenCalledWith(proxyUrl);
-    expect(resolveTelegramFetch).toHaveBeenCalledWith(expect.any(Function), { network: undefined });
+    expect(resolveTelegramTransport).toHaveBeenCalledWith(expect.any(Function), {
+      network: undefined,
+    });
     expect(botCtorSpy).toHaveBeenCalledWith(
       "tok",
       expect.objectContaining({
@@ -107,13 +135,18 @@ describe("telegram proxy client", () => {
   beforeEach(() => {
     resetTelegramClientOptionsCacheForTests();
     vi.unstubAllEnvs();
+    for (const fn of Object.values(botApi)) {
+      fn.mockReset();
+    }
     botApi.sendMessage.mockResolvedValue({ message_id: 1, chat: { id: "123" } });
     botApi.setMessageReaction.mockResolvedValue(undefined);
     botApi.deleteMessage.mockResolvedValue(true);
     botCtorSpy.mockClear();
     loadConfig.mockReturnValue(TELEGRAM_PROXY_CFG);
     makeProxyFetch.mockClear();
-    resolveTelegramFetch.mockClear();
+    resolveTelegramTransport.mockClear();
+    transportForceFallback.mockReset();
+    transportForceFallback.mockReturnValue(true);
   });
 
   it("reuses cached Telegram client options for repeated sends with same account transport settings", async () => {
@@ -133,7 +166,7 @@ describe("telegram proxy client", () => {
     });
 
     expect(makeProxyFetch).toHaveBeenCalledTimes(1);
-    expect(resolveTelegramFetch).toHaveBeenCalledTimes(1);
+    expect(resolveTelegramTransport).toHaveBeenCalledTimes(1);
     expect(botCtorSpy).toHaveBeenCalledTimes(2);
     expect(botCtorSpy).toHaveBeenNthCalledWith(
       1,
@@ -185,5 +218,28 @@ describe("telegram proxy client", () => {
     await testCase.run();
 
     expectProxyClient(fetchImpl);
+  });
+
+  it("recovers the cached transport after a generic cross-topic sendMessage network failure without retrying", async () => {
+    prepareProxyFetch();
+    const err = new Error("Network request for 'sendMessage' failed after 1 attempts.");
+    botApi.sendMessage.mockRejectedValueOnce(err);
+
+    await expect(
+      sendMessageTelegram("-1001234567890", "after idle", {
+        cfg: TELEGRAM_PROXY_CFG,
+        token: "tok",
+        accountId: "foo",
+        messageThreadId: 42,
+        retry: { attempts: 2, minDelayMs: 0, maxDelayMs: 0, jitter: 0 },
+      }),
+    ).rejects.toThrow(/sendMessage.*failed after 1 attempts/i);
+
+    expect(botApi.sendMessage).toHaveBeenCalledTimes(1);
+    expect(botApi.sendMessage).toHaveBeenCalledWith("-1001234567890", "after idle", {
+      parse_mode: "HTML",
+      message_thread_id: 42,
+    });
+    expect(transportForceFallback).toHaveBeenCalledWith("telegram-message-network-error");
   });
 });
