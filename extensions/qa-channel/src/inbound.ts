@@ -103,7 +103,6 @@ export async function handleQaInbound(params: {
         cfg: params.config as OpenClawConfig,
         channel: params.channelId,
         groupId: inbound.conversation.id,
-        groupChannel: inbound.conversation.id,
         accountId: params.account.accountId,
       })
     : false;
