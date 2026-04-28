@@ -8,6 +8,8 @@ import { addZoomSetupCheck, getZoomSetupStatus } from "./setup.js";
 import { isSameZoomUrlForReuse, resolveChromeNodeInfo } from "./transports/chrome-browser-proxy.js";
 import {
   assertBlackHole2chAvailable,
+  leaveChromeZoom,
+  leaveChromeZoomOnNode,
   launchChromeZoom,
   launchChromeZoomOnNode,
   recoverCurrentZoomTab,
@@ -322,6 +324,37 @@ export class ZoomRuntime {
       this.#sessionSpeakers.delete(sessionId);
       this.#sessionHealth.delete(sessionId);
       await stop();
+    }
+    if (session.transport === "chrome") {
+      try {
+        const browser = await leaveChromeZoom({
+          config: this.params.config,
+          url: session.chrome?.health?.browserUrl ?? session.url,
+        });
+        if (session.chrome) {
+          session.chrome.health = {
+            ...session.chrome.health,
+            ...browser,
+          };
+        }
+      } catch (error) {
+        this.params.logger.warn(`[zoom] browser leave failed: ${formatErrorMessage(error)}`);
+      }
+    } else if (session.transport === "chrome-node" && session.chrome?.nodeId) {
+      try {
+        const browser = await leaveChromeZoomOnNode({
+          runtime: this.params.runtime,
+          config: this.params.config,
+          nodeId: session.chrome.nodeId,
+          url: session.chrome.health?.browserUrl ?? session.url,
+        });
+        session.chrome.health = {
+          ...session.chrome.health,
+          ...browser,
+        };
+      } catch (error) {
+        this.params.logger.warn(`[zoom] node browser leave failed: ${formatErrorMessage(error)}`);
+      }
     }
     session.state = "ended";
     session.updatedAt = nowIso();

@@ -31,6 +31,7 @@ export const ZOOM_SYSTEM_PROFILER_COMMAND = "/usr/sbin/system_profiler";
 type BrowserRequestParams = {
   method: "GET" | "POST" | "DELETE";
   path: string;
+  query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
   timeoutMs: number;
 };
@@ -42,6 +43,11 @@ const chromeTransportDeps: {
 } = {
   callGatewayFromCli,
 };
+
+type LocalZoomAudioBridge =
+  | { type: "external-command" }
+  | ({ type: "command-pair" } & ChromeRealtimeAudioBridgeHandle)
+  | ({ type: "native-conversation" } & ZoomNativeConversationHandle);
 
 export const __testing = {
   setDepsForTest(deps: { callGatewayFromCli?: typeof callGatewayFromCli } | null) {
@@ -94,10 +100,7 @@ export async function launchChromeZoom(params: {
   logger: RuntimeLogger;
 }): Promise<{
   launched: boolean;
-  audioBridge?:
-    | { type: "external-command" }
-    | ({ type: "command-pair" } & ChromeRealtimeAudioBridgeHandle)
-    | ({ type: "native-conversation" } & ZoomNativeConversationHandle);
+  audioBridge?: LocalZoomAudioBridge;
   browser?: ZoomChromeHealth;
 }> {
   const needsAudioBridge = params.mode === "realtime" || params.mode === "conversation";
@@ -120,15 +123,44 @@ export async function launchChromeZoom(params: {
     }
   }
 
-  if (params.mode === "conversation" && params.config.chrome.launch) {
-    const result = await openZoomWithBrowserRequest({
-      callBrowser: callLocalBrowserRequest,
-      config: params.config,
-      url: params.url,
-    });
-    if (result.browser?.inCall !== true) {
-      return result;
+  const startAudioBridge = async (): Promise<LocalZoomAudioBridge | undefined> => {
+    if (!needsAudioBridge) {
+      return undefined;
     }
+
+    if (params.config.chrome.audioBridgeCommand) {
+      const bridge = await params.runtime.system.runCommandWithTimeout(
+        params.config.chrome.audioBridgeCommand,
+        { timeoutMs: params.config.chrome.joinTimeoutMs },
+      );
+      if (bridge.code !== 0) {
+        throw new Error(
+          `failed to start Chrome audio bridge: ${bridge.stderr || bridge.stdout || bridge.code}`,
+        );
+      }
+      return { type: "external-command" };
+    }
+
+    if (params.mode === "realtime") {
+      if (!params.config.chrome.audioInputCommand || !params.config.chrome.audioOutputCommand) {
+        throw new Error(
+          "Chrome realtime mode requires chrome.audioInputCommand and chrome.audioOutputCommand, or chrome.audioBridgeCommand for an external bridge.",
+        );
+      }
+      return {
+        type: "command-pair",
+        ...(await startCommandRealtimeAudioBridge({
+          config: params.config,
+          fullConfig: params.fullConfig,
+          runtime: params.runtime,
+          meetingSessionId: params.meetingSessionId,
+          inputCommand: params.config.chrome.audioInputCommand,
+          outputCommand: params.config.chrome.audioOutputCommand,
+          logger: params.logger,
+        })),
+      };
+    }
+
     if (!params.config.chrome.audioInputCommand) {
       throw new Error("Chrome conversation mode requires chrome.audioInputCommand.");
     }
@@ -144,93 +176,41 @@ export async function launchChromeZoom(params: {
     });
     params.logger.debug?.("[zoom] native conversation bridge started");
     return {
-      ...result,
-      audioBridge: {
-        type: "native-conversation",
-        ...bridge,
-      },
-    };
-  }
-
-  let audioBridge:
-    | { type: "external-command" }
-    | ({ type: "command-pair" } & ChromeRealtimeAudioBridgeHandle)
-    | ({ type: "native-conversation" } & ZoomNativeConversationHandle)
-    | undefined;
-
-  if (needsAudioBridge && params.config.chrome.audioBridgeCommand) {
-    const bridge = await params.runtime.system.runCommandWithTimeout(
-      params.config.chrome.audioBridgeCommand,
-      { timeoutMs: params.config.chrome.joinTimeoutMs },
-    );
-    if (bridge.code !== 0) {
-      throw new Error(
-        `failed to start Chrome audio bridge: ${bridge.stderr || bridge.stdout || bridge.code}`,
-      );
-    }
-    audioBridge = { type: "external-command" };
-  } else if (params.mode === "realtime") {
-    if (!params.config.chrome.audioInputCommand || !params.config.chrome.audioOutputCommand) {
-      throw new Error(
-        "Chrome realtime mode requires chrome.audioInputCommand and chrome.audioOutputCommand, or chrome.audioBridgeCommand for an external bridge.",
-      );
-    }
-    audioBridge = {
-      type: "command-pair",
-      ...(await startCommandRealtimeAudioBridge({
-        config: params.config,
-        fullConfig: params.fullConfig,
-        runtime: params.runtime,
-        meetingSessionId: params.meetingSessionId,
-        inputCommand: params.config.chrome.audioInputCommand,
-        outputCommand: params.config.chrome.audioOutputCommand,
-        logger: params.logger,
-      })),
-    };
-  } else if (params.mode === "conversation") {
-    if (!params.config.chrome.audioInputCommand) {
-      throw new Error("Chrome conversation mode requires chrome.audioInputCommand.");
-    }
-    audioBridge = {
       type: "native-conversation",
-      ...(await startNativeConversationBridge({
-        config: params.config,
-        fullConfig: params.fullConfig,
-        runtime: params.runtime,
-        meetingSessionId: params.meetingSessionId,
-        inputCommand: params.config.chrome.audioInputCommand,
-        playbackCommand: params.config.conversation.playbackCommand,
-        logger: params.logger,
-      })),
+      ...bridge,
     };
-  }
-
-  if (!params.config.chrome.launch) {
-    return { launched: false, audioBridge };
-  }
-
-  let commandPairBridgeStopped = false;
-  const stopCommandPairBridge = async () => {
-    if (commandPairBridgeStopped) {
-      return;
-    }
-    commandPairBridgeStopped = true;
-    if (audioBridge?.type === "command-pair" || audioBridge?.type === "native-conversation") {
-      await audioBridge.stop();
-    }
   };
 
-  try {
+  if (params.config.chrome.launch) {
     const result = await openZoomWithBrowserRequest({
       callBrowser: callLocalBrowserRequest,
       config: params.config,
+      useMedia: needsAudioBridge,
       url: params.url,
     });
-    return { ...result, audioBridge };
-  } catch (error) {
-    await stopCommandPairBridge();
-    throw error;
+    if (!needsAudioBridge || result.browser?.inCall !== true) {
+      return result;
+    }
+    try {
+      return { ...result, audioBridge: await startAudioBridge() };
+    } catch (error) {
+      await leaveZoomWithBrowserRequest({
+        callBrowser: callLocalBrowserRequest,
+        config: params.config,
+        url: params.url,
+        closeTab: true,
+      }).catch((leaveError) => {
+        params.logger.debug?.(
+          `[zoom] browser cleanup after audio bridge failure ignored: ${
+            leaveError instanceof Error ? leaveError.message : String(leaveError)
+          }`,
+        );
+      });
+      throw error;
+    }
   }
+
+  return { launched: false, audioBridge: await startAudioBridge() };
 }
 
 function parseNodeStartResult(raw: unknown): {
@@ -263,6 +243,10 @@ function parseZoomBrowserStatus(result: unknown): ZoomChromeHealth | undefined {
   const parsed = JSON.parse(raw) as {
     inCall?: boolean;
     micMuted?: boolean;
+    cameraOn?: boolean;
+    audioSetupOk?: boolean;
+    microphoneSelected?: string;
+    speakerSelected?: string;
     manualActionRequired?: boolean;
     manualActionReason?: ZoomChromeHealth["manualActionReason"];
     manualActionMessage?: string;
@@ -273,6 +257,10 @@ function parseZoomBrowserStatus(result: unknown): ZoomChromeHealth | undefined {
   return {
     inCall: parsed.inCall,
     micMuted: parsed.micMuted,
+    cameraOn: parsed.cameraOn,
+    audioSetupOk: parsed.audioSetupOk,
+    microphoneSelected: parsed.microphoneSelected,
+    speakerSelected: parsed.speakerSelected,
     manualActionRequired: parsed.manualActionRequired,
     manualActionReason: parsed.manualActionReason,
     manualActionMessage: parsed.manualActionMessage,
@@ -295,6 +283,7 @@ async function callLocalBrowserRequest(params: BrowserRequestParams) {
     {
       method: params.method,
       path: params.path,
+      query: params.query,
       body: params.body,
       timeoutMs: params.timeoutMs,
     },
@@ -313,6 +302,137 @@ function mergeBrowserNotes(
     ...browser,
     notes: [...new Set([...(browser.notes ?? []), ...notes])],
   };
+}
+
+function readSnapshotText(result: unknown): string {
+  const record = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  return typeof record.snapshot === "string" ? record.snapshot : "";
+}
+
+function findSnapshotRef(snapshot: string, patterns: RegExp[]): string | undefined {
+  for (const line of snapshot.split("\n")) {
+    if (!patterns.some((pattern) => pattern.test(line))) {
+      continue;
+    }
+    const match = /\[ref=([^\]]+)\]/.exec(line);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+async function readZoomSnapshot(params: {
+  callBrowser: BrowserRequestCaller;
+  targetId: string;
+  timeoutMs: number;
+}): Promise<string> {
+  return readSnapshotText(
+    await params.callBrowser({
+      method: "GET",
+      path: "/snapshot",
+      query: {
+        format: "ai",
+        targetId: params.targetId,
+        limit: 500,
+      },
+      timeoutMs: Math.min(params.timeoutMs, 10_000),
+    }),
+  );
+}
+
+async function clickSnapshotRef(params: {
+  callBrowser: BrowserRequestCaller;
+  targetId: string;
+  ref: string;
+  timeoutMs: number;
+}) {
+  await params.callBrowser({
+    method: "POST",
+    path: "/act",
+    body: {
+      kind: "click",
+      targetId: params.targetId,
+      ref: params.ref,
+      timeoutMs: Math.min(params.timeoutMs, 5_000),
+    },
+    timeoutMs: Math.min(params.timeoutMs, 8_000),
+  });
+}
+
+async function driveZoomFrameControls(params: {
+  callBrowser: BrowserRequestCaller;
+  targetId: string;
+  guestName: string;
+  useMedia: boolean;
+  timeoutMs: number;
+}): Promise<string[]> {
+  const notes: string[] = [];
+  const clickBySnapshot = async (patterns: RegExp[], note: string) => {
+    const snapshot = await readZoomSnapshot(params);
+    const ref = findSnapshotRef(snapshot, patterns);
+    if (!ref) {
+      return false;
+    }
+    await clickSnapshotRef({ ...params, ref });
+    notes.push(note);
+    return true;
+  };
+
+  const clickMediaChoice = async () => {
+    if (params.useMedia) {
+      const clicked = await clickBySnapshot(
+        [
+          /button\s+"?Use microphone and camera"?/i,
+          /button\s+"?Join with microphone and camera"?/i,
+          /button\s+"?Continue with microphone and camera"?/i,
+        ],
+        "Allowed Zoom microphone/camera choice.",
+      );
+      if (clicked) {
+        return;
+      }
+    }
+    await clickBySnapshot(
+      [
+        /button\s+"?Continue without microphone and camera"?/i,
+        /button\s+"?Continue without (microphone|mic|camera|audio|video)/i,
+        /button\s+"?Join without (microphone|mic|camera|audio|video)/i,
+      ],
+      "Continued in Zoom without microphone/camera.",
+    );
+  };
+
+  await clickMediaChoice();
+  await clickBySnapshot([/button\s+"?Stop Video"?/i], "Turned Zoom camera off.");
+
+  const nameSnapshot = await readZoomSnapshot(params);
+  if (/Your Name|Enter Meeting Info/i.test(nameSnapshot)) {
+    const nameRef = findSnapshotRef(nameSnapshot, [/textbox/i]);
+    if (nameRef) {
+      await params.callBrowser({
+        method: "POST",
+        path: "/act",
+        body: {
+          kind: "fill",
+          targetId: params.targetId,
+          fields: [{ ref: nameRef, type: "text", value: params.guestName }],
+          timeoutMs: Math.min(params.timeoutMs, 5_000),
+        },
+        timeoutMs: Math.min(params.timeoutMs, 8_000),
+      });
+      notes.push("Filled Zoom display name.");
+    }
+  }
+
+  await clickMediaChoice();
+  await clickBySnapshot([/button\s+"?Join"?/i, /button\s+"?Join Meeting"?/i], "Clicked Zoom Join.");
+  await clickBySnapshot(
+    [/button\s+"?Join Audio by Computer"?/i, /button\s+"?Join with Computer Audio"?/i],
+    "Joined Zoom computer audio.",
+  );
+  await clickBySnapshot([/button\s+"?Stop Video"?/i], "Turned Zoom camera off after joining.");
+  return notes;
 }
 
 function resolveBrowserPermissionOrigin(value: string | undefined): string {
@@ -369,15 +489,25 @@ async function grantZoomMediaPermissions(params: {
   }
 }
 
-function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
+function zoomStatusScript(params: { guestName: string; autoJoin: boolean; useMedia: boolean }) {
   return `async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const text = (node) => (node?.innerText || node?.textContent || "").trim();
+  const visible = (node) => {
+    if (!node || node.disabled) return false;
+    const style = node.ownerDocument?.defaultView?.getComputedStyle?.(node);
+    if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) return false;
+    const rect = node.getBoundingClientRect?.();
+    return !rect || rect.width > 0 || rect.height > 0;
+  };
+  const text = (node) => (node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim();
   const label = (node) => [
     node?.getAttribute?.("aria-label"),
     node?.getAttribute?.("title"),
     node?.getAttribute?.("data-tooltip"),
+    node?.getAttribute?.("data-original-title"),
+    node?.getAttribute?.("data-testid"),
     node?.getAttribute?.("placeholder"),
+    node?.getAttribute?.("name"),
     node?.value,
     text(node),
   ].filter(Boolean).join(" ");
@@ -391,20 +521,34 @@ function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
     return result;
   };
   const queryAll = (selector) => docs().flatMap((doc) => [...doc.querySelectorAll(selector)]);
-  const clickables = () => queryAll('button, a, [role="button"], input[type="button"], input[type="submit"], [role="menuitem"], li');
+  const clickables = () => queryAll('button, a, [role="button"], input[type="button"], input[type="submit"], [role="menuitem"], [role="option"], li, div[aria-label], span[aria-label]').filter(visible);
   const findClickable = (pattern) =>
-    clickables().find((node) => pattern.test(label(node) || "") && !node.disabled);
+    clickables().find((node) => pattern.test(label(node) || ""));
   const clickIfFound = async (pattern, note) => {
     const node = findClickable(pattern);
     if (!node) return false;
     node.click();
     if (note) notes.push(note);
-    await sleep(150);
+    await sleep(250);
     return true;
+  };
+  const joinLooksDisabled = (node) =>
+    !node || node.disabled || /\\bdisabled\\b/i.test(String(node.className || "")) || node.getAttribute?.("aria-disabled") === "true";
+  const setInputValue = (input, value) => {
+    input.focus();
+    const valueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")?.set;
+    const previousValue = input.value;
+    if (valueSetter) valueSetter.call(input, value); else input.value = value;
+    input._valueTracker?.setValue?.(previousValue);
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: value }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', bubbles: true }));
   };
   const notes = [];
   const pageUrl = location.href;
   const autoJoin = ${JSON.stringify(params.autoJoin)};
+  const useMedia = ${JSON.stringify(params.useMedia)};
+  const desiredName = ${JSON.stringify(params.guestName)};
   const joinFromBrowser = findClickable(/join from (your )?browser/i);
   if (autoJoin && joinFromBrowser) {
     joinFromBrowser.click();
@@ -412,77 +556,108 @@ function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
     await sleep(500);
   }
 
-  const stopVideo = findClickable(/(^|\\b)stop video(\\b|$)/i);
-  if (autoJoin && stopVideo) {
+  const buttons = () => queryAll('button').filter(visible);
+  const useMediaChoice = async () =>
+    await clickIfFound(
+      /use microphone and camera|join with microphone and camera|continue with microphone and camera/i,
+      "Allowed Zoom microphone/camera choice.",
+    );
+  const continueWithoutMedia = async () =>
+    await clickIfFound(
+      /continue without (microphone|mic|camera|audio|video)|join without (microphone|mic|camera|audio|video)/i,
+      "Continued in Zoom without microphone/camera.",
+    );
+  if (autoJoin) {
+    if (useMedia) {
+      await useMediaChoice();
+    } else {
+      await continueWithoutMedia();
+    }
+  }
+  const stopVideoIfOn = async (context) => {
+    const stopVideo = findClickable(/(^|\\b)stop video(\\b|$)|turn off video|camera on/i);
+    if (!autoJoin || !stopVideo || joinLooksDisabled(stopVideo)) return false;
     stopVideo.click();
-    notes.push("Turned Zoom camera off before joining.");
-    await sleep(150);
-  }
-
-  const blackHoleMicSelected = () => clickables().some((node) => /select a microphone.*blackhole 2ch.*selected/i.test(label(node)));
-  const blackHoleSpeakerSelected = () => clickables().some((node) => /select a speaker.*blackhole 2ch.*selected/i.test(label(node)));
-  const ensureAudioMenuOpen = async () => {
-    if (clickables().some((node) => /select a microphone|select a speaker/i.test(label(node)))) return;
-    await clickIfFound(/more audio controls|audio controls|select audio/i, "Opened Zoom audio device menu.");
+    notes.push(context);
+    await sleep(350);
+    return true;
   };
-  if (autoJoin && (!blackHoleMicSelected() || !blackHoleSpeakerSelected())) {
+  await stopVideoIfOn("Turned Zoom camera off.");
+
+  const audioLabels = () => clickables().map(label).filter(Boolean);
+  const selectedBlackHoleLabels = () => audioLabels().filter((value) => /blackhole 2ch/i.test(value) && /selected|checked|current|active/i.test(value));
+  const blackHoleMicSelected = () => selectedBlackHoleLabels().some((value) => /microphone|mic|input/i.test(value)) || audioLabels().some((value) => /microphone|mic|input/i.test(value) && /blackhole 2ch/i.test(value) && /selected|checked|current|active/i.test(value));
+  const blackHoleSpeakerSelected = () => selectedBlackHoleLabels().some((value) => /speaker|output/i.test(value)) || audioLabels().some((value) => /speaker|output/i.test(value) && /blackhole 2ch/i.test(value) && /selected|checked|current|active/i.test(value));
+  const ensureAudioMenuOpen = async () => {
+    if (audioLabels().some((value) => /blackhole 2ch|select a microphone|select a speaker|microphone|speaker/i.test(value))) return true;
+    return await clickIfFound(/more audio controls|audio controls|select audio|audio settings|microphone|mute|unmute|join audio/i, "Opened Zoom audio device menu.");
+  };
+  const selectBlackHoleDevices = async () => {
+    if (!autoJoin) return;
     await ensureAudioMenuOpen();
-    if (!blackHoleMicSelected()) {
-      await clickIfFound(/select a microphone.*blackhole 2ch/i, "Selected BlackHole 2ch as Zoom microphone.");
+    for (let i = 0; i < 3; i += 1) {
+      const candidates = clickables().filter((node) => /blackhole 2ch/i.test(label(node)) && !/selected|checked|current|active/i.test(label(node)));
+      if (candidates.length === 0) break;
+      const node = candidates[0];
+      node.click();
+      notes.push("Selected BlackHole 2ch in Zoom audio devices.");
+      await sleep(300);
       await ensureAudioMenuOpen();
     }
-    if (!blackHoleSpeakerSelected()) {
-      await clickIfFound(/select a speaker.*blackhole 2ch/i, "Selected BlackHole 2ch as Zoom speaker.");
-      await ensureAudioMenuOpen();
-    }
-  }
+  };
+  await selectBlackHoleDevices();
 
   const nameInput = queryAll('input').find((el) =>
     el.type !== 'hidden' &&
     /your name|display name|name/i.test(el.getAttribute('aria-label') || el.placeholder || el.name || '')
   ) ?? queryAll('input').find((el) => el.type !== 'hidden' && el.getBoundingClientRect().width > 100 && el.getBoundingClientRect().height > 10);
-  if (autoJoin && nameInput && !nameInput.value) {
-    nameInput.focus();
-    const valueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(nameInput), "value")?.set;
-    const guestName = ${JSON.stringify(params.guestName)};
-    let previousValue = nameInput.value;
-    if (valueSetter) valueSetter.call(nameInput, ""); else nameInput.value = "";
-    nameInput._valueTracker?.setValue?.(previousValue);
-    for (const ch of guestName) {
-      previousValue = nameInput.value;
-      if (valueSetter) valueSetter.call(nameInput, nameInput.value + ch); else nameInput.value = nameInput.value + ch;
-      nameInput._valueTracker?.setValue?.(previousValue);
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
-      nameInput.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: ch }));
-      nameInput.dispatchEvent(new KeyboardEvent('keyup', { key: ch, bubbles: true }));
-    }
-    nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+  if (autoJoin && nameInput && nameInput.value !== desiredName) {
+    setInputValue(nameInput, desiredName);
     notes.push("Filled Zoom display name.");
     await sleep(300);
   }
   const passcodeInput = queryAll('input').find((el) =>
     /passcode|password/i.test(el.getAttribute('aria-label') || el.placeholder || el.name || '')
   );
-  const audioChoice = findClickable(/use microphone and camera|continue without microphone and camera|join audio by computer|join with computer audio/i);
+  const audioChoice = findClickable(
+    useMedia
+      ? /use microphone and camera|join with microphone and camera|continue with microphone and camera|join audio by computer|join with computer audio/i
+      : /continue without microphone and camera|join audio by computer|join with computer audio/i,
+  );
   if (autoJoin && audioChoice) {
     audioChoice.click();
     notes.push("Accepted Zoom audio/video choice with browser automation.");
     await sleep(500);
   }
+  if (autoJoin) {
+    if (useMedia) {
+      await useMediaChoice();
+    } else {
+      await continueWithoutMedia();
+    }
+  }
   const join = autoJoin ? findClickable(/^(join|join meeting|join webinar)$/i) : null;
-  const joinLooksDisabled = (node) =>
-    !node || node.disabled || /\bdisabled\b/i.test(String(node.className || "")) || node.getAttribute?.("aria-disabled") === "true";
   if (join && !joinLooksDisabled(join)) {
     join.click();
     notes.push("Clicked Zoom Join.");
     await sleep(500);
   }
-  const buttons = queryAll('button');
-  const mic = buttons.find((button) => /mute|unmute|microphone/i.test(label(button)));
-  const inCall = buttons.some((button) => /leave|end meeting|end webinar/i.test(label(button)));
+  if (autoJoin) {
+    await clickIfFound(/join audio by computer|join with computer audio|use computer audio/i, "Joined Zoom computer audio.");
+  }
+  await selectBlackHoleDevices();
+  await stopVideoIfOn("Turned Zoom camera off after joining.");
+  const currentButtons = buttons();
+  const mic = currentButtons.find((button) => /mute|unmute|microphone/i.test(label(button)));
+  const video = currentButtons.find((button) => /start video|stop video|camera|video/i.test(label(button)));
+  const inCall = currentButtons.some((button) => /leave|end meeting|end webinar/i.test(label(button)));
   const pageText = docs().map((doc) => text(doc.body)).join("\\n").toLowerCase();
+  const labels = audioLabels();
+  const microphoneSelected = labels.find((value) => /microphone|mic|input/i.test(value) && /blackhole 2ch/i.test(value) && /selected|checked|current|active/i.test(value));
+  const speakerSelected = labels.find((value) => /speaker|output/i.test(value) && /blackhole 2ch/i.test(value) && /selected|checked|current|active/i.test(value));
+  const audioSetupOk = blackHoleMicSelected() && blackHoleSpeakerSelected();
   const permissionNeeded = /allow.*(microphone|camera)|blocked.*(microphone|camera)|permission.*(microphone|camera|speaker)|browser prevents access/i.test(pageText);
-  const preJoinVisible = Boolean(nameInput) || Boolean(join) || Boolean(stopVideo) || /enter meeting info|your name|remember my name|by clicking.*join/i.test(pageText);
+  const preJoinVisible = Boolean(nameInput) || Boolean(join) || /enter meeting info|your name|remember my name|by clicking.*join/i.test(pageText);
   let manualActionReason;
   let manualActionMessage;
   if (!inCall && joinFromBrowser && !autoJoin) {
@@ -509,7 +684,7 @@ function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
   } else if (!inCall && !autoJoin && /invalid meeting id|meeting id is invalid|unable to join this meeting/i.test(pageText)) {
     manualActionReason = "zoom-invalid-meeting";
     manualActionMessage = "Zoom reports that the meeting link or meeting id is invalid.";
-  } else if (permissionNeeded) {
+  } else if (!inCall && permissionNeeded) {
     manualActionReason = "zoom-permission-required";
     manualActionMessage = "Allow microphone/camera/speaker permissions for Zoom in the OpenClaw browser profile, then retry.";
   }
@@ -518,6 +693,10 @@ function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
     clickedJoinFromBrowser: Boolean(joinFromBrowser && autoJoin),
     inCall,
     micMuted: mic ? /unmute/i.test(label(mic)) : undefined,
+    cameraOn: video ? /stop video|camera on/i.test(label(video)) : undefined,
+    audioSetupOk,
+    microphoneSelected,
+    speakerSelected,
     manualActionRequired: Boolean(manualActionReason),
     manualActionReason,
     manualActionMessage,
@@ -528,10 +707,208 @@ function zoomStatusScript(params: { guestName: string; autoJoin: boolean }) {
 }`;
 }
 
+function zoomLeaveScript() {
+  return `async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const visible = (node) => {
+    if (!node || node.disabled) return false;
+    const style = node.ownerDocument?.defaultView?.getComputedStyle?.(node);
+    if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) return false;
+    const rect = node.getBoundingClientRect?.();
+    return !rect || rect.width > 0 || rect.height > 0;
+  };
+  const text = (node) => (node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim();
+  const label = (node) => [
+    node?.getAttribute?.("aria-label"),
+    node?.getAttribute?.("title"),
+    node?.getAttribute?.("data-tooltip"),
+    node?.getAttribute?.("data-original-title"),
+    text(node),
+  ].filter(Boolean).join(" ");
+  const docs = () => {
+    const result = [document];
+    for (const frame of [...document.querySelectorAll('iframe')]) {
+      try {
+        if (frame.contentDocument) result.push(frame.contentDocument);
+      } catch {}
+    }
+    return result;
+  };
+  const queryAll = (selector) => docs().flatMap((doc) => [...doc.querySelectorAll(selector)]).filter(visible);
+  const clickables = () => queryAll('button, a, [role="button"], input[type="button"], input[type="submit"], [role="menuitem"], [role="option"], li, div[aria-label], span[aria-label]');
+  const findClickable = (pattern) => clickables().find((node) => pattern.test(label(node) || ""));
+  const notes = [];
+  const click = async (pattern, note) => {
+    const node = findClickable(pattern);
+    if (!node) return false;
+    node.click();
+    if (note) notes.push(note);
+    await sleep(350);
+    return true;
+  };
+  const wasInCall = Boolean(findClickable(/(^|\\b)(leave|end meeting|end webinar)(\\b|$)/i));
+  if (wasInCall) {
+    await click(/(^|\\b)(leave|leave meeting|leave webinar)(\\b|$)/i, "Clicked Zoom leave control.");
+    await click(/leave meeting|leave webinar|leave$/i, "Confirmed Zoom leave.");
+  }
+  await sleep(500);
+  const stillInCall = Boolean(findClickable(/(^|\\b)(leave|end meeting|end webinar)(\\b|$)/i));
+  return JSON.stringify({
+    left: !stillInCall,
+    wasInCall,
+    inCall: stillInCall,
+    title: document.title,
+    url: location.href,
+    notes
+  });
+}`;
+}
+
+function parseBrowserJsonResult(result: unknown): unknown {
+  const record = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  const raw = record.result;
+  if (typeof raw !== "string" || !raw.trim()) {
+    return undefined;
+  }
+  return JSON.parse(raw) as unknown;
+}
+
+async function findZoomBrowserTab(params: {
+  callBrowser: BrowserRequestCaller;
+  config: ZoomConfig;
+  url: string;
+}): Promise<{ tab?: BrowserTab; targetId?: string }> {
+  const timeoutMs = Math.max(1_000, params.config.chrome.joinTimeoutMs);
+  const tabs = asBrowserTabs(
+    await params.callBrowser({
+      method: "GET",
+      path: "/tabs",
+      timeoutMs: Math.min(timeoutMs, 5_000),
+    }),
+  );
+  const tab = tabs.find((entry) => isSameZoomUrlForReuse(entry.url, params.url));
+  return { tab, targetId: tab?.targetId };
+}
+
+async function leaveZoomWithBrowserRequest(params: {
+  callBrowser: BrowserRequestCaller;
+  config: ZoomConfig;
+  url: string;
+  closeTab?: boolean;
+}): Promise<ZoomChromeHealth> {
+  if (!params.config.chrome.launch) {
+    return {
+      status: "browser-control",
+      notes: ["Zoom browser leave skipped because chrome.launch is false."],
+    };
+  }
+  const timeoutMs = Math.max(1_000, params.config.chrome.joinTimeoutMs);
+  const { tab, targetId } = await findZoomBrowserTab(params);
+  if (!targetId) {
+    return {
+      status: "browser-control",
+      inCall: false,
+      browserUrl: tab?.url,
+      browserTitle: tab?.title,
+      notes: ["No matching Zoom browser tab found during leave."],
+    };
+  }
+  await params.callBrowser({
+    method: "POST",
+    path: "/tabs/focus",
+    body: { targetId },
+    timeoutMs: Math.min(timeoutMs, 5_000),
+  });
+  const evaluated = await params.callBrowser({
+    method: "POST",
+    path: "/act",
+    body: {
+      kind: "evaluate",
+      targetId,
+      fn: zoomLeaveScript(),
+    },
+    timeoutMs: Math.min(timeoutMs, 10_000),
+  });
+  const parsed =
+    (parseBrowserJsonResult(evaluated) as
+      | {
+          inCall?: boolean;
+          left?: boolean;
+          title?: string;
+          url?: string;
+          notes?: string[];
+        }
+      | undefined) ?? {};
+  const notes = Array.isArray(parsed.notes)
+    ? parsed.notes.filter((note): note is string => typeof note === "string")
+    : [];
+  let closedTab = false;
+  if (params.closeTab) {
+    try {
+      await params.callBrowser({
+        method: "DELETE",
+        path: `/tabs/${encodeURIComponent(targetId)}`,
+        timeoutMs: Math.min(timeoutMs, 5_000),
+      });
+      closedTab = true;
+      notes.push("Closed Zoom browser tab.");
+    } catch (error) {
+      notes.push(
+        `Could not close Zoom browser tab: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return {
+    status: "browser-control",
+    inCall: closedTab ? false : parsed.inCall === true,
+    browserUrl: parsed.url ?? tab?.url,
+    browserTitle: parsed.title ?? tab?.title,
+    notes,
+  };
+}
+
+export async function leaveChromeZoom(params: {
+  config: ZoomConfig;
+  url: string;
+}): Promise<ZoomChromeHealth> {
+  return await leaveZoomWithBrowserRequest({
+    callBrowser: callLocalBrowserRequest,
+    config: params.config,
+    url: params.url,
+    closeTab: true,
+  });
+}
+
+export async function leaveChromeZoomOnNode(params: {
+  runtime: PluginRuntime;
+  config: ZoomConfig;
+  nodeId: string;
+  url: string;
+}): Promise<ZoomChromeHealth> {
+  return await leaveZoomWithBrowserRequest({
+    callBrowser: async (request) =>
+      await callBrowserProxyOnNode({
+        runtime: params.runtime,
+        nodeId: params.nodeId,
+        method: request.method,
+        path: request.path,
+        query: request.query,
+        body: request.body,
+        timeoutMs: request.timeoutMs,
+      }),
+    config: params.config,
+    url: params.url,
+    closeTab: true,
+  });
+}
+
 async function openZoomWithBrowserProxy(params: {
   runtime: PluginRuntime;
   nodeId: string;
   config: ZoomConfig;
+  useMedia: boolean;
   url: string;
 }): Promise<{ launched: boolean; browser?: ZoomChromeHealth }> {
   return await openZoomWithBrowserRequest({
@@ -541,10 +918,12 @@ async function openZoomWithBrowserProxy(params: {
         nodeId: params.nodeId,
         method: request.method,
         path: request.path,
+        query: request.query,
         body: request.body,
         timeoutMs: request.timeoutMs,
       }),
     config: params.config,
+    useMedia: params.useMedia,
     url: params.url,
   });
 }
@@ -552,6 +931,7 @@ async function openZoomWithBrowserProxy(params: {
 async function openZoomWithBrowserRequest(params: {
   callBrowser: BrowserRequestCaller;
   config: ZoomConfig;
+  useMedia: boolean;
   url: string;
 }): Promise<{ launched: boolean; browser?: ZoomChromeHealth }> {
   if (!params.config.chrome.launch) {
@@ -616,7 +996,25 @@ async function openZoomWithBrowserRequest(params: {
     notes: permissionNotes,
   };
   do {
+    let frameNotes: string[] = [];
     try {
+      if (params.config.chrome.autoJoin) {
+        try {
+          frameNotes = await driveZoomFrameControls({
+            callBrowser: params.callBrowser,
+            targetId,
+            guestName: params.config.name,
+            useMedia: params.useMedia,
+            timeoutMs,
+          });
+        } catch (error) {
+          frameNotes = [
+            `Frame-aware Zoom controls were unavailable: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ];
+        }
+      }
       const evaluated = await params.callBrowser({
         method: "POST",
         path: "/act",
@@ -624,18 +1022,33 @@ async function openZoomWithBrowserRequest(params: {
           kind: "evaluate",
           targetId,
           fn: zoomStatusScript({
-            guestName: params.config.chrome.guestName,
+            guestName: params.config.name,
             autoJoin: params.config.chrome.autoJoin,
+            useMedia: params.useMedia,
           }),
         },
         timeoutMs: Math.min(timeoutMs, 10_000),
       });
-      browser = mergeBrowserNotes(parseZoomBrowserStatus(evaluated) ?? browser, permissionNotes);
+      browser = mergeBrowserNotes(parseZoomBrowserStatus(evaluated) ?? browser, [
+        ...permissionNotes,
+        ...frameNotes,
+      ]);
       if (browser?.inCall === true) {
         return { launched: true, browser };
       }
       if (browser?.manualActionRequired === true) {
-        return { launched: true, browser };
+        const retryableManualAction =
+          params.config.chrome.autoJoin &&
+          [
+            "zoom-browser-join-required",
+            "zoom-name-required",
+            "zoom-audio-choice-required",
+            "zoom-permission-required",
+            "zoom-admission-required",
+          ].includes(browser.manualActionReason ?? "");
+        if (!retryableManualAction || Date.now() >= deadline) {
+          return { launched: true, browser };
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -652,6 +1065,7 @@ async function openZoomWithBrowserRequest(params: {
           : "Open the OpenClaw browser profile, finish Zoom login, admission, or permission prompts, then retry.",
         notes: [
           ...permissionNotes,
+          ...frameNotes,
           `Browser control could not inspect or auto-join Zoom: ${message}`,
         ],
       };
@@ -711,8 +1125,9 @@ async function inspectRecoverableZoomTab(params: {
       kind: "evaluate",
       targetId: params.targetId,
       fn: zoomStatusScript({
-        guestName: params.config.chrome.guestName,
+        guestName: params.config.name,
         autoJoin: false,
+        useMedia: false,
       }),
     },
     timeoutMs: Math.min(params.timeoutMs, 10_000),
@@ -829,6 +1244,7 @@ export async function recoverCurrentZoomTabOnNode(params: {
           nodeId,
           method: request.method,
           path: request.path,
+          query: request.query,
           body: request.body,
           timeoutMs: request.timeoutMs,
         }),
@@ -886,6 +1302,7 @@ export async function launchChromeZoomOnNode(params: {
     runtime: params.runtime,
     nodeId,
     config: params.config,
+    useMedia: params.mode === "realtime",
     url: params.url,
   });
   if (params.mode === "conversation") {
@@ -894,6 +1311,13 @@ export async function launchChromeZoomOnNode(params: {
     );
   }
   if (params.mode !== "realtime") {
+    return {
+      nodeId,
+      launched: browserControl.launched,
+      browser: browserControl.browser,
+    };
+  }
+  if (browserControl.browser?.inCall !== true) {
     return {
       nodeId,
       launched: browserControl.launched,

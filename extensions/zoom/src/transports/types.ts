@@ -24,6 +24,10 @@ export type ZoomManualActionReason =
 export type ZoomChromeHealth = {
   inCall?: boolean;
   micMuted?: boolean;
+  cameraOn?: boolean;
+  audioSetupOk?: boolean;
+  microphoneSelected?: string;
+  speakerSelected?: string;
   manualActionRequired?: boolean;
   manualActionReason?: ZoomManualActionReason;
   manualActionMessage?: string;

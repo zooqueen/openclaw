@@ -190,6 +190,7 @@ export async function callBrowserProxyOnNode(params: {
   nodeId: string;
   method: "GET" | "POST" | "DELETE";
   path: string;
+  query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
   timeoutMs: number;
 }) {
@@ -199,6 +200,7 @@ export async function callBrowserProxyOnNode(params: {
     params: {
       method: params.method,
       path: params.path,
+      query: params.query,
       body: params.body,
       timeoutMs: params.timeoutMs,
     },

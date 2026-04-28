@@ -239,12 +239,9 @@ Route Zoom through that node on the Gateway host:
       zoom: {
         enabled: true,
         config: {
+          name: "OpenClaw Agent",
           defaultTransport: "chrome-node",
-          chrome: {
-            guestName: "OpenClaw Agent",
-            autoJoin: true,
-            reuseExistingTab: true,
-          },
+          chrome: { autoJoin: true, reuseExistingTab: true },
           chromeNode: {
             node: "zoom-macos",
           },
@@ -269,7 +266,7 @@ openclaw zoom test-speech 'https://example.zoom.us/j/123456789?pwd=...'
 
 ## Browser join behavior
 
-The plugin uses conservative browser automation. It may click Zoom's browser-join control, fill the configured display name, click Join, and click the computer-audio join control when those controls are clearly visible. It does not guess passcodes or bypass waiting rooms.
+The plugin uses conservative browser automation. It may click Zoom's browser-join control, fill the configured display name, keep camera off, select BlackHole 2ch for visible microphone/speaker choices, click Join, and click the computer-audio join control when those controls are clearly visible. It does not guess passcodes or bypass waiting rooms. `zoom.leave` clicks visible leave controls when possible and closes the matching Zoom tab after stopping the audio bridge.
 
 When an agent sees `manualActionRequired: true`, it should report the `manualActionMessage` plus the browser node/tab context and stop opening new Zoom tabs until the operator completes the browser step.
 
@@ -278,7 +275,7 @@ Common manual-action reasons:
 | Reason                        | Meaning                                                                                                           |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `zoom-browser-join-required`  | Zoom is showing a browser-join control and `chrome.autoJoin` is disabled or automation could not safely continue. |
-| `zoom-name-required`          | Zoom needs a display name. Configure `chrome.guestName` or fill the field manually.                               |
+| `zoom-name-required`          | Zoom needs a display name. Configure `name` or fill the field manually.                                           |
 | `zoom-passcode-required`      | Enter the meeting passcode in the browser.                                                                        |
 | `zoom-admission-required`     | The participant is in the waiting room or the host has not started/admitted the meeting.                          |
 | `zoom-login-required`         | The meeting/account requires Zoom sign-in.                                                                        |
@@ -309,9 +306,10 @@ Defaults:
 
 - `defaultTransport: "chrome"`
 - `defaultMode: "realtime"`
+- `name`: display name used when Zoom asks for a participant name; falls back to `conversation.agentId`, `realtime.agentId`, then `main`
 - `chromeNode.node`: optional node id/name/IP for `chrome-node`
 - `chrome.audioBackend: "blackhole-2ch"`
-- `chrome.guestName: "OpenClaw Agent"`
+- `chrome.guestName`: legacy alias for `name`
 - `chrome.autoJoin: true`
 - `chrome.reuseExistingTab: true`
 - `chrome.waitForInCallMs: 20000`
@@ -333,6 +331,7 @@ Optional overrides:
 
 ```json5
 {
+  name: "OpenClaw Agent",
   defaults: {
     meeting: "https://example.zoom.us/j/123456789?pwd=...",
   },
@@ -340,7 +339,6 @@ Optional overrides:
     defaultProfile: "openclaw",
   },
   chrome: {
-    guestName: "OpenClaw Agent",
     waitForInCallMs: 30000,
   },
   chromeNode: {

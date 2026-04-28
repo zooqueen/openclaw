@@ -19,9 +19,10 @@ describe("Zoom config", () => {
     const config = resolveZoomConfig({});
 
     expect(config.enabled).toBe(true);
+    expect(config.name).toBe("main");
     expect(config.defaultTransport).toBe("chrome");
     expect(config.defaultMode).toBe("realtime");
-    expect(config.chrome.guestName).toBe("OpenClaw Agent");
+    expect(config.chrome.guestName).toBe("main");
     expect(config.conversation.playbackCommand).toEqual([
       "sox",
       "-q",
@@ -50,6 +51,15 @@ describe("Zoom config", () => {
     expect(config.conversation.playbackCommand).toEqual(["sox", "{{AudioPath}}", "-d"]);
     expect(config.conversation.vad.rmsThreshold).toBe(0.01);
     expect(config.conversation.vad.silenceMs).toBe(500);
+  });
+
+  it("resolves participant name from name, legacy guestName, or agent id", () => {
+    expect(resolveZoomConfig({ name: "OpenClaw Zoom" }).name).toBe("OpenClaw Zoom");
+    expect(resolveZoomConfig({ chrome: { guestName: "Legacy Name" } }).name).toBe("Legacy Name");
+    expect(resolveZoomConfig({ conversation: { agentId: "meetings" } }).name).toBe("meetings");
+    expect(resolveZoomConfig({ realtime: { agentId: "voice-agent" } }).chrome.guestName).toBe(
+      "voice-agent",
+    );
   });
 
   it("reads a default meeting from Zoom environment fallback", () => {
@@ -220,6 +230,143 @@ describe("Zoom plugin registration", () => {
       manualActionRequired: true,
       manualActionReason: "zoom-passcode-required",
     });
+  });
+
+  it("does not start chrome-node audio when browser join needs manual action", async () => {
+    const harness = setupZoomPlugin(
+      plugin,
+      {
+        defaultTransport: "chrome-node",
+        defaultMode: "realtime",
+        chromeNode: { node: "zoom-macos" },
+      },
+      {
+        browserActResult: {
+          inCall: false,
+          manualActionRequired: true,
+          manualActionReason: "zoom-passcode-required",
+          manualActionMessage:
+            "Enter the Zoom meeting passcode in the OpenClaw browser profile, then retry.",
+          title: "Zoom",
+          url: "https://example.zoom.us/j/123456789",
+        },
+      },
+    );
+
+    await invokeZoomGatewayMethodForTest(harness.methods, "zoom.join", {
+      url: "https://example.zoom.us/j/123456789",
+    });
+
+    expect(harness.nodesInvoke).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "zoom.chrome",
+        params: expect.objectContaining({ action: "start" }),
+      }),
+    );
+  });
+
+  it("leaves a chrome-node browser session and closes the Zoom tab", async () => {
+    const browserRequests: Array<{ method?: string; path?: string; body?: unknown }> = [];
+    const originalUrl = "https://example.zoom.us/my/gumadeiras";
+    const browserUrl = "https://app.zoom.us/wc/123456789/join?fromPWA=1";
+    const harness = setupZoomPlugin(
+      plugin,
+      {
+        defaultTransport: "chrome-node",
+        defaultMode: "transcribe",
+        chromeNode: { node: "zoom-macos" },
+      },
+      {
+        nodesInvokeHandler: async (params) => {
+          if (params.command !== "browser.proxy") {
+            return { ok: true };
+          }
+          const request = params.params as {
+            method?: string;
+            path?: string;
+            body?: { url?: string; targetId?: string };
+          };
+          browserRequests.push(request);
+          if (request.path === "/tabs") {
+            return {
+              payload: {
+                result: {
+                  running: true,
+                  tabs: browserRequests.some((entry) => entry.path === "/tabs/open")
+                    ? [
+                        {
+                          targetId: "tab-1",
+                          title: "Zoom Meeting",
+                          url: browserUrl,
+                        },
+                      ]
+                    : [],
+                },
+              },
+            };
+          }
+          if (request.path === "/tabs/open") {
+            return {
+              payload: {
+                result: {
+                  targetId: "tab-1",
+                  title: "Zoom",
+                  url: request.body?.url ?? originalUrl,
+                },
+              },
+            };
+          }
+          if (request.path === "/act") {
+            const isLeave = ((request.body as { fn?: string } | undefined)?.fn ?? "").includes(
+              "Clicked Zoom leave control",
+            );
+            return {
+              payload: {
+                result: {
+                  ok: true,
+                  targetId: request.body?.targetId ?? "tab-1",
+                  result: JSON.stringify(
+                    isLeave
+                      ? {
+                          inCall: false,
+                          left: true,
+                          title: "Zoom",
+                          url: browserUrl,
+                          notes: ["Clicked Zoom leave control.", "Confirmed Zoom leave."],
+                        }
+                      : {
+                          inCall: true,
+                          micMuted: false,
+                          cameraOn: false,
+                          audioSetupOk: true,
+                          title: "Zoom Meeting",
+                          url: browserUrl,
+                        },
+                  ),
+                },
+              },
+            };
+          }
+          return { payload: { result: { ok: true } } };
+        },
+      },
+    );
+
+    const joined = (await invokeZoomGatewayMethodForTest(harness.methods, "zoom.join", {
+      url: originalUrl,
+    })) as { session: { id: string } };
+    const left = (await invokeZoomGatewayMethodForTest(harness.methods, "zoom.leave", {
+      sessionId: joined.session.id,
+    })) as { session: { state: string; chrome?: { health?: Record<string, unknown> } } };
+
+    expect(left.session.state).toBe("ended");
+    expect(left.session.chrome?.health).toMatchObject({ inCall: false });
+    expect(browserRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "POST", path: "/tabs/focus" }),
+        expect.objectContaining({ method: "DELETE", path: "/tabs/tab-1" }),
+      ]),
+    );
   });
 
   it("reports pinned offline chrome-node setup blockers", async () => {
