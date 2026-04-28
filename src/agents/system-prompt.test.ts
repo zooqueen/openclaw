@@ -1018,7 +1018,8 @@ describe("buildSubagentSystemPrompt", () => {
     expect(prompt).toContain("  line two");
     expect(prompt).toContain("  line three");
     expect(prompt).toContain("```escape");
-    expect(prompt).toContain("&lt;/untrusted-text&gt;");
+    expect(prompt).toContain("&lt;/untrusted_text&gt;");
+    expect(prompt).not.toContain("&lt;/untrusted-text&gt;");
     expect(prompt).not.toContain("line one line two");
   });
 
