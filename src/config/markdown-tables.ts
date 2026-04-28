@@ -3,6 +3,7 @@ import { listChannelPlugins } from "../channels/plugins/registry.js";
 import { getActivePluginChannelRegistryVersion } from "../plugins/runtime.js";
 import { resolveAccountEntry } from "../routing/account-lookup.js";
 import { normalizeAccountId } from "../routing/session-key.js";
+import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
 import type { ResolveMarkdownTableModeParams } from "./markdown-tables.types.js";
 import type { MarkdownTableMode } from "./types.base.js";
 
@@ -88,7 +89,8 @@ export type {
 export function resolveMarkdownTableMode(
   params: ResolveMarkdownTableModeParams,
 ): MarkdownTableMode {
-  const channel = normalizeChannelId(params.channel);
+  const channel =
+    normalizeChannelId(params.channel) ?? normalizeOptionalLowercaseString(params.channel);
   const defaultMode = channel ? (getDefaultTableModes().get(channel) ?? "code") : "code";
   if (!channel || !params.cfg) {
     return defaultMode;
@@ -99,7 +101,6 @@ export function resolveMarkdownTableMode(
     | MarkdownConfigSection
     | undefined;
   const resolved = resolveMarkdownModeFromSection(section, params.accountId) ?? defaultMode;
-  // "block" stays schema-valid for the shared markdown seam, but this PR
-  // keeps runtime delivery on safe text rendering until Slack send support lands.
-  return resolved === "block" ? "code" : resolved;
+  const supportsBlockTables = getDefaultTableModes().get(channel) === "block";
+  return resolved === "block" && !supportsBlockTables ? "code" : resolved;
 }

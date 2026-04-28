@@ -1,5 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSlackSendTestClient, installSlackBlockTestMocks } from "./blocks.test-helpers.js";
+
+vi.mock("@slack/web-api", () => ({
+  WebClient: class SlackWebClientTestDouble {},
+}));
+
+vi.mock("openclaw/plugin-sdk/fetch-runtime", () => ({
+  withTrustedEnvProxyGuardedFetchMode: (params: Record<string, unknown>) => params,
+}));
+
+vi.mock("openclaw/plugin-sdk/ssrf-runtime", () => ({
+  fetchWithSsrFGuard: vi.fn(async () => {
+    throw new Error("unexpected Slack upload fetch in block test");
+  }),
+}));
+
+vi.mock("./client.js", () => ({
+  createSlackTokenCacheKey: (token: string) => `test:${token}`,
+  getSlackWriteClient: () => {
+    throw new Error("Slack block tests must pass an explicit client");
+  },
+}));
 
 installSlackBlockTestMocks();
 const { sendMessageSlack } = await import("./send.js");
@@ -90,6 +111,44 @@ describe("sendMessageSlack chunking", () => {
     expect(postedTexts).toHaveLength(2);
     expect(postedTexts.every((text) => typeof text === "string" && text.length <= 8000)).toBe(true);
     expect(postedTexts.join("")).toBe(message);
+  });
+});
+
+describe("sendMessageSlack markdown tables", () => {
+  it("sends Slack Block Kit table blocks for markdown tables", async () => {
+    const client = createSlackSendTestClient();
+    await sendMessageSlack("channel:C123", "Before\n\n| Name | Age |\n|---|---|\n| Alice | 30 |", {
+      token: "xoxb-test",
+      cfg: SLACK_TEST_CFG,
+      client,
+    });
+
+    expect(client.chat.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "C123",
+        text: expect.stringContaining("| Name "),
+        blocks: [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: "Before" },
+          },
+          {
+            type: "table",
+            rows: [
+              [
+                { type: "raw_text", text: "Name" },
+                { type: "raw_text", text: "Age" },
+              ],
+              [
+                { type: "raw_text", text: "Alice" },
+                { type: "raw_text", text: "30" },
+              ],
+            ],
+            column_settings: [{ is_wrapped: true }, { is_wrapped: true }],
+          },
+        ],
+      }),
+    );
   });
 });
 

@@ -4,6 +4,7 @@ const listChannelPluginsMock = vi.hoisted(() =>
   vi.fn(() => [
     { id: "mattermost", messaging: { defaultMarkdownTableMode: "off" as const } },
     { id: "signal", messaging: { defaultMarkdownTableMode: "bullets" as const } },
+    { id: "slack", messaging: { defaultMarkdownTableMode: "block" as const } },
     { id: "whatsapp", messaging: { defaultMarkdownTableMode: "bullets" as const } },
   ]),
 );
@@ -43,19 +44,19 @@ describe("DEFAULT_TABLE_MODES", () => {
     expect(DEFAULT_TABLE_MODES.get("whatsapp")).toBe("bullets");
   });
 
-  it("slack has no special default in this seam-only slice", () => {
-    expect(DEFAULT_TABLE_MODES.get("slack")).toBeUndefined();
+  it("slack mode is block", () => {
+    expect(DEFAULT_TABLE_MODES.get("slack")).toBe("block");
   });
 });
 
 describe("resolveMarkdownTableMode", () => {
-  it("defaults to code for slack", () => {
-    expect(resolveMarkdownTableMode({ channel: "slack" })).toBe("code");
+  it("defaults to block for slack", () => {
+    expect(resolveMarkdownTableMode({ channel: "slack" })).toBe("block");
   });
 
-  it("coerces explicit block mode to code for slack", () => {
+  it("preserves explicit block mode for slack", () => {
     const cfg = { channels: { slack: { markdown: { tables: "block" as const } } } };
-    expect(resolveMarkdownTableMode({ cfg, channel: "slack" })).toBe("code");
+    expect(resolveMarkdownTableMode({ cfg, channel: "slack" })).toBe("block");
   });
 
   it("coerces explicit block mode to code for non-slack channels", () => {

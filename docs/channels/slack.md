@@ -439,6 +439,10 @@ Available action groups in current Slack tooling:
 
 Current Slack message actions include `send`, `upload-file`, `download-file`, `read`, `edit`, `delete`, `pin`, `unpin`, `list-pins`, `member-info`, and `emoji-list`. `download-file` accepts Slack file IDs shown in inbound file placeholders and returns image previews for images or local file metadata for other file types.
 
+## Message formatting
+
+Slack outbound text is rendered as Slack mrkdwn. Markdown tables are sent as native Block Kit table blocks when Slack can send a block message; media captions and other non-block delivery paths fall back to fenced code tables.
+
 ## Access control and routing
 
 <Tabs>

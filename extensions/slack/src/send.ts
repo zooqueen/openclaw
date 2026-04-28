@@ -1,4 +1,4 @@
-import { type Block, type KnownBlock, type WebClient } from "@slack/web-api";
+import type { Block, KnownBlock, WebClient } from "@slack/web-api";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-types";
 import { withTrustedEnvProxyGuardedFetchMode } from "openclaw/plugin-sdk/fetch-runtime";
 import { resolveMarkdownTableMode } from "openclaw/plugin-sdk/markdown-table-runtime";
@@ -18,8 +18,9 @@ import {
 } from "openclaw/plugin-sdk/text-runtime";
 import type { SlackTokenSource } from "./accounts.js";
 import { resolveSlackAccount } from "./accounts.js";
+import { markdownToSlackBlockKitTables } from "./block-kit-tables.js";
 import { buildSlackBlocksFallbackText } from "./blocks-fallback.js";
-import { validateSlackBlocksArray } from "./blocks-input.js";
+import { SLACK_MAX_BLOCKS, validateSlackBlocksArray } from "./blocks-input.js";
 import { createSlackTokenCacheKey, getSlackWriteClient } from "./client.js";
 import { markdownToSlackMrkdwnChunks } from "./format.js";
 import { SLACK_TEXT_LIMIT } from "./limits.js";
@@ -434,13 +435,34 @@ async function sendMessageSlackQueued(params: {
     channel: "slack",
     accountId: account.accountId,
   });
+  if (!opts.mediaUrl && tableMode === "block") {
+    const rendered = markdownToSlackBlockKitTables(trimmedMessage, {
+      textLimit: chunkLimit,
+      maxBlocks: SLACK_MAX_BLOCKS,
+    });
+    if (rendered) {
+      const response = await postSlackMessageBestEffort({
+        client,
+        channelId,
+        text: rendered.text,
+        threadTs: opts.threadTs,
+        identity: opts.identity,
+        blocks: rendered.blocks,
+      });
+      return {
+        messageId: response.ts ?? "unknown",
+        channelId,
+      };
+    }
+  }
+  const effectiveTableMode = tableMode === "block" ? "code" : tableMode;
   const chunkMode = resolveChunkMode(cfg, "slack", account.accountId);
   const markdownChunks =
     chunkMode === "newline"
       ? chunkMarkdownTextWithMode(trimmedMessage, chunkLimit, chunkMode)
       : [trimmedMessage];
   const chunks = markdownChunks.flatMap((markdown) =>
-    markdownToSlackMrkdwnChunks(markdown, chunkLimit, { tableMode }),
+    markdownToSlackMrkdwnChunks(markdown, chunkLimit, { tableMode: effectiveTableMode }),
   );
   const resolvedChunks = resolveTextChunksWithFallback(trimmedMessage, chunks);
   const mediaMaxBytes =

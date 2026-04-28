@@ -1,6 +1,7 @@
 import type { MarkdownTableMode } from "openclaw/plugin-sdk/config-types";
 import {
   markdownToIR,
+  type MarkdownIR,
   type MarkdownLinkSpan,
   renderMarkdownIRChunksWithinLimit,
 } from "openclaw/plugin-sdk/text-runtime";
@@ -132,8 +133,22 @@ export function markdownToSlackMrkdwn(
   return renderMarkdownWithMarkers(ir, buildSlackRenderOptions());
 }
 
+export function renderSlackMrkdwnIR(ir: MarkdownIR): string {
+  return renderMarkdownWithMarkers(ir, buildSlackRenderOptions());
+}
+
 export function normalizeSlackOutboundText(markdown: string): string {
   return markdownToSlackMrkdwn(markdown ?? "");
+}
+
+export function renderSlackMrkdwnIRChunks(ir: MarkdownIR, limit: number): string[] {
+  const renderOptions = buildSlackRenderOptions();
+  return renderMarkdownIRChunksWithinLimit({
+    ir,
+    limit,
+    renderChunk: (chunk) => renderMarkdownWithMarkers(chunk, renderOptions),
+    measureRendered: (rendered) => rendered.length,
+  }).map(({ rendered }) => rendered);
 }
 
 export function markdownToSlackMrkdwnChunks(
@@ -148,11 +163,5 @@ export function markdownToSlackMrkdwnChunks(
     blockquotePrefix: "> ",
     tableMode: options.tableMode,
   });
-  const renderOptions = buildSlackRenderOptions();
-  return renderMarkdownIRChunksWithinLimit({
-    ir,
-    limit,
-    renderChunk: (chunk) => renderMarkdownWithMarkers(chunk, renderOptions),
-    measureRendered: (rendered) => rendered.length,
-  }).map(({ rendered }) => rendered);
+  return renderSlackMrkdwnIRChunks(ir, limit);
 }
