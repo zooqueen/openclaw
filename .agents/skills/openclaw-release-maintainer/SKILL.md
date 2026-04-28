@@ -382,6 +382,27 @@ node --import tsx scripts/openclaw-npm-postpublish-verify.ts <published-version>
   retesting.
 - If any required build, packaging step, or release workflow is red, do not say the release is ready.
 
+## Record release evidence with npm provenance
+
+- Every release validation evidence report should identify whether it matches a
+  published npm package. When dispatching `.github/workflows/full-release-validation.yml`
+  for a package that is already published or expected to be published before
+  evidence is finalized, pass `evidence_package_spec=openclaw@<version>`.
+- When the post-publish Telegram npm lane is part of the same full validation,
+  also pass `npm_telegram_package_spec=openclaw@<version>` so the validation
+  proves the exact registry package, not only a branch/ref tarball.
+- If a full validation was started before the npm package existed, regenerate
+  the private evidence after publish with
+  `openclaw/releases-private/.github/workflows/openclaw-release-evidence-from-full-validation.yml`
+  and pass `package_spec=openclaw@<version>`, the original
+  `full_validation_run_id`, and a human release id such as `YYYY.M.D`.
+- Use SHA evidence ids for immutable debugging, but also create/update the
+  human stable evidence bucket (`evidence/YYYY.M.D/`) after stable publish so
+  maintainers can find the final npm/release proof quickly.
+- Do not claim npm proof from a ref-backed or local tarball-backed run. Label
+  those as pre-publish package/tarball proof, and keep the npm registry proof
+  tied to `source=npm` or `package_spec=openclaw@<published-version>`.
+
 ## Use the right auth flow
 
 - OpenClaw publish uses GitHub trusted publishing.
@@ -612,6 +633,11 @@ node --import tsx scripts/openclaw-npm-postpublish-verify.ts <published-version>
     `appcast.xml` artifact and do not update the shared production feed unless a
     separate beta feed exists.
 32. After publish, verify npm and the attached release artifacts.
+33. After any beta or stable npm publish, ensure the private release evidence
+    report includes `package_spec=openclaw@<published-version>` and shows the
+    npm package match. If the original full validation omitted the package spec,
+    rerun the private evidence generation workflow with the same
+    `full_validation_run_id` and the published package spec.
 
 ## GHSA advisory work
 
