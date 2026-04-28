@@ -827,7 +827,6 @@ export async function runReplyAgent(params: {
   shouldFollowup: boolean;
   isActive: boolean;
   isRunActive?: () => boolean;
-  isStreaming: boolean;
   opts?: GetReplyOptions;
   typing: TypingController;
   sessionEntry?: SessionEntry;
