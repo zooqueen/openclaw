@@ -127,6 +127,7 @@ export async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: Runtim
     cfg,
     agentId,
     to: opts.to,
+    channel: opts.channel,
     sessionId: opts.sessionId,
   }).sessionKey;
 

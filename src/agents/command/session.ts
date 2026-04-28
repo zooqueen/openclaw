@@ -21,6 +21,7 @@ import { resolveSessionKey } from "../../config/sessions/session-key.js";
 import { loadSessionStore } from "../../config/sessions/store-load.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { channelRouteTargetsShareConversation } from "../../plugin-sdk/channel-route.js";
 import {
   buildAgentMainSessionKey,
   DEFAULT_AGENT_ID,
@@ -28,6 +29,11 @@ import {
   normalizeMainKey,
 } from "../../routing/session-key.js";
 import { resolveSessionIdMatchSelection } from "../../sessions/session-id-resolution.js";
+import {
+  deliveryContextFromSession,
+  normalizeDeliveryContext,
+} from "../../utils/delivery-context.shared.js";
+import { normalizeMessageChannel } from "../../utils/message-channel-core.js";
 import { listAgentIds, resolveDefaultAgentId } from "../agent-scope.js";
 import { clearBootstrapSnapshotOnSessionRollover } from "../bootstrap-cache.js";
 
@@ -56,6 +62,60 @@ type SessionIdMatchSet = {
 
 function buildExplicitSessionIdSessionKey(params: { sessionId: string; agentId?: string }): string {
   return `agent:${normalizeAgentId(params.agentId)}:explicit:${params.sessionId.trim()}`;
+}
+
+function normalizeDeliveryLookupTarget(params: { channel?: string; to?: string }) {
+  const channel = normalizeMessageChannel(params.channel);
+  const rawTo = params.to?.trim();
+  if (!channel || !rawTo) {
+    return undefined;
+  }
+
+  if (channel !== "discord") {
+    return normalizeDeliveryContext({ channel, to: rawTo });
+  }
+
+  const channelTarget = rawTo.match(/^(?:discord:)?channel:(.+)$/i)?.[1]?.trim();
+  const to = channelTarget
+    ? `channel:${channelTarget}`
+    : /^\d+$/.test(rawTo)
+      ? `channel:${rawTo}`
+      : rawTo;
+  return normalizeDeliveryContext({ channel, to });
+}
+
+function resolveStoredSessionKeyForDeliveryContext(opts: {
+  channel?: string;
+  to?: string;
+  sessionStore: Record<string, SessionEntry>;
+}): string | undefined {
+  const target = normalizeDeliveryLookupTarget({
+    channel: opts.channel,
+    to: opts.to,
+  });
+  if (!target) {
+    return undefined;
+  }
+
+  let selected: { key: string; entry: SessionEntry } | undefined;
+  for (const [candidateKey, candidateEntry] of Object.entries(opts.sessionStore)) {
+    if (
+      !channelRouteTargetsShareConversation({
+        left: target,
+        right: deliveryContextFromSession(candidateEntry),
+      })
+    ) {
+      continue;
+    }
+    if (
+      !selected ||
+      candidateEntry.updatedAt > selected.entry.updatedAt ||
+      (candidateEntry.updatedAt === selected.entry.updatedAt && candidateKey < selected.key)
+    ) {
+      selected = { key: candidateKey, entry: candidateEntry };
+    }
+  }
+  return selected?.key;
 }
 
 function resolveLegacyMainStoreSessionForDefaultAgent(opts: {
@@ -196,6 +256,7 @@ export function resolveStoredSessionKeyForSessionId(opts: {
 export function resolveSessionKeyForRequest(opts: {
   cfg: OpenClawConfig;
   to?: string;
+  channel?: string;
   sessionId?: string;
   sessionKey?: string;
   agentId?: string;
@@ -223,8 +284,18 @@ export function resolveSessionKeyForRequest(opts: {
   const sessionStore = loadSessionStore(storePath);
 
   const ctx: MsgContext | undefined = opts.to?.trim() ? { From: opts.to } : undefined;
+  const deliverySessionKey =
+    !explicitSessionKey && !requestedSessionId
+      ? resolveStoredSessionKeyForDeliveryContext({
+          channel: opts.channel,
+          to: opts.to,
+          sessionStore,
+        })
+      : undefined;
   let sessionKey: string | undefined =
-    explicitSessionKey ?? (ctx ? resolveSessionKey(scope, ctx, mainKey, storeAgentId) : undefined);
+    explicitSessionKey ??
+    deliverySessionKey ??
+    (ctx ? resolveSessionKey(scope, ctx, mainKey, storeAgentId) : undefined);
 
   if (ctx && !requestedAgentId && !requestedSessionId && !explicitSessionKey) {
     const legacyMainSession = resolveLegacyMainStoreSessionForDefaultAgent({
@@ -284,6 +355,7 @@ export function resolveSessionKeyForRequest(opts: {
 export function resolveSession(opts: {
   cfg: OpenClawConfig;
   to?: string;
+  channel?: string;
   sessionId?: string;
   sessionKey?: string;
   agentId?: string;
@@ -292,6 +364,7 @@ export function resolveSession(opts: {
   const { sessionKey, sessionStore, storePath } = resolveSessionKeyForRequest({
     cfg: opts.cfg,
     to: opts.to,
+    channel: opts.channel,
     sessionId: opts.sessionId,
     sessionKey: opts.sessionKey,
     agentId: opts.agentId,

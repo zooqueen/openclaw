@@ -138,6 +138,37 @@ describe("agentCliCommand", () => {
     });
   });
 
+  it("resolves Discord delivery-context sessions before gateway requests", async () => {
+    await withTempStore(async ({ store }) => {
+      fs.writeFileSync(
+        store,
+        JSON.stringify({
+          "agent:main:main": { sessionId: "main-session-id", updatedAt: 10 },
+          "agent:main:discord:channel:123": {
+            sessionId: "discord-session-id",
+            updatedAt: 20,
+            deliveryContext: {
+              channel: "discord",
+              to: "channel:123",
+            },
+          },
+        }),
+      );
+      mockGatewaySuccessReply();
+
+      await agentCliCommand({ message: "hi", channel: "discord", to: "123" }, runtime);
+
+      expect(callGateway).toHaveBeenCalledTimes(1);
+      expect(callGateway.mock.calls[0]?.[0]).toMatchObject({
+        params: {
+          channel: "discord",
+          sessionKey: "agent:main:discord:channel:123",
+          to: "123",
+        },
+      });
+    });
+  });
+
   it("routes diagnostics to stderr before JSON gateway execution", async () => {
     await withTempStore(async () => {
       const response = {

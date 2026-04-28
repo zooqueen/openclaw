@@ -28,9 +28,9 @@ vi.mock("../../config/sessions/paths.js", () => ({
 }));
 
 vi.mock("../../agents/agent-scope.js", async () => {
-  const { normalizeAgentId } = await vi.importActual<
-    typeof import("../../routing/session-key.js")
-  >("../../routing/session-key.js");
+  const { normalizeAgentId } = await vi.importActual<typeof import("../../routing/session-key.js")>(
+    "../../routing/session-key.js",
+  );
   return {
     listAgentIds: mocks.listAgentIds,
     resolveDefaultAgentId: (cfg: OpenClawConfig) => {
@@ -44,7 +44,16 @@ describe("resolveSessionKeyForRequest", () => {
   const MAIN_STORE_PATH = "/tmp/main-store.json";
   const MYBOT_STORE_PATH = "/tmp/mybot-store.json";
   const SHARED_STORE_PATH = "/tmp/shared-store.json";
-  type SessionStoreEntry = { sessionId: string; updatedAt: number };
+  type SessionStoreEntry = {
+    sessionId: string;
+    updatedAt: number;
+    deliveryContext?: {
+      channel?: string;
+      to?: string;
+      accountId?: string;
+      threadId?: string | number;
+    };
+  };
   type SessionStoreMap = Record<string, SessionStoreEntry>;
 
   const setupMainAndMybotStorePaths = () => {
@@ -82,6 +91,78 @@ describe("resolveSessionKeyForRequest", () => {
       to: "+15551234567",
     });
     expect(result.sessionKey).toBe("agent:main:main");
+  });
+
+  it("finds an existing Discord channel session by delivery context before main fallback", async () => {
+    mocks.resolveStorePath.mockReturnValue(MAIN_STORE_PATH);
+    mocks.loadSessionStore.mockReturnValue({
+      "agent:main:main": { sessionId: "main-session-id", updatedAt: 10 },
+      "agent:main:discord:channel:123": {
+        sessionId: "discord-session-id",
+        updatedAt: 20,
+        deliveryContext: {
+          channel: "discord",
+          to: "channel:123",
+        },
+      },
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      channel: "discord",
+      to: "channel:123",
+    });
+
+    expect(result.sessionKey).toBe("agent:main:discord:channel:123");
+  });
+
+  it("normalizes raw numeric Discord channel targets for delivery-context lookup", async () => {
+    mocks.resolveStorePath.mockReturnValue(MAIN_STORE_PATH);
+    mocks.loadSessionStore.mockReturnValue({
+      "agent:main:discord:channel:456": {
+        sessionId: "discord-session-id",
+        updatedAt: 20,
+        deliveryContext: {
+          channel: "discord",
+          to: "channel:456",
+        },
+      },
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      channel: "discord",
+      to: "456",
+    });
+
+    expect(result.sessionKey).toBe("agent:main:discord:channel:456");
+  });
+
+  it("preserves --session-id precedence over delivery-context lookup", async () => {
+    mocks.resolveStorePath.mockReturnValue(MAIN_STORE_PATH);
+    mocks.loadSessionStore.mockReturnValue({
+      "agent:main:discord:channel:123": {
+        sessionId: "discord-session-id",
+        updatedAt: 20,
+        deliveryContext: {
+          channel: "discord",
+          to: "channel:123",
+        },
+      },
+      "agent:main:whatsapp:direct:+15551234567": {
+        sessionId: "target-session-id",
+        updatedAt: 10,
+      },
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      channel: "discord",
+      to: "channel:123",
+      sessionId: "target-session-id",
+    });
+
+    expect(result.sessionKey).toBe("agent:main:whatsapp:direct:+15551234567");
   });
 
   it("uses the configured default agent store for new --to sessions", async () => {
