@@ -14,7 +14,9 @@ manual `CI` workflow with that target, and dispatches `OpenClaw Release Checks`
 for install smoke, package acceptance, Docker release-path suites, live/E2E,
 OpenWebUI, QA Lab parity, Matrix, and Telegram lanes. It can also run the
 post-publish `NPM Telegram Beta E2E` workflow when a published package spec is
-provided. The umbrella records the dispatched child run ids, and the final
+provided. For unpublished package candidates, `OpenClaw Release Checks` runs
+Package Acceptance with `source=ref` and Telegram package QA against the packed
+tarball. The umbrella records the dispatched child run ids, and the final
 `Verify full validation` job re-checks the current child run conclusions. If a
 child workflow is rerun and turns green, rerun only the parent verifier job to
 refresh the umbrella result.
@@ -37,7 +39,9 @@ Docker lane selections. The `package` profile uses offline plugin coverage so
 published-package validation is not gated on live ClawHub availability. The
 optional Telegram lane reuses the
 `package-under-test` artifact in the `NPM Telegram Beta E2E` workflow, with the
-published npm spec path kept for standalone dispatches.
+published npm spec path kept for standalone dispatches. Standalone Telegram
+dispatch can also pack a trusted branch/tag/SHA, verify an HTTPS tarball URL
+plus SHA-256, or reuse a tarball artifact from another run.
 
 ## Package acceptance
 
@@ -163,6 +167,26 @@ gh workflow run package-acceptance.yml \
   -f artifact_name=package-under-test \
   -f suite_profile=custom \
   -f docker_lanes='install-e2e plugin-update'
+```
+
+Use standalone `NPM Telegram Beta E2E` when only the Telegram package lane is
+needed:
+
+```bash
+# Exact published npm proof.
+gh workflow run npm-telegram-beta-e2e.yml \
+  --ref main \
+  -f source=npm \
+  -f package_spec=openclaw@YYYY.M.D-beta.N \
+  -f provider_mode=mock-openai
+
+# Pre-publish proof from a branch, tag, or full SHA.
+gh workflow run npm-telegram-beta-e2e.yml \
+  --ref main \
+  -f source=ref \
+  -f package_ref=release/YYYY.M.D \
+  -f harness_ref=main \
+  -f provider_mode=mock-openai
 ```
 
 When debugging a failed package acceptance run, start at the `resolve_package`

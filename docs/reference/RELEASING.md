@@ -183,7 +183,10 @@ Validation` or from the `main`/release workflow ref so workflow logic and
   `OPENCLAW_QA_TELEGRAM_*` env credentials directly.
 - Maintainers can run the same post-publish check from GitHub Actions via the
   manual `NPM Telegram Beta E2E` workflow. It is intentionally manual-only and
-  does not run on every merge.
+  does not run on every merge. For pre-publish Telegram-only proof, run the
+  same workflow with `source=ref` and `package_ref=<branch-or-sha>` so CI packs
+  the candidate tarball before exercising Telegram. For exact registry proof
+  after publish, keep `source=npm` and `package_spec=openclaw@<version>`.
 - Maintainer release automation now uses preflight-then-promote:
   - real npm publish must pass a successful npm `preflight_run_id`
   - the real npm publish must be dispatched from the same `main` or
@@ -248,7 +251,10 @@ install smoke, cross-OS release checks, live/E2E Docker release-path coverage,
 Package Acceptance with Telegram package QA, QA Lab parity, live Matrix, and
 live Telegram. A full run is only acceptable when the `Full Release Validation`
 summary shows `normal_ci` and `release_checks` as successful, and any optional
-`npm_telegram` child is either successful or intentionally skipped.
+`npm_telegram` child is either successful or intentionally skipped. A skipped
+`npm_telegram` child only means no exact published npm package was supplied;
+the pre-publish tarball-backed Telegram package proof still runs inside
+`OpenClaw Release Checks` through Package Acceptance.
 Child workflows are dispatched from the trusted ref that runs `Full Release
 Validation`, normally `--ref main`, even when the target `ref` points at an
 older release branch or tag. There is no separate Full Release Validation
@@ -280,6 +286,27 @@ gh workflow run full-release-validation.yml \
   -f evidence_package_spec=openclaw@YYYY.M.D-beta.N \
   -f npm_telegram_package_spec=openclaw@YYYY.M.D-beta.N \
   -f npm_telegram_provider_mode=mock-openai
+```
+
+For focused Telegram package proof before publishing, use the standalone
+`NPM Telegram Beta E2E` workflow with the same package candidate shapes as
+Package Acceptance:
+
+```bash
+# Pack and test a release branch or exact SHA through Telegram.
+gh workflow run npm-telegram-beta-e2e.yml \
+  --ref main \
+  -f source=ref \
+  -f package_ref=release/YYYY.M.D \
+  -f harness_ref=main \
+  -f provider_mode=mock-openai
+
+# Exact published package proof after beta/stable publish.
+gh workflow run npm-telegram-beta-e2e.yml \
+  --ref main \
+  -f source=npm \
+  -f package_spec=openclaw@YYYY.M.D-beta.N \
+  -f provider_mode=mock-openai
 ```
 
 Do not use the full umbrella as the first rerun after a focused fix. If one box
