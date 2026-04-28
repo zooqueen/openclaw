@@ -1,6 +1,7 @@
 export const EXPECTED_CODEX_MODELS_COMMAND_TEXT = [
   "Codex models:",
   "Available Codex models",
+  "Available Codex agent:",
   "Available Codex agent models",
   "Available models:",
   "Available models, local cache:",
@@ -207,7 +208,8 @@ export function isExpectedCodexModelsCommandText(text: string): boolean {
     normalized.includes("available agent ids in this session:") &&
     (text.includes("`openai/") || text.includes("`codex/"));
   const isCodexAgentModelSummary =
-    normalized.includes("available codex agent models:") &&
+    (normalized.includes("available codex agent:") ||
+      normalized.includes("available codex agent models:")) &&
     (text.includes("`openai/") || text.includes("`codex/"));
   const isAvailableHereModelSummary =
     normalized.includes("available here:") &&
