@@ -22,6 +22,10 @@ const zoomConfigSchema = {
     return resolveZoomConfig(value);
   },
   uiHints: {
+    name: {
+      label: "Participant Name",
+      help: 'Zoom display name. Defaults to the configured Zoom agent id, then "main".',
+    },
     "defaults.meeting": {
       label: "Default Meeting",
       help: "Zoom URL used when CLI commands omit a meeting.",
@@ -41,8 +45,9 @@ const zoomConfigSchema = {
     "chrome.launch": { label: "Launch Chrome" },
     "chrome.browserProfile": { label: "Chrome Profile", advanced: true },
     "chrome.guestName": {
-      label: "Guest Name",
-      help: "Used when Zoom asks for a display name.",
+      label: "Guest Name (legacy)",
+      help: "Legacy alias for name.",
+      advanced: true,
     },
     "chrome.reuseExistingTab": {
       label: "Reuse Existing Zoom Tab",

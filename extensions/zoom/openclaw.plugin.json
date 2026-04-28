@@ -10,6 +10,10 @@
     "onCapabilities": ["tool"]
   },
   "uiHints": {
+    "name": {
+      "label": "Participant Name",
+      "help": "Zoom display name. Defaults to the configured Zoom agent id, then \"main\"."
+    },
     "defaults.meeting": {
       "label": "Default Meeting",
       "help": "Zoom URL used when commands omit a meeting."
@@ -34,8 +38,9 @@
       "advanced": true
     },
     "chrome.guestName": {
-      "label": "Guest Name",
-      "help": "Used when Zoom asks for a display name."
+      "label": "Guest Name (legacy)",
+      "help": "Legacy alias for name.",
+      "advanced": true
     },
     "chrome.reuseExistingTab": {
       "label": "Reuse Existing Zoom Tab",
@@ -137,6 +142,9 @@
       "enabled": {
         "type": "boolean"
       },
+      "name": {
+        "type": "string"
+      },
       "defaults": {
         "type": "object",
         "additionalProperties": false,
@@ -173,8 +181,7 @@
             "type": "string"
           },
           "guestName": {
-            "type": "string",
-            "default": "OpenClaw Agent"
+            "type": "string"
           },
           "reuseExistingTab": {
             "type": "boolean",

@@ -15,6 +15,7 @@ export type ZoomToolPolicy = RealtimeVoiceAgentConsultToolPolicy;
 
 export type ZoomConfig = {
   enabled: boolean;
+  name: string;
   defaults: {
     meeting?: string;
   };
@@ -160,6 +161,7 @@ export const DEFAULT_ZOOM_REALTIME_INTRO_MESSAGE = "Say exactly: I'm here and li
 
 export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   enabled: true,
+  name: "main",
   defaults: {},
   defaultTransport: "chrome",
   defaultMode: "realtime",
@@ -167,7 +169,7 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
     audioBackend: "blackhole-2ch",
     audioFormat: DEFAULT_ZOOM_CHROME_AUDIO_FORMAT,
     launch: true,
-    guestName: "OpenClaw Agent",
+    guestName: "main",
     reuseExistingTab: true,
     autoJoin: true,
     joinTimeoutMs: 30_000,
@@ -318,9 +320,18 @@ export function resolveZoomConfigWithEnv(
   const conversationVad = asRecord(conversation.vad);
   const chromeNode = asRecord(raw.chromeNode);
   const realtime = asRecord(raw.realtime);
+  const conversationAgentId = normalizeOptionalString(conversation.agentId);
+  const realtimeAgentId = normalizeOptionalString(realtime.agentId);
+  const participantName =
+    normalizeOptionalString(raw.name) ??
+    normalizeOptionalString(chrome.guestName) ??
+    conversationAgentId ??
+    realtimeAgentId ??
+    DEFAULT_ZOOM_CONFIG.name;
 
   return {
     enabled: resolveBoolean(raw.enabled, DEFAULT_ZOOM_CONFIG.enabled),
+    name: participantName,
     defaults: {
       meeting:
         normalizeOptionalString(defaults.meeting) ?? readEnvString(env, ZOOM_DEFAULT_MEETING_KEYS),
@@ -332,7 +343,7 @@ export function resolveZoomConfigWithEnv(
       audioFormat,
       launch: resolveBoolean(chrome.launch, DEFAULT_ZOOM_CONFIG.chrome.launch),
       browserProfile: normalizeOptionalString(chrome.browserProfile),
-      guestName: normalizeOptionalString(chrome.guestName) ?? DEFAULT_ZOOM_CONFIG.chrome.guestName,
+      guestName: participantName,
       reuseExistingTab: resolveBoolean(
         chrome.reuseExistingTab,
         DEFAULT_ZOOM_CONFIG.chrome.reuseExistingTab,
@@ -351,7 +362,7 @@ export function resolveZoomConfigWithEnv(
       audioBridgeHealthCommand: resolveStringArray(chrome.audioBridgeHealthCommand),
     },
     conversation: {
-      agentId: normalizeOptionalString(conversation.agentId),
+      agentId: conversationAgentId,
       provider: normalizeOptionalString(conversation.provider),
       model: normalizeOptionalString(conversation.model),
       instructions:
@@ -412,7 +423,7 @@ export function resolveZoomConfigWithEnv(
         normalizeOptionalString(realtime.instructions) ?? DEFAULT_ZOOM_CONFIG.realtime.instructions,
       introMessage:
         normalizeOptionalString(realtime.introMessage) ?? DEFAULT_ZOOM_CONFIG.realtime.introMessage,
-      agentId: normalizeOptionalString(realtime.agentId),
+      agentId: realtimeAgentId,
       toolPolicy: resolveRealtimeVoiceAgentConsultToolPolicy(
         realtime.toolPolicy,
         DEFAULT_ZOOM_CONFIG.realtime.toolPolicy,
