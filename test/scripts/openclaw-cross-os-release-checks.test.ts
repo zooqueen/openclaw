@@ -110,6 +110,13 @@ describe("scripts/openclaw-cross-os-release-checks", () => {
         new Error("document-extract failed to stage bundled runtime deps after 463ms"),
       ),
     ).toBe(true);
+    expect(
+      shouldRetryCrossOsAgentTurnError(
+        new Error(
+          "PluginLoadFailureError: plugin load failed: qqbot: Error: ENOENT: no such file or directory, open '/tmp/home/.openclaw/plugin-runtime-deps/openclaw-2026.4.27-beta.1/dist/console-DnTGmMkY.js'",
+        ),
+      ),
+    ).toBe(true);
     expect(shouldRetryCrossOsAgentTurnError(new Error("Agent output did not contain OK."))).toBe(
       false,
     );

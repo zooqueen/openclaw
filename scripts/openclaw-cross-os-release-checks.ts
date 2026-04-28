@@ -2661,8 +2661,10 @@ async function runAgentTurn(params) {
 
 export function shouldRetryCrossOsAgentTurnError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return /failed to (?:install|stage) bundled runtime deps|failed to stage bundled runtime deps after/u.test(
-    message,
+  return (
+    /failed to (?:install|stage) bundled runtime deps|failed to stage bundled runtime deps after/u.test(
+      message,
+    ) || /plugin load failed: .*ENOENT: .*plugin-runtime-deps.*\/dist\//su.test(message)
   );
 }
 

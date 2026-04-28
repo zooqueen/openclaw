@@ -1485,9 +1485,13 @@ show_gateway_status_compat() {
 }
 
 verify_turn() {
+  local agent_log agent_done agent_runner
+  agent_log="/tmp/openclaw-parallels-agent-turn.log"
+  agent_done="/tmp/openclaw-parallels-agent-turn.done"
+  agent_runner="/tmp/openclaw-parallels-agent-turn.sh"
   guest_current_user_exec "$GUEST_NODE_BIN" "$GUEST_OPENCLAW_ENTRY" models set "$MODEL_ID"
   guest_current_user_exec "$GUEST_NODE_BIN" "$GUEST_OPENCLAW_ENTRY" config set agents.defaults.skipBootstrap true --strict-json
-  guest_current_user_sh "$(cat <<EOF
+  run_logged_guest_current_user_sh "$(cat <<EOF
 export PATH=$(shell_quote "$GUEST_EXEC_PATH")
 workspace="\${OPENCLAW_WORKSPACE_DIR:-\$HOME/.openclaw/workspace}"
 mkdir -p "\$workspace/.openclaw"
@@ -1511,7 +1515,7 @@ exec /usr/bin/env $(shell_quote "$API_KEY_ENV=$API_KEY_VALUE") \
   --message $(shell_quote "Reply with exact ASCII text OK only.") \
   --json
 EOF
-)"
+)" "$agent_log" "$agent_done" "$TIMEOUT_AGENT_S" "$agent_runner"
 }
 
 resolve_dashboard_url() {

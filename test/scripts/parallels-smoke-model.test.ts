@@ -54,4 +54,11 @@ describe("Parallels smoke model selection", () => {
     expect(script).toContain("deadline=$((SECONDS + TIMEOUT_GATEWAY_S))");
     expect(script).toContain("gateway status --deep --require-rpc --timeout 30000");
   });
+
+  it("runs the macOS agent turn through the logged guest runner", () => {
+    const script = readFileSync("scripts/e2e/parallels-macos-smoke.sh", "utf8");
+
+    expect(script).toContain('agent_log="/tmp/openclaw-parallels-agent-turn.log"');
+    expect(script).toContain("run_logged_guest_current_user_sh");
+  });
 });
