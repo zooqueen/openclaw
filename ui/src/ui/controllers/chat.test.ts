@@ -1044,6 +1044,7 @@ describe("loadChatHistory", () => {
     const request = vi.fn().mockResolvedValue({
       messages: [{ role: "user", content: [{ type: "text", text: "latest ask" }] }],
       status: "running",
+      activeRun: { runId: "run-reconnect", state: "running" },
     });
     const state = createState({
       connected: true,
@@ -1055,6 +1056,11 @@ describe("loadChatHistory", () => {
 
     await loadChatHistory(state);
 
+    expect(request).toHaveBeenCalledWith("chat.history", {
+      sessionKey: "main",
+      limit: 200,
+      activeRunId: "run-reconnect",
+    });
     expect(state.chatRunId).toBe("run-reconnect");
     expect(state.chatStream).toBe("partial reply");
     expect(state.chatStreamStartedAt).toBe(123);
@@ -1063,7 +1069,7 @@ describe("loadChatHistory", () => {
     ]);
   });
 
-  it("clears active run state when reconnect history has terminal session status", async () => {
+  it("preserves active run state when reconnect history only has stale terminal session status", async () => {
     const request = vi.fn().mockResolvedValue({
       messages: [
         { role: "user", content: [{ type: "text", text: "latest ask" }] },
@@ -1071,6 +1077,45 @@ describe("loadChatHistory", () => {
       ],
       status: "done",
       endedAt: 456,
+    });
+    const state = createState({
+      connected: true,
+      client: { request } as unknown as ChatState["client"],
+      chatRunId: "run-reconnect",
+      chatStream: "partial reply",
+      chatStreamStartedAt: 123,
+    });
+
+    await loadChatHistory(state);
+
+    expect(request).toHaveBeenCalledWith("chat.history", {
+      sessionKey: "main",
+      limit: 200,
+      activeRunId: "run-reconnect",
+    });
+    expect(state.chatRunId).toBe("run-reconnect");
+    expect(state.chatStream).toBe("partial reply");
+    expect(state.chatStreamStartedAt).toBe(123);
+    expect(state.chatMessages).toEqual([
+      { role: "user", content: [{ type: "text", text: "latest ask" }] },
+      { role: "assistant", content: [{ type: "text", text: "done" }] },
+    ]);
+  });
+
+  it("clears active run state when reconnect history proves that active run is terminal", async () => {
+    const request = vi.fn().mockResolvedValue({
+      messages: [
+        { role: "user", content: [{ type: "text", text: "latest ask" }] },
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+      ],
+      status: "done",
+      endedAt: 456,
+      activeRun: {
+        runId: "run-reconnect",
+        state: "terminal",
+        terminalState: "done",
+        endedAt: 456,
+      },
     });
     const state = createState({
       connected: true,

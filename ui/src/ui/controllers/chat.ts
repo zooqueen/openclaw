@@ -378,15 +378,27 @@ type ChatHistoryResult = {
   thinkingLevel?: string;
   status?: ChatHistorySessionStatus;
   endedAt?: number;
+  activeRun?: {
+    runId?: string;
+    state?: "running" | "terminal";
+    terminalState?: ChatHistorySessionStatus;
+    endedAt?: number;
+    errorMessage?: string;
+  };
 };
 
-function isTerminalChatHistorySnapshot(res: ChatHistoryResult): boolean {
-  return (
-    res.status === "done" ||
-    res.status === "failed" ||
-    res.status === "killed" ||
-    res.status === "timeout" ||
-    typeof res.endedAt === "number"
+function isTerminalActiveRunHistorySnapshot(
+  res: ChatHistoryResult,
+  activeRunId: string | null,
+): boolean {
+  return Boolean(
+    activeRunId &&
+    res.activeRun?.runId === activeRunId &&
+    res.activeRun.state === "terminal" &&
+    (res.activeRun.terminalState === "done" ||
+      res.activeRun.terminalState === "failed" ||
+      res.activeRun.terminalState === "killed" ||
+      res.activeRun.terminalState === "timeout"),
   );
 }
 
@@ -421,6 +433,7 @@ export async function loadChatHistory(state: ChatState) {
         res = await state.client.request<ChatHistoryResult>("chat.history", {
           sessionKey,
           limit: 200,
+          ...(state.chatRunId ? { activeRunId: state.chatRunId } : {}),
         });
         break;
       } catch (err) {
@@ -446,10 +459,10 @@ export async function loadChatHistory(state: ChatState) {
     const visibleMessages = messages.filter((message) => !shouldHideHistoryMessage(message));
     state.chatMessages = preserveOptimisticTailMessages(visibleMessages, previousMessages);
     state.chatThinkingLevel = res.thinkingLevel ?? null;
-    if (!state.chatRunId || isTerminalChatHistorySnapshot(res)) {
-      // Clear streaming state once history is known to include terminal run
-      // state. During reconnect, a running session may return only a stale
-      // history snapshot, so keep the active run identity and stream.
+    const activeRunId = state.chatRunId;
+    if (!activeRunId || isTerminalActiveRunHistorySnapshot(res, activeRunId)) {
+      // Session status is not enough to prove the current run ended; it can
+      // still describe the previous persisted turn during reconnect.
       maybeResetToolStream(state);
       state.chatStream = null;
       state.chatRunId = null;

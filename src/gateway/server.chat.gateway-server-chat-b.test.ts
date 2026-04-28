@@ -90,6 +90,33 @@ async function writeMainSessionStore() {
   });
 }
 
+function createDirectChatHistoryContext(
+  overrides: Partial<GatewayRequestContext> = {},
+): GatewayRequestContext {
+  return {
+    loadGatewayModelCatalog: vi.fn(async () => []),
+    logGateway: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+    agentRunSeq: new Map<string, number>(),
+    chatAbortControllers: new Map(),
+    chatAbortedRuns: new Map(),
+    chatRunBuffers: new Map(),
+    chatDeltaSentAt: new Map(),
+    chatDeltaLastBroadcastLen: new Map(),
+    addChatRun: vi.fn(),
+    removeChatRun: vi.fn(),
+    broadcast: vi.fn(),
+    nodeSendToSession: vi.fn(),
+    registerToolEventRecipient: vi.fn(),
+    dedupe: new Map(),
+    ...overrides,
+  } as unknown as GatewayRequestContext;
+}
+
 async function writeGatewayConfig(config: Record<string, unknown>) {
   const configPath = process.env.OPENCLAW_CONFIG_PATH;
   if (!configPath) {
@@ -135,6 +162,110 @@ async function prepareMainHistoryHarness(params: {
 }
 
 describe("gateway server chat", () => {
+  test("chat.history reports requested active run as running despite stale terminal session status", async () => {
+    const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gw-"));
+    try {
+      testState.sessionStorePath = path.join(sessionDir, "sessions.json");
+      await writeSessionStore({
+        entries: {
+          main: {
+            sessionId: "sess-main",
+            status: "done",
+            endedAt: 100,
+            updatedAt: 100,
+          },
+        },
+      });
+      const context = createDirectChatHistoryContext();
+      context.chatAbortControllers.set("run-active", {
+        controller: new AbortController(),
+        sessionId: "sess-main",
+        sessionKey: "main",
+        startedAtMs: 200,
+        expiresAtMs: 10_000,
+        kind: "chat-send",
+      });
+      let response: { ok: boolean; payload?: unknown } | undefined;
+
+      const { chatHandlers } = await import("./server-methods/chat.js");
+      await chatHandlers["chat.history"]({
+        req: {
+          type: "req",
+          id: "history-active",
+          method: "chat.history",
+          params: { sessionKey: "main", activeRunId: "run-active" },
+        },
+        params: { sessionKey: "main", activeRunId: "run-active" },
+        client: null,
+        isWebchatConnect: () => false,
+        respond: ((ok, payload) => {
+          response = { ok, payload };
+        }) as RespondFn,
+        context,
+      });
+
+      expect(response?.ok).toBe(true);
+      expect(response?.payload).toMatchObject({
+        status: "done",
+        endedAt: 100,
+        activeRun: {
+          runId: "run-active",
+          state: "running",
+        },
+      });
+    } finally {
+      testState.sessionStorePath = undefined;
+      clearConfigCache();
+      await fs.rm(sessionDir, { recursive: true, force: true });
+    }
+  });
+
+  test("chat.history reports requested active run terminal state from chat dedupe", async () => {
+    const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gw-"));
+    try {
+      testState.sessionStorePath = path.join(sessionDir, "sessions.json");
+      await writeMainSessionStore();
+      const context = createDirectChatHistoryContext();
+      context.dedupe.set("chat:run-terminal", {
+        ts: 300,
+        ok: true,
+        payload: { runId: "run-terminal", status: "ok", endedAt: 300 },
+      });
+      let response: { ok: boolean; payload?: unknown } | undefined;
+
+      const { chatHandlers } = await import("./server-methods/chat.js");
+      await chatHandlers["chat.history"]({
+        req: {
+          type: "req",
+          id: "history-terminal",
+          method: "chat.history",
+          params: { sessionKey: "main", activeRunId: "run-terminal" },
+        },
+        params: { sessionKey: "main", activeRunId: "run-terminal" },
+        client: null,
+        isWebchatConnect: () => false,
+        respond: ((ok, payload) => {
+          response = { ok, payload };
+        }) as RespondFn,
+        context,
+      });
+
+      expect(response?.ok).toBe(true);
+      expect(response?.payload).toMatchObject({
+        activeRun: {
+          runId: "run-terminal",
+          state: "terminal",
+          terminalState: "done",
+          endedAt: 300,
+        },
+      });
+    } finally {
+      testState.sessionStorePath = undefined;
+      clearConfigCache();
+      await fs.rm(sessionDir, { recursive: true, force: true });
+    }
+  });
+
   test("chat.send returns in_flight when duplicate attachment send wins parsing race", async () => {
     const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gw-"));
     const dispatchRelease = createDeferred<void>();

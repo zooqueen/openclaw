@@ -105,7 +105,10 @@ import {
 } from "../session-utils.js";
 import { formatForLog } from "../ws-log.js";
 import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
-import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
+import {
+  readTerminalSnapshotFromGatewayDedupe,
+  setGatewayDedupeEntry,
+} from "./agent-wait-dedupe.js";
 import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
 import { appendInjectedAssistantMessageToTranscript } from "./chat-transcript-inject.js";
 import {
@@ -1640,6 +1643,61 @@ function broadcastChatError(params: {
   params.context.agentRunSeq.delete(params.runId);
 }
 
+type ChatHistoryActiveRunSnapshot =
+  | {
+      runId: string;
+      state: "running";
+    }
+  | {
+      runId: string;
+      state: "terminal";
+      terminalState: "done" | "failed" | "killed" | "timeout";
+      endedAt?: number;
+      errorMessage?: string;
+    };
+
+function resolveChatHistoryActiveRunSnapshot(params: {
+  context: GatewayRequestContext;
+  sessionKey: string;
+  activeRunId?: string;
+}): ChatHistoryActiveRunSnapshot | undefined {
+  const runId = params.activeRunId?.trim();
+  if (!runId) {
+    return undefined;
+  }
+
+  const active = params.context.chatAbortControllers.get(runId);
+  if (active) {
+    if (active.sessionKey !== params.sessionKey) {
+      return undefined;
+    }
+    return { runId, state: "running" };
+  }
+
+  const abortedAt = params.context.chatAbortedRuns.get(runId);
+  if (typeof abortedAt === "number") {
+    return { runId, state: "terminal", terminalState: "killed", endedAt: abortedAt };
+  }
+
+  const terminal = readTerminalSnapshotFromGatewayDedupe({
+    dedupe: params.context.dedupe,
+    runId,
+    ignoreAgentTerminalSnapshot: true,
+  });
+  if (!terminal) {
+    return undefined;
+  }
+
+  return {
+    runId,
+    state: "terminal",
+    terminalState:
+      terminal.status === "ok" ? "done" : terminal.status === "timeout" ? "timeout" : "failed",
+    endedAt: terminal.endedAt,
+    errorMessage: terminal.error,
+  };
+}
+
 export const chatHandlers: GatewayRequestHandlers = {
   "chat.history": async ({ params, respond, context }) => {
     if (!validateChatHistoryParams(params)) {
@@ -1653,10 +1711,11 @@ export const chatHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const { sessionKey, limit, maxChars } = params as {
+    const { sessionKey, limit, maxChars, activeRunId } = params as {
       sessionKey: string;
       limit?: number;
       maxChars?: number;
+      activeRunId?: string;
     };
     const { cfg, storePath, entry } = loadSessionEntry(sessionKey);
     const sessionId = entry?.sessionId;
@@ -1724,6 +1783,11 @@ export const chatHandlers: GatewayRequestHandlers = {
       verboseLevel,
       status: entry?.status,
       endedAt: entry?.endedAt,
+      activeRun: resolveChatHistoryActiveRunSnapshot({
+        context,
+        sessionKey,
+        activeRunId,
+      }),
     });
   },
   "chat.abort": ({ params, respond, context, client }) => {
