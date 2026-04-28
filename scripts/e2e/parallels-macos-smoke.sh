@@ -1460,15 +1460,18 @@ EOF
 }
 
 verify_gateway() {
-  local attempt
-  for attempt in 1 2 3 4 5 6 7 8; do
-    if guest_current_user_exec "$GUEST_OPENCLAW_BIN" gateway status --deep --require-rpc --timeout 15000; then
+  local attempt deadline
+  attempt=1
+  deadline=$((SECONDS + TIMEOUT_GATEWAY_S))
+  while (( SECONDS < deadline )); do
+    if guest_current_user_exec "$GUEST_OPENCLAW_BIN" gateway status --deep --require-rpc --timeout 30000; then
       return 0
     fi
-    if (( attempt < 8 )); then
+    if (( SECONDS < deadline )); then
       printf 'gateway-status retry %s\n' "$attempt" >&2
       sleep 5
     fi
+    attempt=$((attempt + 1))
   done
   return 1
 }
