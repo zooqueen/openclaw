@@ -633,6 +633,7 @@ The setup can be checked or installed from the command surface:
 
 - `/codex computer-use status`
 - `/codex computer-use install`
+- `/codex computer-use setup`
 - `/codex computer-use install --source <marketplace-source>`
 - `/codex computer-use install --marketplace-path <path>`
 
@@ -755,6 +756,7 @@ Common forms:
 - `/codex diagnostics [note]` asks before sending Codex diagnostics feedback for the attached thread.
 - `/codex computer-use status` checks the configured Computer Use plugin and MCP server.
 - `/codex computer-use install` installs the configured Computer Use plugin and reloads MCP servers.
+- `/codex computer-use setup` installs Computer Use if needed and opens the first-run native setup path.
 - `/codex account` shows account and rate-limit status.
 - `/codex mcp` lists Codex app-server MCP server status.
 - `/codex skills` lists Codex app-server skills.

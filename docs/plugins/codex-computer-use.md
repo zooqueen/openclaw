@@ -6,7 +6,7 @@ read_when:
   - You are deciding between Codex Computer Use, PeekabooBridge, and direct cua-driver MCP
   - You are deciding between Codex Computer Use and a direct cua-driver MCP setup
   - You are configuring computerUse for the bundled Codex plugin
-  - You are troubleshooting /codex computer-use status or install
+  - You are troubleshooting /codex computer-use status, install, or setup
 ---
 
 Computer Use is a Codex-native MCP plugin for local desktop control. OpenClaw
@@ -115,6 +115,11 @@ register the bundled Codex marketplace from
 fails. If setup still cannot make the MCP server available, the turn fails
 before the thread starts.
 
+After logging in with Codex for the first time, run `/codex computer-use setup`
+from an OpenClaw chat surface. It installs Computer Use if needed and invokes a
+read-only Computer Use tool so native first-run permissions can appear while you
+are present.
+
 Existing sessions keep their runtime and Codex thread binding. After changing
 `agentRuntime` or Computer Use config, use `/new` or `/reset` in the affected
 chat before testing.
@@ -128,6 +133,7 @@ not `openclaw codex ...` CLI subcommands:
 ```text
 /codex computer-use status
 /codex computer-use install
+/codex computer-use setup
 /codex computer-use install --source <marketplace-source>
 /codex computer-use install --marketplace-path <path>
 /codex computer-use install --marketplace <name>
@@ -139,6 +145,10 @@ enable Codex plugin support.
 `install` enables Codex app-server plugin support, optionally adds a configured
 marketplace source, installs or re-enables the configured plugin through Codex
 app-server, reloads MCP servers, and verifies that the MCP server exposes tools.
+
+`setup` runs `install`, starts a temporary Codex thread, and calls the read-only
+`list_apps` Computer Use MCP tool. This deliberately starts the native Computer
+Use path before an agent needs it for real work.
 
 ## Marketplace choices
 
@@ -241,6 +251,15 @@ status for chat:
 The chat output includes the plugin state, MCP server state, marketplace, tools
 when available, and the specific message for the failing setup step.
 
+The `setup` command also reports a setup probe result:
+
+| Probe state           | Meaning                                                             |
+| --------------------- | ------------------------------------------------------------------- |
+| `completed`           | The read-only Computer Use probe returned normally.                 |
+| `permissions pending` | The native permission flow opened and still needs user action.      |
+| `failed`              | The setup probe returned an error or app-server request failed.     |
+| `skipped`             | Computer Use is ready, but the read-only setup tool is unavailable. |
+
 ## macOS permissions
 
 Computer Use is macOS-specific. The Codex-owned MCP server may need local OS
@@ -255,6 +274,16 @@ Use setup first:
 - macOS has granted the required permissions for the desktop-control app.
 - The current host session can access the desktop being controlled.
 
+On macOS, `/codex computer-use setup` can surface the native Computer Use
+permissions flow before a normal agent turn needs it. If a Codex Computer Use
+window or macOS System Settings opens, finish the prompts and rerun setup or
+status.
+
+On Windows or Linux, Codex Computer Use is not expected to become available
+through this path. OpenClaw reports the missing plugin, MCP server, or tools
+instead of silently running a Codex-mode turn without the required desktop
+control path.
+
 OpenClaw intentionally fails closed when `computerUse.enabled` is true. A
 Codex-mode turn should not silently proceed without the native desktop tools
 that the config required.
@@ -266,6 +295,9 @@ marketplace is not discovered, pass `--source` or `--marketplace-path`.
 
 **Status says installed but disabled.** Run `/codex computer-use install` again.
 Codex app-server install writes the plugin config back to enabled.
+
+**Setup says permissions are pending.** Finish the Codex Computer Use and macOS
+System Settings prompts, then rerun `/codex computer-use setup`.
 
 **Status says remote install is unsupported.** Use a local marketplace source or
 path. Remote-only catalog entries can be inspected but not installed through the

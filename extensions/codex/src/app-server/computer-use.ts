@@ -8,7 +8,7 @@ import {
   type ResolvedCodexComputerUseConfig,
 } from "./config.js";
 import type { v2 } from "./protocol-generated/typescript/index.js";
-import type { JsonValue } from "./protocol.js";
+import { isJsonObject, type JsonValue } from "./protocol.js";
 import { requestCodexAppServerJson } from "./request.js";
 
 export type CodexComputerUseRequest = <T = JsonValue | undefined>(
@@ -42,6 +42,25 @@ export type CodexComputerUseStatus = {
   message: string;
 };
 
+export type CodexComputerUseSetupProbeState =
+  | "completed"
+  | "failed"
+  | "permissions_pending"
+  | "skipped";
+
+export type CodexComputerUseSetupProbe = {
+  attempted: boolean;
+  state: CodexComputerUseSetupProbeState;
+  toolName: string;
+  message: string;
+  threadId?: string;
+};
+
+export type CodexComputerUseSetupResult = {
+  status: CodexComputerUseStatus;
+  probe: CodexComputerUseSetupProbe;
+};
+
 export class CodexComputerUseSetupError extends Error {
   readonly status: CodexComputerUseStatus;
 
@@ -61,6 +80,11 @@ export type CodexComputerUseSetupParams = {
   signal?: AbortSignal;
   forceEnable?: boolean;
   defaultBundledMarketplacePath?: string;
+};
+
+export type CodexComputerUsePermissionSetupParams = CodexComputerUseSetupParams & {
+  cwd?: string;
+  setupToolName?: string;
 };
 
 type MarketplaceRef =
@@ -94,6 +118,10 @@ const CURATED_MARKETPLACE_POLL_INTERVAL_MS = 2_000;
 const COMPUTER_USE_MARKETPLACE_NAME_PRIORITY = ["openai-bundled", "openai-curated", "local"];
 const DEFAULT_CODEX_BUNDLED_MARKETPLACE_PATH =
   "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled";
+const DEFAULT_COMPUTER_USE_SETUP_TOOL_NAME = "list_apps";
+const COMPUTER_USE_PERMISSION_PENDING_RE =
+  /Computer Use permissions are (?:still pending|not granted)/i;
+const COMPUTER_USE_SETUP_ERROR_MAX_CHARS = 300;
 
 export async function readCodexComputerUseStatus(
   params: CodexComputerUseSetupParams = {},
@@ -170,6 +198,62 @@ export async function installCodexComputerUse(
     throw new CodexComputerUseSetupError(status);
   }
   return status;
+}
+
+export async function setupCodexComputerUsePermissions(
+  params: CodexComputerUsePermissionSetupParams = {},
+): Promise<CodexComputerUseSetupResult> {
+  const status = await installCodexComputerUse(params);
+  const toolName = params.setupToolName ?? DEFAULT_COMPUTER_USE_SETUP_TOOL_NAME;
+  if (!status.tools.includes(toolName)) {
+    return {
+      status,
+      probe: {
+        attempted: false,
+        state: "skipped",
+        toolName,
+        message: `Computer Use is ready, but setup did not run because the ${toolName} MCP tool is unavailable.`,
+      },
+    };
+  }
+
+  const request = createComputerUseRequest(params);
+  try {
+    const thread = await request<v2.ThreadStartResponse>("thread/start", {
+      cwd: params.cwd ?? process.cwd(),
+      developerInstructions:
+        "This temporary thread checks whether Computer Use can start. Do not perform user work in this thread.",
+      ephemeral: true,
+      experimentalRawEvents: false,
+      persistExtendedHistory: false,
+    } satisfies v2.ThreadStartParams);
+    const result = await request<v2.McpServerToolCallResponse>("mcpServer/tool/call", {
+      threadId: thread.thread.id,
+      server: status.mcpServerName,
+      tool: toolName,
+      arguments: {},
+    } satisfies v2.McpServerToolCallParams);
+    return {
+      status,
+      probe: {
+        attempted: true,
+        state: computerUseSetupProbeState(result),
+        toolName,
+        threadId: thread.thread.id,
+        message: computerUseSetupProbeMessage(result),
+      },
+    };
+  } catch (error) {
+    return {
+      status,
+      probe: {
+        attempted: true,
+        state: "failed",
+        toolName,
+        message: `Computer Use setup probe failed: ${describeControlFailure(error)}`,
+      },
+    };
+  }
 }
 
 async function inspectCodexComputerUse(params: {
@@ -515,6 +599,45 @@ async function readComputerUsePlugin(
     pluginRequestParams(marketplace, pluginName) satisfies v2.PluginReadParams,
   );
   return response.plugin;
+}
+
+function computerUseSetupProbeState(
+  result: v2.McpServerToolCallResponse,
+): CodexComputerUseSetupProbeState {
+  const text = readToolCallText(result);
+  if (COMPUTER_USE_PERMISSION_PENDING_RE.test(text)) {
+    return "permissions_pending";
+  }
+  return result.isError ? "failed" : "completed";
+}
+
+function computerUseSetupProbeMessage(result: v2.McpServerToolCallResponse): string {
+  const text = readToolCallText(result);
+  if (COMPUTER_USE_PERMISSION_PENDING_RE.test(text)) {
+    return "Computer Use opened its permission flow. Finish the Codex Computer Use window and macOS System Settings, then run /codex computer-use setup again.";
+  }
+  if (result.isError) {
+    return `Computer Use setup probe returned an error: ${truncateSetupMessage(text || "unknown error")}`;
+  }
+  return "Computer Use setup probe completed. If a Codex Computer Use permissions window appeared, follow it to finish macOS setup.";
+}
+
+function readToolCallText(result: v2.McpServerToolCallResponse): string {
+  return result.content.map(readTextContent).filter(Boolean).join("\n").trim();
+}
+
+function readTextContent(value: JsonValue): string {
+  if (isJsonObject(value)) {
+    const text = value.text;
+    return typeof text === "string" ? text : "";
+  }
+  return "";
+}
+
+function truncateSetupMessage(value: string): string {
+  return value.length > COMPUTER_USE_SETUP_ERROR_MAX_CHARS
+    ? `${value.slice(0, COMPUTER_USE_SETUP_ERROR_MAX_CHARS)}...`
+    : value;
 }
 
 async function readMcpServerStatus(

@@ -1,4 +1,8 @@
-import type { CodexComputerUseStatus } from "./app-server/computer-use.js";
+import type {
+  CodexComputerUseSetupProbeState,
+  CodexComputerUseSetupResult,
+  CodexComputerUseStatus,
+} from "./app-server/computer-use.js";
 import type { CodexAppServerModelListResult } from "./app-server/models.js";
 import { isJsonObject, type JsonObject, type JsonValue } from "./app-server/protocol.js";
 import type { SafeValue } from "./command-rpc.js";
@@ -110,6 +114,21 @@ export function formatComputerUseStatus(status: CodexComputerUseStatus): string 
   return lines.join("\n");
 }
 
+export function formatComputerUseSetupResult(result: CodexComputerUseSetupResult): string {
+  return [
+    formatComputerUseStatus(result.status),
+    `Setup probe: ${formatComputerUseProbeState(result.probe.state)}`,
+    result.probe.message,
+  ].join("\n");
+}
+
+function formatComputerUseProbeState(state: CodexComputerUseSetupProbeState): string {
+  if (state === "permissions_pending") {
+    return "permissions pending";
+  }
+  return state;
+}
+
 function computerUsePluginState(status: CodexComputerUseStatus): string {
   if (!status.installed) {
     return "not installed";
@@ -149,7 +168,7 @@ export function buildHelp(): string {
     "- /codex compact",
     "- /codex review",
     "- /codex diagnostics [note]",
-    "- /codex computer-use [status|install]",
+    "- /codex computer-use [status|install|setup]",
     "- /codex account",
     "- /codex mcp",
     "- /codex skills",

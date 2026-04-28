@@ -4,6 +4,7 @@ import { CODEX_CONTROL_METHODS, type CodexControlMethod } from "./app-server/cap
 import {
   installCodexComputerUse,
   readCodexComputerUseStatus,
+  setupCodexComputerUsePermissions,
   type CodexComputerUseSetupParams,
 } from "./app-server/computer-use.js";
 import type { CodexComputerUseConfig } from "./app-server/config.js";
@@ -17,6 +18,7 @@ import {
 import {
   buildHelp,
   formatAccount,
+  formatComputerUseSetupResult,
   formatComputerUseStatus,
   formatCodexStatus,
   formatList,
@@ -59,6 +61,7 @@ export type CodexCommandDeps = {
   clearCodexAppServerBinding: typeof clearCodexAppServerBinding;
   readCodexComputerUseStatus: typeof readCodexComputerUseStatus;
   installCodexComputerUse: typeof installCodexComputerUse;
+  setupCodexComputerUsePermissions: typeof setupCodexComputerUsePermissions;
   resolveCodexDefaultWorkspaceDir: typeof resolveCodexDefaultWorkspaceDir;
   startCodexConversationThread: typeof startCodexConversationThread;
   readCodexConversationActiveTurn: typeof readCodexConversationActiveTurn;
@@ -92,6 +95,7 @@ const defaultCodexCommandDeps: CodexCommandDeps = {
   clearCodexAppServerBinding,
   readCodexComputerUseStatus,
   installCodexComputerUse,
+  setupCodexComputerUsePermissions,
   resolveCodexDefaultWorkspaceDir,
   startCodexConversationThread,
   readCodexConversationActiveTurn,
@@ -111,7 +115,7 @@ type ParsedBindArgs = {
 };
 
 type ParsedComputerUseArgs = {
-  action: "status" | "install";
+  action: "status" | "install" | "setup";
   overrides: Partial<CodexComputerUseConfig>;
   hasOverrides: boolean;
   help?: boolean;
@@ -302,17 +306,25 @@ async function handleComputerUseCommand(
   const parsed = parseComputerUseArgs(args);
   if (parsed.help) {
     return [
-      "Usage: /codex computer-use [status|install] [--source <marketplace-source>] [--marketplace-path <path>] [--marketplace <name>]",
-      "Checks or installs the configured Codex Computer Use plugin through app-server.",
+      "Usage: /codex computer-use [status|install|setup] [--source <marketplace-source>] [--marketplace-path <path>] [--marketplace <name>]",
+      "Checks, installs, or opens first-run setup for the configured Codex Computer Use plugin through app-server.",
     ].join("\n");
   }
   const params: CodexComputerUseSetupParams = {
     pluginConfig,
-    forceEnable: parsed.action === "install" || parsed.hasOverrides,
+    forceEnable: parsed.action !== "status" || parsed.hasOverrides,
     ...(Object.keys(parsed.overrides).length > 0 ? { overrides: parsed.overrides } : {}),
   };
   if (parsed.action === "install") {
     return formatComputerUseStatus(await deps.installCodexComputerUse(params));
+  }
+  if (parsed.action === "setup") {
+    return formatComputerUseSetupResult(
+      await deps.setupCodexComputerUsePermissions({
+        ...params,
+        cwd: deps.resolveCodexDefaultWorkspaceDir(pluginConfig),
+      }),
+    );
   }
   return formatComputerUseStatus(await deps.readCodexComputerUseStatus(params));
 }
@@ -1457,7 +1469,7 @@ function parseComputerUseArgs(args: string[]): ParsedComputerUseArgs {
       parsed.help = true;
       continue;
     }
-    if (arg === "status" || arg === "install") {
+    if (arg === "status" || arg === "install" || arg === "setup") {
       parsed.action = arg;
       continue;
     }

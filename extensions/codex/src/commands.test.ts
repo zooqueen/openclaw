@@ -348,6 +348,45 @@ describe("codex command", () => {
     });
   });
 
+  it("runs Codex Computer Use first-run setup from the command surface", async () => {
+    const setupCodexComputerUsePermissions = vi.fn(async () => ({
+      status: computerUseReadyStatus(),
+      probe: {
+        attempted: true,
+        state: "completed" as const,
+        toolName: "list_apps",
+        message:
+          "Computer Use setup probe completed. If a Codex Computer Use permissions window appeared, follow it to finish macOS setup.",
+      },
+    }));
+    const resolveCodexDefaultWorkspaceDir = vi.fn(() => "/repo");
+
+    await expect(
+      handleCodexCommand(createContext("computer-use setup"), {
+        deps: createDeps({
+          setupCodexComputerUsePermissions,
+          resolveCodexDefaultWorkspaceDir,
+        }),
+      }),
+    ).resolves.toEqual({
+      text: [
+        "Computer Use: ready",
+        "Plugin: computer-use (installed)",
+        "MCP server: computer-use (1 tools)",
+        "Marketplace: desktop-tools",
+        "Tools: list_apps",
+        "Computer Use is ready.",
+        "Setup probe: completed",
+        "Computer Use setup probe completed. If a Codex Computer Use permissions window appeared, follow it to finish macOS setup.",
+      ].join("\n"),
+    });
+    expect(setupCodexComputerUsePermissions).toHaveBeenCalledWith({
+      pluginConfig: undefined,
+      forceEnable: true,
+      cwd: "/repo",
+    });
+  });
+
   it("shows help when Computer Use option values are missing", async () => {
     const installCodexComputerUse = vi.fn(async () => computerUseReadyStatus());
 
