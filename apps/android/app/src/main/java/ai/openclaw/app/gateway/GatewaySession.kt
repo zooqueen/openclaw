@@ -278,6 +278,9 @@ class GatewaySession(
 
     val remoteAddress: String = formatGatewayAuthority(endpoint.host, endpoint.port)
 
+    // Gateway TLS uses certificate SHA-256 pinning in buildGatewayTlsConfig.
+    // OkHttp CertificatePinner pins SPKI hashes, so it cannot represent existing TOFU cert pins.
+    @SuppressWarnings("java/android/missing-certificate-pinning")
     suspend fun connect() {
       val url = buildGatewayWebSocketUrl(endpoint.host, endpoint.port, tls != null)
       val request = Request.Builder().url(url).build()
