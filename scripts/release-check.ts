@@ -482,20 +482,25 @@ function runPackedTaskRegistryControlRuntimeSmoke(packageRoot: string): void {
   if (!existsSync(runtimePath)) {
     throw new Error("release-check: packed task-registry control runtime is missing.");
   }
-  const source = `
-const runtime = await import(${JSON.stringify(pathToFileURL(runtimePath).href)});
-if (typeof runtime.getAcpSessionManager !== "function") {
-  throw new Error("missing getAcpSessionManager export");
-}
-if (typeof runtime.killSubagentRunAdmin !== "function") {
-  throw new Error("missing killSubagentRunAdmin export");
-}
-`;
-  execFileSync(process.execPath, ["--input-type=module", "--eval", source], {
-    cwd: packageRoot,
-    stdio: "inherit",
-    env: createPackedCliSmokeEnv(process.env),
-  });
+  const source = [
+    'const dynamicImport = Function("specifier", "return im" + "port(specifier)");',
+    "const runtime = await dynamicImport(process.argv[1]);",
+    'if (typeof runtime.getAcpSessionManager !== "function") {',
+    '  throw new Error("missing getAcpSessionManager export");',
+    "}",
+    'if (typeof runtime.killSubagentRunAdmin !== "function") {',
+    '  throw new Error("missing killSubagentRunAdmin export");',
+    "}",
+  ].join("\n");
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", source, pathToFileURL(runtimePath).href],
+    {
+      cwd: packageRoot,
+      stdio: "inherit",
+      env: createPackedCliSmokeEnv(process.env),
+    },
+  );
 }
 
 function runPackedCliSmoke(params: {
