@@ -221,6 +221,7 @@ describe("plugin runtime command execution", () => {
           provider: DEFAULT_PROVIDER,
         });
         expectFunctionKeys(runtime.agent as Record<string, unknown>, [
+          "abort",
           "runEmbeddedAgent",
           "runEmbeddedPiAgent",
           "normalizeThinkingLevel",
@@ -245,6 +246,29 @@ describe("plugin runtime command execution", () => {
     },
   ] as const)("$name", ({ assert }) => {
     expectRuntimeShape(assert);
+  });
+
+  it("routes runtime.agent.abort to the active embedded run for the run id", async () => {
+    const runs = await import("../../agents/pi-embedded-runner/runs.js");
+    const abort = vi.fn();
+    const handle: Parameters<typeof runs.setActiveEmbeddedRun>[1] = {
+      queueMessage: async () => {},
+      isStreaming: () => true,
+      isCompacting: () => false,
+      abort,
+    };
+
+    runs.__testing.resetActiveEmbeddedRuns();
+    try {
+      runs.setActiveEmbeddedRun("session-1", handle, "agent:main:main", "run-1");
+
+      const runtime = createPluginRuntime();
+      await expect(runtime.agent.abort({ runId: "run-1" })).resolves.toBe(true);
+      expect(abort).toHaveBeenCalledOnce();
+      await expect(runtime.agent.abort({ runId: "missing" })).resolves.toBe(false);
+    } finally {
+      runs.__testing.resetActiveEmbeddedRuns();
+    }
   });
 
   it("modelAuth wrappers strip agentDir and store to prevent credential steering", async () => {

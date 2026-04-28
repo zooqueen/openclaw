@@ -15,6 +15,8 @@ const loadEmbeddedPiRuntime = createLazyRuntimeModule(
   () => import("./runtime-embedded-pi.runtime.js"),
 );
 
+type RuntimeAgentEmbeddedKey = "abort" | "runEmbeddedAgent" | "runEmbeddedPiAgent";
+
 export function createRuntimeAgent(): PluginRuntime["agent"] {
   const agentRuntime = {
     defaults: {
@@ -38,9 +40,12 @@ export function createRuntimeAgent(): PluginRuntime["agent"] {
     },
     resolveAgentTimeoutMs,
     ensureAgentWorkspace,
-  } satisfies Omit<PluginRuntime["agent"], "runEmbeddedAgent" | "runEmbeddedPiAgent" | "session"> &
-    Partial<Pick<PluginRuntime["agent"], "runEmbeddedAgent" | "runEmbeddedPiAgent" | "session">>;
+  } satisfies Omit<PluginRuntime["agent"], RuntimeAgentEmbeddedKey | "session"> &
+    Partial<Pick<PluginRuntime["agent"], RuntimeAgentEmbeddedKey | "session">>;
 
+  defineCachedValue(agentRuntime, "abort", () =>
+    createLazyRuntimeMethod(loadEmbeddedPiRuntime, (runtime) => runtime.abort),
+  );
   defineCachedValue(agentRuntime, "runEmbeddedAgent", () =>
     createLazyRuntimeMethod(loadEmbeddedPiRuntime, (runtime) => runtime.runEmbeddedAgent),
   );

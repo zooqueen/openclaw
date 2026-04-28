@@ -2108,7 +2108,7 @@ export async function runEmbeddedAttempt(
           onBeforeLifecycleTerminal: () => {
             // Clear embedded-run activity before emitting terminal lifecycle events so
             // post-completion cleanup does not observe a logically finished run as active.
-            clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+            clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey, params.runId);
           },
           enforceFinalTag: params.enforceFinalTag,
           silentExpected: params.silentExpected,
@@ -2166,7 +2166,7 @@ export async function runEmbeddedAttempt(
       if (params.replyOperation) {
         params.replyOperation.attachBackend(queueHandle);
       }
-      setActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+      setActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey, params.runId);
 
       let abortWarnTimer: NodeJS.Timeout | undefined;
       const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
@@ -3089,7 +3089,7 @@ export async function runEmbeddedAttempt(
         if (params.replyOperation) {
           params.replyOperation.detachBackend(queueHandle);
         }
-        clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+        clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey, params.runId);
         params.abortSignal?.removeEventListener?.("abort", onAbort);
       }
 

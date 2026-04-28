@@ -135,6 +135,7 @@ export function createPluginRuntimeMock(overrides: DeepPartial<PluginRuntime> = 
           { id: "high", label: "high" },
         ],
       })) as unknown as PluginRuntime["agent"]["resolveThinkingPolicy"],
+      abort: vi.fn().mockResolvedValue(false) as unknown as PluginRuntime["agent"]["abort"],
       runEmbeddedPiAgent: vi.fn().mockResolvedValue({
         payloads: [],
         meta: {},

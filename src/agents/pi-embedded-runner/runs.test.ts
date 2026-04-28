@@ -9,6 +9,7 @@ import {
   isEmbeddedPiRunHandleActive,
   requestEmbeddedRunModelSwitch,
   resolveActiveEmbeddedRunHandleSessionId,
+  resolveActiveEmbeddedRunSessionIdByRunId,
   setActiveEmbeddedRun,
   updateActiveEmbeddedRunSnapshot,
   waitForActiveEmbeddedRuns,
@@ -141,6 +142,20 @@ describe("pi-embedded runner run registry", () => {
 
     expect(isEmbeddedPiRunHandleActive("session-a")).toBe(false);
     expect(resolveActiveEmbeddedRunHandleSessionId("agent:main:main")).toBeUndefined();
+  });
+
+  it("tracks active embedded runs by run id until the run clears", () => {
+    const handle = createRunHandle();
+
+    expect(resolveActiveEmbeddedRunSessionIdByRunId("run-a")).toBeUndefined();
+
+    setActiveEmbeddedRun("session-a", handle, "agent:main:main", "run-a");
+
+    expect(resolveActiveEmbeddedRunSessionIdByRunId("run-a")).toBe("session-a");
+
+    clearActiveEmbeddedRun("session-a", handle, "agent:main:main", "run-a");
+
+    expect(resolveActiveEmbeddedRunSessionIdByRunId("run-a")).toBeUndefined();
   });
 
   it("tracks and clears per-session transcript snapshots for active runs", () => {

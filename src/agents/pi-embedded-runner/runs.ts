@@ -16,6 +16,7 @@ import {
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import {
   ACTIVE_EMBEDDED_RUNS,
+  ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID,
   ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_KEY,
   ACTIVE_EMBEDDED_RUN_SNAPSHOTS,
   EMBEDDED_RUN_MODEL_SWITCH_REQUESTS,
@@ -42,6 +43,14 @@ function setActiveRunSessionKey(sessionKey: string | undefined, sessionId: strin
   ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_KEY.set(normalizedSessionKey, sessionId);
 }
 
+function setActiveRunId(runId: string | undefined, sessionId: string): void {
+  const normalizedRunId = runId?.trim();
+  if (!normalizedRunId) {
+    return;
+  }
+  ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.set(normalizedRunId, sessionId);
+}
+
 function clearActiveRunSessionKeys(sessionId: string, sessionKey?: string): void {
   const normalizedSessionKey = sessionKey?.trim();
   if (normalizedSessionKey) {
@@ -53,6 +62,21 @@ function clearActiveRunSessionKeys(sessionId: string, sessionKey?: string): void
   for (const [key, activeSessionId] of ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_KEY) {
     if (activeSessionId === sessionId) {
       ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_KEY.delete(key);
+    }
+  }
+}
+
+function clearActiveRunIds(sessionId: string, runId?: string): void {
+  const normalizedRunId = runId?.trim();
+  if (normalizedRunId) {
+    if (ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.get(normalizedRunId) === sessionId) {
+      ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.delete(normalizedRunId);
+    }
+    return;
+  }
+  for (const [activeRunId, activeSessionId] of ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID) {
+    if (activeSessionId === sessionId) {
+      ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.delete(activeRunId);
     }
   }
 }
@@ -193,6 +217,14 @@ export function resolveActiveEmbeddedRunSessionId(sessionKey: string): string | 
   );
 }
 
+export function resolveActiveEmbeddedRunSessionIdByRunId(runId: string): string | undefined {
+  const normalizedRunId = runId.trim();
+  if (!normalizedRunId) {
+    return undefined;
+  }
+  return ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.get(normalizedRunId);
+}
+
 export function getActiveEmbeddedRunSnapshot(
   sessionId: string,
 ): ActiveEmbeddedRunSnapshot | undefined {
@@ -327,10 +359,12 @@ export function setActiveEmbeddedRun(
   sessionId: string,
   handle: EmbeddedPiQueueHandle,
   sessionKey?: string,
+  runId?: string,
 ) {
   const wasActive = ACTIVE_EMBEDDED_RUNS.has(sessionId);
   ACTIVE_EMBEDDED_RUNS.set(sessionId, handle);
   setActiveRunSessionKey(sessionKey, sessionId);
+  setActiveRunId(runId, sessionId);
   logSessionStateChange({
     sessionId,
     sessionKey,
@@ -356,12 +390,14 @@ export function clearActiveEmbeddedRun(
   sessionId: string,
   handle: EmbeddedPiQueueHandle,
   sessionKey?: string,
+  runId?: string,
 ) {
   if (ACTIVE_EMBEDDED_RUNS.get(sessionId) === handle) {
     ACTIVE_EMBEDDED_RUNS.delete(sessionId);
     ACTIVE_EMBEDDED_RUN_SNAPSHOTS.delete(sessionId);
     EMBEDDED_RUN_MODEL_SWITCH_REQUESTS.delete(sessionId);
     clearActiveRunSessionKeys(sessionId, sessionKey);
+    clearActiveRunIds(sessionId, runId);
     logSessionStateChange({ sessionId, sessionKey, state: "idle", reason: "run_completed" });
     if (!sessionId.startsWith("probe-")) {
       diag.debug(`run cleared: sessionId=${sessionId} totalActive=${ACTIVE_EMBEDDED_RUNS.size}`);
@@ -383,6 +419,7 @@ export function forceClearEmbeddedPiRun(
     ACTIVE_EMBEDDED_RUN_SNAPSHOTS.delete(sessionId);
     EMBEDDED_RUN_MODEL_SWITCH_REQUESTS.delete(sessionId);
     clearActiveRunSessionKeys(sessionId, sessionKey);
+    clearActiveRunIds(sessionId);
     logSessionStateChange({ sessionId, sessionKey, state: "idle", reason });
     notifyEmbeddedRunEnded(sessionId);
     cleared = true;
@@ -403,6 +440,7 @@ export const __testing = {
     ACTIVE_EMBEDDED_RUNS.clear();
     ACTIVE_EMBEDDED_RUN_SNAPSHOTS.clear();
     ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_KEY.clear();
+    ACTIVE_EMBEDDED_RUN_SESSION_IDS_BY_RUN_ID.clear();
     EMBEDDED_RUN_MODEL_SWITCH_REQUESTS.clear();
   },
 };

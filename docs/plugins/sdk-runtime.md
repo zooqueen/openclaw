@@ -92,9 +92,10 @@ Provider and channel execution paths must use the active runtime config snapshot
 
     // Run an embedded agent turn
     const agentDir = api.runtime.agent.resolveAgentDir(cfg);
+    const runId = crypto.randomUUID();
     const result = await api.runtime.agent.runEmbeddedAgent({
       sessionId: "my-plugin:task-1",
-      runId: crypto.randomUUID(),
+      runId,
       sessionFile: path.join(agentDir, "sessions", "my-plugin-task-1.jsonl"),
       workspaceDir: api.runtime.agent.resolveAgentWorkspaceDir(cfg),
       prompt: "Summarize the latest changes",
@@ -103,6 +104,14 @@ Provider and channel execution paths must use the active runtime config snapshot
     ```
 
     `runEmbeddedAgent(...)` is the neutral helper for starting a normal OpenClaw agent turn from plugin code. It uses the same provider/model resolution and agent-harness selection as channel-triggered replies.
+
+    Plugins that own an embedded run can request cancellation by keeping the `runId` passed to `runEmbeddedAgent(...)`:
+
+    ```typescript
+    const aborted = await api.runtime.agent.abort({ runId });
+    ```
+
+    `abort(...)` returns `true` when an active embedded run for that `runId` was found and signaled.
 
     `runEmbeddedPiAgent(...)` remains as a compatibility alias.
 

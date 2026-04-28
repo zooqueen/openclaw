@@ -299,6 +299,7 @@ releases.
     | `resolveThinkingDefault` | `api.runtime.agent.resolveThinkingDefault` |
     | `resolveAgentTimeoutMs` | `api.runtime.agent.resolveAgentTimeoutMs` |
     | `ensureAgentWorkspace` | `api.runtime.agent.ensureAgentWorkspace` |
+    | plugin-owned embedded-run abort | `api.runtime.agent.abort({ runId })` |
     | session store helpers | `api.runtime.agent.session.*` |
 
   </Step>

@@ -60,6 +60,9 @@ export type PluginRuntimeThinkingPolicy = {
   levels: PluginRuntimeThinkingPolicyLevel[];
   defaultLevel?: import("../../auto-reply/thinking.js").ThinkLevel | null;
 };
+export type PluginRuntimeAgentAbortParams = {
+  runId: string;
+};
 
 /** Structured logger surface injected into runtime-backed plugin helpers. */
 export type RuntimeLogger = {
@@ -135,6 +138,7 @@ export type PluginRuntimeCore = {
     resolveThinkingPolicy: (
       params: PluginRuntimeThinkingPolicyRequest,
     ) => PluginRuntimeThinkingPolicy;
+    abort: (params: PluginRuntimeAgentAbortParams) => Promise<boolean>;
     runEmbeddedAgent: import("../../agents/pi-embedded-runtime.types.js").RunEmbeddedAgentFn;
     runEmbeddedPiAgent: import("../../agents/pi-embedded-runtime.types.js").RunEmbeddedPiAgentFn;
     resolveAgentTimeoutMs: typeof import("../../agents/timeout.js").resolveAgentTimeoutMs;
