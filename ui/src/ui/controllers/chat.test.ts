@@ -1040,6 +1040,57 @@ describe("loadChatHistory", () => {
     expect(state.chatMessages).toEqual([historyUser, historyAssistant]);
   });
 
+  it("preserves active run state when reconnect history still shows the session running", async () => {
+    const request = vi.fn().mockResolvedValue({
+      messages: [{ role: "user", content: [{ type: "text", text: "latest ask" }] }],
+      status: "running",
+    });
+    const state = createState({
+      connected: true,
+      client: { request } as unknown as ChatState["client"],
+      chatRunId: "run-reconnect",
+      chatStream: "partial reply",
+      chatStreamStartedAt: 123,
+    });
+
+    await loadChatHistory(state);
+
+    expect(state.chatRunId).toBe("run-reconnect");
+    expect(state.chatStream).toBe("partial reply");
+    expect(state.chatStreamStartedAt).toBe(123);
+    expect(state.chatMessages).toEqual([
+      { role: "user", content: [{ type: "text", text: "latest ask" }] },
+    ]);
+  });
+
+  it("clears active run state when reconnect history has terminal session status", async () => {
+    const request = vi.fn().mockResolvedValue({
+      messages: [
+        { role: "user", content: [{ type: "text", text: "latest ask" }] },
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+      ],
+      status: "done",
+      endedAt: 456,
+    });
+    const state = createState({
+      connected: true,
+      client: { request } as unknown as ChatState["client"],
+      chatRunId: "run-reconnect",
+      chatStream: "partial reply",
+      chatStreamStartedAt: 123,
+    });
+
+    await loadChatHistory(state);
+
+    expect(state.chatRunId).toBeNull();
+    expect(state.chatStream).toBeNull();
+    expect(state.chatStreamStartedAt).toBeNull();
+    expect(state.chatMessages).toEqual([
+      { role: "user", content: [{ type: "text", text: "latest ask" }] },
+      { role: "assistant", content: [{ type: "text", text: "done" }] },
+    ]);
+  });
+
   it("shows a targeted message when chat history is unauthorized", async () => {
     const request = vi.fn().mockRejectedValue(
       new GatewayRequestError({

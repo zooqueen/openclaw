@@ -388,6 +388,7 @@ function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnaps
 export function connectGateway(host: GatewayHost, options?: ConnectGatewayOptions) {
   const shutdownHost = host as GatewayHostWithShutdownMessage;
   const reconnectReason = options?.reason ?? "initial";
+  const activeRunIdBeforeReconnect = host.chatRunId;
   shutdownHost.pendingShutdownMessage = null;
   shutdownHost.resumeChatQueueAfterReconnect = false;
   host.lastError = null;
@@ -448,22 +449,24 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
             console.warn("[openclaw] pending abort failed:", err);
           });
       }
-      // Reset orphaned chat run state from before disconnect.
-      // Any in-flight run's final event was lost during the disconnect window.
-      host.chatRunId = null;
-      (host as unknown as { chatStream: string | null }).chatStream = null;
-      (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
       (host as GatewayHostWithSideResults).chatSideResultTerminalRuns?.clear();
-      resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-      if (shutdownHost.resumeChatQueueAfterReconnect) {
-        // The interrupted run will never emit its terminal event now that the
-        // old client is gone, so resume any deferred commands after hello.
-        shutdownHost.resumeChatQueueAfterReconnect = false;
-        void flushChatQueueForEvent(
-          host as unknown as Parameters<typeof flushChatQueueForEvent>[0],
-        );
-      }
-      void subscribeSessions(host as unknown as SessionsState);
+      const shouldRecoverActiveRun = Boolean(activeRunIdBeforeReconnect && host.chatRunId);
+      const shouldResumeQueueAfterRecovery = shutdownHost.resumeChatQueueAfterReconnect === true;
+      shutdownHost.resumeChatQueueAfterReconnect = false;
+      void subscribeSessions(host as unknown as SessionsState).then(() => {
+        if (!shouldRecoverActiveRun || !activeRunIdBeforeReconnect) {
+          if (shouldResumeQueueAfterRecovery) {
+            void flushChatQueueForEvent(
+              host as unknown as Parameters<typeof flushChatQueueForEvent>[0],
+            );
+          }
+          return;
+        }
+        void recoverActiveChatRunAfterReconnect(host, {
+          activeRunId: activeRunIdBeforeReconnect,
+          resumeQueue: shouldResumeQueueAfterRecovery,
+        });
+      });
       void loadAssistantIdentity(host as unknown as AssistantIdentityState);
       void refreshChatAvatar(host as unknown as Parameters<typeof refreshChatAvatar>[0]);
       void loadAgents(host as unknown as AgentsState);
@@ -586,6 +589,24 @@ function isEventForDifferentActiveRun(
   activeRunId: string | null,
 ): boolean {
   return Boolean(activeRunId && payload?.runId && payload.runId !== activeRunId);
+}
+
+async function recoverActiveChatRunAfterReconnect(
+  host: GatewayHost,
+  params: { activeRunId: string; resumeQueue: boolean },
+) {
+  const runId = params.activeRunId.trim();
+  if (!runId || host.chatRunId !== runId) {
+    return;
+  }
+  await loadChatHistory(host as unknown as ChatState);
+  if (host.chatRunId === runId) {
+    return;
+  }
+  resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
+  if (params.resumeQueue) {
+    void flushChatQueueForEvent(host as unknown as Parameters<typeof flushChatQueueForEvent>[0]);
+  }
 }
 
 function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | undefined) {

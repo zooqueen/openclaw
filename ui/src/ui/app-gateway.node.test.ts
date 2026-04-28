@@ -117,6 +117,7 @@ type TestGatewayHost = Parameters<typeof connectGateway>[0] & {
   chatSideResult: unknown;
   chatSideResultTerminalRuns: Set<string>;
   chatStream: string | null;
+  chatStreamStartedAt: number | null;
   chatToolMessages: Record<string, unknown>[];
   toolStreamById: Map<string, unknown>;
   toolStreamOrder: string[];
@@ -675,8 +676,8 @@ describe("connectGateway", () => {
       runId: "run-main",
     });
     expect(host.pendingAbort).toBeNull();
-    expect(host.chatRunId).toBeNull();
-    expect(host.chatStream).toBeNull();
+    expect(host.chatRunId).toBe("run-main");
+    expect(host.chatStream).toBe("partial");
   });
 
   it("logs and drops stale queued chat abort failures after reconnect", async () => {
@@ -698,6 +699,52 @@ describe("connectGateway", () => {
     expect(host.pendingAbort).toBeNull();
     expect(warn).toHaveBeenCalledWith("[openclaw] pending abort failed:", error);
     warn.mockRestore();
+  });
+
+  it("keeps active chat run state through reconnect while recovery history is still running", async () => {
+    const host = createHost();
+    host.chatRunId = "run-reconnect";
+    host.chatStream = "still working";
+    host.chatStreamStartedAt = 123;
+
+    connectGateway(host);
+    const client = gatewayClientInstances[0];
+    expect(client).toBeDefined();
+
+    client.emitHello();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.request).toHaveBeenCalledWith("sessions.subscribe", {});
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+    expect(host.chatRunId).toBe("run-reconnect");
+    expect(host.chatStream).toBe("still working");
+    expect(host.chatStreamStartedAt).toBe(123);
+  });
+
+  it("lets reconnect recovery clear active chat run state only after terminal history", async () => {
+    const host = createHost();
+    host.chatRunId = "run-reconnect-terminal";
+    host.chatStream = "nearly done";
+    host.chatStreamStartedAt = 321;
+    loadChatHistoryMock.mockImplementationOnce(async () => {
+      host.chatRunId = null;
+      host.chatStream = null;
+      host.chatStreamStartedAt = null;
+    });
+
+    connectGateway(host);
+    const client = gatewayClientInstances[0];
+    expect(client).toBeDefined();
+
+    client.emitHello();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+    expect(host.chatRunId).toBeNull();
+    expect(host.chatStream).toBeNull();
+    expect(host.chatStreamStartedAt).toBeNull();
   });
 
   it("keeps shutdown restart reasons on service restart closes", () => {

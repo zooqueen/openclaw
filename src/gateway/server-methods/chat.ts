@@ -1722,6 +1722,8 @@ export const chatHandlers: GatewayRequestHandlers = {
       thinkingLevel,
       fastMode: entry?.fastMode,
       verboseLevel,
+      status: entry?.status,
+      endedAt: entry?.endedAt,
     });
   },
   "chat.abort": ({ params, respond, context, client }) => {

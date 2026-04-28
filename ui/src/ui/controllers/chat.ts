@@ -371,6 +371,25 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
+type ChatHistorySessionStatus = "running" | "done" | "failed" | "killed" | "timeout";
+
+type ChatHistoryResult = {
+  messages?: Array<unknown>;
+  thinkingLevel?: string;
+  status?: ChatHistorySessionStatus;
+  endedAt?: number;
+};
+
+function isTerminalChatHistorySnapshot(res: ChatHistoryResult): boolean {
+  return (
+    res.status === "done" ||
+    res.status === "failed" ||
+    res.status === "killed" ||
+    res.status === "timeout" ||
+    typeof res.endedAt === "number"
+  );
+}
+
 function maybeResetToolStream(state: ChatState) {
   const toolHost = state as ChatState & Partial<Parameters<typeof resetToolStream>[0]>;
   if (
@@ -396,16 +415,13 @@ export async function loadChatHistory(state: ChatState) {
   state.chatLoading = true;
   state.lastError = null;
   try {
-    let res: { messages?: Array<unknown>; thinkingLevel?: string };
+    let res: ChatHistoryResult;
     for (;;) {
       try {
-        res = await state.client.request<{ messages?: Array<unknown>; thinkingLevel?: string }>(
-          "chat.history",
-          {
-            sessionKey,
-            limit: 200,
-          },
-        );
+        res = await state.client.request<ChatHistoryResult>("chat.history", {
+          sessionKey,
+          limit: 200,
+        });
         break;
       } catch (err) {
         if (!shouldApplyChatHistoryResult(state, requestVersion, sessionKey)) {
@@ -430,11 +446,15 @@ export async function loadChatHistory(state: ChatState) {
     const visibleMessages = messages.filter((message) => !shouldHideHistoryMessage(message));
     state.chatMessages = preserveOptimisticTailMessages(visibleMessages, previousMessages);
     state.chatThinkingLevel = res.thinkingLevel ?? null;
-    // Clear all streaming state — history includes tool results and text
-    // inline, so keeping streaming artifacts would cause duplicates.
-    maybeResetToolStream(state);
-    state.chatStream = null;
-    state.chatStreamStartedAt = null;
+    if (!state.chatRunId || isTerminalChatHistorySnapshot(res)) {
+      // Clear streaming state once history is known to include terminal run
+      // state. During reconnect, a running session may return only a stale
+      // history snapshot, so keep the active run identity and stream.
+      maybeResetToolStream(state);
+      state.chatStream = null;
+      state.chatRunId = null;
+      state.chatStreamStartedAt = null;
+    }
   } catch (err) {
     if (!shouldApplyChatHistoryResult(state, requestVersion, sessionKey)) {
       return;
