@@ -373,6 +373,57 @@ describe("toSanitizedMarkdownHtml", () => {
     });
   });
 
+  describe("LaTeX math", () => {
+    it("renders inline math with KaTeX", () => {
+      const html = toSanitizedMarkdownHtml("Use $E=mc^2$ here");
+      expect(html).toContain('class="katex"');
+      expect(html).toContain('aria-hidden="true"');
+      expect(html).toContain("mathnormal");
+      expect(html).not.toContain("$E=mc^2$");
+    });
+
+    it("renders display math blocks", () => {
+      const html = toSanitizedMarkdownHtml("$$\n\\frac{a}{b}\n$$");
+      expect(html).toContain('class="katex-display"');
+      expect(html).toContain("mfrac");
+      expect(html).not.toContain("\\frac");
+    });
+
+    it("renders digit-prefixed formulas without treating currency as math", () => {
+      const formula = toSanitizedMarkdownHtml("Solve $2x + 1$");
+      expect(formula).toContain('class="katex"');
+      expect(formula).not.toContain("$2x + 1$");
+
+      const currency = toSanitizedMarkdownHtml("Costs $5 and $10 today");
+      expect(currency).not.toContain('class="katex"');
+      expect(currency).toContain("$5 and $10 today");
+    });
+
+    it("keeps code spans and fences as literal dollar text", () => {
+      const inline = toSanitizedMarkdownHtml("Run `$E=mc^2$`");
+      expect(inline).not.toContain('class="katex"');
+      expect(inline).toContain("<code>$E=mc^2$</code>");
+
+      const fenced = toSanitizedMarkdownHtml("```\n$E=mc^2$\n```");
+      expect(fenced).not.toContain('class="katex"');
+      expect(fenced).toContain("$E=mc^2$");
+    });
+
+    it("falls back to literal text for invalid formulas", () => {
+      const html = toSanitizedMarkdownHtml("Broken $\\notacommand{$ text");
+      expect(html).not.toContain('class="katex"');
+      expect(html).toContain("$\\notacommand{$");
+    });
+
+    it("keeps KaTeX styles but strips non-KaTeX style attributes", () => {
+      const html = toSanitizedMarkdownHtml('$\\sqrt{x}$\n\n<span style="color:red">raw</span>');
+      expect(html).toContain('class="katex"');
+      expect(html).toContain("style=");
+      expect(html).toContain('&lt;span style="color:red"&gt;raw&lt;/span&gt;');
+      expect(html).not.toContain('<span style="color:red">raw</span>');
+    });
+  });
+
   describe("security", () => {
     it("blocks javascript: in links via DOMPurify", () => {
       const html = toSanitizedMarkdownHtml("[click me](javascript:alert(1))");

@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import katex, { type KatexOptions } from "katex";
 import MarkdownIt from "markdown-it";
 import markdownItTaskLists from "markdown-it-task-lists";
 import { truncateText } from "./format.ts";
@@ -54,6 +55,8 @@ const allowedAttrs = [
   "data-code",
   "type",
   "aria-label",
+  "aria-hidden",
+  "style",
 ];
 const sanitizeOptions = {
   ALLOWED_TAGS: allowedTags,
@@ -69,6 +72,14 @@ const MARKDOWN_CACHE_MAX_CHARS = 50_000;
 const INLINE_DATA_IMAGE_RE = /^data:image\/[a-z0-9.+-]+;base64,/i;
 const markdownCache = new Map<string, string>();
 const TAIL_LINK_BLUR_CLASS = "chat-link-tail-blur";
+const KATEX_OPTIONS = {
+  throwOnError: true,
+  strict: "ignore",
+  trust: false,
+  output: "html",
+  maxSize: 20,
+  maxExpand: 1_000,
+} satisfies KatexOptions;
 
 // CJK character ranges for URL boundary detection (RFC 3986: CJK is not valid in raw URLs).
 // CJK Unified Ideographs, CJK Symbols/Punctuation, Fullwidth Forms, Hiragana, Katakana,
@@ -103,6 +114,15 @@ function installHooks() {
     return;
   }
   hooksInstalled = true;
+
+  DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+    if (data.attrName !== "style") {
+      return;
+    }
+    if (!(node instanceof Element) || !node.closest(".katex")) {
+      data.keepAttr = false;
+    }
+  });
 
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
     if (!(node instanceof HTMLAnchorElement)) {
@@ -148,6 +168,43 @@ function escapeHtml(value: string): string {
 function normalizeMarkdownImageLabel(text?: string | null): string {
   const trimmed = text?.trim();
   return trimmed ? trimmed : "image";
+}
+
+function findUnescapedDollar(source: string, start: number): number {
+  for (let i = start; i < source.length; i++) {
+    if (source[i] !== "$") {
+      continue;
+    }
+    let slashCount = 0;
+    for (let j = i - 1; j >= 0 && source[j] === "\\"; j--) {
+      slashCount++;
+    }
+    if (slashCount % 2 === 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function shouldRenderInlineMath(content: string): boolean {
+  if (!content || content.trim() !== content || content.includes("\n")) {
+    return false;
+  }
+  if (/^\d+(?:[.,]\d+)?$/.test(content)) {
+    return false;
+  }
+  if (/^\d/.test(content)) {
+    return /[\\=^_{}+\-*/<>]|\d[A-Za-z]/.test(content);
+  }
+  return /[\\=^_{}+\-*/<>]|^[A-Za-z]$|[A-Za-z]\d|\d[A-Za-z]/.test(content);
+}
+
+function renderKatexHtml(source: string, displayMode: boolean, fallback: string): string {
+  try {
+    return katex.renderToString(source, { ...KATEX_OPTIONS, displayMode });
+  } catch {
+    return escapeHtml(fallback);
+  }
 }
 
 export const md = new MarkdownIt({
@@ -279,6 +336,93 @@ md.linkify.add("www", {
     match.url = "http://" + match.url;
   },
 });
+
+md.block.ruler.before("paragraph", "math_block", (state, startLine, endLine, silent) => {
+  if (state.sCount[startLine] - state.blkIndent >= 4) {
+    return false;
+  }
+
+  const start = state.bMarks[startLine] + state.tShift[startLine];
+  const max = state.eMarks[startLine];
+  if (state.src.slice(start, start + 2) !== "$$" || state.src[start + 2] === "$") {
+    return false;
+  }
+
+  const firstLine = state.src.slice(start + 2, max);
+  const contentLines: string[] = [];
+  let nextLine = startLine;
+  const firstTrimmedEnd = firstLine.trimEnd();
+  if (firstTrimmedEnd.endsWith("$$")) {
+    contentLines.push(firstTrimmedEnd.slice(0, -2));
+  } else {
+    contentLines.push(firstLine);
+    let foundEnd = false;
+    while (++nextLine < endLine) {
+      const lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
+      const lineEnd = state.eMarks[nextLine];
+      const line = state.src.slice(lineStart, lineEnd);
+      const trimmedEnd = line.trimEnd();
+      if (trimmedEnd.endsWith("$$")) {
+        contentLines.push(trimmedEnd.slice(0, -2));
+        foundEnd = true;
+        break;
+      }
+      contentLines.push(line);
+    }
+    if (!foundEnd) {
+      return false;
+    }
+  }
+
+  const content = contentLines.join("\n").trim();
+  if (!content) {
+    return false;
+  }
+  if (silent) {
+    return true;
+  }
+
+  const token = state.push("math_block", "span", 0);
+  token.block = true;
+  token.content = content;
+  token.markup = "$$";
+  token.map = [startLine, nextLine + 1];
+  state.line = nextLine + 1;
+  return true;
+});
+
+md.inline.ruler.before("text", "math_inline", (state, silent) => {
+  const start = state.pos;
+  if (state.src[start] !== "$" || state.src[start + 1] === "$") {
+    return false;
+  }
+  const close = findUnescapedDollar(state.src, start + 1);
+  if (close < 0) {
+    return false;
+  }
+
+  const content = state.src.slice(start + 1, close);
+  if (!shouldRenderInlineMath(content)) {
+    return false;
+  }
+  if (!silent) {
+    const token = state.push("math_inline", "span", 0);
+    token.content = content;
+    token.markup = "$";
+  }
+  state.pos = close + 1;
+  return true;
+});
+
+md.renderer.rules.math_inline = (tokens, idx) => {
+  const content = tokens[idx].content;
+  return renderKatexHtml(content, false, `$${content}$`);
+};
+
+md.renderer.rules.math_block = (tokens, idx) => {
+  const content = tokens[idx].content;
+  return renderKatexHtml(content, true, `$$\n${content}\n$$`);
+};
 
 // Override default link validator to allow all URLs through to renderers.
 // marked.js does not validate URLs at all — it generates <a>/<img> tags for
