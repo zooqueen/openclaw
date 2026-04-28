@@ -15,6 +15,8 @@ import {
   canConnectToLoopbackPort,
   buildDiscordSmokeGuildsConfig,
   buildRealUpdateEnv,
+  CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS,
+  CROSS_OS_AGENT_TURN_TIMEOUT_MS,
   CROSS_OS_GATEWAY_READY_TIMEOUT_MS,
   CROSS_OS_GATEWAY_STATUS_COMMAND_TIMEOUT_MS,
   CROSS_OS_GATEWAY_STATUS_RPC_TIMEOUT_MS,
@@ -64,6 +66,16 @@ describe("scripts/openclaw-cross-os-release-checks", () => {
     );
     expect(CROSS_OS_GATEWAY_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(180_000);
     expect(CROSS_OS_WINDOWS_GATEWAY_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(300_000);
+  });
+
+  it("keeps agent turns more patient than the CLI reply timeout", () => {
+    expect(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS).toBeGreaterThanOrEqual(900);
+    expect(CROSS_OS_AGENT_TURN_TIMEOUT_MS).toBeGreaterThan(
+      CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS * 1000,
+    );
+    expect(readFileSync("scripts/openclaw-cross-os-release-checks.ts", "utf8")).toContain(
+      '"--timeout",\n      String(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS)',
+    );
   });
 
   it("accepts OK agent output from the captured log when stdout is empty", () => {

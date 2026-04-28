@@ -69,6 +69,8 @@ export const CROSS_OS_GATEWAY_STATUS_COMMAND_TIMEOUT_MS =
   CROSS_OS_GATEWAY_STATUS_RPC_TIMEOUT_MS + 45_000;
 export const CROSS_OS_GATEWAY_READY_TIMEOUT_MS = 3 * 60_000;
 export const CROSS_OS_WINDOWS_GATEWAY_READY_TIMEOUT_MS = 5 * 60_000;
+export const CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS = 15 * 60;
+export const CROSS_OS_AGENT_TURN_TIMEOUT_MS = 20 * 60_000;
 
 if (isMainModule()) {
   try {
@@ -1871,12 +1873,14 @@ async function runInstalledAgentTurn(params) {
       sessionId,
       "--message",
       "Reply with exact ASCII text OK only.",
+      "--timeout",
+      String(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS),
       "--json",
     ],
     cwd: params.cwd,
     env: params.env,
     logPath: params.logPath,
-    timeoutMs: 10 * 60 * 1000,
+    timeoutMs: CROSS_OS_AGENT_TURN_TIMEOUT_MS,
   });
   if (!agentOutputHasExpectedOkMarker(result.stdout, { logPath: params.logPath })) {
     throw new Error("Agent output did not contain the expected OK marker.");
@@ -2628,10 +2632,12 @@ async function runAgentTurn(params) {
           sessionId,
           "--message",
           "Reply with exact ASCII text OK only.",
+          "--timeout",
+          String(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS),
           "--json",
         ],
         logPath: params.logPath,
-        timeoutMs: 10 * 60 * 1000,
+        timeoutMs: CROSS_OS_AGENT_TURN_TIMEOUT_MS,
       });
       if (!agentOutputHasExpectedOkMarker(result.stdout, { logPath: params.logPath })) {
         throw new Error("Agent output did not contain the expected OK marker.");
