@@ -186,6 +186,33 @@ describe("resolveBootstrapContextForRun", () => {
     expect(files.every((file) => file.name === "HEARTBEAT.md")).toBe(true);
   });
 
+  it("refreshes HEARTBEAT.md content for repeated lightweight heartbeat loads in the same session", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    const heartbeatPath = path.join(workspaceDir, "HEARTBEAT.md");
+    const sessionKey = "agent:main:whatsapp:dm:123";
+    await fs.writeFile(heartbeatPath, "check inbox", "utf8");
+
+    const first = await resolveBootstrapContextForRun({
+      workspaceDir,
+      sessionKey,
+      contextMode: "lightweight",
+      runKind: "heartbeat",
+    });
+    expect(first.contextFiles).toEqual([{ path: heartbeatPath, content: "check inbox" }]);
+
+    await fs.writeFile(heartbeatPath, "check updated server logs", "utf8");
+
+    const second = await resolveBootstrapContextForRun({
+      workspaceDir,
+      sessionKey,
+      contextMode: "lightweight",
+      runKind: "heartbeat",
+    });
+    expect(second.contextFiles).toEqual([
+      { path: heartbeatPath, content: "check updated server logs" },
+    ]);
+  });
+
   it("keeps bootstrap context empty in lightweight cron mode", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
     await fs.writeFile(path.join(workspaceDir, "HEARTBEAT.md"), "check inbox", "utf8");

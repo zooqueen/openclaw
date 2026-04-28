@@ -202,6 +202,17 @@ describe("runHeartbeatOnce – heartbeat model override", () => {
       expect.objectContaining({
         isHeartbeat: true,
         bootstrapContextMode: "lightweight",
+        bootstrapContextRunKind: "heartbeat",
+      }),
+    );
+  });
+
+  it("marks default interval runs as heartbeat bootstrap runs", async () => {
+    const replyOpts = await runDefaultsHeartbeat({});
+    expect(replyOpts).toEqual(
+      expect.objectContaining({
+        isHeartbeat: true,
+        bootstrapContextRunKind: "heartbeat",
       }),
     );
   });
@@ -278,6 +289,7 @@ describe("runHeartbeatOnce – heartbeat model override", () => {
       heartbeat: { lightContext: true },
       expectedOptions: {
         bootstrapContextMode: "lightweight",
+        bootstrapContextRunKind: "heartbeat",
       },
     });
   });
