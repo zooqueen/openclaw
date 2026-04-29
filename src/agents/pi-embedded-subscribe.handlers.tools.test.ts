@@ -822,6 +822,38 @@ describe("messaging tool media URL tracking", () => {
     expect(ctx.state.pendingMessagingMediaUrls.get("tool-m1")).toEqual(["file:///img.jpg"]);
   });
 
+  it("tracks caption-only messaging tool text for dedupe", async () => {
+    const { ctx } = createTestContext();
+
+    const startEvt: ToolExecutionStartEvent = {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-caption",
+      args: {
+        action: "send",
+        to: "channel:123",
+        media: "file:///img.jpg",
+        caption: "  caption text  ",
+      },
+    };
+
+    await handleToolExecutionStart(ctx, startEvt);
+
+    expect(ctx.state.pendingMessagingTexts.get("tool-caption")).toBe("caption text");
+
+    const endEvt: ToolExecutionEndEvent = {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-caption",
+      isError: false,
+      result: { ok: true },
+    };
+
+    await handleToolExecutionEnd(ctx, endEvt);
+
+    expect(ctx.state.messagingToolSentTexts).toEqual(["caption text"]);
+  });
+
   it("commits pending media URL on tool success", async () => {
     const { ctx } = createTestContext();
 

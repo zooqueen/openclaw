@@ -521,15 +521,15 @@ export function extractMessagingToolSend(
     if (action !== "send" && action !== "thread-reply") {
       return undefined;
     }
-    const toRaw = resolveMessageToolTarget(args);
-    if (!toRaw) {
-      return undefined;
-    }
     const providerRaw = normalizeOptionalString(args.provider) ?? "";
     const channelRaw = normalizeOptionalString(args.channel) ?? "";
     const providerHint = providerRaw || channelRaw;
     const providerId = providerHint ? normalizeChannelId(providerHint) : null;
     const provider = providerId ?? normalizeOptionalLowercaseString(providerHint) ?? "message";
+    const toRaw = resolveMessageToolTarget(args);
+    if (!toRaw) {
+      return { tool: toolName, provider, accountId };
+    }
     const to = normalizeTargetForProvider(provider, toRaw);
     return to ? { tool: toolName, provider, accountId, to } : undefined;
   }

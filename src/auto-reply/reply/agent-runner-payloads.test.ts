@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../../plugins/runtime.js";
+import {
+  getActivePluginRegistry,
+  getActivePluginRegistryKey,
+  getActivePluginRegistryWorkspaceDir,
+  getActivePluginRuntimeSubagentMode,
+  resetPluginRuntimeStateForTest,
+  setActivePluginRegistry,
+} from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { buildReplyPayloads } from "./agent-runner-payloads.js";
 
@@ -23,6 +30,31 @@ async function expectSameTargetShortDuplicateDeduped(params: { provider: string;
   });
 
   expect(replyPayloads).toHaveLength(0);
+}
+
+function captureActivePluginRegistryForTest() {
+  const registry = getActivePluginRegistry();
+  return {
+    registry,
+    key: getActivePluginRegistryKey(),
+    workspaceDir: getActivePluginRegistryWorkspaceDir(),
+    runtimeSubagentMode: getActivePluginRuntimeSubagentMode(),
+  };
+}
+
+function restoreActivePluginRegistryForTest(
+  snapshot: ReturnType<typeof captureActivePluginRegistryForTest>,
+) {
+  if (!snapshot.registry) {
+    resetPluginRuntimeStateForTest();
+    return;
+  }
+  setActivePluginRegistry(
+    snapshot.registry,
+    snapshot.key ?? undefined,
+    snapshot.runtimeSubagentMode,
+    snapshot.workspaceDir,
+  );
 }
 
 describe("buildReplyPayloads media filter integration", () => {
@@ -171,6 +203,20 @@ describe("buildReplyPayloads media filter integration", () => {
     expect(replyPayloads[0]?.text).toBe("final answer");
   });
 
+  it("drops duplicate final text after same-target caption-only media sends", async () => {
+    const { replyPayloads } = await buildReplyPayloads({
+      ...baseParams,
+      payloads: [{ text: "caption text" }],
+      messageProvider: "slack",
+      originatingTo: "channel:C1",
+      messagingToolSentMediaUrls: ["file:///tmp/photo.jpg"],
+      messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+      messagingToolSentTexts: ["caption text"],
+    });
+
+    expect(replyPayloads).toHaveLength(0);
+  });
+
   it("keeps same-target replies when the messaging tool sent different text", async () => {
     const { replyPayloads } = await buildReplyPayloads({
       ...baseParams,
@@ -191,29 +237,49 @@ describe("buildReplyPayloads media filter integration", () => {
   });
 
   it("dedupes short same-target replies when target provider is channel alias", async () => {
-    resetPluginRuntimeStateForTest();
-    setActivePluginRegistry(
-      createTestRegistry([
-        {
-          pluginId: "feishu-plugin",
-          source: "test",
-          plugin: {
-            id: "feishu",
-            meta: {
+    const previousRegistry = captureActivePluginRegistryForTest();
+    try {
+      setActivePluginRegistry(
+        createTestRegistry([
+          {
+            pluginId: "feishu-plugin",
+            source: "test",
+            plugin: {
               id: "feishu",
-              label: "Feishu",
-              selectionLabel: "Feishu",
-              docsPath: "/channels/feishu",
-              blurb: "test stub",
-              aliases: ["lark"],
+              meta: {
+                id: "feishu",
+                label: "Feishu",
+                selectionLabel: "Feishu",
+                docsPath: "/channels/feishu",
+                blurb: "test stub",
+                aliases: ["lark"],
+              },
+              capabilities: { chatTypes: ["direct"] },
+              config: { listAccountIds: () => [], resolveAccount: () => ({}) },
             },
-            capabilities: { chatTypes: ["direct"] },
-            config: { listAccountIds: () => [], resolveAccount: () => ({}) },
           },
-        },
-      ]),
-    );
-    await expectSameTargetShortDuplicateDeduped({ provider: "lark", to: "ou_abc123" });
+        ]),
+      );
+      await expectSameTargetShortDuplicateDeduped({ provider: "lark", to: "ou_abc123" });
+    } finally {
+      restoreActivePluginRegistryForTest(previousRegistry);
+    }
+  });
+
+  it("dedupes implicit same-target message sends when another send targets elsewhere", async () => {
+    const { replyPayloads } = await buildReplyPayloads({
+      ...baseParams,
+      payloads: [{ text: "ok" }],
+      messageProvider: "telegram",
+      originatingTo: "268300329",
+      messagingToolSentTexts: ["ok"],
+      messagingToolSentTargets: [
+        { tool: "message", provider: "message" },
+        { tool: "discord", provider: "discord", to: "channel:C1" },
+      ],
+    });
+
+    expect(replyPayloads).toHaveLength(0);
   });
 
   it("strips media already sent by the block pipeline after normalizing both paths", async () => {

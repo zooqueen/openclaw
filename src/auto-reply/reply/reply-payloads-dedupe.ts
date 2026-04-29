@@ -176,6 +176,9 @@ export function shouldSuppressMessagingToolReplies(params: {
       return false;
     }
     const targetRaw = normalizeOptionalString(target.to);
+    if (!targetRaw) {
+      return target.tool === "message";
+    }
     const routeAccount = originAccount ?? targetAccount;
     const originRoute = normalizeRouteTargetForSuppression({
       provider,

@@ -83,6 +83,36 @@ describe("resolveFollowupDeliveryPayloads", () => {
     ).toEqual([]);
   });
 
+  it("dedupes implicit same-target message sends when another send targets elsewhere", () => {
+    expect(
+      resolveFollowupDeliveryPayloads({
+        cfg: baseConfig,
+        payloads: [{ text: "ok" }],
+        messageProvider: "telegram",
+        originatingTo: "268300329",
+        sentTexts: ["ok"],
+        sentTargets: [
+          { tool: "message", provider: "message" },
+          { tool: "discord", provider: "discord", to: "channel:C1" },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("drops duplicate final text after same-target caption-only media sends", () => {
+    expect(
+      resolveFollowupDeliveryPayloads({
+        cfg: baseConfig,
+        payloads: [{ text: "caption text" }],
+        messageProvider: "slack",
+        originatingTo: "channel:C1",
+        sentMediaUrls: ["/tmp/img.png"],
+        sentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+        sentTexts: ["caption text"],
+      }),
+    ).toEqual([]);
+  });
+
   it("drops duplicate caption text after same-target media is stripped", () => {
     expect(
       resolveFollowupDeliveryPayloads({

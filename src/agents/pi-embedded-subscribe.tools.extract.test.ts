@@ -60,4 +60,16 @@ describe("extractMessagingToolSend", () => {
     expect(result?.provider).toBe("telegram");
     expect(result?.to).toBe("telegram:123");
   });
+
+  it("tracks implicit current-conversation message sends", () => {
+    const result = extractMessagingToolSend("message", {
+      action: "send",
+      channel: "telegram",
+      message: "hi",
+    });
+
+    expect(result?.tool).toBe("message");
+    expect(result?.provider).toBe("telegram");
+    expect(result).not.toHaveProperty("to");
+  });
 });

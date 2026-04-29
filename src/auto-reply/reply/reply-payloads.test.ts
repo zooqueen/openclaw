@@ -149,6 +149,19 @@ describe("shouldSuppressMessagingToolReplies", () => {
     ).toBe(true);
   });
 
+  it("suppresses implicit current-conversation message sends", () => {
+    expect(
+      shouldSuppressMessagingToolReplies({
+        messageProvider: "telegram",
+        originatingTo: "123",
+        messagingToolSentTargets: [
+          { tool: "message", provider: "message" },
+          { tool: "discord", provider: "discord", to: "channel:C1" },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it("does not suppress when providerless target does not match origin route", () => {
     expect(
       shouldSuppressMessagingToolReplies({
