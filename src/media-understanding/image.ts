@@ -23,6 +23,13 @@ import type {
   ImagesDescriptionResult,
 } from "./types.js";
 
+export type ImageDescriptionModelTransform = (model: Model<Api>) => Model<Api>;
+
+type DescribeImagesWithModelInternalOptions = {
+  onPayload?: ProviderStreamOptions["onPayload"];
+  transformModel?: ImageDescriptionModelTransform;
+};
+
 let piModelDiscoveryRuntimePromise: Promise<
   typeof import("../agents/pi-model-discovery-runtime.js")
 > | null = null;
@@ -313,7 +320,7 @@ async function resolveMinimaxVlmFallbackRuntime(params: {
 
 async function describeImagesWithModelInternal(
   params: ImagesDescriptionRequest,
-  options: { onPayload?: ProviderStreamOptions["onPayload"] } = {},
+  options: DescribeImagesWithModelInternalOptions = {},
 ): Promise<ImagesDescriptionResult> {
   const prompt = params.prompt ?? "Describe the image.";
   let apiKey: string;
@@ -349,14 +356,15 @@ async function describeImagesWithModelInternal(
     });
   }
 
+  const runtimeModel = options.transformModel?.(model) ?? model;
   registerProviderStreamForModel({
-    model,
+    model: runtimeModel,
     cfg: params.cfg,
     agentDir: params.agentDir,
   });
 
   const context = buildImageContext(prompt, params.images, {
-    promptInUserContent: shouldPlaceImagePromptInUserContent(model),
+    promptInUserContent: shouldPlaceImagePromptInUserContent(runtimeModel),
   });
   const controller = new AbortController();
   const timeout =
@@ -366,10 +374,10 @@ async function describeImagesWithModelInternal(
       ? setTimeout(() => controller.abort(), params.timeoutMs)
       : undefined;
 
-  const maxTokens = resolveImageToolMaxTokens(model.maxTokens, params.maxTokens ?? 512);
+  const maxTokens = resolveImageToolMaxTokens(runtimeModel.maxTokens, params.maxTokens ?? 512);
   const completeImage = async (onPayload?: ProviderStreamOptions["onPayload"]) => {
     const payloadHandler = composeImageDescriptionPayloadHandlers(onPayload, options.onPayload);
-    return await complete(model, context, {
+    return await complete(runtimeModel, context, {
       apiKey,
       maxTokens,
       signal: controller.signal,
@@ -382,10 +390,10 @@ async function describeImagesWithModelInternal(
     try {
       const text = coerceImageAssistantText({
         message,
-        provider: model.provider,
-        model: model.id,
+        provider: runtimeModel.provider,
+        model: runtimeModel.id,
       });
-      return { text, model: model.id };
+      return { text, model: runtimeModel.id };
     } catch (err) {
       if (!isImageModelNoTextError(err) || !hasImageReasoningOnlyResponse(message)) {
         throw err;
@@ -395,10 +403,10 @@ async function describeImagesWithModelInternal(
     const retryMessage = await completeImage(disableReasoningForImageRetryPayload);
     const text = coerceImageAssistantText({
       message: retryMessage,
-      provider: model.provider,
-      model: model.id,
+      provider: runtimeModel.provider,
+      model: runtimeModel.id,
     });
-    return { text, model: model.id };
+    return { text, model: runtimeModel.id };
   } finally {
     clearTimeout(timeout);
   }
@@ -415,6 +423,13 @@ export async function describeImagesWithModelPayloadTransform(
   onPayload: ProviderStreamOptions["onPayload"],
 ): Promise<ImagesDescriptionResult> {
   return await describeImagesWithModelInternal(params, { onPayload });
+}
+
+export async function describeImagesWithModelTransform(
+  params: ImagesDescriptionRequest,
+  transformModel: ImageDescriptionModelTransform,
+): Promise<ImagesDescriptionResult> {
+  return await describeImagesWithModelInternal(params, { transformModel });
 }
 
 export async function describeImageWithModel(
@@ -466,5 +481,33 @@ export async function describeImageWithModelPayloadTransform(
       cfg: params.cfg,
     },
     onPayload,
+  );
+}
+
+export async function describeImageWithModelTransform(
+  params: ImageDescriptionRequest,
+  transformModel: ImageDescriptionModelTransform,
+): Promise<ImageDescriptionResult> {
+  return await describeImagesWithModelTransform(
+    {
+      images: [
+        {
+          buffer: params.buffer,
+          fileName: params.fileName,
+          mime: params.mime,
+        },
+      ],
+      model: params.model,
+      provider: params.provider,
+      prompt: params.prompt,
+      maxTokens: params.maxTokens,
+      timeoutMs: params.timeoutMs,
+      profile: params.profile,
+      preferredProfile: params.preferredProfile,
+      authStore: params.authStore,
+      agentDir: params.agentDir,
+      cfg: params.cfg,
+    },
+    transformModel,
   );
 }

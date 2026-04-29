@@ -13,3 +13,9 @@ export const describeImageWithModelPayloadTransform = bindImageRuntime(
 export const describeImagesWithModelPayloadTransform = bindImageRuntime(
   (runtime) => runtime.describeImagesWithModelPayloadTransform,
 );
+export const describeImageWithModelTransform = bindImageRuntime(
+  (runtime) => runtime.describeImageWithModelTransform,
+);
+export const describeImagesWithModelTransform = bindImageRuntime(
+  (runtime) => runtime.describeImagesWithModelTransform,
+);

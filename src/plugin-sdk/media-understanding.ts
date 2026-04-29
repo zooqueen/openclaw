@@ -12,12 +12,15 @@ export type {
   VideoDescriptionRequest,
   VideoDescriptionResult,
 } from "../media-understanding/types.js";
+export type { ImageDescriptionModelTransform } from "../media-understanding/image.js";
 
 export {
   describeImageWithModel,
   describeImageWithModelPayloadTransform,
+  describeImageWithModelTransform,
   describeImagesWithModel,
   describeImagesWithModelPayloadTransform,
+  describeImagesWithModelTransform,
 } from "../media-understanding/image-runtime.js";
 export {
   buildOpenAiCompatibleVideoRequestBody,

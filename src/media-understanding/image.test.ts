@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
 
 const hoisted = vi.hoisted(() => ({
   completeMock: vi.fn(),
@@ -84,7 +85,7 @@ vi.mock("../agents/pi-embedded-runner/model.js", () => ({
   resolveModelWithRegistry: resolveModelWithRegistryMock,
 }));
 
-const { describeImageWithModel } = await import("./image.js");
+const { describeImageWithModel, describeImageWithModelTransform } = await import("./image.js");
 
 describe("describeImageWithModel", () => {
   afterEach(() => {
@@ -215,6 +216,100 @@ describe("describeImageWithModel", () => {
     );
     expect(completeMock).toHaveBeenCalledOnce();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("applies request-local model transforms without rewriting provider config", async () => {
+    const cfg: OpenClawConfig = {
+      models: {
+        providers: {
+          zai: {
+            api: "openai-completions",
+            baseUrl: "https://api.z.ai/api/coding/paas/v4",
+            models: [
+              {
+                id: "glm-4.6v",
+                name: "GLM-4.6V",
+                input: ["text", "image"],
+                reasoning: true,
+                cost: { input: 0.3, output: 0.9, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 128000,
+                maxTokens: 32768,
+              },
+            ],
+          },
+        },
+      },
+    };
+    const resolvedModel = {
+      api: "openai-completions",
+      provider: "zai",
+      id: "glm-4.6v",
+      name: "GLM-4.6V",
+      input: ["text", "image"],
+      baseUrl: "https://api.z.ai/api/coding/paas/v4",
+      reasoning: true,
+      cost: { input: 0.3, output: 0.9, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000,
+      maxTokens: 32768,
+    };
+    discoverModelsMock.mockReturnValue({
+      find: vi.fn(() => resolvedModel),
+    });
+    completeMock.mockResolvedValue({
+      role: "assistant",
+      api: "openai-completions",
+      provider: "zai",
+      model: "glm-4.6v",
+      stopReason: "stop",
+      timestamp: Date.now(),
+      content: [{ type: "text", text: "zai vision ok" }],
+    });
+
+    const result = await describeImageWithModelTransform(
+      {
+        cfg,
+        agentDir: "/tmp/openclaw-agent",
+        provider: "zai",
+        model: "glm-4.6v",
+        buffer: Buffer.from("png-bytes"),
+        fileName: "image.png",
+        mime: "image/png",
+        prompt: "Describe the image.",
+        timeoutMs: 1000,
+      },
+      (model) => ({
+        ...model,
+        baseUrl: "https://api.z.ai/api/paas/v4",
+      }),
+    );
+
+    expect(result).toEqual({
+      text: "zai vision ok",
+      model: "glm-4.6v",
+    });
+    expect(ensureOpenClawModelsJsonMock).toHaveBeenCalledWith(cfg, "/tmp/openclaw-agent");
+    expect(registerProviderStreamForModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg,
+        agentDir: "/tmp/openclaw-agent",
+        model: expect.objectContaining({
+          provider: "zai",
+          id: "glm-4.6v",
+          baseUrl: "https://api.z.ai/api/paas/v4",
+        }),
+      }),
+    );
+    expect(completeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "zai",
+        id: "glm-4.6v",
+        baseUrl: "https://api.z.ai/api/paas/v4",
+      }),
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(cfg.models?.providers?.zai?.baseUrl).toBe("https://api.z.ai/api/coding/paas/v4");
+    expect(resolvedModel.baseUrl).toBe("https://api.z.ai/api/coding/paas/v4");
   });
 
   it("resolves configured image models when discovery has not registered the provider", async () => {
