@@ -234,6 +234,14 @@ type TranscriptMessage = {
   provenance?: unknown;
 };
 
+function isDiagnosticTranscriptEntry(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return false;
+  }
+  const type = (entry as { type?: unknown }).type;
+  return typeof type === "string" && type.startsWith("diagnostic.");
+}
+
 export function readSessionTitleFieldsFromTranscript(
   sessionId: string,
   storePath: string | undefined,
@@ -426,21 +434,35 @@ function readLastMessagePreviewFromOpenTranscript(params: {
 
   const chunk = buf.toString("utf-8");
   const lines = chunk.split(/\r?\n/).filter((l) => l.trim());
-  const tailLines = lines.slice(-LAST_MSG_MAX_LINES);
 
-  for (let i = tailLines.length - 1; i >= 0; i--) {
-    const line = tailLines[i];
+  let scannedNonDiagnosticLines = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
     try {
       const parsed = JSON.parse(line);
+      if (isDiagnosticTranscriptEntry(parsed)) {
+        continue;
+      }
+      scannedNonDiagnosticLines += 1;
       const msg = parsed?.message as TranscriptMessage | undefined;
       if (msg?.role !== "user" && msg?.role !== "assistant") {
+        if (scannedNonDiagnosticLines >= LAST_MSG_MAX_LINES) {
+          break;
+        }
         continue;
       }
       const text = extractTextFromContent(msg.content);
       if (text) {
         return text;
       }
+      if (scannedNonDiagnosticLines >= LAST_MSG_MAX_LINES) {
+        break;
+      }
     } catch {
+      scannedNonDiagnosticLines += 1;
+      if (scannedNonDiagnosticLines >= LAST_MSG_MAX_LINES) {
+        break;
+      }
       // skip malformed
     }
   }
@@ -811,6 +833,9 @@ function readRecentMessagesFromTranscript(
       const line = tailLines[i];
       try {
         const parsed = JSON.parse(line);
+        if (isDiagnosticTranscriptEntry(parsed)) {
+          continue;
+        }
         const msg = parsed?.message as TranscriptPreviewMessage | undefined;
         if (msg && typeof msg === "object") {
           collected.push(msg);

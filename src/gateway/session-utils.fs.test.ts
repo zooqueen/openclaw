@@ -235,6 +235,23 @@ describe("readLastMessagePreviewFromTranscript", () => {
     expect(result).toBe("Real last");
   });
 
+  test("skips diagnostic transcript entries before applying the last-message line cap", () => {
+    const sessionId = "test-last-skip-diagnostics";
+    writeTranscript(tmpDir, sessionId, [
+      { message: { role: "assistant", content: "Actual assistant reply" } },
+      ...Array.from({ length: 25 }, (_, index) => ({
+        type: index % 2 === 0 ? "diagnostic.heartbeat" : "diagnostic.context",
+        message: {
+          role: index % 2 === 0 ? "assistant" : "user",
+          content: `Diagnostic transcript row ${index}`,
+        },
+      })),
+    ]);
+
+    const result = readLastMessagePreviewFromTranscript(sessionId, storePath);
+    expect(result).toBe("Actual assistant reply");
+  });
+
   test("returns null when no user/assistant messages exist", () => {
     const sessionId = "test-last-no-match";
     const transcriptPath = path.join(tmpDir, `${sessionId}.jsonl`);
@@ -638,6 +655,30 @@ describe("readSessionPreviewItemsFromTranscript", () => {
 
     expect(result.map((item) => item.role)).toEqual(["assistant", "tool", "assistant"]);
     expect(result[1]?.text).toContain("call weather");
+  });
+
+  test("skips diagnostic transcript entries when building preview items", () => {
+    const sessionId = "preview-skip-diagnostics";
+    const lines = [
+      JSON.stringify({ type: "session", version: 1, id: sessionId }),
+      JSON.stringify({ message: { role: "user", content: "Question before diagnostics" } }),
+      JSON.stringify({
+        type: "diagnostic.heartbeat",
+        message: { role: "assistant", content: "HEARTBEAT_OK" },
+      }),
+      JSON.stringify({
+        type: "diagnostic.context",
+        message: { role: "user", content: "Context probe" },
+      }),
+      JSON.stringify({ message: { role: "assistant", content: "Answer after diagnostics" } }),
+    ];
+    writeTranscriptLines(sessionId, lines);
+    const result = readPreview(sessionId, 3);
+
+    expect(result.map((item) => item.text)).toEqual([
+      "Question before diagnostics",
+      "Answer after diagnostics",
+    ]);
   });
 
   test("detects tool calls from tool_use/tool_call blocks and toolName field", () => {
