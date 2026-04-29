@@ -143,13 +143,6 @@ export type MediaToolsConfig = {
   models?: MediaUnderstandingModelConfig[];
   /** Max concurrent media understanding runs. */
   concurrency?: number;
-  asyncCompletion?: {
-    /**
-     * Enable direct channel sends for completed async media generation tasks.
-     * Default: false.
-     */
-    directSend?: boolean;
-  };
   image?: MediaUnderstandingConfig;
   audio?: MediaUnderstandingConfig;
   video?: MediaUnderstandingConfig;

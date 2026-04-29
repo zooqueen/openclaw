@@ -104,7 +104,9 @@ export function resolveRegistryPluginModuleLocation(params: {
   resolutionKey: string;
   env?: NodeJS.ProcessEnv;
 }): FacadeModuleLocation | null {
-  const registry = getFacadeManifestRegistry({ env: params.env });
+  const registry = getFacadeManifestRegistry({
+    ...(params.env ? { env: params.env } : {}),
+  });
   return resolveRegistryPluginModuleLocationFromRecords({
     registry,
     dirName: params.dirName,
@@ -206,7 +208,9 @@ function resolveBundledPluginManifestRecord(params: {
     return metadataRecord;
   }
 
-  const registry = getFacadeManifestRegistry({ env: params.env });
+  const registry = getFacadeManifestRegistry({
+    ...(params.env ? { env: params.env } : {}),
+  });
   const resolved =
     (params.location
       ? registry.find((plugin) => {

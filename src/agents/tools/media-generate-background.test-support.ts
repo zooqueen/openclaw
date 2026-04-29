@@ -15,17 +15,9 @@ export const announceDeliveryMocks = {
   deliverSubagentAnnouncement: vi.fn(),
 };
 
-export const taskDeliveryRuntimeMocks = {
-  sendMessage: vi.fn(),
-};
-
 type TaskExecutorBackgroundMocks = {
   createRunningTaskRun: MockWithReset;
   recordTaskRunProgressByRunId: MockWithReset;
-};
-
-type TaskDeliveryBackgroundMocks = {
-  sendMessage: MockWithReset;
 };
 
 type AnnouncementBackgroundMocks = {
@@ -34,7 +26,6 @@ type AnnouncementBackgroundMocks = {
 
 type MediaBackgroundResetMocks = {
   taskExecutorMocks: TaskExecutorBackgroundMocks;
-  taskDeliveryRuntimeMocks: TaskDeliveryBackgroundMocks;
   announceDeliveryMocks: AnnouncementBackgroundMocks;
 };
 
@@ -51,15 +42,6 @@ type ProgressExpectation = {
   progressSummary: string;
 };
 
-type DirectSendExpectation = {
-  sendMessageMock: unknown;
-  channel: string;
-  to: string;
-  threadId: string;
-  content: string;
-  mediaUrls: string[];
-};
-
 type FallbackAnnouncementExpectation = {
   deliverAnnouncementMock: unknown;
   requesterSessionKey: string;
@@ -72,7 +54,6 @@ type FallbackAnnouncementExpectation = {
 };
 
 type CompletionFixtureParams = {
-  directSend?: boolean;
   mediaUrls?: string[];
   result: string;
   runId: string;
@@ -80,16 +61,12 @@ type CompletionFixtureParams = {
 };
 
 export function createMediaCompletionFixture({
-  directSend,
   mediaUrls,
   result,
   runId,
   taskLabel,
 }: CompletionFixtureParams) {
   return {
-    ...(directSend
-      ? { config: { tools: { media: { asyncCompletion: { directSend: true } } } } }
-      : {}),
     handle: {
       taskId: "task-123",
       runId,
@@ -110,12 +87,10 @@ export function createMediaCompletionFixture({
 
 export function resetMediaBackgroundMocks({
   taskExecutorMocks,
-  taskDeliveryRuntimeMocks,
   announceDeliveryMocks,
 }: MediaBackgroundResetMocks): void {
   taskExecutorMocks.createRunningTaskRun.mockReset();
   taskExecutorMocks.recordTaskRunProgressByRunId.mockReset();
-  taskDeliveryRuntimeMocks.sendMessage.mockReset();
   announceDeliveryMocks.deliverSubagentAnnouncement.mockReset();
 }
 
@@ -145,27 +120,6 @@ export function expectRecordedTaskProgress({
       progressSummary,
     }),
   );
-}
-
-export function expectDirectMediaSend({
-  sendMessageMock,
-  channel,
-  to,
-  threadId,
-  content,
-  mediaUrls,
-}: DirectSendExpectation): void {
-  expect(sendMessageMock).toHaveBeenCalledWith(
-    expect.objectContaining({
-      channel,
-      to,
-      threadId,
-      content,
-      mediaUrls,
-    }),
-  );
-  const firstCall = (sendMessageMock as { mock?: { calls?: unknown[][] } }).mock?.calls?.[0]?.[0];
-  expect(firstCall).not.toHaveProperty("mirror");
 }
 
 export function expectFallbackMediaAnnouncement({

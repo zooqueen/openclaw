@@ -3,17 +3,14 @@ import { MUSIC_GENERATION_TASK_KIND } from "../music-generation-task-status.js";
 import {
   announceDeliveryMocks,
   createMediaCompletionFixture,
-  expectDirectMediaSend,
   expectFallbackMediaAnnouncement,
   expectQueuedTaskRun,
   expectRecordedTaskProgress,
   resetMediaBackgroundMocks,
-  taskDeliveryRuntimeMocks,
   taskExecutorMocks,
 } from "./media-generate-background.test-support.js";
 
 vi.mock("../../tasks/detached-task-runtime.js", () => taskExecutorMocks);
-vi.mock("../../tasks/task-registry-delivery-runtime.js", () => taskDeliveryRuntimeMocks);
 vi.mock("../subagent-announce-delivery.js", () => announceDeliveryMocks);
 
 const {
@@ -26,7 +23,6 @@ describe("music generate background helpers", () => {
   beforeEach(() => {
     resetMediaBackgroundMocks({
       taskExecutorMocks,
-      taskDeliveryRuntimeMocks,
       announceDeliveryMocks,
     });
   });
@@ -92,38 +88,10 @@ describe("music generate background helpers", () => {
       }),
     });
 
-    expect(taskDeliveryRuntimeMocks.sendMessage).not.toHaveBeenCalled();
     expect(announceDeliveryMocks.deliverSubagentAnnouncement).toHaveBeenCalled();
   });
 
-  it("delivers completed music directly to the requester channel when enabled", async () => {
-    taskDeliveryRuntimeMocks.sendMessage.mockResolvedValue({
-      channel: "discord",
-      messageId: "msg-1",
-    });
-
-    await wakeMusicGenerationTaskCompletion({
-      ...createMediaCompletionFixture({
-        directSend: true,
-        runId: "tool:music_generate:abc",
-        taskLabel: "night-drive synthwave",
-        result: "Generated 1 track.\nMEDIA:/tmp/generated-night-drive.mp3",
-      }),
-    });
-
-    expectDirectMediaSend({
-      sendMessageMock: taskDeliveryRuntimeMocks.sendMessage,
-      channel: "discord",
-      to: "channel:1",
-      threadId: "thread-1",
-      content: "Generated 1 track.",
-      mediaUrls: ["/tmp/generated-night-drive.mp3"],
-    });
-    expect(announceDeliveryMocks.deliverSubagentAnnouncement).not.toHaveBeenCalled();
-  });
-
-  it("falls back to a music-generation completion event when direct delivery fails", async () => {
-    taskDeliveryRuntimeMocks.sendMessage.mockRejectedValue(new Error("discord upload failed"));
+  it("queues the music-generation completion event for assistant delivery", async () => {
     announceDeliveryMocks.deliverSubagentAnnouncement.mockResolvedValue({
       delivered: true,
       path: "direct",
@@ -131,7 +99,6 @@ describe("music generate background helpers", () => {
 
     await wakeMusicGenerationTaskCompletion({
       ...createMediaCompletionFixture({
-        directSend: true,
         runId: "tool:music_generate:abc",
         taskLabel: "night-drive synthwave",
         result: "Generated 1 track.\nMEDIA:/tmp/generated-night-drive.mp3",

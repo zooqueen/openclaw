@@ -190,19 +190,23 @@ function readApplyPatchSummary(result: unknown): ApplyPatchSummary | null {
   return { added, modified, deleted };
 }
 
-function shouldSuppressStructuredMediaToolOutput(params: {
+const ASSISTANT_FORWARDED_MEDIA_TOOLS = new Set([
+  "image_generate",
+  "music_generate",
+  "tts",
+  "video_generate",
+]);
+
+function isAssistantForwardedMediaTool(params: {
   toolName: string;
   rawToolName: string;
-  isToolError: boolean;
-  hasDeliverableStructuredMedia: boolean;
   builtinToolNames?: ReadonlySet<string>;
 }): boolean {
+  const rawToolName = params.rawToolName.trim();
   return (
-    params.toolName === "tts" &&
-    params.rawToolName.trim() === "tts" &&
-    params.builtinToolNames?.has("tts") === true &&
-    !params.isToolError &&
-    params.hasDeliverableStructuredMedia
+    ASSISTANT_FORWARDED_MEDIA_TOOLS.has(params.toolName) &&
+    rawToolName === params.toolName &&
+    (params.builtinToolNames === undefined || params.builtinToolNames.has(rawToolName))
   );
 }
 
@@ -534,14 +538,7 @@ async function emitToolResultOutput(params: {
     ? filterToolResultMediaUrls(rawToolName, mediaReply.mediaUrls, result, ctx.builtinToolNames)
     : [];
   const shouldEmitOutput =
-    !shouldSuppressStructuredMediaToolOutput({
-      toolName,
-      rawToolName,
-      isToolError,
-      hasDeliverableStructuredMedia: hasStructuredMedia && mediaUrls.length > 0,
-      builtinToolNames: ctx.builtinToolNames,
-    }) &&
-    (ctx.shouldEmitToolOutput() || shouldEmitCompactToolOutput({ toolName, result, outputText }));
+    ctx.shouldEmitToolOutput() || shouldEmitCompactToolOutput({ toolName, result, outputText });
   if (shouldEmitOutput) {
     if (outputText) {
       ctx.emitToolOutput(rawToolName, meta, outputText, result);
@@ -563,6 +560,11 @@ async function emitToolResultOutput(params: {
   }
 
   if (!mediaReply) {
+    return;
+  }
+  if (
+    isAssistantForwardedMediaTool({ toolName, rawToolName, builtinToolNames: ctx.builtinToolNames })
+  ) {
     return;
   }
   const pendingMediaUrls =

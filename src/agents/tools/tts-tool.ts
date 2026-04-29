@@ -64,7 +64,7 @@ export function createTtsTool(opts?: {
     label: "TTS",
     name: "tts",
     displaySummary: "Convert text to speech and return audio.",
-    description: `Convert text to speech. Audio is delivered automatically from the tool result — reply with ${SILENT_REPLY_TOKEN} after a successful call to avoid duplicate messages.`,
+    description: `Convert text to speech. On success, call the message tool with path/filePath set to the returned audio path, then reply with ${SILENT_REPLY_TOKEN}.`,
     parameters: TtsToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -82,13 +82,17 @@ export function createTtsTool(opts?: {
       });
 
       if (result.success && result.audioPath) {
-        // Preserve the spoken text in the tool result content so the session
-        // transcript retains what was said across turns. The audio itself is
-        // still delivered via details.media. Sanitize first so a crafted
-        // utterance cannot inject reply directives when the tool output is
-        // rendered in verbose mode.
+        // Preserve the spoken text and generated path in tool content so the
+        // assistant can forward the audio with the message tool. Sanitize first
+        // so a crafted utterance cannot inject reply directives when the tool
+        // output is rendered in verbose mode.
+        const audioLines = [
+          `(spoken) ${sanitizeTranscriptForToolContent(text)}`,
+          ...(result.audioAsVoice || result.voiceCompatible ? ["[[audio_as_voice]]"] : []),
+          `MEDIA:${result.audioPath}`,
+        ];
         return {
-          content: [{ type: "text", text: `(spoken) ${sanitizeTranscriptForToolContent(text)}` }],
+          content: [{ type: "text", text: audioLines.join("\n") }],
           details: {
             audioPath: result.audioPath,
             provider: result.provider,

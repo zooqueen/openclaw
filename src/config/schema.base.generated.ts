@@ -10005,18 +10005,6 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                 description:
                   "Maximum number of concurrent media understanding operations per turn across image, audio, and video tasks. Lower this in resource-constrained deployments to prevent CPU/network saturation.",
               },
-              asyncCompletion: {
-                type: "object",
-                properties: {
-                  directSend: {
-                    type: "boolean",
-                    title: "Async Media Completion Direct Send",
-                    description:
-                      "Enable direct channel sends for completed async music/video generation tasks instead of relying on the requester session wake path. Default off so detached media completion keeps the legacy model-delivery flow unless you opt in.",
-                  },
-                },
-                additionalProperties: false,
-              },
               image: {
                 type: "object",
                 properties: {
@@ -24984,11 +24972,6 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
       label: "Media Understanding Concurrency",
       help: "Maximum number of concurrent media understanding operations per turn across image, audio, and video tasks. Lower this in resource-constrained deployments to prevent CPU/network saturation.",
       tags: ["performance", "media", "tools"],
-    },
-    "tools.media.asyncCompletion.directSend": {
-      label: "Async Media Completion Direct Send",
-      help: "Enable direct channel sends for completed async music/video generation tasks instead of relying on the requester session wake path. Default off so detached media completion keeps the legacy model-delivery flow unless you opt in.",
-      tags: ["storage", "media", "tools"],
     },
     "tools.media.audio.enabled": {
       label: "Enable Audio Understanding",

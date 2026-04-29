@@ -166,7 +166,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/screenshot.png"]);
   });
 
-  it("preserves audio_as_voice when queuing trusted text MEDIA tool output", async () => {
+  it("leaves TTS MEDIA tool output for assistant message-tool forwarding", async () => {
     const onToolResult = vi.fn();
     const ctx = createMockContext({
       shouldEmitToolOutput: false,
@@ -190,8 +190,8 @@ describe("handleToolExecutionEnd media emission", () => {
     });
 
     expect(onToolResult).not.toHaveBeenCalled();
-    expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/reply.opus"]);
-    expect(ctx.state.pendingToolAudioAsVoice).toBe(true);
+    expect(ctx.state.pendingToolMediaUrls).toEqual([]);
+    expect(ctx.state.pendingToolAudioAsVoice).toBe(false);
   });
 
   it("does NOT emit local media for untrusted tools", async () => {
@@ -259,7 +259,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual([]);
   });
 
-  it("queues TTS structured media without leaking spoken text when verbose is full", async () => {
+  it("keeps verbose TTS text and leaves structured media for assistant forwarding", async () => {
     const ctx = createMockContext({
       shouldEmitToolOutput: true,
       onToolResult: vi.fn(),
@@ -283,12 +283,17 @@ describe("handleToolExecutionEnd media emission", () => {
       },
     });
 
-    expect(ctx.emitToolOutput).not.toHaveBeenCalled();
-    expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/reply.opus"]);
-    expect(ctx.state.pendingToolAudioAsVoice).toBe(true);
+    expect(ctx.emitToolOutput).toHaveBeenCalledWith(
+      "tts",
+      undefined,
+      "(spoken) hello",
+      expect.any(Object),
+    );
+    expect(ctx.state.pendingToolMediaUrls).toEqual([]);
+    expect(ctx.state.pendingToolAudioAsVoice).toBe(false);
   });
 
-  it("queues one voice copy when TTS output also contains a legacy media directive", async () => {
+  it("leaves legacy TTS media directives for assistant forwarding", async () => {
     const ctx = createMockContext({
       shouldEmitToolOutput: true,
       onToolResult: vi.fn(),
@@ -312,9 +317,14 @@ describe("handleToolExecutionEnd media emission", () => {
       },
     });
 
-    expect(ctx.emitToolOutput).not.toHaveBeenCalled();
-    expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/reply.opus"]);
-    expect(ctx.state.pendingToolAudioAsVoice).toBe(true);
+    expect(ctx.emitToolOutput).toHaveBeenCalledWith(
+      "tts",
+      undefined,
+      "Generated audio reply.\nMEDIA:/tmp/reply.opus",
+      expect.any(Object),
+    );
+    expect(ctx.state.pendingToolMediaUrls).toEqual([]);
+    expect(ctx.state.pendingToolAudioAsVoice).toBe(false);
   });
 
   it("keeps verbose TTS text when structured local media is not trusted", async () => {
@@ -417,11 +427,11 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual([]);
   });
 
-  it("queues structured media once for markdown verbose output", async () => {
+  it("does not queue generated image media for markdown verbose output", async () => {
     const ctx = await handleVerboseGeneratedImage("markdown");
 
     expect(ctx.emitToolOutput).toHaveBeenCalled();
-    expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/generated.png"]);
+    expect(ctx.state.pendingToolMediaUrls).toEqual([]);
   });
 
   it("emits provider inventory output for compact video_generate list results", async () => {
@@ -567,7 +577,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/canvas-output.png"]);
   });
 
-  it("queues structured details.media trust and voice metadata", async () => {
+  it("leaves structured TTS media for assistant message-tool forwarding", async () => {
     const ctx = createMockContext({ shouldEmitToolOutput: false, onToolResult: vi.fn() });
 
     await handleToolExecutionEnd(ctx, {
@@ -586,8 +596,8 @@ describe("handleToolExecutionEnd media emission", () => {
       },
     });
 
-    expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/reply.opus"]);
-    expect(ctx.state.pendingToolAudioAsVoice).toBe(true);
-    expect(ctx.state.pendingToolTrustedLocalMedia).toBe(true);
+    expect(ctx.state.pendingToolMediaUrls).toEqual([]);
+    expect(ctx.state.pendingToolAudioAsVoice).toBe(false);
+    expect(ctx.state.pendingToolTrustedLocalMedia).toBe(false);
   });
 });

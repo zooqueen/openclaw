@@ -200,9 +200,6 @@ Configures inbound media understanding (image/audio/video):
   tools: {
     media: {
       concurrency: 2,
-      asyncCompletion: {
-        directSend: false, // opt-in: send finished async music/video directly to the channel
-      },
       audio: {
         enabled: true,
         maxBytes: 20971520,
@@ -251,10 +248,6 @@ Configures inbound media understanding (image/audio/video):
     - Failures fall back to the next entry.
 
     Provider auth follows standard order: `auth-profiles.json` → env vars → `models.providers.*.apiKey`.
-
-    **Async completion fields:**
-
-    - `asyncCompletion.directSend`: when `true`, completed async `music_generate` and `video_generate` tasks try direct channel delivery first. Default: `false` (legacy requester-session wake/model-delivery path).
 
   </Accordion>
 </AccordionGroup>

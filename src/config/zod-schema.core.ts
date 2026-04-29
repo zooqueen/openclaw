@@ -837,28 +837,12 @@ export const ToolsMediaSchema = z
   .object({
     models: z.array(MediaUnderstandingModelSchema).optional(),
     concurrency: z.number().int().positive().optional(),
-    asyncCompletion: z
-      .object({
-        directSend: z.boolean().optional(),
-      })
-      .strict()
-      .optional(),
     image: ToolsMediaUnderstandingSchema.optional(),
     audio: ToolsMediaUnderstandingSchema.optional(),
     video: ToolsMediaUnderstandingSchema.optional(),
   })
   .strict()
   .optional();
-
-type ToolsMediaConfigFromSchema = NonNullable<z.infer<typeof ToolsMediaSchema>>;
-type _ToolsMediaAsyncCompletionSchemaAssignableToType = AssertAssignable<
-  ToolsMediaConfigFromSchema["asyncCompletion"],
-  MediaToolsConfig["asyncCompletion"]
->;
-type _ToolsMediaAsyncCompletionTypeAssignableToSchema = AssertAssignable<
-  MediaToolsConfig["asyncCompletion"],
-  ToolsMediaConfigFromSchema["asyncCompletion"]
->;
 
 export const LinkModelSchema = z
   .object({
