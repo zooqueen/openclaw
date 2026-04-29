@@ -256,6 +256,13 @@ describe("listSessionsFromStore search", () => {
         totalTokens: 1200,
         totalTokensFresh: true,
       } as SessionEntry,
+      "agent:main:zero": {
+        sessionId: "sess-zero",
+        updatedAt: now - 500,
+        totalTokens: 0,
+        totalTokensFresh: true,
+        contextTokens: 200_000,
+      } as SessionEntry,
       "agent:main:stale": {
         sessionId: "sess-stale",
         updatedAt: now - 1000,
@@ -267,6 +274,7 @@ describe("listSessionsFromStore search", () => {
         updatedAt: now - 2000,
         inputTokens: 100,
         outputTokens: 200,
+        contextTokens: 200_000,
       } as SessionEntry,
     };
 
@@ -278,14 +286,19 @@ describe("listSessionsFromStore search", () => {
     });
 
     const fresh = result.sessions.find((row) => row.key === "agent:main:fresh");
+    const zero = result.sessions.find((row) => row.key === "agent:main:zero");
     const stale = result.sessions.find((row) => row.key === "agent:main:stale");
     const missing = result.sessions.find((row) => row.key === "agent:main:missing");
     expect(fresh?.totalTokens).toBe(1200);
     expect(fresh?.totalTokensFresh).toBe(true);
+    expect(zero?.totalTokens).toBe(0);
+    expect(zero?.totalTokensFresh).toBe(true);
+    expect(zero?.contextTokens).toBe(200_000);
     expect(stale?.totalTokens).toBeUndefined();
     expect(stale?.totalTokensFresh).toBe(false);
     expect(missing?.totalTokens).toBeUndefined();
     expect(missing?.totalTokensFresh).toBe(false);
+    expect(missing?.contextTokens).toBe(200_000);
   });
 
   test("includes estimated session cost when model pricing is configured", () => {

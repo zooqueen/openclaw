@@ -303,6 +303,81 @@ describe("tui session actions", () => {
     expect(state.sessionInfo.contextTokens).toBe(272000);
   });
 
+  it("applies known zero token totals from session rows without treating missing totals as zero", async () => {
+    const listSessions = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ts: Date.now(),
+        path: "/tmp/sessions.json",
+        count: 1,
+        defaults: {},
+        sessions: [
+          {
+            key: "agent:main:main",
+            totalTokens: 0,
+            contextTokens: 200_000,
+            updatedAt: 100,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ts: Date.now(),
+        path: "/tmp/sessions.json",
+        count: 1,
+        defaults: {},
+        sessions: [
+          {
+            key: "agent:main:main",
+            contextTokens: 200_000,
+            updatedAt: 200,
+          },
+        ],
+      });
+    const state = createBaseState();
+    const { refreshSessionInfo } = createTestSessionActions({
+      client: { listSessions } as unknown as TuiBackend,
+      state,
+    });
+
+    await refreshSessionInfo();
+    expect(state.sessionInfo.totalTokens).toBe(0);
+    expect(state.sessionInfo.contextTokens).toBe(200_000);
+
+    await refreshSessionInfo();
+    expect(state.sessionInfo.totalTokens).toBeNull();
+    expect(state.sessionInfo.contextTokens).toBe(200_000);
+  });
+
+  it("applies transcript-derived nonzero token totals to the current session", async () => {
+    const listSessions = vi.fn().mockResolvedValue({
+      ts: Date.now(),
+      path: "/tmp/sessions.json",
+      count: 1,
+      defaults: {},
+      sessions: [
+        {
+          key: "agent:main:main",
+          totalTokens: 3200,
+          contextTokens: 1_048_576,
+          updatedAt: 100,
+        },
+      ],
+    });
+    const state = createBaseState();
+    const updateFooter = vi.fn();
+    const { refreshSessionInfo } = createTestSessionActions({
+      client: { listSessions } as unknown as TuiBackend,
+      state,
+      updateFooter,
+    });
+
+    await refreshSessionInfo();
+
+    expect(state.sessionInfo.totalTokens).toBe(3200);
+    expect(state.sessionInfo.contextTokens).toBe(1_048_576);
+    expect(updateFooter).toHaveBeenCalled();
+  });
+
   it("resets activity status to idle when switching sessions after streaming", async () => {
     const listSessions = vi.fn().mockResolvedValue({
       ts: Date.now(),

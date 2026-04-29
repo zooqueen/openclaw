@@ -449,7 +449,7 @@ function resolveTranscriptUsageFallback(params: {
   return {
     modelProvider,
     model,
-    totalTokens: resolvePositiveNumber(snapshot.totalTokens),
+    totalTokens: resolveNonNegativeNumber(snapshot.totalTokens),
     totalTokensFresh: snapshot.totalTokensFresh === true,
     contextTokens: resolvePositiveNumber(contextTokens),
     estimatedCostUsd,
@@ -1346,8 +1346,8 @@ export function buildGatewaySessionRow(params: {
   );
   const runtimeModelPresent =
     Boolean(entry?.model?.trim()) || Boolean(entry?.modelProvider?.trim());
-  const needsTranscriptTotalTokens =
-    resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) === undefined;
+  const freshStoredTotalTokens = resolveNonNegativeNumber(resolveFreshSessionTotalTokens(entry));
+  const needsTranscriptTotalTokens = freshStoredTotalTokens === undefined;
   const needsTranscriptContextTokens = resolvePositiveNumber(entry?.contextTokens) === undefined;
   const needsTranscriptEstimatedCostUsd =
     resolveEstimatedSessionCostUsd({
@@ -1384,13 +1384,14 @@ export function buildGatewaySessionRow(params: {
       }
     : resolvedModelIdentity;
   const { provider: modelProvider, model } = modelIdentity;
-  const totalTokens =
-    resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) ??
-    resolvePositiveNumber(transcriptUsage?.totalTokens);
+  const transcriptTotalTokens = resolveNonNegativeNumber(transcriptUsage?.totalTokens);
+  const totalTokens = freshStoredTotalTokens ?? transcriptTotalTokens;
   const totalTokensFresh =
-    typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0
+    freshStoredTotalTokens !== undefined
       ? true
-      : transcriptUsage?.totalTokensFresh === true;
+      : transcriptTotalTokens !== undefined
+        ? transcriptUsage?.totalTokensFresh === true
+        : false;
   const childSessions = resolveChildSessionKeys(key, store, now);
   const latestCompactionCheckpoint = resolveLatestCompactionCheckpoint(entry);
   const estimatedCostUsd =

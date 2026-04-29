@@ -839,6 +839,38 @@ describe("readLatestSessionUsageFromTranscript", () => {
     expect(snapshot?.costUsd).toBeCloseTo(0.0115, 8);
   });
 
+  test("returns explicit zero assistant usage as a known fresh snapshot", () => {
+    const sessionId = "usage-zero";
+    writeTranscript(tmpDir, sessionId, [
+      { type: "session", version: 1, id: sessionId },
+      {
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-5.4",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+          },
+        },
+      },
+    ]);
+
+    expect(readLatestSessionUsageFromTranscript(sessionId, storePath)).toEqual({
+      modelProvider: "openai",
+      model: "gpt-5.4",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      totalTokensFresh: true,
+    });
+  });
+
   test("reads earlier assistant usage outside the old tail window", () => {
     const sessionId = "usage-full-transcript";
     const filler = "x".repeat(20_000);

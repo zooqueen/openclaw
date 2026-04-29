@@ -3,6 +3,7 @@ import {
   extractContentFromMessage,
   extractTextFromMessage,
   extractThinkingFromMessage,
+  formatTokens,
   isCommandMessage,
   sanitizeRenderableText,
 } from "./tui-formatters.js";
@@ -282,6 +283,16 @@ describe("isCommandMessage", () => {
     expect(isCommandMessage({ command: true })).toBe(true);
     expect(isCommandMessage({ command: false })).toBe(false);
     expect(isCommandMessage({})).toBe(false);
+  });
+});
+
+describe("formatTokens", () => {
+  it("keeps missing totals unknown when context is known", () => {
+    expect(formatTokens(null, 200_000)).toBe("tokens ?/200k");
+  });
+
+  it("renders an explicit zero total distinctly from unknown", () => {
+    expect(formatTokens(0, 200_000)).toBe("tokens 0/200k (0%)");
   });
 });
 

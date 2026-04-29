@@ -189,12 +189,18 @@ export function createSessionActions(context: SessionActionContext) {
     }
     if (entry?.inputTokens !== undefined) {
       next.inputTokens = entry.inputTokens;
+    } else if (!params.force) {
+      next.inputTokens = null;
     }
     if (entry?.outputTokens !== undefined) {
       next.outputTokens = entry.outputTokens;
+    } else if (!params.force) {
+      next.outputTokens = null;
     }
     if (entry?.totalTokens !== undefined) {
       next.totalTokens = entry.totalTokens;
+    } else if (!params.force) {
+      next.totalTokens = null;
     }
     if (entry?.contextTokens !== undefined || defaults?.contextTokens !== undefined) {
       next.contextTokens =

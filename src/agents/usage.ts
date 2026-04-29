@@ -245,7 +245,11 @@ export function deriveSessionTotalTokens(params: {
 }): number | undefined {
   const promptOverride = params.promptTokens;
   const hasPromptOverride =
-    typeof promptOverride === "number" && Number.isFinite(promptOverride) && promptOverride > 0;
+    typeof promptOverride === "number" && Number.isFinite(promptOverride) && promptOverride >= 0;
+
+  if (hasPromptOverride && promptOverride === 0) {
+    return 0;
+  }
 
   const usage = params.usage;
   if (!usage && !hasPromptOverride) {
@@ -260,6 +264,33 @@ export function deriveSessionTotalTokens(params: {
   });
 
   if (!(typeof promptTokens === "number") || !Number.isFinite(promptTokens) || promptTokens <= 0) {
+    const promptUsageValues = [usage?.input, usage?.cacheRead, usage?.cacheWrite];
+    const hasKnownPromptUsage = promptUsageValues.some(
+      (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
+    );
+    let promptUsageTotal = 0;
+    for (const value of promptUsageValues) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+        promptUsageTotal += value;
+      }
+    }
+    if (hasKnownPromptUsage && promptUsageTotal === 0) {
+      return 0;
+    }
+    const hasPositiveUsageComponent = [
+      usage?.input,
+      usage?.output,
+      usage?.cacheRead,
+      usage?.cacheWrite,
+    ].some((value) => typeof value === "number" && Number.isFinite(value) && value > 0);
+    if (
+      typeof usage?.total === "number" &&
+      Number.isFinite(usage.total) &&
+      usage.total === 0 &&
+      !hasPositiveUsageComponent
+    ) {
+      return 0;
+    }
     return undefined;
   }
 

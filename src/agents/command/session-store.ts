@@ -129,28 +129,40 @@ export async function updateSessionStoreAfterAgentRun(params: {
   if (result.meta.systemPromptReport) {
     next.systemPromptReport = result.meta.systemPromptReport;
   }
-  if (hasNonzeroUsage(usage)) {
+  const totalTokens = deriveSessionTotalTokens({
+    usage: promptTokens ? undefined : usage,
+    contextTokens,
+    promptTokens,
+  });
+  const hasKnownTotalTokens =
+    typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens >= 0;
+  if (hasNonzeroUsage(usage) || hasKnownTotalTokens) {
     const { estimateUsageCost, resolveModelCostConfig } = await getUsageFormatModule();
-    const input = usage.input ?? 0;
-    const output = usage.output ?? 0;
-    const totalTokens = deriveSessionTotalTokens({
-      usage: promptTokens ? undefined : usage,
-      contextTokens,
-      promptTokens,
-    });
-    const runEstimatedCostUsd = resolveNonNegativeNumber(
-      estimateUsageCost({
-        usage,
-        cost: resolveModelCostConfig({
-          provider: providerUsed,
-          model: modelUsed,
-          config: cfg,
+    if (usage) {
+      const input = usage.input ?? 0;
+      const output = usage.output ?? 0;
+      const runEstimatedCostUsd = resolveNonNegativeNumber(
+        estimateUsageCost({
+          usage,
+          cost: resolveModelCostConfig({
+            provider: providerUsed,
+            model: modelUsed,
+            config: cfg,
+          }),
         }),
-      }),
-    );
-    next.inputTokens = input;
-    next.outputTokens = output;
-    if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
+      );
+      next.inputTokens = input;
+      next.outputTokens = output;
+      next.cacheRead = usage.cacheRead ?? 0;
+      next.cacheWrite = usage.cacheWrite ?? 0;
+      // Snapshot cost like tokens (runEstimatedCostUsd is already computed from
+      // cumulative run usage, so assign directly instead of accumulating).
+      // Fixes #69347: cost was inflated 1x-72x by accumulating on every persist.
+      if (runEstimatedCostUsd !== undefined) {
+        next.estimatedCostUsd = runEstimatedCostUsd;
+      }
+    }
+    if (hasKnownTotalTokens) {
       next.totalTokens = totalTokens;
       next.totalTokensFresh = true;
     } else if (compactionTokensAfter !== undefined) {
@@ -159,14 +171,6 @@ export async function updateSessionStoreAfterAgentRun(params: {
     } else {
       next.totalTokens = undefined;
       next.totalTokensFresh = false;
-    }
-    next.cacheRead = usage.cacheRead ?? 0;
-    next.cacheWrite = usage.cacheWrite ?? 0;
-    // Snapshot cost like tokens (runEstimatedCostUsd is already computed from
-    // cumulative run usage, so assign directly instead of accumulating).
-    // Fixes #69347: cost was inflated 1x-72x by accumulating on every persist.
-    if (runEstimatedCostUsd !== undefined) {
-      next.estimatedCostUsd = runEstimatedCostUsd;
     }
   } else if (compactionTokensAfter !== undefined) {
     next.totalTokens = compactionTokensAfter;

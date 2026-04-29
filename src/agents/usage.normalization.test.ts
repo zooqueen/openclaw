@@ -122,6 +122,21 @@ describe("normalizeUsage", () => {
     ).toBe(1_550);
   });
 
+  it("returns a known zero for explicit zero prompt usage", () => {
+    expect(
+      deriveSessionTotalTokens({
+        usage: {
+          input: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          output: 0,
+          total: 0,
+        },
+        contextTokens: 200_000,
+      }),
+    ).toBe(0);
+  });
+
   it("prefers explicit prompt token overrides", () => {
     expect(
       deriveSessionTotalTokens({
