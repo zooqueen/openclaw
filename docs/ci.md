@@ -340,7 +340,7 @@ gh workflow run duplicate-after-merge.yml \
 | `build-artifacts`                | Build `dist/`, Control UI, built-artifact checks, and reusable downstream artifacts          | Node-relevant changes              |
 | `checks-fast-core`               | Fast Linux correctness lanes such as bundled/plugin-contract/protocol checks                 | Node-relevant changes              |
 | `checks-fast-contracts-channels` | Sharded channel contract checks with a stable aggregate check result                         | Node-relevant changes              |
-| `checks-node-extensions`         | Full bundled-plugin test shards across the extension suite                                   | Node-relevant changes              |
+| `checks-node-extensions`         | Full plugin test shards across the plugin suite                                              | Full Release Validation CI child   |
 | `checks-node-core-test`          | Core Node test shards, excluding channel, bundled, contract, and extension lanes             | Node-relevant changes              |
 | `check`                          | Sharded main local gate equivalent: prod types, lint, guards, test types, and strict smoke   | Node-relevant changes              |
 | `check-additional`               | Architecture, boundary, extension-surface guards, package-boundary, and gateway-watch shards | Node-relevant changes              |
@@ -357,15 +357,16 @@ gh workflow run duplicate-after-merge.yml \
 | `test-performance-agent`         | Daily Codex slow-test optimization after trusted activity                                    | Main CI success or manual dispatch |
 
 Manual CI dispatches run the same job graph as normal CI but force every
-scoped lane on: Linux Node shards, bundled-plugin shards, channel contracts,
-Node 22 compatibility, `check`, `check-additional`, build smoke, docs checks,
-Python skills, Windows, macOS, Android, and Control UI i18n. The plugin
-prerelease suite is excluded from standalone manual CI and is enabled only when
-the full release umbrella passes `full_release_validation=true`. Manual runs use a
-unique concurrency group so a release-candidate full suite is not cancelled by
-another push or PR run on the same ref. The optional `target_ref` input lets a
-trusted caller run that graph against a branch, tag, or full commit SHA while
-using the workflow file from the selected dispatch ref.
+normal scoped lane on: Linux Node shards, bundled checks and plugin-contract fast checks,
+channel contracts, Node 22 compatibility, `check`, `check-additional`, build
+smoke, docs checks, Python skills, Windows, macOS, Android, and Control UI i18n.
+The release-only `checks-node-extensions` aggregate and plugin prerelease suite
+are excluded from standalone manual CI and are enabled only when the full
+release umbrella passes `full_release_validation=true`. Manual runs use a unique
+concurrency group so a release-candidate full suite is not cancelled by another
+push or PR run on the same ref. The optional `target_ref` input lets a trusted
+caller run that graph against a branch, tag, or full commit SHA while using the
+workflow file from the selected dispatch ref.
 
 ```bash
 gh workflow run ci.yml --ref release/YYYY.M.D
@@ -380,7 +381,7 @@ Jobs are ordered so cheap checks fail before expensive ones run:
 1. `preflight` decides which lanes exist at all. The `docs-scope` and `changed-scope` logic are steps inside this job, not standalone jobs.
 2. `security-scm-fast`, `security-dependency-audit`, `security-fast`, `check`, `check-additional`, `check-docs`, and `skills-python` fail quickly without waiting on the heavier artifact and platform matrix jobs.
 3. `build-artifacts` overlaps with the fast Linux lanes so downstream consumers can start as soon as the shared build is ready.
-4. Heavier platform and runtime lanes fan out after that: `checks-fast-core`, `checks-fast-contracts-channels`, `checks-node-extensions`, `checks-node-core-test`, `checks`, `checks-windows`, `macos-node`, `macos-swift`, and `android`.
+4. Heavier platform and runtime lanes fan out after that: `checks-fast-core`, `checks-fast-contracts-channels`, `checks-node-core-test`, `checks`, `checks-windows`, `macos-node`, `macos-swift`, and `android`. The Full Release Validation CI child also enables the release-only `checks-node-extensions` aggregate.
 
 Scope logic lives in `scripts/ci-changed-scope.mjs` and is covered by unit tests in `src/scripts/ci-changed-scope.test.ts`.
 Manual dispatch skips changed-scope detection and makes the preflight manifest
@@ -413,7 +414,7 @@ copy of the PR. Stop that box and warm a fresh one instead of debugging the
 product test failure. For intentional large deletion PRs, set
 `OPENCLAW_TESTBOX_ALLOW_MASS_DELETIONS=1` for that sanity run.
 
-Manual CI dispatches run `checks-node-compat-node22` as broad compatibility coverage. `plugin-prerelease-suite` is more expensive product/package coverage, so it runs only when `Full Release Validation` dispatches CI with `full_release_validation=true`. Normal pull requests, `main` pushes, and standalone manual CI dispatches keep that suite off.
+Manual CI dispatches run `checks-node-compat-node22` as broad compatibility coverage. `checks-node-extensions` and `plugin-prerelease-suite` are more expensive plugin product and package coverage, so they run only when `Full Release Validation` dispatches CI with `full_release_validation=true`. Normal pull requests, `main` pushes, and standalone manual CI dispatches keep those suites off.
 
 The slowest Node test families are split or balanced so each job stays small without over-reserving runners: channel contracts run as three weighted shards, bundled plugin tests balance across six extension workers, small core unit lanes are paired, auto-reply runs as four balanced workers with the reply subtree split into agent-runner, dispatch, and commands/state-routing shards, and agentic gateway/plugin configs are spread across the existing source-only agentic Node jobs instead of waiting on built artifacts. Broad browser, QA, media, and miscellaneous plugin tests use their dedicated Vitest configs instead of the shared plugin catch-all. Extension shard jobs run up to two plugin config groups at a time with one Vitest worker per group and a larger Node heap so import-heavy plugin batches do not create extra CI jobs. The broad agents lane uses the shared Vitest file-parallel scheduler because it is import/scheduling dominated rather than owned by a single slow test file. `runtime-config` runs with the infra core-runtime shard to keep the shared runtime shard from owning the tail. Include-pattern shards record timing entries using the CI shard name, so `.artifacts/vitest-shard-timings.json` can distinguish a whole config from a filtered shard. `check-additional` keeps package-boundary compile/canary work together and separates runtime topology architecture from gateway watch coverage; the boundary guard shard runs its small independent guards concurrently inside one job. Gateway watch, channel tests, and the core support-boundary shard run concurrently inside `build-artifacts` after `dist/` and `dist-runtime/` are already built, keeping their old check names as lightweight verifier jobs while avoiding two extra Blacksmith workers and a second artifact-consumer queue.
 Android CI runs both `testPlayDebugUnitTest` and `testThirdPartyDebugUnitTest`, then builds the Play debug APK. The third-party flavor has no separate source set or manifest; its unit-test lane still compiles that flavor with the SMS/call-log BuildConfig flags, while avoiding a duplicate debug APK packaging job on every Android-relevant push.
