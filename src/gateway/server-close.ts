@@ -104,6 +104,23 @@ async function stopGmailWatcherOnDemand(): Promise<void> {
   await stopGmailWatcher();
 }
 
+async function persistFollowupQueuesForExpectedRestart(params: {
+  log: { info: (msg: string) => void; warn: (msg: string) => void };
+}): Promise<void> {
+  try {
+    const { persistFollowupQueuesForRestart } =
+      await import("../auto-reply/reply/queue/persist.js");
+    const result = await persistFollowupQueuesForRestart({ log: params.log });
+    if (result.persistedQueues > 0) {
+      params.log.info(
+        `persisted ${result.persistedItems} queued followup message(s) across ${result.persistedQueues} queue(s) before restart`,
+      );
+    }
+  } catch (err) {
+    params.log.warn(`followup queue restart snapshot failed: ${String(err)}`);
+  }
+}
+
 export async function runGatewayClosePrelude(params: {
   stopDiagnostics?: () => void;
   clearSkillsRefreshTimer?: () => void;
@@ -204,6 +221,9 @@ export function createGatewayCloseHandler(params: {
         }
       } catch {
         // Best-effort only; shutdown should proceed even if hooks fail.
+      }
+      if (restartExpectedMs !== null) {
+        await persistFollowupQueuesForExpectedRestart({ log: shutdownLog });
       }
       if (params.bonjourStop) {
         try {

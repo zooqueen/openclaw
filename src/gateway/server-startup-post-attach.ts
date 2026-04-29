@@ -202,6 +202,23 @@ function schedulePrimaryModelPrewarm(
   });
 }
 
+async function recoverPersistedFollowupQueuesAfterRestart(params: {
+  log: { info?: (msg: string) => void; warn: (msg: string) => void };
+}): Promise<void> {
+  try {
+    const { recoverPersistedFollowupQueuesForRestart } =
+      await import("../auto-reply/reply/queue/persist.js");
+    const result = await recoverPersistedFollowupQueuesForRestart({ log: params.log });
+    if (result.recoveredQueues > 0) {
+      params.log.info?.(
+        `recovered ${result.recoveredItems} queued followup message(s) across ${result.recoveredQueues} queue(s) after restart`,
+      );
+    }
+  } catch (err) {
+    params.log.warn(`followup queue restart recovery failed: ${String(err)}`);
+  }
+}
+
 export async function startGatewaySidecars(params: {
   cfg: OpenClawConfig;
   pluginRegistry: ReturnType<typeof loadOpenClawPlugins>;
@@ -340,6 +357,11 @@ export async function startGatewaySidecars(params: {
         );
         await measureStartup(params.startupTrace, "sidecars.channel-start", () =>
           params.startChannels(),
+        );
+        await measureStartup(params.startupTrace, "sidecars.followup-queue-recovery", () =>
+          recoverPersistedFollowupQueuesAfterRestart({
+            log: { info: params.logChannels.info, warn: params.log.warn },
+          }),
         );
       } catch (err) {
         params.logChannels.error(`channel startup failed: ${String(err)}`);
