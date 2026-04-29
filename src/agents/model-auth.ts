@@ -53,8 +53,9 @@ function resolveConfigAwareEnvApiKey(
   cfg: OpenClawConfig | undefined,
   provider: string,
   workspaceDir?: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): EnvApiKeyResult | null {
-  return resolveEnvApiKey(provider, process.env, { config: cfg, workspaceDir });
+  return resolveEnvApiKey(provider, env, { config: cfg, workspaceDir });
 }
 
 function resolveProviderConfig(
@@ -324,12 +325,7 @@ export function hasRuntimeAvailableProviderAuth(params: {
   if (authOverride === "aws-sdk") {
     return true;
   }
-  if (
-    resolveEnvApiKey(provider, params.env, {
-      config: params.cfg,
-      workspaceDir: params.workspaceDir,
-    })
-  ) {
+  if (resolveConfigAwareEnvApiKey(params.cfg, provider, params.workspaceDir, params.env)) {
     return true;
   }
   if (resolveUsableCustomProviderApiKey({ cfg: params.cfg, provider, env: params.env })) {
