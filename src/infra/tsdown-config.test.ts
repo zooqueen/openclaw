@@ -41,6 +41,13 @@ function entryKeys(config: TsdownConfigEntry): string[] {
   return Object.keys(config.entry);
 }
 
+function entrySources(config: TsdownConfigEntry): Record<string, string> {
+  if (!config.entry || Array.isArray(config.entry)) {
+    return {};
+  }
+  return config.entry;
+}
+
 function hasBundledPluginRuntimeEntry(config: TsdownConfigEntry): boolean {
   const keys = entryKeys(config);
   return keys.includes("index") || keys.includes("runtime-api");
@@ -82,6 +89,26 @@ describe("tsdown config", () => {
         bundledEntry("openai"),
         "bundled/boot-md/handler",
       ]),
+    );
+  });
+
+  it("keeps gateway lifecycle lazy loaders on stable dist entries", () => {
+    const distGraph = unifiedDistGraph();
+
+    expect(distGraph).toBeDefined();
+    expect(entrySources(distGraph as TsdownConfigEntry)).toEqual(
+      expect.objectContaining({
+        "agents/pi-embedded-runner/runs": "src/agents/pi-embedded-runner/runs.ts",
+        "config/config": "src/config/config.ts",
+        "infra/process-respawn": "src/infra/process-respawn.ts",
+        "infra/restart": "src/infra/restart.ts",
+        "infra/restart-sentinel": "src/infra/restart-sentinel.ts",
+        "infra/supervisor-markers": "src/infra/supervisor-markers.ts",
+        "logging/diagnostic-stability-bundle": "src/logging/diagnostic-stability-bundle.ts",
+        "plugins/bundled-runtime-deps-activity": "src/plugins/bundled-runtime-deps-activity.ts",
+        "process/command-queue": "src/process/command-queue.ts",
+        "tasks/runtime-internal": "src/tasks/runtime-internal.ts",
+      }),
     );
   });
 

@@ -201,6 +201,21 @@ function buildBundledPluginNeverBundlePredicate(packageJson: {
   };
 }
 
+function buildGatewayLifecycleLazyEntries(): Record<string, string> {
+  return {
+    "agents/pi-embedded-runner/runs": "src/agents/pi-embedded-runner/runs.ts",
+    "config/config": "src/config/config.ts",
+    "infra/process-respawn": "src/infra/process-respawn.ts",
+    "infra/restart": "src/infra/restart.ts",
+    "infra/restart-sentinel": "src/infra/restart-sentinel.ts",
+    "infra/supervisor-markers": "src/infra/supervisor-markers.ts",
+    "logging/diagnostic-stability-bundle": "src/logging/diagnostic-stability-bundle.ts",
+    "plugins/bundled-runtime-deps-activity": "src/plugins/bundled-runtime-deps-activity.ts",
+    "process/command-queue": "src/process/command-queue.ts",
+    "tasks/runtime-internal": "src/tasks/runtime-internal.ts",
+  };
+}
+
 function buildCoreDistEntries(): Record<string, string> {
   return {
     index: "src/index.ts",
@@ -209,6 +224,7 @@ function buildCoreDistEntries(): Record<string, string> {
     "cli/daemon-cli": "src/cli/daemon-cli.ts",
     // Keep long-lived lazy runtime boundaries on stable filenames so rebuilt
     // dist/ trees do not strand already-running gateways on stale hashed chunks.
+    ...buildGatewayLifecycleLazyEntries(),
     "agents/auth-profiles.runtime": "src/agents/auth-profiles.runtime.ts",
     "agents/model-catalog.runtime": "src/agents/model-catalog.runtime.ts",
     "agents/models-config.runtime": "src/agents/models-config.runtime.ts",
@@ -250,7 +266,6 @@ function buildDockerE2eHarnessEntries(): Record<string, string> {
       "src/agents/pi-embedded-runner/run/runtime-context-prompt.ts",
     "auto-reply/reply/commands-crestodian": "src/auto-reply/reply/commands-crestodian.ts",
     "cli/run-main": "src/cli/run-main.ts",
-    "config/config": "src/config/config.ts",
     "crestodian/crestodian": "src/crestodian/crestodian.ts",
     "crestodian/rescue-message": "src/crestodian/rescue-message.ts",
     "gateway/protocol/index": "src/gateway/protocol/index.ts",
