@@ -38,7 +38,11 @@ describe("Parallels smoke model selection", () => {
       const script = readFileSync(scriptPath, "utf8");
 
       expect(script, scriptPath).toContain("release_smoke_plugin_allowlist_json");
-      expect(script, scriptPath).toContain("config set plugins.allow");
+      expect(script, scriptPath).toContain("plugins.allow");
+      expect(
+        script.includes("config set plugins.allow") || script.includes("config set --batch-file"),
+        scriptPath,
+      ).toBe(true);
       expect(script, scriptPath).toContain('"acpx"');
       expect(script, scriptPath).toContain('"device-pair"');
       expect(script, scriptPath).not.toContain('"memory-core"');
@@ -90,9 +94,9 @@ describe("Parallels smoke model selection", () => {
     const script = readFileSync("scripts/e2e/parallels-windows-smoke.sh", "utf8");
     const npmUpdateScript = readFileSync(NPM_UPDATE_SCRIPT_PATH, "utf8");
 
-    expect(script).toContain("guest_run_node_openclaw");
-    expect(script).toContain('guest_run_node_openclaw "" "" config set plugins.allow');
-    expect(npmUpdateScript).toContain("$node $entry config set plugins.allow");
+    expect(script).toContain("guest_set_release_smoke_plugin_allowlist");
+    expect(script).toContain("config set --batch-file \\$batch --strict-json");
+    expect(npmUpdateScript).toContain("config set --batch-file $pluginAllowBatch --strict-json");
   });
 
   it("keeps Windows gateway reachability on a real deadline with start recovery", () => {

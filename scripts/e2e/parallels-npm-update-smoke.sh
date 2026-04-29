@@ -991,7 +991,9 @@ try {
   Write-ProgressLog 'update.set-plugin-allowlist'
   $node = (Get-Command node.exe -ErrorAction Stop).Source
   $entry = Join-Path $env:APPDATA 'npm\node_modules\openclaw\openclaw.mjs'
-  Invoke-Logged 'openclaw config set plugins.allow' { & $node $entry config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json }
+  $pluginAllowBatch = Join-Path $env:TEMP 'openclaw-release-smoke-plugin-allow.json'
+  Set-Content -Path $pluginAllowBatch -Value '[{"path":"plugins.allow","value":$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON}]' -Encoding UTF8
+  Invoke-Logged 'openclaw config set plugins.allow' { & $node $entry config set --batch-file $pluginAllowBatch --strict-json }
   # Windows can keep the old hashed dist modules alive across in-place global npm upgrades.
   # Restart the gateway/service before verifying status or the next agent turn.
   # Current login-item restarts can report failure before the background service
@@ -1303,8 +1305,10 @@ if (-not \$gatewayReady) {
 Set-Item -Path ('Env:' + '$API_KEY_ENV') -Value \$providerValue
 \$node = (Get-Command node.exe -ErrorAction Stop).Source
 \$entry = Join-Path \$env:APPDATA 'npm\\node_modules\\openclaw\\openclaw.mjs'
+\$pluginAllowBatch = Join-Path \$env:TEMP 'openclaw-release-smoke-plugin-allow.json'
+Set-Content -Path \$pluginAllowBatch -Value '[{"path":"plugins.allow","value":$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON}]' -Encoding UTF8
   & \$openclaw models set '$MODEL_ID'
-  & \$node \$entry config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json
+  & \$node \$entry config set --batch-file \$pluginAllowBatch --strict-json
   & \$openclaw config set agents.defaults.skipBootstrap true --strict-json
 \$workspace = \$env:OPENCLAW_WORKSPACE_DIR
 if (-not \$workspace) {

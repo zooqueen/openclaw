@@ -618,27 +618,19 @@ EOF
 )"
 }
 
-guest_run_node_openclaw() {
-  local env_name="${1:-}"
-  local env_value="${2:-}"
-  shift 2
-
-  local args_literal env_name_q env_value_q
-  args_literal="$(ps_array_literal "$@")"
-  env_name_q="$(ps_single_quote "$env_name")"
-  env_value_q="$(ps_single_quote "$env_value")"
-
+guest_set_release_smoke_plugin_allowlist() {
+  local allow_json allow_json_q
+  allow_json="$(release_smoke_plugin_allowlist_json)"
+  allow_json_q="$(ps_single_quote "$allow_json")"
   guest_powershell "$(cat <<EOF
 \$node = Join-Path \$env:ProgramFiles 'nodejs\node.exe'
 if (-not (Test-Path \$node)) {
   \$node = 'node'
 }
 \$entry = Join-Path \$env:APPDATA 'npm\node_modules\openclaw\openclaw.mjs'
-\$args = $args_literal
-if ('${env_name_q}' -ne '') {
-  Set-Item -Path ('Env:' + '${env_name_q}') -Value '${env_value_q}'
-}
-\$output = & \$node \$entry @args 2>&1
+\$batch = Join-Path \$env:TEMP 'openclaw-release-smoke-plugin-allow.json'
+Set-Content -Path \$batch -Value '[{"path":"plugins.allow","value":${allow_json_q}}]' -Encoding UTF8
+\$output = & \$node \$entry config set --batch-file \$batch --strict-json 2>&1
 if (\$null -ne \$output) {
   \$output | ForEach-Object { \$_ }
 }
@@ -2647,7 +2639,7 @@ show_gateway_status_compat() {
 
 verify_turn() {
   guest_run_openclaw "" "" models set "$MODEL_ID"
-  guest_run_node_openclaw "" "" config set plugins.allow "$(release_smoke_plugin_allowlist_json)" --strict-json
+  guest_set_release_smoke_plugin_allowlist
   guest_run_openclaw "" "" config set agents.defaults.skipBootstrap true --strict-json
   guest_powershell "$(cat <<'EOF'
 $workspace = $env:OPENCLAW_WORKSPACE_DIR
