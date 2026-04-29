@@ -9,3 +9,5 @@ export {
   isPluginProvidersLoadInFlight,
   resolvePluginProviders,
 } from "../plugins/providers.runtime.js";
+
+export function resetProviderRuntimeHookCacheForTest(): void {}
