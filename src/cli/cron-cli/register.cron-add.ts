@@ -8,12 +8,12 @@ import {
 } from "../../shared/string-coerce.js";
 import type { GatewayRpcOpts } from "../gateway-rpc.js";
 import { addGatewayClientOptions, callGatewayFromCli } from "../gateway-rpc.js";
-import { parsePositiveIntOrUndefined } from "../program/helpers.js";
 import { resolveCronCreateSchedule } from "./schedule-options.js";
 import {
   getCronChannelOptions,
   coerceCronDeliveryPreviews,
   handleCronCliError,
+  parseCronTimeoutSecondsOption,
   parseCronToolsAllow,
   printCronJson,
   printCronList,
@@ -150,14 +150,13 @@ export function registerCronAddCommand(cron: Command) {
             if (systemEvent) {
               return { kind: "systemEvent" as const, text: systemEvent };
             }
-            const timeoutSeconds = parsePositiveIntOrUndefined(opts.timeoutSeconds);
+            const timeoutSeconds = parseCronTimeoutSecondsOption(opts.timeoutSeconds);
             return {
               kind: "agentTurn" as const,
               message,
               model: normalizeOptionalString(opts.model),
               thinking: normalizeOptionalString(opts.thinking),
-              timeoutSeconds:
-                timeoutSeconds && Number.isFinite(timeoutSeconds) ? timeoutSeconds : undefined,
+              timeoutSeconds,
               lightContext: opts.lightContext === true ? true : undefined,
               toolsAllow: parseCronToolsAllow(opts.tools),
             };

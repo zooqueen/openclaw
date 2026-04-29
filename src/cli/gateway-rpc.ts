@@ -1,8 +1,9 @@
-import type { Command } from "commander";
+import { InvalidArgumentError, type Command } from "commander";
 import type { OperatorScope } from "../gateway/operator-scopes.js";
 import type { GatewayClientMode, GatewayClientName } from "../gateway/protocol/client-info.js";
 import type { DeviceIdentity } from "../infra/device-identity.js";
 import type { GatewayRpcOpts } from "./gateway-rpc.types.js";
+import { parsePositiveIntOrUndefined } from "./program/helpers.js";
 export type { GatewayRpcOpts } from "./gateway-rpc.types.js";
 
 type GatewayRpcRuntimeModule = typeof import("./gateway-rpc.runtime.js");
@@ -14,11 +15,19 @@ async function loadGatewayRpcRuntime(): Promise<GatewayRpcRuntimeModule> {
   return gatewayRpcRuntimePromise;
 }
 
+export function parseGatewayTimeoutMsOption(value: string): number {
+  const parsed = parsePositiveIntOrUndefined(value);
+  if (parsed === undefined) {
+    throw new InvalidArgumentError("--timeout must be a positive integer (milliseconds)");
+  }
+  return parsed;
+}
+
 export function addGatewayClientOptions(cmd: Command) {
   return cmd
     .option("--url <url>", "Gateway WebSocket URL (defaults to gateway.remote.url when configured)")
     .option("--token <token>", "Gateway token (if required)")
-    .option("--timeout <ms>", "Timeout in ms", "30000")
+    .option("--timeout <ms>", "Timeout in ms", parseGatewayTimeoutMsOption, 30000)
     .option("--expect-final", "Wait for final response (agent)", false);
 }
 

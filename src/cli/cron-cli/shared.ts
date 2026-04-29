@@ -16,6 +16,7 @@ import {
 import { colorize, isRich, theme } from "../../terminal/theme.js";
 import type { GatewayRpcOpts } from "../gateway-rpc.js";
 import { callGatewayFromCli } from "../gateway-rpc.js";
+import { parsePositiveIntOrUndefined } from "../program/helpers.js";
 
 export const getCronChannelOptions = () => {
   // Keep help truthful even before the plugin registry is bootstrapped.
@@ -32,6 +33,14 @@ export function printCronJson(value: unknown) {
 export function handleCronCliError(err: unknown) {
   defaultRuntime.error(danger(String(err)));
   defaultRuntime.exit(1);
+}
+
+export function parseCronTimeoutSecondsOption(value: unknown): number | undefined {
+  const parsed = parsePositiveIntOrUndefined(value);
+  if (value !== undefined && parsed === undefined) {
+    throw new Error("--timeout-seconds must be a positive integer");
+  }
+  return parsed;
 }
 
 export async function warnIfCronSchedulerDisabled(opts: GatewayRpcOpts) {

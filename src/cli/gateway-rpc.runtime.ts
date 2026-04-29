@@ -1,6 +1,7 @@
 import { callGateway } from "../gateway/call.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../gateway/protocol/client-info.js";
 import type { GatewayRpcOpts } from "./gateway-rpc.types.js";
+import { parsePositiveIntOrUndefined } from "./program/helpers.js";
 import { withProgress } from "./progress.js";
 
 type CallGatewayFromCliRuntimeExtra = {
@@ -11,6 +12,14 @@ type CallGatewayFromCliRuntimeExtra = {
   progress?: boolean;
   scopes?: Parameters<typeof callGateway>[0]["scopes"];
 };
+
+function resolveGatewayTimeoutMs(value: GatewayRpcOpts["timeout"]): number {
+  const parsed = parsePositiveIntOrUndefined(value);
+  if (value !== undefined && parsed === undefined) {
+    throw new Error("--timeout must be a positive integer (milliseconds)");
+  }
+  return parsed ?? 10_000;
+}
 
 export async function callGatewayFromCliRuntime(
   method: string,
@@ -34,7 +43,7 @@ export async function callGatewayFromCliRuntime(
         deviceIdentity: extra?.deviceIdentity,
         expectFinal: extra?.expectFinal ?? Boolean(opts.expectFinal),
         scopes: extra?.scopes,
-        timeoutMs: Number(opts.timeout ?? 10_000),
+        timeoutMs: resolveGatewayTimeoutMs(opts.timeout),
         clientName: extra?.clientName ?? GATEWAY_CLIENT_NAMES.CLI,
         mode: extra?.mode ?? GATEWAY_CLIENT_MODES.CLI,
       }),

@@ -14,6 +14,7 @@ import {
 } from "./schedule-options.js";
 import {
   getCronChannelOptions,
+  parseCronTimeoutSecondsOption,
   parseCronToolsAllow,
   parseDurationMs,
   warnIfCronSchedulerDisabled,
@@ -226,10 +227,8 @@ export function registerCronEditCommand(cron: Command) {
           const model = normalizeOptionalString(opts.model);
           const thinking = normalizeOptionalString(opts.thinking);
           const toolsAllow = parseCronToolsAllow(opts.tools);
-          const timeoutSeconds = opts.timeoutSeconds
-            ? Number.parseInt(String(opts.timeoutSeconds), 10)
-            : undefined;
-          const hasTimeoutSeconds = Boolean(timeoutSeconds && Number.isFinite(timeoutSeconds));
+          const timeoutSeconds = parseCronTimeoutSecondsOption(opts.timeoutSeconds);
+          const hasTimeoutSeconds = timeoutSeconds !== undefined;
           const hasDeliveryModeFlag = opts.announce || typeof opts.deliver === "boolean";
           const threadId = parseCronThreadIdOption(opts.threadId);
           const hasDeliveryThreadId = typeof threadId === "number";

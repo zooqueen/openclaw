@@ -138,7 +138,7 @@ describe("registerStatusHealthSessionsCommands", () => {
   });
 
   it("rejects invalid status timeout without calling status command", async () => {
-    await runCli(["status", "--timeout", "nope"]);
+    await runCli(["status", "--timeout", "10ms"]);
 
     expect(runtime.error).toHaveBeenCalledWith(
       "--timeout must be a positive integer (milliseconds)",

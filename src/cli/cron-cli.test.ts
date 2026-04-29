@@ -60,6 +60,7 @@ type CronUpdatePatch = {
       message?: string;
       model?: string;
       thinking?: string;
+      timeoutSeconds?: number;
       lightContext?: boolean;
       toolsAllow?: string[];
     };
@@ -79,6 +80,7 @@ type CronAddParams = {
   payload?: {
     model?: string;
     thinking?: string;
+    timeoutSeconds?: number;
     lightContext?: boolean;
     toolsAllow?: string[];
   };
@@ -303,6 +305,45 @@ describe("cron cli", () => {
 
     expect(params?.payload?.model).toBe("opus");
     expect(params?.payload?.thinking).toBe("low");
+  });
+
+  it("sets timeout seconds on cron add", async () => {
+    const params = await runCronAddAndGetParams([
+      "--name",
+      "Daily",
+      "--cron",
+      "* * * * *",
+      "--session",
+      "isolated",
+      "--message",
+      "hello",
+      "--timeout-seconds",
+      "45",
+    ]);
+
+    expect(params.payload?.timeoutSeconds).toBe(45);
+  });
+
+  it("rejects invalid timeout seconds on cron add", async () => {
+    await expectCronCommandExit([
+      "cron",
+      "add",
+      "--name",
+      "Daily",
+      "--cron",
+      "* * * * *",
+      "--session",
+      "isolated",
+      "--message",
+      "hello",
+      "--timeout-seconds",
+      "45s",
+    ]);
+
+    expect(defaultRuntime.error).toHaveBeenCalledWith(
+      expect.stringContaining("--timeout-seconds must be a positive integer"),
+    );
+    expect(callGatewayFromCli).not.toHaveBeenCalled();
   });
 
   it("defaults isolated cron add to announce delivery", async () => {
@@ -1105,6 +1146,21 @@ describe("cron cli", () => {
       kind: "at",
       at: "2026-03-23T22:00:00.000Z",
     });
+  });
+
+  it("patches timeout seconds on cron edit", async () => {
+    const patch = await runCronEditAndGetPatch(["--timeout-seconds", "90"]);
+
+    expect(patch?.patch?.payload?.timeoutSeconds).toBe(90);
+  });
+
+  it("rejects invalid timeout seconds on cron edit", async () => {
+    await expectCronCommandExit(["cron", "edit", "job-1", "--timeout-seconds", "90s"]);
+
+    expect(defaultRuntime.error).toHaveBeenCalledWith(
+      expect.stringContaining("--timeout-seconds must be a positive integer"),
+    );
+    expect(callGatewayFromCli).not.toHaveBeenCalled();
   });
 
   it("rejects --tz with --every on cron edit", async () => {

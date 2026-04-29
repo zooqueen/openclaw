@@ -7,15 +7,18 @@ export function parsePositiveIntOrUndefined(value: unknown): number | undefined 
     return undefined;
   }
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
+    if (!Number.isSafeInteger(value)) {
       return undefined;
     }
-    const parsed = Math.trunc(value);
-    return parsed > 0 ? parsed : undefined;
+    return value > 0 ? value : undefined;
   }
   if (typeof value === "string") {
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed) || parsed <= 0) {
+    const normalized = value.trim();
+    if (!/^[1-9]\d*$/u.test(normalized)) {
+      return undefined;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
       return undefined;
     }
     return parsed;
