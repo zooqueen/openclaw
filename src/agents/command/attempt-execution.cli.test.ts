@@ -4,9 +4,14 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { readLatestSessionUsageFromTranscript } from "../../gateway/session-utils.fs.js";
 import { FailoverError } from "../failover-error.js";
 import { runEmbeddedPiAgent, type EmbeddedPiRunResult } from "../pi-embedded.js";
-import { persistCliTurnTranscript, runAgentAttempt } from "./attempt-execution.js";
+import {
+  persistAcpTurnTranscript,
+  persistCliTurnTranscript,
+  runAgentAttempt,
+} from "./attempt-execution.js";
 
 const runCliAgentMock = vi.hoisted(() => vi.fn());
 const runEmbeddedPiAgentMock = vi.hoisted(() => vi.fn());
@@ -69,7 +74,14 @@ async function readSessionMessages(sessionFile: string) {
     .filter((entry) => entry.type === "message")
     .map(
       (entry) =>
-        entry.message as { role?: string; content?: unknown; provider?: string; model?: string },
+        entry.message as {
+          role?: string;
+          content?: unknown;
+          provider?: string;
+          model?: string;
+          usage?: unknown;
+          __openclaw?: { usage?: string };
+        },
     );
 }
 
@@ -387,6 +399,102 @@ describe("CLI attempt execution", () => {
       model: "opus",
       content: [{ type: "text", text: "hello from cli" }],
     });
+  });
+
+  it("keeps ACP transcript fallback usage unknown when no usage is available", async () => {
+    const sessionKey = "agent:main:subagent:acp-missing-usage";
+    const sessionEntry: SessionEntry = {
+      sessionId: "session-acp-missing-usage",
+      updatedAt: Date.now(),
+    };
+    const sessionStore: Record<string, SessionEntry> = { [sessionKey]: sessionEntry };
+    await fs.writeFile(storePath, JSON.stringify(sessionStore, null, 2), "utf-8");
+
+    const updatedEntry = await persistAcpTurnTranscript({
+      body: "persist this",
+      finalText: "hello from acp",
+      sessionId: sessionEntry.sessionId,
+      sessionKey,
+      sessionEntry,
+      sessionStore,
+      storePath,
+      sessionAgentId: "main",
+      sessionCwd: tmpDir,
+    });
+
+    const sessionFile = updatedEntry?.sessionFile;
+    expect(sessionFile).toBeTruthy();
+    const messages = await readSessionMessages(sessionFile!);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      provider: "openclaw",
+      model: "acp-runtime",
+      usage: { totalTokens: 0 },
+      __openclaw: { usage: "missing" },
+    });
+
+    const snapshot = readLatestSessionUsageFromTranscript(
+      sessionEntry.sessionId,
+      storePath,
+      sessionFile,
+      "main",
+    );
+    expect(snapshot).toMatchObject({
+      modelProvider: "openclaw",
+      model: "acp-runtime",
+    });
+    expect(snapshot?.totalTokens).toBeUndefined();
+    expect(snapshot?.totalTokensFresh).toBeUndefined();
+  });
+
+  it("keeps CLI transcript fallback usage unknown when no usage is available", async () => {
+    const sessionKey = "agent:main:subagent:cli-missing-usage";
+    const sessionEntry: SessionEntry = {
+      sessionId: "session-cli-missing-usage",
+      updatedAt: Date.now(),
+    };
+    const sessionStore: Record<string, SessionEntry> = { [sessionKey]: sessionEntry };
+    await fs.writeFile(storePath, JSON.stringify(sessionStore, null, 2), "utf-8");
+    const result = makeCliResult("hello from cli");
+    if (result.meta.agentMeta) {
+      result.meta.agentMeta.usage = undefined;
+    }
+
+    const updatedEntry = await persistCliTurnTranscript({
+      body: "persist this",
+      result,
+      sessionId: sessionEntry.sessionId,
+      sessionKey,
+      sessionEntry,
+      sessionStore,
+      storePath,
+      sessionAgentId: "main",
+      sessionCwd: tmpDir,
+    });
+
+    const sessionFile = updatedEntry?.sessionFile;
+    expect(sessionFile).toBeTruthy();
+    const messages = await readSessionMessages(sessionFile!);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      provider: "claude-cli",
+      model: "opus",
+      usage: { totalTokens: 0 },
+      __openclaw: { usage: "missing" },
+    });
+
+    const snapshot = readLatestSessionUsageFromTranscript(
+      sessionEntry.sessionId,
+      storePath,
+      sessionFile,
+      "main",
+    );
+    expect(snapshot).toMatchObject({
+      modelProvider: "claude-cli",
+      model: "opus",
+    });
+    expect(snapshot?.totalTokens).toBeUndefined();
+    expect(snapshot?.totalTokensFresh).toBeUndefined();
   });
 
   it("persists the transcript body instead of runtime-only CLI prompt context", async () => {

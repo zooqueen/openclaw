@@ -42,7 +42,7 @@ export {
 
 const log = createSubsystemLogger("agents/agent-command");
 
-const ACP_TRANSCRIPT_USAGE = {
+const MISSING_TRANSCRIPT_USAGE = {
   input: 0,
   output: 0,
   cacheRead: 0,
@@ -56,6 +56,15 @@ const ACP_TRANSCRIPT_USAGE = {
     total: 0,
   },
 } as const;
+
+type AssistantTranscriptMessage = Extract<
+  Parameters<SessionManager["appendMessage"]>[0],
+  { role: "assistant" }
+> & {
+  __openclaw?: {
+    usage?: "missing";
+  };
+};
 
 type TranscriptUsage = {
   input?: number;
@@ -87,15 +96,18 @@ type PersistTextTurnTranscriptParams = {
 
 function resolveTranscriptUsage(usage: PersistTextTurnTranscriptParams["assistant"]["usage"]) {
   if (!usage) {
-    return ACP_TRANSCRIPT_USAGE;
+    return { usage: MISSING_TRANSCRIPT_USAGE, missing: true };
   }
-  return buildUsageWithNoCost({
-    input: usage.input,
-    output: usage.output,
-    cacheRead: usage.cacheRead,
-    cacheWrite: usage.cacheWrite,
-    totalTokens: usage.total,
-  });
+  return {
+    usage: buildUsageWithNoCost({
+      input: usage.input,
+      output: usage.output,
+      cacheRead: usage.cacheRead,
+      cacheWrite: usage.cacheWrite,
+      totalTokens: usage.total,
+    }),
+    missing: false,
+  };
 }
 
 async function persistTextTurnTranscript(
@@ -138,16 +150,21 @@ async function persistTextTurnTranscript(
   }
 
   if (replyText) {
-    sessionManager.appendMessage({
+    const transcriptUsage = resolveTranscriptUsage(params.assistant.usage);
+    const assistantMessage: AssistantTranscriptMessage = {
       role: "assistant",
       content: [{ type: "text", text: replyText }],
       api: params.assistant.api,
       provider: params.assistant.provider,
       model: params.assistant.model,
-      usage: resolveTranscriptUsage(params.assistant.usage),
+      usage: transcriptUsage.usage,
       stopReason: "stop",
       timestamp: Date.now(),
-    });
+    };
+    if (transcriptUsage.missing) {
+      assistantMessage.__openclaw = { usage: "missing" };
+    }
+    sessionManager.appendMessage(assistantMessage);
   }
 
   emitSessionTranscriptUpdate(sessionFile);

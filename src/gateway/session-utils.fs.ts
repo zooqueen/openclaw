@@ -91,6 +91,16 @@ export function attachOpenClawTranscriptMeta(
   };
 }
 
+function hasMissingTranscriptUsage(message: Record<string, unknown>): boolean {
+  const meta =
+    message.__openclaw &&
+    typeof message.__openclaw === "object" &&
+    !Array.isArray(message.__openclaw)
+      ? (message.__openclaw as Record<string, unknown>)
+      : undefined;
+  return meta?.usage === "missing";
+}
+
 export function readSessionMessages(
   sessionId: string,
   storePath: string | undefined,
@@ -527,8 +537,10 @@ function extractLatestUsageFromTranscriptChunk(
       if (role && role !== "assistant") {
         continue;
       }
-      const usageRaw =
-        message.usage && typeof message.usage === "object" && !Array.isArray(message.usage)
+      const missingTranscriptUsage = hasMissingTranscriptUsage(message);
+      const usageRaw = missingTranscriptUsage
+        ? undefined
+        : message.usage && typeof message.usage === "object" && !Array.isArray(message.usage)
           ? message.usage
           : parsed.usage && typeof parsed.usage === "object" && !Array.isArray(parsed.usage)
             ? parsed.usage
