@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import * as http from "node:http";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { waitForAbortableDelay } from "./async.js";
-import { createFeishuWSClient } from "./client.js";
+import { createFeishuWSClient, type FeishuWSClientLifecycleCallbacks } from "./client.js";
 import {
   applyBasicWebhookRequestGuards,
   type RuntimeEnv,
@@ -32,6 +32,8 @@ export type MonitorTransportParams = {
 
 const FEISHU_WS_RECONNECT_INITIAL_DELAY_MS = 1_000;
 const FEISHU_WS_RECONNECT_MAX_DELAY_MS = 30_000;
+const FEISHU_WS_SUPERVISOR_POLL_MS = 5_000;
+const FEISHU_WS_RECONNECT_STALL_GRACE_MS = 60_000;
 const FEISHU_WS_LOG_ERROR_MAX_LENGTH = 500;
 
 function isFeishuWebhookPayload(value: unknown): value is Record<string, unknown> {
@@ -120,12 +122,143 @@ function formatFeishuWsErrorForLog(err: unknown): string {
   return `${redacted.slice(0, FEISHU_WS_LOG_ERROR_MAX_LENGTH)}...`;
 }
 
+type FeishuWsReconnectInfo = ReturnType<Lark.WSClient["getReconnectInfo"]>;
+type FeishuWsLifecycleSignal = { type: "sdk-error"; error: unknown };
+type FeishuWsSupervisorSignal =
+  | FeishuWsLifecycleSignal
+  | { type: "abort" }
+  | { type: "reconnect-stalled"; reconnectInfo: FeishuWsReconnectInfo };
+
+function createFeishuWsLifecycleMonitor(): {
+  callbacks: FeishuWSClientLifecycleCallbacks;
+  signal: Promise<FeishuWsLifecycleSignal>;
+  hasConnected: () => boolean;
+  isReconnecting: () => boolean;
+} {
+  let hasConnected = false;
+  let reconnecting = false;
+  let settled = false;
+  let resolveSignal: (signal: FeishuWsLifecycleSignal) => void = () => {};
+  const signal = new Promise<FeishuWsLifecycleSignal>((resolve) => {
+    resolveSignal = resolve;
+  });
+  const resolveOnce = (value: FeishuWsLifecycleSignal): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    resolveSignal(value);
+  };
+
+  return {
+    callbacks: {
+      onReady: () => {
+        hasConnected = true;
+        reconnecting = false;
+      },
+      onReconnecting: () => {
+        reconnecting = true;
+      },
+      onReconnected: () => {
+        hasConnected = true;
+        reconnecting = false;
+      },
+      onError: (err) => {
+        resolveOnce({ type: "sdk-error", error: err });
+      },
+    },
+    signal,
+    hasConnected: () => hasConnected,
+    isReconnecting: () => reconnecting,
+  };
+}
+
+function getFeishuWsStalledReconnectInfo(
+  wsClient: Lark.WSClient,
+  nowMs: number,
+): FeishuWsReconnectInfo | null {
+  const reconnectInfo = wsClient.getReconnectInfo();
+  const nextConnectTime = reconnectInfo.nextConnectTime;
+  if (
+    !Number.isFinite(nextConnectTime) ||
+    nextConnectTime <= 0 ||
+    nowMs - nextConnectTime < FEISHU_WS_RECONNECT_STALL_GRACE_MS
+  ) {
+    return null;
+  }
+  return reconnectInfo;
+}
+
+function formatFeishuWsReconnectInfo(info: FeishuWsReconnectInfo): string {
+  return `lastConnectTime=${Math.max(0, Math.floor(info.lastConnectTime))} nextConnectTime=${Math.max(0, Math.floor(info.nextConnectTime))}`;
+}
+
+function formatFeishuWsSupervisorSignal(
+  signal: Exclude<FeishuWsSupervisorSignal, { type: "abort" }>,
+): string {
+  if (signal.type === "sdk-error") {
+    return `SDK retry exhaustion: ${formatFeishuWsErrorForLog(signal.error)}`;
+  }
+  return `reconnect state stalled (${formatFeishuWsReconnectInfo(signal.reconnectInfo)})`;
+}
+
+function waitForFeishuWsSupervisorSignal(params: {
+  wsClient: Lark.WSClient;
+  lifecycleSignal: Promise<FeishuWsLifecycleSignal>;
+  isReconnecting: () => boolean;
+  abortSignal?: AbortSignal;
+}): Promise<FeishuWsSupervisorSignal> {
+  const { wsClient, lifecycleSignal, isReconnecting, abortSignal } = params;
+  if (abortSignal?.aborted) {
+    return Promise.resolve({ type: "abort" });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const settle = (signal: FeishuWsSupervisorSignal): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      abortSignal?.removeEventListener("abort", handleAbort);
+      resolve(signal);
+    };
+    const handleAbort = () => {
+      settle({ type: "abort" });
+    };
+    const poll = () => {
+      if (abortSignal?.aborted) {
+        handleAbort();
+        return;
+      }
+      if (isReconnecting()) {
+        const reconnectInfo = getFeishuWsStalledReconnectInfo(wsClient, Date.now());
+        if (reconnectInfo) {
+          settle({ type: "reconnect-stalled", reconnectInfo });
+          return;
+        }
+      }
+      timer = setTimeout(poll, FEISHU_WS_SUPERVISOR_POLL_MS);
+    };
+
+    abortSignal?.addEventListener("abort", handleAbort, { once: true });
+    void lifecycleSignal.then(settle);
+    poll();
+  });
+}
+
 function cleanupFeishuWsClient(params: {
   accountId: string;
   wsClient?: Lark.WSClient;
   error: (message: string) => void;
+  preserveBotIdentity?: boolean;
 }): void {
-  const { accountId, wsClient, error } = params;
+  const { accountId, wsClient, error, preserveBotIdentity = false } = params;
   if (wsClient) {
     try {
       wsClient.close();
@@ -136,28 +269,10 @@ function cleanupFeishuWsClient(params: {
     }
   }
   wsClients.delete(accountId);
-  botOpenIds.delete(accountId);
-  botNames.delete(accountId);
-}
-
-function waitForFeishuWsAbort(abortSignal?: AbortSignal): Promise<void> {
-  if (abortSignal?.aborted) {
-    return Promise.resolve();
+  if (!preserveBotIdentity) {
+    botOpenIds.delete(accountId);
+    botNames.delete(accountId);
   }
-  return new Promise((resolve) => {
-    if (!abortSignal) {
-      // No external lifecycle owner was provided, so keep the SDK-managed connection alive.
-      return;
-    }
-    const handleAbort = () => {
-      abortSignal.removeEventListener("abort", handleAbort);
-      resolve();
-    };
-    abortSignal.addEventListener("abort", handleAbort, { once: true });
-    if (abortSignal.aborted) {
-      handleAbort();
-    }
-  });
 }
 
 export async function monitorWebSocket({
@@ -177,23 +292,50 @@ export async function monitorWebSocket({
     }
 
     let wsClient: Lark.WSClient | undefined;
+    const lifecycle = createFeishuWsLifecycleMonitor();
     try {
       log(`feishu[${accountId}]: starting WebSocket connection...`);
-      wsClient = await createFeishuWSClient(account);
+      wsClient = await createFeishuWSClient(account, lifecycle.callbacks);
       if (abortSignal?.aborted) {
         cleanupFeishuWsClient({ accountId, wsClient, error });
         break;
       }
       wsClients.set(accountId, wsClient);
       await wsClient.start({ eventDispatcher });
-      attempt = 0;
       log(`feishu[${accountId}]: WebSocket client started`);
-      await waitForFeishuWsAbort(abortSignal);
-      log(`feishu[${accountId}]: abort signal received, stopping`);
-      cleanupFeishuWsClient({ accountId, wsClient, error });
-      return;
+      const supervisorSignal = await waitForFeishuWsSupervisorSignal({
+        wsClient,
+        lifecycleSignal: lifecycle.signal,
+        isReconnecting: lifecycle.isReconnecting,
+        abortSignal,
+      });
+      if (supervisorSignal.type === "abort") {
+        log(`feishu[${accountId}]: abort signal received, stopping`);
+        cleanupFeishuWsClient({ accountId, wsClient, error });
+        return;
+      }
+
+      cleanupFeishuWsClient({ accountId, wsClient, error, preserveBotIdentity: true });
+      if (lifecycle.hasConnected()) {
+        attempt = 0;
+      }
+      attempt += 1;
+      const delayMs = getFeishuWsReconnectDelayMs(attempt);
+      error(
+        `feishu[${accountId}]: WebSocket supervisor detected ${formatFeishuWsSupervisorSignal(supervisorSignal)}, recreating client in ${delayMs}ms`,
+      );
+      const shouldRetry = await waitForAbortableDelay(delayMs, abortSignal);
+      if (!shouldRetry) {
+        cleanupFeishuWsClient({ accountId, error });
+        break;
+      }
     } catch (err) {
-      cleanupFeishuWsClient({ accountId, wsClient, error });
+      cleanupFeishuWsClient({
+        accountId,
+        wsClient,
+        error,
+        preserveBotIdentity: !abortSignal?.aborted,
+      });
       if (abortSignal?.aborted) {
         break;
       }
@@ -205,9 +347,14 @@ export async function monitorWebSocket({
       );
       const shouldRetry = await waitForAbortableDelay(delayMs, abortSignal);
       if (!shouldRetry) {
+        cleanupFeishuWsClient({ accountId, error });
         break;
       }
     }
+  }
+
+  if (abortSignal?.aborted) {
+    cleanupFeishuWsClient({ accountId, error });
   }
 }
 

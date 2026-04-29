@@ -20,6 +20,11 @@ const FEISHU_WS_CONFIG = {
   PingTimeout: 3,
 } as const;
 
+export type FeishuWSClientLifecycleCallbacks = Pick<
+  ConstructorParameters<typeof Lark.WSClient>[0],
+  "onReady" | "onError" | "onReconnecting" | "onReconnected"
+>;
+
 /** User-Agent header value for all Feishu API requests. */
 export function getFeishuUserAgent(): string {
   return FEISHU_USER_AGENT;
@@ -224,7 +229,10 @@ export function createFeishuClient(creds: FeishuClientCredentials): Lark.Client 
  * Create a Feishu WebSocket client for an account.
  * Note: WSClient is not cached since each call creates a new connection.
  */
-export async function createFeishuWSClient(account: ResolvedFeishuAccount): Promise<Lark.WSClient> {
+export async function createFeishuWSClient(
+  account: ResolvedFeishuAccount,
+  lifecycleCallbacks?: FeishuWSClientLifecycleCallbacks,
+): Promise<Lark.WSClient> {
   const { accountId, appId, appSecret, domain } = account;
 
   if (!appId || !appSecret) {
@@ -238,6 +246,7 @@ export async function createFeishuWSClient(account: ResolvedFeishuAccount): Prom
     domain: resolveDomain(domain),
     loggerLevel: feishuClientSdk.LoggerLevel.info,
     wsConfig: FEISHU_WS_CONFIG,
+    ...lifecycleCallbacks,
     ...(agent ? { agent } : {}),
   } as ConstructorParameters<typeof feishuClientSdk.WSClient>[0] & {
     wsConfig: typeof FEISHU_WS_CONFIG;
