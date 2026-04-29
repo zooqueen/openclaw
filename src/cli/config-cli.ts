@@ -72,6 +72,14 @@ type ConfigSetOperation = {
   touchedProviderAlias?: string;
   assignedRef?: SecretRef;
 };
+type ConfigSetModelReferenceAssignment = {
+  path: PathSegment[];
+  raw: string;
+};
+type ConfigSetModelReferenceCatalogMiss = ConfigSetModelReferenceAssignment & {
+  provider: string;
+  model: string;
+};
 
 const GATEWAY_AUTH_MODE_PATH: PathSegment[] = ["gateway", "auth", "mode"];
 const SECRET_PROVIDER_PATH_PREFIX: PathSegment[] = ["secrets", "providers"];
@@ -562,6 +570,166 @@ function pruneInactiveGatewayAuthCredentials(params: {
 
 function toDotPath(path: PathSegment[]): string {
   return path.join(".");
+}
+
+function agentModelRootLength(path: PathSegment[]): number | null {
+  if (path[0] !== "agents") {
+    return null;
+  }
+  if (path[1] === "defaults" && path[2] === "model") {
+    return 3;
+  }
+  if (
+    path[1] === "list" &&
+    path[2] !== undefined &&
+    isIndexSegment(path[2]) &&
+    path[3] === "model"
+  ) {
+    return 4;
+  }
+  return null;
+}
+
+function pushStringModelReference(
+  assignments: ConfigSetModelReferenceAssignment[],
+  path: PathSegment[],
+  value: unknown,
+): void {
+  const raw = normalizeOptionalString(value);
+  if (!raw) {
+    return;
+  }
+  assignments.push({ path, raw });
+}
+
+function collectModelReferenceAssignmentsFromValue(params: {
+  path: PathSegment[];
+  value: unknown;
+}): ConfigSetModelReferenceAssignment[] {
+  const rootLength = agentModelRootLength(params.path);
+  if (rootLength === null) {
+    return [];
+  }
+
+  const assignments: ConfigSetModelReferenceAssignment[] = [];
+  const suffix = params.path.slice(rootLength);
+  if (suffix.length === 0) {
+    pushStringModelReference(assignments, params.path, params.value);
+    if (isPlainRecord(params.value)) {
+      pushStringModelReference(assignments, [...params.path, "primary"], params.value.primary);
+      if (Array.isArray(params.value.fallbacks)) {
+        params.value.fallbacks.forEach((fallback, index) => {
+          pushStringModelReference(
+            assignments,
+            [...params.path, "fallbacks", String(index)],
+            fallback,
+          );
+        });
+      }
+    }
+    return assignments;
+  }
+
+  if (suffix.length === 1 && suffix[0] === "primary") {
+    pushStringModelReference(assignments, params.path, params.value);
+    return assignments;
+  }
+
+  if (suffix.length === 1 && suffix[0] === "fallbacks" && Array.isArray(params.value)) {
+    params.value.forEach((fallback, index) => {
+      pushStringModelReference(assignments, [...params.path, String(index)], fallback);
+    });
+    return assignments;
+  }
+
+  if (suffix.length === 2 && suffix[0] === "fallbacks" && isIndexSegment(suffix[1] ?? "")) {
+    pushStringModelReference(assignments, params.path, params.value);
+  }
+  return assignments;
+}
+
+function collectModelReferenceAssignments(
+  operations: ConfigSetOperation[],
+): ConfigSetModelReferenceAssignment[] {
+  const assignments: ConfigSetModelReferenceAssignment[] = [];
+  const seen = new Set<string>();
+  for (const operation of operations) {
+    for (const assignment of collectModelReferenceAssignmentsFromValue({
+      path: operation.requestedPath,
+      value: operation.value,
+    })) {
+      const key = `${toDotPath(assignment.path)}\u0000${assignment.raw}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      assignments.push(assignment);
+    }
+  }
+  return assignments;
+}
+
+async function collectMissingModelReferenceWarnings(params: {
+  operations: ConfigSetOperation[];
+  config: OpenClawConfig;
+}): Promise<ConfigSetModelReferenceCatalogMiss[]> {
+  const assignments = collectModelReferenceAssignments(params.operations);
+  if (assignments.length === 0) {
+    return [];
+  }
+
+  try {
+    const [
+      { loadModelCatalog, findModelInCatalog },
+      { DEFAULT_PROVIDER },
+      { splitTrailingAuthProfile },
+      { parseModelRef },
+    ] = await Promise.all([
+      import("../agents/model-catalog.js"),
+      import("../agents/defaults.js"),
+      import("../agents/model-ref-profile.js"),
+      import("../agents/model-selection.js"),
+    ]);
+    const catalog = await loadModelCatalog({ config: params.config, readOnly: true });
+    if (catalog.length === 0) {
+      return [];
+    }
+
+    const misses: ConfigSetModelReferenceCatalogMiss[] = [];
+    for (const assignment of assignments) {
+      const modelWithoutProfile = splitTrailingAuthProfile(assignment.raw).model;
+      const parsed = parseModelRef(modelWithoutProfile, DEFAULT_PROVIDER);
+      if (!parsed || findModelInCatalog(catalog, parsed.provider, parsed.model)) {
+        continue;
+      }
+      misses.push({
+        ...assignment,
+        provider: parsed.provider,
+        model: parsed.model,
+      });
+    }
+    return misses;
+  } catch {
+    return [];
+  }
+}
+
+async function logMissingModelReferenceWarnings(params: {
+  runtime: RuntimeEnv;
+  operations: ConfigSetOperation[];
+  config: OpenClawConfig;
+}): Promise<void> {
+  const misses = await collectMissingModelReferenceWarnings({
+    operations: params.operations,
+    config: params.config,
+  });
+  for (const miss of misses) {
+    params.runtime.log(
+      theme.warn(
+        `Warning: model ref "${miss.raw}" at ${toDotPath(miss.path)} was not found in the loaded model catalog (parsed as ${miss.provider}/${miss.model}).`,
+      ),
+    );
+  }
 }
 
 function parseSecretRefSource(raw: string, label: string): SecretRefSource {
@@ -1321,6 +1489,11 @@ export async function runConfigSet(opts: {
       if (opts.cliOptions.json) {
         writeRuntimeJson(runtime, dryRunResult);
       } else {
+        await logMissingModelReferenceWarnings({
+          runtime,
+          operations,
+          config: nextConfig,
+        });
         if (!dryRunResult.checks.schema && !dryRunResult.checks.resolvability) {
           runtime.log(
             info(
@@ -1350,6 +1523,11 @@ export async function runConfigSet(opts: {
     await replaceConfigFile({
       nextConfig: next,
       ...(snapshot.hash !== undefined ? { baseHash: snapshot.hash } : {}),
+    });
+    await logMissingModelReferenceWarnings({
+      runtime,
+      operations,
+      config: nextConfig,
     });
     if (removedGatewayAuthPaths.length > 0) {
       runtime.log(

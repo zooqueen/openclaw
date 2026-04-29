@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ModelCatalogEntry } from "../agents/model-catalog.types.js";
 import type { ConfigFileSnapshot, OpenClawConfig } from "../config/types.js";
 import { createCliRuntimeCapture, mockRuntimeModule } from "./test-runtime-capture.js";
 
@@ -16,6 +17,14 @@ const mockReadConfigFileSnapshot = vi.fn<() => Promise<ConfigFileSnapshot>>();
 const mockWriteConfigFile = vi.fn<
   (cfg: OpenClawConfig, options?: { unsetPaths?: string[][] }) => Promise<void>
 >(async () => {});
+const mockLoadModelCatalog =
+  vi.fn<
+    (params?: {
+      config?: OpenClawConfig;
+      useCache?: boolean;
+      readOnly?: boolean;
+    }) => Promise<ModelCatalogEntry[]>
+  >();
 const mockResolveSecretRefValue = vi.fn();
 const mockReadBestEffortRuntimeConfigSchema = vi.fn();
 
@@ -39,6 +48,20 @@ vi.mock("../secrets/resolve.js", () => ({
 
 vi.mock("../config/runtime-schema.js", () => ({
   readBestEffortRuntimeConfigSchema: () => mockReadBestEffortRuntimeConfigSchema(),
+}));
+
+vi.mock("../agents/model-catalog.js", () => ({
+  loadModelCatalog: (params?: {
+    config?: OpenClawConfig;
+    useCache?: boolean;
+    readOnly?: boolean;
+  }) => mockLoadModelCatalog(params),
+  findModelInCatalog: (catalog: ModelCatalogEntry[], provider: string, modelId: string) =>
+    catalog.find(
+      (entry) =>
+        entry.provider.toLowerCase() === provider.toLowerCase() &&
+        entry.id.toLowerCase() === modelId.toLowerCase(),
+    ),
 }));
 
 const { defaultRuntime, resetRuntimeCapture } = createCliRuntimeCapture();
@@ -136,6 +159,12 @@ async function runConfigCommand(args: string[]) {
   await sharedProgram.parseAsync(args, { from: "user" });
 }
 
+function modelCatalogWarningLogs(): string[] {
+  return mockLog.mock.calls
+    .map((call) => call.map((part) => String(part)).join(" "))
+    .filter((line) => line.includes("was not found in the loaded model catalog"));
+}
+
 describe("config cli", () => {
   beforeAll(async () => {
     ({ registerConfigCli } = await import("./config-cli.js"));
@@ -181,6 +210,10 @@ describe("config cli", () => {
       const errorMessages = mockError.mock.calls.map((call) => call.join(" ")).join("; ");
       throw new Error(`__exit__:${code} - ${errorMessages}`);
     });
+    mockLoadModelCatalog.mockResolvedValue([
+      { provider: "openai", id: "gpt-5.4", name: "GPT-5.4" },
+      { provider: "anthropic", id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    ]);
     mockResolveSecretRefValue.mockResolvedValue("resolved-secret");
   });
 
@@ -472,6 +505,151 @@ describe("config cli", () => {
           "Removed inactive gateway.auth.password for gateway.auth.mode=token",
         ),
       );
+    });
+  });
+
+  describe("config set model catalog warnings", () => {
+    it("accepts catalog hits and auth-profile suffixes without warning", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "agents.defaults.model", "openai/gpt-5.4@work"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(mockLoadModelCatalog).toHaveBeenCalledWith(
+        expect.objectContaining({ readOnly: true }),
+      );
+      expect(modelCatalogWarningLogs()).toEqual([]);
+      const written = mockWriteConfigFile.mock.calls[0]?.[0];
+      expect(written.agents?.defaults?.model).toBe("openai/gpt-5.4@work");
+    });
+
+    it("warns non-blockingly when agents.defaults.model is missing from the catalog", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "agents.defaults.model", "openai/not-a-model"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(modelCatalogWarningLogs()).toEqual([
+        expect.stringContaining(
+          'Warning: model ref "openai/not-a-model" at agents.defaults.model was not found',
+        ),
+      ]);
+    });
+
+    it("warns for agents.defaults.model.primary catalog misses", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand([
+        "config",
+        "set",
+        "agents.defaults.model.primary",
+        "anthropic/not-a-model",
+      ]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(modelCatalogWarningLogs()).toEqual([
+        expect.stringContaining(
+          'Warning: model ref "anthropic/not-a-model" at agents.defaults.model.primary was not found',
+        ),
+      ]);
+    });
+
+    it("warns for bracket-notation agents.list model refs", async () => {
+      const resolved: OpenClawConfig = {
+        agents: {
+          list: [{ id: "main" }],
+        },
+      };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "agents.list[0].model", "openai/not-a-model"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(modelCatalogWarningLogs()).toEqual([
+        expect.stringContaining(
+          'Warning: model ref "openai/not-a-model" at agents.list.0.model was not found',
+        ),
+      ]);
+    });
+
+    it("skips catalog lookup for unrelated paths", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "gateway.auth.mode", "token"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(mockLoadModelCatalog).not.toHaveBeenCalled();
+      expect(modelCatalogWarningLogs()).toEqual([]);
+    });
+
+    it("skips warnings when the catalog is empty or unavailable", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      mockLoadModelCatalog.mockResolvedValueOnce([]);
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "agents.defaults.model", "openai/not-a-model"]);
+
+      expect(modelCatalogWarningLogs()).toEqual([]);
+
+      vi.clearAllMocks();
+      resetRuntimeCapture();
+      mockLoadModelCatalog.mockRejectedValueOnce(new Error("catalog unavailable"));
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand(["config", "set", "agents.defaults.model", "openai/not-a-model"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(modelCatalogWarningLogs()).toEqual([]);
+    });
+
+    it("warns during successful dry-run without writing", async () => {
+      const resolved: OpenClawConfig = { gateway: { port: 18789 } };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand([
+        "config",
+        "set",
+        "agents.defaults.model",
+        "openai/not-a-model",
+        "--dry-run",
+      ]);
+
+      expect(mockWriteConfigFile).not.toHaveBeenCalled();
+      expect(modelCatalogWarningLogs()).toEqual([
+        expect.stringContaining(
+          'Warning: model ref "openai/not-a-model" at agents.defaults.model was not found',
+        ),
+      ]);
+      expect(mockLog).toHaveBeenCalledWith(
+        expect.stringContaining("Dry run successful: 1 update(s) validated"),
+      );
+    });
+
+    it("warns once for batch model refs that miss the catalog", async () => {
+      const resolved: OpenClawConfig = {
+        agents: {
+          list: [{ id: "main" }],
+        },
+      };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommand([
+        "config",
+        "set",
+        "--batch-json",
+        '[{"path":"agents.defaults.model","value":"openai/not-a-model"},{"path":"agents.list[0].model","value":"openai/gpt-5.4"}]',
+      ]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(modelCatalogWarningLogs()).toEqual([
+        expect.stringContaining(
+          'Warning: model ref "openai/not-a-model" at agents.defaults.model was not found',
+        ),
+      ]);
     });
   });
 
