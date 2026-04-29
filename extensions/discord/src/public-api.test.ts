@@ -144,6 +144,32 @@ function collectExportedNames(): Set<string> {
   return names;
 }
 
+function findExportSource(exportName: string): string | undefined {
+  const source = ts.createSourceFile(
+    API_SOURCE_PATH,
+    readFileSync(API_SOURCE_PATH, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  for (const statement of source.statements) {
+    if (
+      !ts.isExportDeclaration(statement) ||
+      !statement.exportClause ||
+      !ts.isNamedExports(statement.exportClause) ||
+      !statement.moduleSpecifier ||
+      !ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      continue;
+    }
+    for (const element of statement.exportClause.elements) {
+      if (element.name.text === exportName) {
+        return statement.moduleSpecifier.text;
+      }
+    }
+  }
+  return undefined;
+}
+
 describe("discord public API barrel", () => {
   it("keeps compatibility exports for existing @openclaw/discord/api.js consumers", () => {
     const exportedNames = collectExportedNames();
@@ -151,6 +177,12 @@ describe("discord public API barrel", () => {
     for (const exportName of FORMER_PUBLIC_API_EXPORTS) {
       expect(exportedNames).toContain(exportName);
     }
+  });
+
+  it("resolves runtime group policy through the plugin SDK public surface", () => {
+    expect(findExportSource("resolveDiscordRuntimeGroupPolicy")).toBe(
+      "openclaw/plugin-sdk/runtime-group-policy",
+    );
   });
 
   itOnSupportedNode("links restored runtime compatibility exports", async () => {
