@@ -238,7 +238,11 @@ API_KEY_VALUE="${!API_KEY_ENV:-}"
 [[ -n "$API_KEY_VALUE" ]] || die "$API_KEY_ENV is required"
 
 release_smoke_plugin_allowlist_json() {
-  printf '["%s","acpx","bonjour","browser","device-pair","phone-control","talk-voice"]' "$PROVIDER"
+  if [[ -n "${OPENCLAW_PARALLELS_RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON:-}" ]]; then
+    printf '%s' "$OPENCLAW_PARALLELS_RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON"
+    return
+  fi
+  printf '["%s"]' "$PROVIDER"
 }
 
 RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON="$(release_smoke_plugin_allowlist_json)"
