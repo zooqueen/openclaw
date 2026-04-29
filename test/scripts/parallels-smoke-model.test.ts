@@ -33,6 +33,18 @@ describe("Parallels smoke model selection", () => {
     }
   });
 
+  it("keeps Parallels agent-turn smokes on a focused plugin allowlist", () => {
+    for (const scriptPath of [...OS_SCRIPT_PATHS, NPM_UPDATE_SCRIPT_PATH]) {
+      const script = readFileSync(scriptPath, "utf8");
+
+      expect(script, scriptPath).toContain("release_smoke_plugin_allowlist_json");
+      expect(script, scriptPath).toContain("config set plugins.allow");
+      expect(script, scriptPath).toContain('"acpx"');
+      expect(script, scriptPath).toContain('"device-pair"');
+      expect(script, scriptPath).not.toContain('"memory-core"');
+    }
+  });
+
   it("passes aggregate model overrides into each OS fresh lane", () => {
     const script = readFileSync(NPM_UPDATE_SCRIPT_PATH, "utf8");
 

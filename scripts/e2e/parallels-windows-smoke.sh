@@ -280,6 +280,10 @@ esac
 API_KEY_VALUE="${!API_KEY_ENV:-}"
 [[ -n "$API_KEY_VALUE" ]] || die "$API_KEY_ENV is required"
 
+release_smoke_plugin_allowlist_json() {
+  printf '["%s","acpx","bonjour","browser","device-pair","phone-control","talk-voice"]' "$PROVIDER"
+}
+
 ps_single_quote() {
   printf "%s" "$1" | sed "s/'/''/g"
 }
@@ -2614,6 +2618,7 @@ show_gateway_status_compat() {
 
 verify_turn() {
   guest_run_openclaw "" "" models set "$MODEL_ID"
+  guest_run_openclaw "" "" config set plugins.allow "$(release_smoke_plugin_allowlist_json)" --strict-json
   guest_run_openclaw "" "" config set agents.defaults.skipBootstrap true --strict-json
   guest_powershell "$(cat <<'EOF'
 $workspace = $env:OPENCLAW_WORKSPACE_DIR

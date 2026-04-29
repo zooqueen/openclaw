@@ -236,6 +236,13 @@ esac
 
 API_KEY_VALUE="${!API_KEY_ENV:-}"
 [[ -n "$API_KEY_VALUE" ]] || die "$API_KEY_ENV is required"
+
+release_smoke_plugin_allowlist_json() {
+  printf '["%s","acpx","bonjour","browser","device-pair","phone-control","talk-voice"]' "$PROVIDER"
+}
+
+RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON="$(release_smoke_plugin_allowlist_json)"
+
 resolve_python_bin
 
 resolve_linux_vm_name() {
@@ -1158,6 +1165,7 @@ cat > "\$workspace/.openclaw/workspace-state.json" <<'STATE_EOF'
 STATE_EOF
 rm -f "\$workspace/BOOTSTRAP.md"
   /opt/homebrew/bin/openclaw models set "$MODEL_ID"
+  /opt/homebrew/bin/openclaw config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json
   /opt/homebrew/bin/openclaw config set agents.defaults.skipBootstrap true --strict-json
 /opt/homebrew/bin/openclaw agent --agent main --session-id "parallels-npm-update-macos-transport-recovery-$expected_needle" --message "Reply with exact ASCII text OK only." --json
 EOF
@@ -1290,6 +1298,7 @@ if (-not \$gatewayReady) {
 \$providerValue = [Text.Encoding]::UTF8.GetString(\$providerBytes)
 Set-Item -Path ('Env:' + '$API_KEY_ENV') -Value \$providerValue
   & \$openclaw models set '$MODEL_ID'
+  & \$openclaw config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json
   & \$openclaw config set agents.defaults.skipBootstrap true --strict-json
 \$workspace = \$env:OPENCLAW_WORKSPACE_DIR
 if (-not \$workspace) {
@@ -1763,6 +1772,7 @@ stop_openclaw_gateway_processes
 version="\$(openclaw_version_with_retry /opt/homebrew/bin/openclaw "$expected_needle")"
 /opt/homebrew/bin/openclaw update status --json
   /opt/homebrew/bin/openclaw models set "$MODEL_ID"
+  /opt/homebrew/bin/openclaw config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json
   /opt/homebrew/bin/openclaw config set agents.defaults.skipBootstrap true --strict-json
 # Same-guest npm upgrades can leave launchd holding the old gateway process or
 # module graph briefly; wait for a fresh RPC-ready restart before the agent turn.
@@ -1912,6 +1922,7 @@ stop_openclaw_gateway_processes
 version="\$(openclaw_version_with_retry openclaw "$expected_needle")"
 openclaw update status --json
 openclaw models set "$MODEL_ID"
+openclaw config set plugins.allow '$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON' --strict-json
 openclaw config set agents.defaults.skipBootstrap true --strict-json
 workspace="\${OPENCLAW_WORKSPACE_DIR:-\$HOME/.openclaw/workspace}"
 mkdir -p "\$workspace/.openclaw"
