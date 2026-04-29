@@ -17,6 +17,7 @@ import { isTelegramExecApprovalHandlerConfigured } from "./exec-approvals.js";
 import { resolveTelegramTransport } from "./fetch.js";
 import type { MonitorTelegramOpts } from "./monitor.types.js";
 import {
+  getTelegramNetworkErrorOrigin,
   isRecoverableTelegramNetworkError,
   isTelegramPollingNetworkError,
 } from "./network-errors.js";
@@ -88,11 +89,39 @@ async function loadTelegramMonitorWebhookRuntime() {
   return await telegramMonitorWebhookRuntimePromise;
 }
 
+function telegramNetworkOriginMatchesToken(err: unknown, token: string): boolean {
+  const origin = getTelegramNetworkErrorOrigin(err);
+  const rawUrl = origin?.url?.trim();
+  if (!rawUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(rawUrl, "https://api.telegram.org");
+    const botSegment = url.pathname
+      .split("/")
+      .find((segment) => segment.startsWith("bot") && segment.length > 3);
+    if (!botSegment) {
+      return false;
+    }
+    const segmentToken = botSegment.slice(3);
+    return segmentToken === token || decodeURIComponent(segmentToken) === token;
+  } catch {
+    return rawUrl.includes(`/bot${token}/`) || rawUrl.endsWith(`/bot${token}`);
+  }
+}
+
 export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
   const log = opts.runtime?.error ?? console.error;
   let pollingSession: TelegramPollingSessionInstance | undefined;
+  let activePollingToken: string | undefined;
 
   const handlePollingNetworkFailure = (err: unknown, label: string) => {
+    const token = activePollingToken;
+    if (!token || !telegramNetworkOriginMatchesToken(err, token)) {
+      return false;
+    }
+
     const isNetworkError = isRecoverableTelegramNetworkError(err, { context: "polling" });
     const isTelegramPollingError = isTelegramPollingNetworkError(err);
 
@@ -134,6 +163,7 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
         `Telegram bot token missing for account "${account.accountId}" (set channels.telegram.accounts.${account.accountId}.botToken/tokenFile or TELEGRAM_BOT_TOKEN for default).`,
       );
     }
+    activePollingToken = opts.useWebhook ? undefined : token;
 
     const proxyFetch =
       opts.proxyFetch ?? (account.config.proxy ? makeProxyFetch(account.config.proxy) : undefined);

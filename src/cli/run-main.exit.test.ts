@@ -693,7 +693,48 @@ describe("runCli exit behavior", () => {
     }
   });
 
-  it("does not exit for transient uncaught CLI exceptions", async () => {
+  it("exits for unhandled transient uncaught CLI exceptions", async () => {
+    buildProgramMock.mockReturnValueOnce({
+      commands: [{ name: () => "status" }],
+      parseAsync: vi.fn().mockResolvedValueOnce(undefined),
+    });
+
+    const processOnSpy = vi.spyOn(process, "on");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${String(code)})`);
+    }) as typeof process.exit);
+
+    await runCli(["node", "openclaw", "status"]);
+
+    const handler = processOnSpy.mock.calls.find(([event]) => event === "uncaughtException")?.[1];
+    expect(typeof handler).toBe("function");
+
+    try {
+      const hostUnreachable = Object.assign(new Error("connect EHOSTUNREACH 149.154.167.220:443"), {
+        code: "EHOSTUNREACH",
+      });
+      expect(() => (handler as (error: unknown) => void)(hostUnreachable)).toThrow(
+        "process.exit(1)",
+      );
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+      expect(restoreTerminalStateMock).toHaveBeenCalledWith("uncaught exception", {
+        resumeStdinIfPaused: false,
+      });
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      if (typeof handler === "function") {
+        process.off("uncaughtException", handler);
+      }
+      consoleErrorSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+      exitSpy.mockRestore();
+      processOnSpy.mockRestore();
+    }
+  });
+
+  it("does not exit for broken output uncaught CLI exceptions", async () => {
     buildProgramMock.mockReturnValueOnce({
       commands: [{ name: () => "status" }],
       parseAsync: vi.fn().mockResolvedValueOnce(undefined),
@@ -711,13 +752,11 @@ describe("runCli exit behavior", () => {
     expect(typeof handler).toBe("function");
 
     try {
-      const hostUnreachable = Object.assign(new Error("connect EHOSTUNREACH 149.154.167.220:443"), {
-        code: "EHOSTUNREACH",
-      });
-      expect(() => (handler as (error: unknown) => void)(hostUnreachable)).not.toThrow();
+      const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      expect(() => (handler as (error: unknown) => void)(epipe)).not.toThrow();
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         "[openclaw] Non-fatal uncaught exception (continuing):",
-        expect.stringContaining("EHOSTUNREACH"),
+        expect.stringContaining("EPIPE"),
       );
       expect(restoreTerminalStateMock).not.toHaveBeenCalled();
       expect(exitSpy).not.toHaveBeenCalled();

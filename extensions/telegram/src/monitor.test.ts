@@ -51,30 +51,30 @@ const {
   emitUncaughtException,
   resetProcessErrorHandlers,
 } = vi.hoisted(() => {
-  let unhandledRejectionHandler: ((reason: unknown) => boolean) | undefined;
-  let uncaughtExceptionHandler: ((error: unknown) => boolean) | undefined;
+  const unhandledRejectionHandlers: Array<(reason: unknown) => boolean> = [];
+  const uncaughtExceptionHandlers: Array<(error: unknown) => boolean> = [];
   return {
     registerUnhandledRejectionHandlerMock: vi.fn((next: (reason: unknown) => boolean) => {
-      unhandledRejectionHandler = next;
+      unhandledRejectionHandlers.push(next);
       return () => {
-        if (unhandledRejectionHandler === next) {
-          unhandledRejectionHandler = undefined;
-        }
+        const index = unhandledRejectionHandlers.indexOf(next);
+        if (index >= 0) unhandledRejectionHandlers.splice(index, 1);
       };
     }),
     registerUncaughtExceptionHandlerMock: vi.fn((next: (error: unknown) => boolean) => {
-      uncaughtExceptionHandler = next;
+      uncaughtExceptionHandlers.push(next);
       return () => {
-        if (uncaughtExceptionHandler === next) {
-          uncaughtExceptionHandler = undefined;
-        }
+        const index = uncaughtExceptionHandlers.indexOf(next);
+        if (index >= 0) uncaughtExceptionHandlers.splice(index, 1);
       };
     }),
-    emitUnhandledRejection: (reason: unknown) => unhandledRejectionHandler?.(reason) ?? false,
-    emitUncaughtException: (error: unknown) => uncaughtExceptionHandler?.(error) ?? false,
+    emitUnhandledRejection: (reason: unknown) =>
+      unhandledRejectionHandlers.some((handler) => handler(reason)),
+    emitUncaughtException: (error: unknown) =>
+      uncaughtExceptionHandlers.some((handler) => handler(error)),
     resetProcessErrorHandlers: () => {
-      unhandledRejectionHandler = undefined;
-      uncaughtExceptionHandler = undefined;
+      unhandledRejectionHandlers.length = 0;
+      uncaughtExceptionHandlers.length = 0;
     },
   };
 });
@@ -139,20 +139,20 @@ class MockHttpError extends Error {
   }
 }
 
-async function makeTaggedPollingFetchError() {
+async function makeTaggedPollingFetchError(token = "tok") {
   const { tagTelegramNetworkError } = await import("./network-errors.js");
   const err = makeRecoverableFetchError();
   tagTelegramNetworkError(err, {
     method: "getUpdates",
-    url: "https://api.telegram.org/bot123456:ABC/getUpdates",
+    url: `https://api.telegram.org/bot${token}/getUpdates`,
   });
   return err;
 }
 
-async function makeTaggedPollingHttpError() {
+async function makeTaggedPollingHttpError(token = "tok") {
   return new MockHttpError(
     "Network request for 'getUpdates' failed!",
-    await makeTaggedPollingFetchError(),
+    await makeTaggedPollingFetchError(token),
   );
 }
 
@@ -724,6 +724,32 @@ describe("monitorTelegramProvider (grammY)", () => {
     abort.abort();
     await monitor;
     expectRecoverableRetryState(2);
+  });
+
+  it("routes uncaught polling network exceptions to the matching bot token", async () => {
+    const firstAbort = new AbortController();
+    const secondAbort = new AbortController();
+    const firstCycle = mockRunOnceWithStalledPollingRunner();
+    const secondCycle = mockRunOnceWithStalledPollingRunner();
+
+    const firstMonitor = monitorTelegramProvider({
+      token: "tok-a",
+      abortSignal: firstAbort.signal,
+    });
+    await firstCycle.waitForRunStart();
+    const secondMonitor = monitorTelegramProvider({
+      token: "tok-b",
+      abortSignal: secondAbort.signal,
+    });
+    await secondCycle.waitForRunStart();
+
+    expect(emitUncaughtException(await makeTaggedPollingFetchError("tok-b"))).toBe(true);
+    expect(firstCycle.stop).not.toHaveBeenCalled();
+    expect(secondCycle.stop).toHaveBeenCalledTimes(1);
+
+    firstAbort.abort();
+    secondAbort.abort();
+    await Promise.all([firstMonitor, secondMonitor]);
   });
 
   it("rebuilds the resolved transport after a stalled polling restart", async () => {

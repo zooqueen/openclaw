@@ -259,8 +259,9 @@ describe("isTransientSqliteError", () => {
 });
 
 describe("isTransientUnhandledRejectionError", () => {
-  it("treats raw pre-connect network uncaught exceptions as benign", () => {
+  it("keeps process-wide benign uncaught exceptions scoped to output errors", () => {
     const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+    const eio = Object.assign(new Error("read EIO"), { code: "EIO" });
     const sqlite = Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
     const network = Object.assign(new Error("connection reset"), { code: "ECONNRESET" });
     const hostUnreachable = Object.assign(new Error("connect EHOSTUNREACH"), {
@@ -272,10 +273,11 @@ describe("isTransientUnhandledRejectionError", () => {
     const generic = new Error("boom");
 
     expect(isBenignUncaughtExceptionError(epipe)).toBe(true);
+    expect(isBenignUncaughtExceptionError(eio)).toBe(true);
     expect(isBenignUncaughtExceptionError(sqlite)).toBe(false);
     expect(isBenignUncaughtExceptionError(network)).toBe(false);
-    expect(isBenignUncaughtExceptionError(hostUnreachable)).toBe(true);
-    expect(isBenignUncaughtExceptionError(rawHostUnreachable)).toBe(true);
+    expect(isBenignUncaughtExceptionError(hostUnreachable)).toBe(false);
+    expect(isBenignUncaughtExceptionError(rawHostUnreachable)).toBe(false);
     expect(isBenignUncaughtExceptionError(generic)).toBe(false);
   });
   it("returns true for transient SQLite errors", () => {
