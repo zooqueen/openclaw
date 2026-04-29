@@ -306,6 +306,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Active Memory/QMD: run QMD boot refresh through a one-shot subprocess path, preserve interactive file watching, and align watcher dependency/build ignores with QMD's scanner so gateway startup avoids arming long-lived QMD watchers. Thanks @codexGW.
 - Gateway/device tokens: stop echoing rotated bearer tokens from shared/admin `device.token.rotate` responses while preserving the same-device token handoff needed by token-only clients before reconnect. (#66773) Thanks @MoerAI.
 - Agents/sessions_spawn: resolve configured bare model aliases for spawn model overrides using the target agent runtime default provider, carrying forward the alias-specific #69029 review fixes from #59681 without the unrelated active-session pruning path. Fixes #59681. Thanks @HowdyDooToYou.
 - Control UI/Talk: keep Google Live browser sessions on the WebSocket transport instead of falling back to WebRTC, validate browser Google Live WebSocket endpoints, cap Gateway relay sessions per browser connection, and remove stale browser-native voice buttons that did not use the configured Talk/TTS provider. Thanks @BunsDev.
