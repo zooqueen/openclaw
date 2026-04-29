@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeProviderId } from "../agents/provider-id.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { formatErrorMessage } from "../infra/errors.js";
 import { buildPluginApi } from "./api-builder.js";
 import { collectPluginConfigContractMatches } from "./config-contracts.js";
 import { getCachedPluginJitiLoader, type PluginJitiLoaderCache } from "./jiti-loader-cache.js";
@@ -17,6 +18,7 @@ import type {
   OpenClawPluginModule,
   PluginConfigMigration,
   PluginLogger,
+  PluginOnboardingHook,
   PluginSetupAutoEnableProbe,
   ProviderPlugin,
 } from "./types.js";
@@ -47,6 +49,11 @@ type SetupAutoEnableProbeEntry = {
   probe: PluginSetupAutoEnableProbe;
 };
 
+type SetupOnboardingHookEntry = {
+  pluginId: string;
+  hook: PluginOnboardingHook;
+};
+
 export type PluginSetupRegistryDiagnosticCode =
   | "setup-descriptor-runtime-disabled"
   | "setup-descriptor-provider-missing-runtime"
@@ -67,6 +74,7 @@ type PluginSetupRegistry = {
   cliBackends: SetupCliBackendEntry[];
   configMigrations: SetupConfigMigrationEntry[];
   autoEnableProbes: SetupAutoEnableProbeEntry[];
+  onboardingHooks: SetupOnboardingHookEntry[];
   diagnostics: PluginSetupRegistryDiagnostic[];
 };
 
@@ -509,6 +517,7 @@ export function resolvePluginSetupRegistry(params?: {
       cliBackends: [],
       configMigrations: [],
       autoEnableProbes: [],
+      onboardingHooks: [],
       diagnostics: [],
     } satisfies PluginSetupRegistry;
     setCachedSetupValue(setupRegistryCache, cacheKey, empty);
@@ -519,6 +528,7 @@ export function resolvePluginSetupRegistry(params?: {
   const cliBackends: SetupCliBackendEntry[] = [];
   const configMigrations: SetupConfigMigrationEntry[] = [];
   const autoEnableProbes: SetupAutoEnableProbeEntry[] = [];
+  const onboardingHooks: SetupOnboardingHookEntry[] = [];
   const diagnostics: PluginSetupRegistryDiagnostic[] = [];
   const providerKeys = new Set<string>();
   const cliBackendKeys = new Set<string>();
@@ -588,6 +598,12 @@ export function resolvePluginSetupRegistry(params?: {
             probe,
           });
         },
+        registerOnboardingHook(hook) {
+          onboardingHooks.push({
+            pluginId: record.id,
+            hook,
+          });
+        },
       },
     });
 
@@ -613,6 +629,7 @@ export function resolvePluginSetupRegistry(params?: {
     cliBackends,
     configMigrations,
     autoEnableProbes,
+    onboardingHooks,
     diagnostics,
   } satisfies PluginSetupRegistry;
   setCachedSetupValue(setupRegistryCache, cacheKey, registry);
@@ -674,6 +691,7 @@ export function resolvePluginSetupProvider(params: {
       },
       registerConfigMigration() {},
       registerAutoEnableProbe() {},
+      registerOnboardingHook() {},
     },
   });
 
@@ -740,6 +758,7 @@ export function resolvePluginSetupCliBackend(params: {
       registerProvider() {},
       registerConfigMigration() {},
       registerAutoEnableProbe() {},
+      registerOnboardingHook() {},
       registerCliBackend(backend) {
         const key = normalizeProviderId(backend.id);
         if (localBackendKeys.has(key)) {
@@ -767,6 +786,41 @@ export function resolvePluginSetupCliBackend(params: {
   const resolvedEntry = matchedBackend ? { pluginId: record.id, backend: matchedBackend } : null;
   setCachedSetupValue(setupCliBackendCache, cacheKey, resolvedEntry);
   return resolvedEntry ?? undefined;
+}
+
+export async function runPluginOnboardingHooks(params: {
+  config: OpenClawConfig;
+  prompter: import("../wizard/prompts.js").WizardPrompter;
+  runtime: import("../runtime.js").RuntimeEnv;
+  workspaceDir?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<OpenClawConfig> {
+  const env = params.env ?? process.env;
+  let next = params.config;
+  const hooks = resolvePluginSetupRegistry({
+    config: params.config,
+    workspaceDir: params.workspaceDir,
+    env,
+  }).onboardingHooks;
+  for (const entry of hooks) {
+    try {
+      const result = await entry.hook({
+        config: next,
+        env,
+        prompter: params.prompter,
+        runtime: params.runtime,
+        workspaceDir: params.workspaceDir,
+      });
+      if (result) {
+        next = result;
+      }
+    } catch (error) {
+      params.runtime.error(
+        `Plugin ${entry.pluginId} onboarding warning: ${formatErrorMessage(error)}`,
+      );
+    }
+  }
+  return next;
 }
 
 export function runPluginSetupConfigMigrations(params: {

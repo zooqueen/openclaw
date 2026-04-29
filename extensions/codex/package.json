@@ -17,6 +17,7 @@
     "extensions": [
       "./index.ts"
     ],
+    "setupEntry": "./setup-api.ts",
     "bundle": {
       "stageRuntimeDependencies": true
     }

@@ -115,10 +115,14 @@ register the bundled Codex marketplace from
 fails. If setup still cannot make the MCP server available, the turn fails
 before the thread starts.
 
-After logging in with Codex for the first time, run `/codex computer-use setup`
-from an OpenClaw chat surface. It installs Computer Use if needed and invokes a
-read-only Computer Use tool so native first-run permissions can appear while you
-are present.
+During interactive onboarding, if you choose Codex login and opt into the native
+Codex runtime on macOS, OpenClaw offers to set up Codex Computer Use immediately.
+That setup installs or re-enables Computer Use if needed and invokes a read-only
+Computer Use tool so native first-run permissions can appear while you are
+present.
+
+You can also run `/codex computer-use setup` later from an OpenClaw chat
+surface. It uses the same install and read-only probe path.
 
 Existing sessions keep their runtime and Codex thread binding. After changing
 `agentRuntime` or Computer Use config, use `/new` or `/reset` in the affected
@@ -274,10 +278,10 @@ Use setup first:
 - macOS has granted the required permissions for the desktop-control app.
 - The current host session can access the desktop being controlled.
 
-On macOS, `/codex computer-use setup` can surface the native Computer Use
-permissions flow before a normal agent turn needs it. If a Codex Computer Use
-window or macOS System Settings opens, finish the prompts and rerun setup or
-status.
+On macOS, onboarding and `/codex computer-use setup` can surface the native
+Computer Use permissions flow before a normal agent turn needs it. If a Codex
+Computer Use window or macOS System Settings opens, finish the prompts and rerun
+setup or status.
 
 On Windows or Linux, Codex Computer Use is not expected to become available
 through this path. OpenClaw reports the missing plugin, MCP server, or tools

@@ -772,6 +772,13 @@ export async function runSetupWizard(
   // Setup hooks (session memory on /new)
   const { setupInternalHooks } = await import("../commands/onboard-hooks.js");
   nextConfig = await setupInternalHooks(nextConfig, runtime, prompter);
+  const { runPluginOnboardingHooks } = await import("../plugins/setup-registry.js");
+  nextConfig = await runPluginOnboardingHooks({
+    config: nextConfig,
+    prompter,
+    runtime,
+    workspaceDir,
+  });
 
   nextConfig = onboardHelpers.applyWizardMetadata(nextConfig, { command: "onboard", mode });
   nextConfig = await writeWizardConfigFile(nextConfig);

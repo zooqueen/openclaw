@@ -7,7 +7,14 @@ type QaRuntimeModule = {
   loadQaRuntimeModule: () => unknown;
 };
 
-type SurfaceLoaderMock = ReturnType<typeof vi.fn>;
+type TestMock = ((...args: any[]) => any) & {
+  mockReturnValue(value: unknown): unknown;
+};
+
+type QaRuntimeSurface = {
+  defaultQaRuntimeModelForMode: (...args: any[]) => any;
+  startQaLiveLaneGateway: (...args: any[]) => any;
+};
 
 export function cleanupTempDirs(tempDirs: string[]): void {
   for (const dir of tempDirs.splice(0)) {
@@ -33,7 +40,7 @@ export function makePrivateQaSourceRoot(tempDirs: string[], prefix: string): str
   return sourceRoot;
 }
 
-export function makeQaRuntimeSurface() {
+export function makeQaRuntimeSurface(): QaRuntimeSurface {
   return {
     defaultQaRuntimeModelForMode: vi.fn(),
     startQaLiveLaneGateway: vi.fn(),
@@ -42,7 +49,7 @@ export function makeQaRuntimeSurface() {
 
 export async function expectQaLabRuntimeSurfaceLoad(params: {
   importRuntime: () => Promise<QaRuntimeModule>;
-  loadBundledPluginPublicSurfaceModuleSync: SurfaceLoaderMock;
+  loadBundledPluginPublicSurfaceModuleSync: TestMock;
 }) {
   const runtimeSurface = makeQaRuntimeSurface();
   params.loadBundledPluginPublicSurfaceModuleSync.mockReturnValue(runtimeSurface);
@@ -59,8 +66,8 @@ export async function expectQaLabRuntimeSurfaceLoad(params: {
 export async function expectPrivateQaLabRuntimeSurfaceLoad(params: {
   tempDirs: string[];
   importRuntime: () => Promise<QaRuntimeModule>;
-  loadBundledPluginPublicSurfaceModuleSync: SurfaceLoaderMock;
-  resolveOpenClawPackageRootSync: SurfaceLoaderMock;
+  loadBundledPluginPublicSurfaceModuleSync: TestMock;
+  resolveOpenClawPackageRootSync: TestMock;
 }) {
   const sourceRoot = makePrivateQaSourceRoot(params.tempDirs, "openclaw-qa-runtime-root-");
   params.resolveOpenClawPackageRootSync.mockReturnValue(sourceRoot);

@@ -13,6 +13,27 @@ type SanitizeConfiguredModelProviderRequestParams = Parameters<
   typeof sanitizeConfiguredModelProviderRequest
 >[0];
 
+type TestMock = ((...args: any[]) => any) & {
+  mock: { calls: any[][] };
+  mockClear(): unknown;
+  mockImplementation(fn: (...args: any[]) => any): unknown;
+  mockRejectedValue(value: unknown): unknown;
+  mockReset(): unknown;
+  mockResolvedValue(value: unknown): unknown;
+  mockResolvedValueOnce(value: unknown): unknown;
+};
+
+type ProviderHttpMocks = {
+  resolveApiKeyForProviderMock: TestMock;
+  postJsonRequestMock: TestMock;
+  fetchWithTimeoutMock: TestMock;
+  pollProviderOperationJsonMock: TestMock;
+  assertOkOrThrowHttpErrorMock: TestMock;
+  assertOkOrThrowProviderErrorMock: TestMock;
+  sanitizeConfiguredModelProviderRequestMock: TestMock;
+  resolveProviderHttpRequestConfigMock: TestMock;
+};
+
 const providerHttpMocks = vi.hoisted(() => ({
   resolveApiKeyForProviderMock: vi.fn(async () => ({ apiKey: "provider-key" })),
   postJsonRequestMock: vi.fn(),
@@ -29,7 +50,7 @@ const providerHttpMocks = vi.hoisted(() => ({
     headers: new Headers(params.defaultHeaders),
     dispatcherPolicy: undefined,
   })),
-}));
+})) as ProviderHttpMocks;
 
 providerHttpMocks.pollProviderOperationJsonMock.mockImplementation(
   async (params: PollProviderOperationJsonParams) => {
@@ -85,7 +106,7 @@ vi.mock("openclaw/plugin-sdk/provider-http", () => ({
   waitProviderOperationPollInterval: async () => {},
 }));
 
-export function getProviderHttpMocks() {
+export function getProviderHttpMocks(): ProviderHttpMocks {
   return providerHttpMocks;
 }
 

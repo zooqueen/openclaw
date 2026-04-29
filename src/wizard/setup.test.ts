@@ -18,6 +18,8 @@ type ResolvePluginSetupProvider =
   typeof import("../plugins/provider-auth-choice.runtime.js").resolvePluginSetupProvider;
 type ResolveManifestProviderAuthChoice =
   typeof import("../plugins/provider-auth-choices.js").resolveManifestProviderAuthChoice;
+type RunPluginOnboardingHooks =
+  typeof import("../plugins/setup-registry.js").runPluginOnboardingHooks;
 type PromptDefaultModel = typeof import("../commands/model-picker.js").promptDefaultModel;
 type ApplyAuthChoice = typeof import("../commands/auth-choice.js").applyAuthChoice;
 
@@ -32,6 +34,9 @@ const resolveManifestProviderAuthChoice = vi.hoisted(() =>
 );
 const resolvePluginSetupProvider = vi.hoisted(() =>
   vi.fn<ResolvePluginSetupProvider>(() => undefined),
+);
+const runPluginOnboardingHooks = vi.hoisted(() =>
+  vi.fn<RunPluginOnboardingHooks>(async (args) => args.config),
 );
 const resolveProviderPluginChoice = vi.hoisted(() =>
   vi.fn<ResolveProviderPluginChoice>(() => null),
@@ -182,6 +187,7 @@ vi.mock("../plugins/provider-auth-choices.js", () => ({
 
 vi.mock("../plugins/setup-registry.js", () => ({
   resolvePluginSetupProvider,
+  runPluginOnboardingHooks,
 }));
 
 vi.mock("../plugins/provider-auth-choice.runtime.js", () => ({
@@ -1033,5 +1039,57 @@ describe("runSetupWizard", () => {
     );
     expect(resolvePluginProvidersRuntime).not.toHaveBeenCalled();
     expect(promptDefaultModel).toHaveBeenCalledWith(expect.objectContaining({ allowKeep: false }));
+  });
+
+  it("runs plugin onboarding hooks before finalizing setup", async () => {
+    runPluginOnboardingHooks.mockClear();
+    finalizeSetupWizard.mockClear();
+    runPluginOnboardingHooks.mockImplementationOnce(async ({ config }) => ({
+      ...config,
+      plugins: {
+        ...config.plugins,
+        entries: {
+          ...config.plugins?.entries,
+          demo: { enabled: true },
+        },
+      },
+    }));
+    const caseDir = await makeCaseDir("plugin-onboarding-");
+    const prompter = buildWizardPrompter({});
+    const runtime = createRuntime();
+
+    await runSetupWizard(
+      {
+        acceptRisk: true,
+        flow: "quickstart",
+        installDaemon: false,
+        skipSkills: true,
+        skipSearch: true,
+        skipHealth: true,
+        skipUi: true,
+        workspace: caseDir,
+      },
+      runtime,
+      prompter,
+    );
+
+    expect(runPluginOnboardingHooks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceDir: caseDir,
+        prompter,
+        runtime,
+      }),
+    );
+    expect(finalizeSetupWizard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nextConfig: expect.objectContaining({
+          plugins: {
+            entries: {
+              demo: { enabled: true },
+            },
+          },
+        }),
+      }),
+    );
   });
 });

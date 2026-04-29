@@ -306,6 +306,8 @@ Bundled workspace channels that keep setup-safe exports in sidecar modules can u
     - The channel plugin object (via `defineSetupPluginEntry`).
     - Any HTTP routes required before gateway listen.
     - Any gateway methods needed during startup.
+    - Optional onboarding hooks via `api.registerOnboardingHook(...)` when the
+      plugin needs an interactive setup step after core onboarding choices.
 
     Those startup gateway methods should still avoid reserved core admin namespaces such as `config.*` or `update.*`.
 

@@ -644,6 +644,11 @@ silently running without the native Computer Use tools. See
 [Codex Computer Use](/plugins/codex-computer-use) for marketplace choices,
 remote catalog limits, status reasons, and troubleshooting.
 
+Interactive onboarding also offers this setup path when a user chooses Codex
+login, opts into the native Codex runtime, and is running on macOS. Windows and
+Linux onboarding skip the Computer Use prompt because this Codex desktop-control
+path is macOS-specific.
+
 When `computerUse.autoInstall` is true, OpenClaw can register the standard
 bundled Codex Desktop marketplace from
 `/Applications/Codex.app/Contents/Resources/plugins/openai-bundled` if Codex

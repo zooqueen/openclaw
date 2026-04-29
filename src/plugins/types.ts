@@ -2242,6 +2242,18 @@ export type PluginSetupAutoEnableProbe = (
   ctx: PluginSetupAutoEnableContext,
 ) => string | string[] | null | undefined;
 
+export type PluginOnboardingContext = {
+  config: OpenClawConfig;
+  env: NodeJS.ProcessEnv;
+  prompter: WizardPrompter;
+  runtime: RuntimeEnv;
+  workspaceDir?: string;
+};
+
+export type PluginOnboardingHook = (
+  ctx: PluginOnboardingContext,
+) => OpenClawConfig | void | Promise<OpenClawConfig | void>;
+
 /** Main registration API injected into native plugin entry files. */
 export type OpenClawPluginApi = {
   id: string;
@@ -2316,6 +2328,8 @@ export type OpenClawPluginApi = {
   registerMigrationProvider: (provider: MigrationProviderPlugin) => void;
   /** Register a lightweight config probe that can auto-enable this plugin generically. */
   registerAutoEnableProbe: (probe: PluginSetupAutoEnableProbe) => void;
+  /** Register an interactive setup wizard hook for plugin-owned onboarding steps. */
+  registerOnboardingHook: (hook: PluginOnboardingHook) => void;
   /** Register a native model/provider plugin (text inference capability). */
   registerProvider: (provider: ProviderPlugin) => void;
   /** Register a speech synthesis provider (speech capability). */

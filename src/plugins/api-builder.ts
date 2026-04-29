@@ -34,6 +34,7 @@ export type BuildPluginApiParams = {
       | "registerConfigMigration"
       | "registerMigrationProvider"
       | "registerAutoEnableProbe"
+      | "registerOnboardingHook"
       | "registerProvider"
       | "registerSpeechProvider"
       | "registerRealtimeTranscriptionProvider"
@@ -94,6 +95,7 @@ const noopRegisterTextTransforms: OpenClawPluginApi["registerTextTransforms"] = 
 const noopRegisterConfigMigration: OpenClawPluginApi["registerConfigMigration"] = () => {};
 const noopRegisterMigrationProvider: OpenClawPluginApi["registerMigrationProvider"] = () => {};
 const noopRegisterAutoEnableProbe: OpenClawPluginApi["registerAutoEnableProbe"] = () => {};
+const noopRegisterOnboardingHook: OpenClawPluginApi["registerOnboardingHook"] = () => {};
 const noopRegisterProvider: OpenClawPluginApi["registerProvider"] = () => {};
 const noopRegisterSpeechProvider: OpenClawPluginApi["registerSpeechProvider"] = () => {};
 const noopRegisterRealtimeTranscriptionProvider: OpenClawPluginApi["registerRealtimeTranscriptionProvider"] =
@@ -181,6 +183,7 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
     registerConfigMigration: handlers.registerConfigMigration ?? noopRegisterConfigMigration,
     registerMigrationProvider: handlers.registerMigrationProvider ?? noopRegisterMigrationProvider,
     registerAutoEnableProbe: handlers.registerAutoEnableProbe ?? noopRegisterAutoEnableProbe,
+    registerOnboardingHook: handlers.registerOnboardingHook ?? noopRegisterOnboardingHook,
     registerProvider: handlers.registerProvider ?? noopRegisterProvider,
     registerSpeechProvider: handlers.registerSpeechProvider ?? noopRegisterSpeechProvider,
     registerRealtimeTranscriptionProvider:

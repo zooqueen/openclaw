@@ -27,6 +27,7 @@ let resolvePluginSetupRegistry: typeof import("./setup-registry.js").resolvePlug
 let resolvePluginSetupProvider: typeof import("./setup-registry.js").resolvePluginSetupProvider;
 let resolvePluginSetupCliBackend: typeof import("./setup-registry.js").resolvePluginSetupCliBackend;
 let runPluginSetupConfigMigrations: typeof import("./setup-registry.js").runPluginSetupConfigMigrations;
+let runPluginOnboardingHooks: typeof import("./setup-registry.js").runPluginOnboardingHooks;
 
 function forceNodeRuntimeVersionsForTest(): () => void {
   const originalVersions = process.versions;
@@ -183,6 +184,7 @@ describe("setup-registry getJiti", () => {
       resolvePluginSetupProvider,
       resolvePluginSetupCliBackend,
       runPluginSetupConfigMigrations,
+      runPluginOnboardingHooks,
     } = await import("./setup-registry.js"));
     clearPluginSetupRegistryCache();
   });
@@ -359,6 +361,54 @@ describe("setup-registry getJiti", () => {
     expect(mocks.createJiti).toHaveBeenCalledTimes(1);
   });
 
+  it("runs setup-registered onboarding hooks and returns their config", async () => {
+    const pluginRoot = makeTempDir();
+    writeSetupApiStub(pluginRoot);
+    mockSinglePlugin({ id: "demo", rootDir: pluginRoot });
+    mocks.createJiti.mockImplementation(() => {
+      return () => ({
+        default: {
+          register(api: {
+            registerOnboardingHook: (
+              hook: (ctx: { config: unknown }) => unknown | Promise<unknown>,
+            ) => void;
+          }) {
+            api.registerOnboardingHook(async ({ config }) => ({
+              ...(config as Record<string, unknown>),
+              plugins: {
+                entries: {
+                  demo: { enabled: true },
+                },
+              },
+            }));
+          },
+        },
+      });
+    });
+    const runtime = {
+      log: vi.fn(),
+      error: vi.fn(),
+      exit: vi.fn(),
+    };
+
+    const result = await runPluginOnboardingHooks({
+      config: {},
+      env: {},
+      prompter: {} as never,
+      runtime,
+      workspaceDir: pluginRoot,
+    });
+
+    expect(result).toEqual({
+      plugins: {
+        entries: {
+          demo: { enabled: true },
+        },
+      },
+    });
+    expect(runtime.error).not.toHaveBeenCalled();
+  });
+
   it("prefers setup provider descriptors over top-level provider ids", () => {
     const pluginRoot = makeTempDir();
     fs.writeFileSync(path.join(pluginRoot, "setup-api.js"), "export default {};\n", "utf-8");
@@ -432,6 +482,7 @@ describe("setup-registry getJiti", () => {
       cliBackends: [],
       configMigrations: [],
       autoEnableProbes: [],
+      onboardingHooks: [],
       diagnostics: [
         expect.objectContaining({
           pluginId: "openai",
@@ -468,6 +519,7 @@ describe("setup-registry getJiti", () => {
       cliBackends: [],
       configMigrations: [],
       autoEnableProbes: [],
+      onboardingHooks: [],
       diagnostics: [],
     });
     expect(mocks.createJiti).not.toHaveBeenCalled();
