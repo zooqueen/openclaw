@@ -146,6 +146,28 @@ describe("createModelListAuthIndex", () => {
     expect(index.hasProviderAuth("google-vertex")).toBe(true);
   });
 
+  it("records Google Vertex ADC auth from bundled manifest evidence", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-list-auth-google-adc-"));
+    const credentialsPath = path.join(tempRoot, "adc.json");
+    await fs.writeFile(credentialsPath, "{}", "utf8");
+
+    try {
+      const index = createModelListAuthIndex({
+        cfg: {},
+        authStore: emptyStore,
+        env: {
+          GOOGLE_APPLICATION_CREDENTIALS: credentialsPath,
+          GOOGLE_CLOUD_LOCATION: "us-central1",
+          GOOGLE_CLOUD_PROJECT: "vertex-project",
+        } as NodeJS.ProcessEnv,
+      });
+
+      expect(index.hasProviderAuth("google-vertex")).toBe(true);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("uses trusted workspace plugin auth evidence when workspace scope is supplied", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-list-auth-index-"));
     const workspaceDir = path.join(tempRoot, "workspace");
