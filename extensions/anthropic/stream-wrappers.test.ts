@@ -11,6 +11,8 @@ import {
 
 const CONTEXT_1M_BETA = "context-1m-2025-08-07";
 const OAUTH_BETA = "oauth-2025-04-20";
+const OAUTH_CLAUDE_CODE_BETA = "claude-code-20250219";
+const DEFAULT_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14";
 
 function runWrapper(apiKey: string | undefined): Record<string, string> | undefined {
   const captured: { headers?: Record<string, string> } = {};
@@ -40,20 +42,39 @@ function createPayloadCapturingBaseStream(captured: {
   };
 }
 
-function runComposedAnthropicProviderStream(apiKey: string) {
+function runComposedAnthropicProviderStreamCase(params: {
+  apiKey: string;
+  baseUrl?: string;
+  extraParams?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  modelId?: string;
+}) {
   const captured: { headers?: Record<string, string>; payload?: Record<string, unknown> } = {};
+  const modelId = params.modelId ?? "claude-sonnet-4-6";
   const wrapped = wrapAnthropicProviderStream({
     streamFn: createPayloadCapturingBaseStream(captured),
-    modelId: "claude-sonnet-4-6",
-    extraParams: { context1m: true, serviceTier: "auto" },
+    modelId,
+    extraParams: params.extraParams,
   } as never);
 
   void wrapped?.(
-    { provider: "anthropic", api: "anthropic-messages", id: "claude-sonnet-4-6" } as never,
+    {
+      provider: "anthropic",
+      api: "anthropic-messages",
+      baseUrl: params.baseUrl,
+      id: modelId,
+    } as never,
     {} as never,
-    { apiKey } as never,
+    { apiKey: params.apiKey, headers: params.headers } as never,
   );
   return captured;
+}
+
+function runComposedAnthropicProviderStream(apiKey: string) {
+  return runComposedAnthropicProviderStreamCase({
+    apiKey,
+    extraParams: { context1m: true, serviceTier: "auto" },
+  });
 }
 
 function runPayloadWrapper(
@@ -113,6 +134,41 @@ describe("anthropic stream wrappers", () => {
     const captured = runComposedAnthropicProviderStream("sk-ant-api-123");
     expect(captured.headers?.["anthropic-beta"]).toContain(CONTEXT_1M_BETA);
     expect(captured.payload).toMatchObject({ service_tier: "auto" });
+  });
+
+  it("applies default beta headers without explicit extra-param betas", () => {
+    const captured = runComposedAnthropicProviderStreamCase({
+      apiKey: "sk-ant-api-123",
+    });
+
+    expect(captured.headers?.["anthropic-beta"]).toContain(DEFAULT_TOOL_STREAMING_BETA);
+  });
+
+  it("merges OAuth beta headers with model/provider-level beta headers without explicit extra-param betas", () => {
+    const debug = vi.spyOn(__testing.log, "debug").mockImplementation(() => undefined);
+    const captured = runComposedAnthropicProviderStreamCase({
+      apiKey: "sk-ant-oat01-oauth-token",
+      headers: { "anthropic-beta": "model-beta-2026-01-01" },
+    });
+
+    const betaHeader = captured.headers?.["anthropic-beta"];
+    expect(betaHeader).toContain("model-beta-2026-01-01");
+    expect(betaHeader).toContain(OAUTH_CLAUDE_CODE_BETA);
+    expect(betaHeader).toContain(OAUTH_BETA);
+    expect(debug).toHaveBeenCalledWith("applying Anthropic beta header wrapper", {
+      modelId: "claude-sonnet-4-6",
+      explicitBetaCount: 0,
+    });
+  });
+
+  it("preserves custom endpoint beta headers without adding implicit betas", () => {
+    const captured = runComposedAnthropicProviderStreamCase({
+      apiKey: "sk-ant-oat01-oauth-token",
+      baseUrl: "https://proxy.example.com/anthropic",
+      headers: { "anthropic-beta": "model-beta-2026-01-01" },
+    });
+
+    expect(captured.headers?.["anthropic-beta"]).toBe("model-beta-2026-01-01");
   });
 });
 

@@ -66,6 +66,18 @@ function isAnthropicOAuthApiKey(apiKey: unknown): boolean {
   return typeof apiKey === "string" && apiKey.includes("sk-ant-oat");
 }
 
+function allowsImplicitAnthropicBetaHeaders(model: Parameters<StreamFn>[0]): boolean {
+  const provider = readStringValue(model.provider);
+  const providerKey = normalizeLowercaseStringOrEmpty(provider);
+  const api =
+    readStringValue(model.api) ?? (providerKey === "anthropic" ? "anthropic-messages" : undefined);
+  return resolveAnthropicPayloadPolicy({
+    provider,
+    api,
+    baseUrl: readStringValue(model.baseUrl),
+  }).allowsServiceTier;
+}
+
 function resolveAnthropicFastServiceTier(enabled: boolean): AnthropicServiceTier {
   return enabled ? "auto" : "standard_only";
 }
@@ -115,6 +127,11 @@ export function createAnthropicBetaHeadersWrapper(
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
     const isOauth = isAnthropicOAuthApiKey(options?.apiKey);
+    const implicitBetas = allowsImplicitAnthropicBetaHeaders(model)
+      ? isOauth
+        ? (PI_AI_OAUTH_ANTHROPIC_BETAS as readonly string[])
+        : (PI_AI_DEFAULT_ANTHROPIC_BETAS as readonly string[])
+      : [];
     const requestedContext1m = betas.includes(ANTHROPIC_CONTEXT_1M_BETA);
     const effectiveBetas =
       isOauth && requestedContext1m
@@ -126,10 +143,10 @@ export function createAnthropicBetaHeadersWrapper(
       );
     }
 
-    const piAiBetas = isOauth
-      ? (PI_AI_OAUTH_ANTHROPIC_BETAS as readonly string[])
-      : (PI_AI_DEFAULT_ANTHROPIC_BETAS as readonly string[]);
-    const allBetas = [...new Set([...piAiBetas, ...effectiveBetas])];
+    const allBetas = [...new Set([...implicitBetas, ...effectiveBetas])];
+    if (allBetas.length === 0) {
+      return underlying(model, context, options);
+    }
     return underlying(model, context, {
       ...options,
       headers: mergeAnthropicBetaHeader(options?.headers, allBetas),
@@ -203,14 +220,16 @@ export function resolveAnthropicServiceTier(
 export function wrapAnthropicProviderStream(
   ctx: ProviderWrapStreamFnContext,
 ): StreamFn | undefined {
-  const anthropicBetas = resolveAnthropicBetas(ctx.extraParams, ctx.modelId);
+  const anthropicBetas = resolveAnthropicBetas(ctx.extraParams, ctx.modelId) ?? [];
   const serviceTier = resolveAnthropicServiceTier(ctx.extraParams);
   const fastMode = resolveAnthropicFastMode(ctx.extraParams);
+  log.debug("applying Anthropic beta header wrapper", {
+    modelId: ctx.modelId,
+    explicitBetaCount: anthropicBetas.length,
+  });
   return composeProviderStreamWrappers(
     ctx.streamFn,
-    anthropicBetas?.length
-      ? (streamFn) => createAnthropicBetaHeadersWrapper(streamFn, anthropicBetas)
-      : undefined,
+    (streamFn) => createAnthropicBetaHeadersWrapper(streamFn, anthropicBetas),
     serviceTier
       ? (streamFn) => createAnthropicServiceTierWrapper(streamFn, serviceTier)
       : undefined,
