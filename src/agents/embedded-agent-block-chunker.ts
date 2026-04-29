@@ -31,6 +31,7 @@ type FenceSplit = {
 type BreakResult = {
   index: number;
   fenceSplit?: FenceSplit;
+  preserveNextWhitespace?: boolean;
 };
 
 type ParagraphBreak = {
@@ -133,6 +134,28 @@ function isSafeMarkdownBreak(
 function extendBreakThroughParagraphSeparator(buffer: string, index: number): number {
   const paragraphSeparator = buffer.slice(index).match(/^\n[\t ]*\n+/);
   return paragraphSeparator ? index + paragraphSeparator[0].length : index;
+}
+
+function findTableRowBreakBeforeLimit(params: {
+  buffer: string;
+  table: TableSpan;
+  offset: number;
+  minChars: number;
+  maxChars: number;
+}): number {
+  const { buffer, table, offset, minChars, maxChars } = params;
+  const tableStart = Math.max(0, table.start - offset);
+  const tableEnd = Math.min(buffer.length, table.end - offset);
+  const limit = Math.min(maxChars, tableEnd);
+  let newlineIdx = buffer.lastIndexOf("\n", limit - 1);
+  while (newlineIdx >= tableStart) {
+    const candidate = newlineIdx + 1;
+    if (candidate > tableStart && candidate >= minChars && candidate <= maxChars) {
+      return candidate;
+    }
+    newlineIdx = buffer.lastIndexOf("\n", newlineIdx - 1);
+  }
+  return -1;
 }
 
 export class EmbeddedBlockChunker {
@@ -301,10 +324,17 @@ export class EmbeddedBlockChunker {
     }
 
     const nextStart =
-      absoluteBreakIdx < source.length && /\s/.test(source[absoluteBreakIdx])
+      !breakResult.preserveNextWhitespace &&
+      absoluteBreakIdx < source.length &&
+      /\s/.test(source[absoluteBreakIdx])
         ? absoluteBreakIdx + 1
         : absoluteBreakIdx;
-    return { start: skipLeadingNewlines(source, nextStart), reopenFence: undefined };
+    return {
+      start: breakResult.preserveNextWhitespace
+        ? nextStart
+        : skipLeadingNewlines(source, nextStart),
+      reopenFence: undefined,
+    };
   }
 
   #pickSoftBreakIndex(
@@ -464,8 +494,22 @@ export class EmbeddedBlockChunker {
         }
         const tableEnd = table.end - offset;
         if (tableEnd > 0 && tableEnd <= buffer.length) {
-          return { index: extendBreakThroughParagraphSeparator(buffer, tableEnd) };
+          const extendedTableEnd = extendBreakThroughParagraphSeparator(buffer, tableEnd);
+          if (extendedTableEnd <= maxChars) {
+            return { index: extendedTableEnd };
+          }
         }
+        const rowBreak = findTableRowBreakBeforeLimit({
+          buffer,
+          table,
+          offset,
+          minChars,
+          maxChars,
+        });
+        if (rowBreak !== -1) {
+          return { index: rowBreak, preserveNextWhitespace: true };
+        }
+        return { index: maxChars, preserveNextWhitespace: true };
       }
       return { index: maxChars };
     }

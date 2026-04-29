@@ -155,7 +155,7 @@ describe("EmbeddedBlockChunker", () => {
     expect(chunks.join("") + chunker.bufferedText).toBe(text);
   });
 
-  it("keeps markdown tables intact when a max-char break falls inside one", () => {
+  it("caps markdown table chunks when a max-char break falls inside one", () => {
     const chunker = new EmbeddedBlockChunker({
       minChars: 1,
       maxChars: 20,
@@ -176,11 +176,32 @@ describe("EmbeddedBlockChunker", () => {
 
     const chunks = drainChunks(chunker);
 
-    expect(chunks).toEqual([
-      "Intro\n\n",
-      "| Name | Value |\n| --- | --- |\n| Alpha | One |\n| Beta | Two |\n\n",
-    ]);
+    expect(chunks[0]).toBe("Intro\n\n");
+    expect(chunks.every((chunk) => chunk.length <= 20)).toBe(true);
     expect(chunks.join("") + chunker.bufferedText).toBe(text);
+  });
+
+  it("does not emit an oversized chunk for a table-only payload longer than maxChars", () => {
+    const maxChars = 25;
+    const chunker = new EmbeddedBlockChunker({
+      minChars: 1,
+      maxChars,
+      breakPreference: "paragraph",
+    });
+    const text = [
+      "| Name | Description |",
+      "| --- | --- |",
+      `| Alpha | ${"a".repeat(70)} |`,
+      `| Beta | ${"b".repeat(70)} |`,
+    ].join("\n");
+
+    chunker.append(text);
+
+    const chunks = drainChunks(chunker, true);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= maxChars)).toBe(true);
+    expect(chunks.join("")).toBe(text);
   });
 
   it("parses fence spans once per drain call for long fenced buffers", () => {
