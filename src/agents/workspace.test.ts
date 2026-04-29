@@ -64,6 +64,34 @@ async function expectCompletedWithoutBootstrap(dir: string) {
   expect(state.setupCompletedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
 }
 
+async function withWorkspaceStateEnv<T>(
+  updates: Record<"OPENCLAW_STATE_DIR" | "OPENCLAW_CONFIG_PATH", string | undefined>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = {
+    OPENCLAW_STATE_DIR: process.env.OPENCLAW_STATE_DIR,
+    OPENCLAW_CONFIG_PATH: process.env.OPENCLAW_CONFIG_PATH,
+  };
+  try {
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    return await run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 function expectSubagentAllowedBootstrapNames(files: WorkspaceBootstrapFile[]) {
   const names = files.map((file) => file.name);
   expect(names).toContain("AGENTS.md");
@@ -451,6 +479,52 @@ describe("loadWorkspaceBootstrapFiles", () => {
         await fs.symlink(targetPath, linkPath);
       },
     );
+  });
+
+  it("keeps AGENTS.md symlinks to OpenClaw state files missing", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-workspace-state-symlink-"));
+    try {
+      const workspaceDir = path.join(rootDir, "workspace");
+      const stateDir = path.join(rootDir, "state");
+      const customConfigPath = path.join(rootDir, "custom-config", "openclaw.json");
+      await fs.mkdir(workspaceDir, { recursive: true });
+      const stateTargets = [
+        path.join(stateDir, "credentials", "telegram", "bot.json"),
+        path.join(stateDir, "agents", "main", "agent", "auth-profiles.json"),
+        path.join(stateDir, "agents", "main", "agent", "auth.json"),
+        path.join(stateDir, "secrets.json"),
+        path.join(stateDir, "openclaw.json"),
+        path.join(stateDir, "agents", "main", "sessions", "session.jsonl"),
+        customConfigPath,
+      ];
+
+      await withWorkspaceStateEnv(
+        {
+          OPENCLAW_STATE_DIR: stateDir,
+          OPENCLAW_CONFIG_PATH: customConfigPath,
+        },
+        async () => {
+          for (const targetPath of stateTargets) {
+            const linkPath = path.join(workspaceDir, DEFAULT_AGENTS_FILENAME);
+            await fs.rm(linkPath, { force: true });
+            await fs.mkdir(path.dirname(targetPath), { recursive: true });
+            await fs.writeFile(targetPath, "private state", "utf-8");
+            await fs.symlink(targetPath, linkPath);
+
+            const files = await loadWorkspaceBootstrapFiles(workspaceDir);
+            const agents = getBootstrapEntry(files, DEFAULT_AGENTS_FILENAME);
+            expect(agents?.missing).toBe(true);
+            expect(agents?.content).toBeUndefined();
+          }
+        },
+      );
+    } finally {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
   });
 
   it("treats hardlinked bootstrap aliases as missing", async () => {

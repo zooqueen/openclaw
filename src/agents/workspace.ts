@@ -2,6 +2,7 @@ import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
+import { isPathInside } from "../infra/path-guards.js";
 import { openVerifiedFileSync } from "../infra/safe-open-sync.js";
 import {
   CANONICAL_ROOT_MEMORY_FILENAME,
@@ -52,6 +53,8 @@ const MAX_WORKSPACE_BOOTSTRAP_FILE_BYTES = 2 * 1024 * 1024;
 
 // File content cache keyed by stable file identity to avoid stale reads.
 const workspaceFileCache = new Map<string, { content: string; identity: string }>();
+const OPENCLAW_CONFIG_FILENAMES = new Set(["openclaw.json", "clawdbot.json"]);
+const OPENCLAW_AGENT_AUTH_FILENAMES = new Set(["auth-profiles.json", "auth.json"]);
 
 /**
  * Read workspace files via boundary-safe open and cache by inode/dev/size/mtime identity.
@@ -85,6 +88,79 @@ function isExplicitTopLevelBootstrapPath(params: {
   return (
     path.dirname(filePath) === workspaceDir && VALID_BOOTSTRAP_NAMES.has(path.basename(filePath))
   );
+}
+
+function realpathOrResolvedPath(filePath: string): string {
+  try {
+    return syncFs.realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
+function knownOpenClawStateDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const dirs = new Set<string>();
+  const stateDir = env.OPENCLAW_STATE_DIR?.trim();
+  if (stateDir) {
+    dirs.add(resolveUserPath(stateDir, env));
+  }
+  dirs.add(resolveUserPath("~/.openclaw", env));
+  dirs.add(resolveUserPath("~/.clawdbot", env));
+  return Array.from(dirs);
+}
+
+function relativePathSegments(root: string, targetPath: string): string[] {
+  return path.relative(root, targetPath).split(path.sep).filter(Boolean);
+}
+
+function isSensitiveOpenClawAgentStatePath(agentsRoot: string, targetPath: string): boolean {
+  if (!isPathInside(agentsRoot, targetPath)) {
+    return false;
+  }
+
+  const segments = relativePathSegments(agentsRoot, targetPath);
+  if (segments.length >= 3 && segments[1] === "sessions") {
+    return true;
+  }
+  return (
+    segments.length === 3 &&
+    segments[1] === "agent" &&
+    OPENCLAW_AGENT_AUTH_FILENAMES.has(segments[2] ?? "")
+  );
+}
+
+function isSensitiveOpenClawStatePath(targetPath: string): boolean {
+  const resolvedTarget = path.resolve(targetPath);
+  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
+  if (configPath && resolvedTarget === realpathOrResolvedPath(resolveUserPath(configPath))) {
+    return true;
+  }
+
+  for (const stateDir of knownOpenClawStateDirs()) {
+    const stateRoot = realpathOrResolvedPath(stateDir);
+    const targetName = path.basename(resolvedTarget);
+    if (isPathInside(stateRoot, resolvedTarget) && OPENCLAW_CONFIG_FILENAMES.has(targetName)) {
+      const segments = relativePathSegments(stateRoot, resolvedTarget);
+      if (segments.length === 1) {
+        return true;
+      }
+    }
+    if (resolvedTarget === realpathOrResolvedPath(path.join(stateDir, "secrets.json"))) {
+      return true;
+    }
+    if (isPathInside(realpathOrResolvedPath(path.join(stateDir, "credentials")), resolvedTarget)) {
+      return true;
+    }
+    if (
+      isSensitiveOpenClawAgentStatePath(
+        realpathOrResolvedPath(path.join(stateDir, "agents")),
+        resolvedTarget,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function readOpenedWorkspaceFile(params: {
@@ -138,6 +214,11 @@ function readExplicitBootstrapSymlinkTargetWithGuards(params: {
   });
   if (!opened.ok) {
     return opened;
+  }
+  if (isSensitiveOpenClawStatePath(opened.path)) {
+    syncFs.closeSync(opened.fd);
+    workspaceFileCache.delete(params.filePath);
+    return { ok: false, reason: "validation" };
   }
 
   return readOpenedWorkspaceFile({
