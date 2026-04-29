@@ -116,7 +116,19 @@ describe("doctor command", () => {
       process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE;
     process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE = "1";
     try {
-      await doctorCommand(createDoctorRuntime(), { yes: true });
+      const previousConfigWriteSupport =
+        process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE;
+      process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE = "1";
+      try {
+        await doctorCommand(createDoctorRuntime(), { yes: true });
+      } finally {
+        if (previousConfigWriteSupport === undefined) {
+          delete process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE;
+        } else {
+          process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE =
+            previousConfigWriteSupport;
+        }
+      }
     } finally {
       if (previousConfigWriteSupport === undefined) {
         delete process.env.OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE;
