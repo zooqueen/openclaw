@@ -203,12 +203,16 @@ function schedulePrimaryModelPrewarm(
 }
 
 async function recoverPersistedFollowupQueuesAfterRestart(params: {
+  cfg: OpenClawConfig;
   log: { info?: (msg: string) => void; warn: (msg: string) => void };
 }): Promise<void> {
   try {
     const { recoverPersistedFollowupQueuesForRestart } =
       await import("../auto-reply/reply/queue/persist.js");
-    const result = await recoverPersistedFollowupQueuesForRestart({ log: params.log });
+    const result = await recoverPersistedFollowupQueuesForRestart({
+      config: params.cfg,
+      log: params.log,
+    });
     if (result.recoveredQueues > 0) {
       params.log.info?.(
         `recovered ${result.recoveredItems} queued followup message(s) across ${result.recoveredQueues} queue(s) after restart`,
@@ -360,6 +364,7 @@ export async function startGatewaySidecars(params: {
         );
         await measureStartup(params.startupTrace, "sidecars.followup-queue-recovery", () =>
           recoverPersistedFollowupQueuesAfterRestart({
+            cfg: params.cfg,
             log: { info: params.logChannels.info, warn: params.log.warn },
           }),
         );

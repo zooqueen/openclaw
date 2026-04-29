@@ -23,6 +23,14 @@ const settings: QueueSettings = {
   dropPolicy: "summarize",
 };
 
+const recoveryConfig = {
+  channels: {
+    slack: {
+      enabled: true,
+    },
+  },
+} as FollowupRun["run"]["config"];
+
 afterEach(() => {
   for (const key of touchedQueueKeys) {
     clearFollowupQueue(key);
@@ -138,11 +146,14 @@ describe("followup queue restart persistence", () => {
           }),
         ],
       });
+      expect(Object.hasOwn(loaded.snapshots[0]?.items[0]?.run ?? {}, "config")).toBe(false);
+      expect(Object.hasOwn(loaded.snapshots[0]?.lastRun ?? {}, "config")).toBe(false);
 
       clearFollowupQueue(key);
       const recovered: FollowupRun[] = [];
       const result = await recoverPersistedFollowupQueuesForRestart({
         stateDir,
+        config: recoveryConfig,
         createRunFollowup: () => async (run) => {
           recovered.push(run);
         },
@@ -165,6 +176,7 @@ describe("followup queue restart persistence", () => {
           messageProvider: "slack",
           senderId: "U123",
           senderIsOwner: false,
+          config: recoveryConfig,
         }),
       });
       expect("kind" in recovered[0]).toBe(false);
@@ -183,6 +195,7 @@ describe("followup queue restart persistence", () => {
       const recovered: FollowupRun[] = [];
       await recoverPersistedFollowupQueuesForRestart({
         stateDir,
+        config: recoveryConfig,
         createRunFollowup: () => async (run) => {
           recovered.push(run);
           await releaseDrain.promise;
@@ -196,11 +209,69 @@ describe("followup queue restart persistence", () => {
       expect(persistedAgain).toEqual({ persistedQueues: 1, persistedItems: 1 });
       const loadedAgain = await loadPersistedFollowupQueueSnapshots({ stateDir });
       expect(loadedAgain.snapshots[0]?.items[0]?.prompt).toBe("survives another restart");
+      expect(Object.hasOwn(loadedAgain.snapshots[0]?.items[0]?.run ?? {}, "config")).toBe(false);
 
       releaseDrain.resolve();
       await vi.waitFor(() => {
         expect(recovered).toHaveLength(1);
       });
+    });
+  });
+
+  it("does not serialize resolved runtime config secrets and restores current config", async () => {
+    await withTempDir({ prefix: "openclaw-followup-persist-" }, async (stateDir) => {
+      const key = trackKey(`agent:main:slack:secret:${Date.now()}`);
+      const resolvedSecret = "persist-test-resolved-secret-value";
+      const queued = makeQueuedRun(key, "do not persist resolved config");
+      queued.run.config = {
+        tools: {
+          web: {
+            search: {
+              apiKey: resolvedSecret,
+            },
+          },
+        },
+      } as FollowupRun["run"]["config"];
+      enqueueFollowupRun(key, queued, settings, "none", undefined, false);
+
+      await persistFollowupQueuesForRestart({ stateDir });
+      const snapshotFiles = await listPersistedSnapshotBasenames(stateDir);
+      expect(snapshotFiles).toHaveLength(1);
+      const rawSnapshot = await fs.readFile(
+        path.join(resolvePersistedFollowupQueueDir(stateDir), snapshotFiles[0]!),
+        "utf-8",
+      );
+      expect(rawSnapshot).not.toContain(resolvedSecret);
+      expect(rawSnapshot).not.toContain('"config"');
+
+      const loaded = await loadPersistedFollowupQueueSnapshots({ stateDir });
+      expect(Object.hasOwn(loaded.snapshots[0]?.items[0]?.run ?? {}, "config")).toBe(false);
+      expect(Object.hasOwn(loaded.snapshots[0]?.lastRun ?? {}, "config")).toBe(false);
+
+      clearFollowupQueue(key);
+      const currentConfig = {
+        tools: {
+          web: {
+            search: {
+              apiKey: "${BRAVE_API_KEY}",
+            },
+          },
+        },
+      } as FollowupRun["run"]["config"];
+      const recovered: FollowupRun[] = [];
+      await recoverPersistedFollowupQueuesForRestart({
+        stateDir,
+        config: currentConfig,
+        createRunFollowup: () => async (run) => {
+          recovered.push(run);
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(recovered).toHaveLength(1);
+      });
+      expect(recovered[0]?.run.config).toBe(currentConfig);
+      expect(JSON.stringify(recovered[0])).not.toContain(resolvedSecret);
     });
   });
 
@@ -215,6 +286,7 @@ describe("followup queue restart persistence", () => {
 
       const result = await recoverPersistedFollowupQueuesForRestart({
         stateDir,
+        config: recoveryConfig,
         log,
         createRunFollowup,
         scheduleDrain,
