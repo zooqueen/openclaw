@@ -48,7 +48,7 @@ export const cliCommandCatalog: readonly CliCommandCatalogEntry[] = [
   {
     commandPath: ["agent"],
     policy: {
-      loadPlugins: "always",
+      loadPlugins: "text-only",
       networkProxy: ({ argv }) => (hasFlag(argv, "--local") ? "default" : "bypass"),
     },
   },
