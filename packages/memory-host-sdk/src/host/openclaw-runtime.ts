@@ -106,8 +106,8 @@ export { emptyPluginConfigSchema } from "../../../../src/plugins/config-schema.j
 export {
   buildMemoryPromptSection as buildActiveMemoryPromptSection,
   getMemoryCapabilityRegistration,
-  listActiveMemoryPublicArtifacts,
 } from "../../../../src/plugins/memory-state.js";
+export { listActiveMemoryPublicArtifacts } from "../../../../src/plugins/memory-runtime.js";
 export type {
   MemoryFlushPlan,
   MemoryFlushPlanResolver,

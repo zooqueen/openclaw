@@ -13,6 +13,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Memory Wiki/CLI: bootstrap the active memory plugin capability before listing public bridge artifacts through Gateway RPC, so bridge status, doctor, and imports no longer report zero artifacts when memory-core is startup-lazy. Follows #67063, #67208, #68586, #69952, #70185, and #71479. Thanks @sahilsatralkar, @moorsecopers99, @imadal1n, @QuentinWalker, @prasad-yashdeep, and @vincentkoc.
 - Telegram/exec approvals: stop treating general Telegram chat allowlists and `defaultTo` routes as native exec approvers; Telegram now uses explicit `execApprovals.approvers` or owner identity from `commands.ownerAllowFrom`, matching the first-pairing owner bootstrap path. Thanks @pashpashpash.
 - Plugin SDK/Discord: restore a deprecated `openclaw/plugin-sdk/discord` compatibility facade and the legacy compat group-policy warning export for the published `@openclaw/discord@2026.3.13` package, covering its config, account, directory, status, and thread-binding imports while keeping new plugins on generic SDK subpaths. Fixes #73685; supersedes #73703. Thanks @rderickson9 and @SymbolStar.
 - Channels/Discord: suppress duplicate gateway monitors when multiple enabled accounts resolve to the same bot token, preferring config tokens over default env fallback and reporting skipped duplicates as disabled. Supersedes #73608. Thanks @kagura-agent.

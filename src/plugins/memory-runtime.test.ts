@@ -5,6 +5,10 @@ const resolveRuntimePluginRegistryMock =
 const applyPluginAutoEnableMock =
   vi.fn<typeof import("../config/plugin-auto-enable.js").applyPluginAutoEnable>();
 const getMemoryRuntimeMock = vi.fn<typeof import("./memory-state.js").getMemoryRuntime>();
+const getMemoryCapabilityRegistrationMock =
+  vi.fn<typeof import("./memory-state.js").getMemoryCapabilityRegistration>();
+const listRegisteredMemoryPublicArtifactsMock =
+  vi.fn<typeof import("./memory-state.js").listActiveMemoryPublicArtifacts>();
 const resolveAgentWorkspaceDirMock =
   vi.fn<typeof import("../agents/agent-scope.js").resolveAgentWorkspaceDir>();
 const resolveDefaultAgentIdMock = vi.fn<
@@ -25,10 +29,13 @@ vi.mock("./loader.js", () => ({
 }));
 
 vi.mock("./memory-state.js", () => ({
+  getMemoryCapabilityRegistration: () => getMemoryCapabilityRegistrationMock(),
   getMemoryRuntime: () => getMemoryRuntimeMock(),
+  listActiveMemoryPublicArtifacts: listRegisteredMemoryPublicArtifactsMock,
 }));
 
 let getActiveMemorySearchManager: typeof import("./memory-runtime.js").getActiveMemorySearchManager;
+let listActiveMemoryPublicArtifacts: typeof import("./memory-runtime.js").listActiveMemoryPublicArtifacts;
 let resolveActiveMemoryBackendConfig: typeof import("./memory-runtime.js").resolveActiveMemoryBackendConfig;
 let closeActiveMemorySearchManagers: typeof import("./memory-runtime.js").closeActiveMemorySearchManagers;
 
@@ -121,12 +128,15 @@ describe("memory runtime auto-enable loading", () => {
     vi.resetModules();
     ({
       getActiveMemorySearchManager,
+      listActiveMemoryPublicArtifacts,
       resolveActiveMemoryBackendConfig,
       closeActiveMemorySearchManagers,
     } = await import("./memory-runtime.js"));
     resolveRuntimePluginRegistryMock.mockReset();
     applyPluginAutoEnableMock.mockReset();
     getMemoryRuntimeMock.mockReset();
+    getMemoryCapabilityRegistrationMock.mockReset();
+    listRegisteredMemoryPublicArtifactsMock.mockReset();
     resolveAgentWorkspaceDirMock.mockReset();
     resolveDefaultAgentIdMock.mockClear();
     applyPluginAutoEnableMock.mockImplementation((params) => ({
@@ -135,6 +145,7 @@ describe("memory runtime auto-enable loading", () => {
       autoEnabledReasons: {},
     }));
     resolveAgentWorkspaceDirMock.mockReturnValue("/resolved-workspace");
+    listRegisteredMemoryPublicArtifactsMock.mockResolvedValue([]);
   });
 
   it.each([
@@ -186,6 +197,62 @@ describe("memory runtime auto-enable loading", () => {
         onlyPluginIds: ["memory-lancedb"],
       }),
     );
+  });
+
+  it("loads the selected memory slot before listing public artifacts", async () => {
+    const { rawConfig, autoEnabledConfig } = createMemoryAutoEnableFixture();
+    const artifacts = [
+      {
+        kind: "memory-root",
+        workspaceDir: "/resolved-workspace",
+        relativePath: "MEMORY.md",
+        absolutePath: "/resolved-workspace/MEMORY.md",
+        agentIds: ["default"],
+        contentType: "markdown" as const,
+      },
+    ];
+    applyPluginAutoEnableMock.mockReturnValue({
+      config: autoEnabledConfig,
+      changes: [],
+      autoEnabledReasons: {},
+    });
+    getMemoryCapabilityRegistrationMock.mockReturnValueOnce(undefined).mockReturnValue({
+      pluginId: "memory-core",
+      capability: {
+        publicArtifacts: {
+          listArtifacts: vi.fn(),
+        },
+      },
+    });
+    listRegisteredMemoryPublicArtifactsMock.mockResolvedValueOnce(artifacts);
+
+    await expect(listActiveMemoryPublicArtifacts({ cfg: rawConfig as never })).resolves.toEqual(
+      artifacts,
+    );
+
+    expectMemoryAutoEnableApplied(rawConfig, autoEnabledConfig);
+    expect(listRegisteredMemoryPublicArtifactsMock).toHaveBeenCalledWith({
+      cfg: rawConfig,
+    });
+  });
+
+  it("does not bootstrap public artifacts when a memory capability is already registered", async () => {
+    const { rawConfig } = createMemoryAutoEnableFixture();
+    getMemoryCapabilityRegistrationMock.mockReturnValue({
+      pluginId: "memory-core",
+      capability: {
+        publicArtifacts: {
+          listArtifacts: vi.fn(),
+        },
+      },
+    });
+
+    await expect(listActiveMemoryPublicArtifacts({ cfg: rawConfig as never })).resolves.toEqual([]);
+
+    expectNoMemoryRuntimeBootstrap();
+    expect(listRegisteredMemoryPublicArtifactsMock).toHaveBeenCalledWith({
+      cfg: rawConfig,
+    });
   });
 
   it("does not fall back to broad plugin loading when the memory slot is disabled", async () => {

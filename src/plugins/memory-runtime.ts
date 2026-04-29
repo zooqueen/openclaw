@@ -1,7 +1,11 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizePluginsConfig } from "./config-state.js";
 import { resolveRuntimePluginRegistry } from "./loader.js";
-import { getMemoryRuntime } from "./memory-state.js";
+import {
+  getMemoryCapabilityRegistration,
+  getMemoryRuntime,
+  listActiveMemoryPublicArtifacts as listRegisteredMemoryPublicArtifacts,
+} from "./memory-state.js";
 import {
   buildPluginRuntimeLoadOptions,
   resolvePluginRuntimeLoadContext,
@@ -12,22 +16,35 @@ function resolveMemoryRuntimePluginIds(config: OpenClawConfig): string[] {
   return typeof memorySlot === "string" && memorySlot.trim().length > 0 ? [memorySlot] : [];
 }
 
-function ensureMemoryRuntime(cfg?: OpenClawConfig) {
-  const current = getMemoryRuntime();
-  if (current || !cfg) {
-    return current;
-  }
+function loadActiveMemorySlotPlugin(cfg: OpenClawConfig): void {
   const context = resolvePluginRuntimeLoadContext({ config: cfg });
   const onlyPluginIds = resolveMemoryRuntimePluginIds(context.config);
   if (onlyPluginIds.length === 0) {
-    return getMemoryRuntime();
+    return;
   }
   resolveRuntimePluginRegistry(
     buildPluginRuntimeLoadOptions(context, {
       onlyPluginIds,
     }),
   );
+}
+
+function ensureMemoryRuntime(cfg?: OpenClawConfig) {
+  const current = getMemoryRuntime();
+  if (current || !cfg) {
+    return current;
+  }
+  loadActiveMemorySlotPlugin(cfg);
   return getMemoryRuntime();
+}
+
+function ensureMemoryCapability(cfg?: OpenClawConfig) {
+  const current = getMemoryCapabilityRegistration();
+  if (current || !cfg) {
+    return current;
+  }
+  loadActiveMemorySlotPlugin(cfg);
+  return getMemoryCapabilityRegistration();
 }
 
 export async function getActiveMemorySearchManager(params: {
@@ -50,4 +67,9 @@ export async function closeActiveMemorySearchManagers(cfg?: OpenClawConfig): Pro
   void cfg;
   const runtime = getMemoryRuntime();
   await runtime?.closeAllMemorySearchManagers?.();
+}
+
+export async function listActiveMemoryPublicArtifacts(params: { cfg: OpenClawConfig }) {
+  ensureMemoryCapability(params.cfg);
+  return await listRegisteredMemoryPublicArtifacts(params);
 }

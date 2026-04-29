@@ -388,6 +388,45 @@ describe("memory-wiki gateway methods", () => {
     );
   });
 
+  it("runs bridge imports with gateway runtime config", async () => {
+    const appConfig = {
+      agents: {
+        list: [{ id: "main", default: true, workspace: "/tmp/workspace" }],
+      },
+    };
+    const { config } = await createVault({
+      prefix: "memory-wiki-gateway-",
+      config: {
+        vaultMode: "isolated",
+        bridge: { enabled: true, readMemoryArtifacts: true },
+      },
+    });
+    const { api, registerGatewayMethod } = createPluginApi();
+
+    registerMemoryWikiGatewayMethods({ api, config, appConfig });
+    const handler = findGatewayHandler(registerGatewayMethod, "wiki.bridge.import");
+    if (!handler) {
+      throw new Error("wiki.bridge.import handler missing");
+    }
+    const respond = vi.fn();
+
+    await handler({
+      params: {},
+      respond,
+    });
+
+    expect(syncMemoryWikiImportedSources).toHaveBeenCalledWith({
+      config: { ...config, vaultMode: "bridge" },
+      appConfig,
+    });
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        artifactCount: 0,
+      }),
+    );
+  });
+
   it("applies wiki mutations over the gateway", async () => {
     const { config } = await createVault({ prefix: "memory-wiki-gateway-" });
     const { api, registerGatewayMethod } = createPluginApi();

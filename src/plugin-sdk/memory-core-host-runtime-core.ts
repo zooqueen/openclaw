@@ -34,10 +34,10 @@ export {
   buildMemoryPromptSection as buildActiveMemoryPromptSection,
   clearMemoryPluginState,
   getMemoryCapabilityRegistration,
-  listActiveMemoryPublicArtifacts,
   listMemoryCorpusSupplements,
   registerMemoryCapability,
   registerMemoryCorpusSupplement,
 } from "../plugins/memory-state.js";
+export { listActiveMemoryPublicArtifacts } from "../plugins/memory-runtime.js";
 export type { OpenClawPluginApi } from "../plugins/types.js";
 export { parseAgentSessionKey } from "../routing/session-key.js";
