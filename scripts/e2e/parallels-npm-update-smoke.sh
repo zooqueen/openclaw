@@ -702,35 +702,6 @@ function Stop-OpenClawUpdateProcesses {
     }
 }
 
-function Remove-FuturePluginEntries {
-  $configPath = Join-Path $env:USERPROFILE '.openclaw\openclaw.json'
-  if (-not (Test-Path $configPath)) {
-    return
-  }
-  try {
-    $config = Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable
-  } catch {
-    return
-  }
-  $plugins = $config['plugins']
-  if (-not ($plugins -is [hashtable])) {
-    return
-  }
-  $entries = $plugins['entries']
-  if ($entries -is [hashtable]) {
-    foreach ($pluginId in @('feishu', 'whatsapp')) {
-      if ($entries.ContainsKey($pluginId)) {
-        $entries.Remove($pluginId)
-      }
-    }
-  }
-  $allow = $plugins['allow']
-  if ($allow -is [array]) {
-    $plugins['allow'] = @($allow | Where-Object { $_ -notin @('feishu', 'whatsapp') })
-  }
-  $config | ConvertTo-Json -Depth 100 | Set-Content -Path $configPath -Encoding UTF8
-}
-
 function Invoke-OpenClawUpdateWithTimeout {
   param(
     [Parameter(Mandatory = $true)][string]$OpenClawPath,
@@ -971,7 +942,6 @@ try {
   }
   Set-Item -Path ('Env:' + $ProviderKeyEnv) -Value $ProviderKey
   $openclaw = Join-Path $env:APPDATA 'npm\openclaw.cmd'
-  Remove-FuturePluginEntries
   Stop-OpenClawGatewayProcesses
   Write-ProgressLog 'update.openclaw-update'
   Invoke-OpenClawUpdateWithTimeout -OpenClawPath $openclaw -UpdateTarget $UpdateTarget

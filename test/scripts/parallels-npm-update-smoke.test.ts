@@ -12,15 +12,18 @@ describe("parallels npm update smoke", () => {
     expect(script).toContain('wait "$pid" 2>/dev/null || true');
   });
 
-  it("scrubs future plugin entries before invoking old same-guest updaters", () => {
+  it("stops old gateways before invoking same-guest updaters without mutating future config", () => {
     const script = readFileSync(SCRIPT_PATH, "utf8");
 
-    expect(script).toContain("Remove-FuturePluginEntries");
-    expect(script).toContain("scrub_future_plugin_entries");
-    expect(script).toContain("delete entries.feishu");
-    expect(script).toContain("delete entries.whatsapp");
-    expect(script).toContain("Remove-FuturePluginEntries\n  Stop-OpenClawGatewayProcesses");
-    expect(script).toContain("scrub_future_plugin_entries\nstop_openclaw_gateway_processes");
+    expect(script).not.toContain("Remove-FuturePluginEntries");
+    expect(script).not.toContain("scrub_future_plugin_entries");
+    expect(script).not.toContain("delete entries.feishu");
+    expect(script).not.toContain("delete entries.whatsapp");
+    expect(script).not.toContain("plugins.allow = plugins.allow.filter");
+    expect(script).toContain(
+      "Stop-OpenClawGatewayProcesses\n  Write-ProgressLog 'update.openclaw-update'",
+    );
+    expect(script).toContain("stop_openclaw_gateway_processes\nOPENCLAW_DISABLE_BUNDLED_PLUGINS=1");
     expect(script).toContain("$env:OPENCLAW_DISABLE_BUNDLED_PLUGINS = '1'");
     expect(script).toContain(
       "OPENCLAW_DISABLE_BUNDLED_PLUGINS=1 /opt/homebrew/bin/openclaw update",
