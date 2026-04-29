@@ -1,6 +1,6 @@
 ---
 name: session-memory
-description: "Save session context to memory when /new or /reset command is issued"
+description: "Save session context to memory when sessions reset or roll over"
 homepage: https://docs.openclaw.ai/automation/hooks#session-memory
 metadata:
   {
@@ -16,11 +16,11 @@ metadata:
 
 # Session Memory Hook
 
-Automatically saves session context to your workspace memory when you issue `/new` or `/reset`.
+Automatically saves session context to your workspace memory when you issue `/new` or `/reset`, or when daily/idle session rollover starts a fresh session.
 
 ## What It Does
 
-When you run `/new` or `/reset` to start a fresh session:
+When a fresh session starts through `/new`, `/reset`, or daily/idle rollover:
 
 1. **Finds the previous session** - Uses the pre-reset session entry to locate the correct transcript
 2. **Extracts conversation** - Reads the last N user/assistant messages from the session (default: 15, configurable)

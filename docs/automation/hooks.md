@@ -36,7 +36,7 @@ openclaw hooks info session-memory
 | Event                    | When it fires                                              |
 | ------------------------ | ---------------------------------------------------------- |
 | `command:new`            | `/new` command issued                                      |
-| `command:reset`          | `/reset` command issued                                    |
+| `command:reset`          | `/reset` command issued or daily/idle session rollover     |
 | `command:stop`           | `/stop` command issued                                     |
 | `command`                | Any command event (general listener)                       |
 | `session:compact:before` | Before compaction summarizes history                       |
@@ -112,7 +112,7 @@ Each event includes: `type`, `action`, `sessionKey`, `timestamp`, `messages` (pu
 
 ### Event context highlights
 
-**Command events** (`command:new`, `command:reset`): `context.sessionEntry`, `context.previousSessionEntry`, `context.commandSource`, `context.workspaceDir`, `context.cfg`.
+**Command events** (`command:new`, `command:reset`): `context.sessionEntry`, `context.previousSessionEntry`, `context.commandSource`, `context.workspaceDir`, `context.cfg`. Automatic daily/idle rollovers emit `command:reset` with `context.previousSessionEndReason`.
 
 **Message events** (`message:received`): `context.from`, `context.content`, `context.channelId`, `context.metadata` (provider-specific data including `senderId`, `senderName`, `guildId`).
 
@@ -177,7 +177,7 @@ openclaw hooks enable <hook-name>
 
 ### session-memory details
 
-Extracts the last 15 user/assistant messages, generates a descriptive filename slug via LLM, and saves to `<workspace>/memory/YYYY-MM-DD-slug.md` using the host local date. Requires `workspace.dir` to be configured.
+Extracts the last 15 user/assistant messages from the previous session, generates a descriptive filename slug via LLM, and saves to `<workspace>/memory/YYYY-MM-DD-slug.md` using the host local date. It runs for `/new`, `/reset`, and automatic daily/idle rollovers. Requires `workspace.dir` to be configured.
 
 <a id="bootstrap-extra-files"></a>
 

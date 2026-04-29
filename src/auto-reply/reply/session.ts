@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { resolveSessionAgentId } from "../../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshotOnSessionRollover } from "../../agents/bootstrap-cache.js";
 import { getCliSessionBinding } from "../../agents/cli-session.js";
 import { resetRegisteredAgentHarnessSessions } from "../../agents/harness/registry.js";
@@ -72,10 +72,16 @@ const log = createSubsystemLogger("session-init");
 let sessionArchiveRuntimePromise: Promise<
   typeof import("../../gateway/session-archive.runtime.js")
 > | null = null;
+let commandsCoreRuntimePromise: Promise<typeof import("./commands-core.runtime.js")> | null = null;
 
 function loadSessionArchiveRuntime() {
   sessionArchiveRuntimePromise ??= import("../../gateway/session-archive.runtime.js");
   return sessionArchiveRuntimePromise;
+}
+
+function loadCommandsCoreRuntime() {
+  commandsCoreRuntimePromise ??= import("./commands-core.runtime.js");
+  return commandsCoreRuntimePromise;
 }
 
 function stripThreadIdFromDeliveryContext(
@@ -130,17 +136,15 @@ function resolveStaleSessionEndReason(params: {
   freshness?: SessionFreshness;
   now: number;
 }): PluginHookSessionEndReason | undefined {
-  if (!params.entry || !params.freshness) {
+  if (!params.entry || !params.freshness || params.freshness.fresh) {
     return undefined;
   }
-  const staleDaily =
-    params.freshness.dailyResetAt != null && params.entry.updatedAt < params.freshness.dailyResetAt;
   const staleIdle =
     params.freshness.idleExpiresAt != null && params.now > params.freshness.idleExpiresAt;
   if (staleIdle) {
     return "idle";
   }
-  if (staleDaily) {
+  if (params.freshness.dailyResetAt != null) {
     return "daily";
   }
   return undefined;
@@ -848,6 +852,27 @@ export async function initSessionState(params: {
       onWarn: (message) => log.warn(message),
     }).catch((error) => {
       log.warn(`browser tab cleanup failed: ${String(error)}`);
+    });
+  }
+
+  const staleResetHookReason =
+    !resetTriggered && (previousSessionEndReason === "daily" || previousSessionEndReason === "idle")
+      ? previousSessionEndReason
+      : undefined;
+  if (previousSessionEntry && staleResetHookReason) {
+    const previousSessionEntryForHooks: SessionEntry = {
+      ...previousSessionEntry,
+      sessionFile: previousSessionTranscript.sessionFile ?? previousSessionEntry.sessionFile,
+    };
+    const { emitSessionRolloverResetHooks } = await loadCommandsCoreRuntime();
+    await emitSessionRolloverResetHooks({
+      cfg,
+      sessionKey,
+      sessionEntry,
+      previousSessionEntry: previousSessionEntryForHooks,
+      previousSessionEndReason: staleResetHookReason,
+      workspaceDir: resolveAgentWorkspaceDir(cfg, agentId),
+      agentId,
     });
   }
 

@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { SessionEntry } from "../../config/sessions/types.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { logVerbose } from "../../globals.js";
 import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -14,6 +16,7 @@ function loadRouteReplyRuntime() {
 }
 
 export type ResetCommandAction = "new" | "reset";
+export type ResetHookReason = ResetCommandAction | "daily" | "idle";
 
 function parseTranscriptMessages(content: string): unknown[] {
   const messages: unknown[] = [];
@@ -92,6 +95,43 @@ async function loadBeforeResetTranscript(params: {
   }
 }
 
+function emitBeforeResetPluginHook(params: {
+  reason?: ResetHookReason;
+  previousSessionEntry?: Pick<SessionEntry, "sessionId" | "sessionFile">;
+  sessionKey?: string;
+  workspaceDir: string;
+  agentId?: string;
+}): void {
+  if (!params.reason) {
+    return;
+  }
+  const hookRunner = getGlobalHookRunner();
+  if (!hookRunner?.hasHooks("before_reset")) {
+    return;
+  }
+  const prevEntry = params.previousSessionEntry;
+  const agentId = params.agentId ?? resolveAgentIdFromSessionKey(params.sessionKey);
+  void (async () => {
+    const { sessionFile, messages } = await loadBeforeResetTranscript({
+      sessionFile: prevEntry?.sessionFile,
+    });
+
+    try {
+      await hookRunner.runBeforeReset(
+        { sessionFile, messages, reason: params.reason },
+        {
+          agentId,
+          sessionKey: params.sessionKey,
+          sessionId: prevEntry?.sessionId,
+          workspaceDir: params.workspaceDir,
+        },
+      );
+    } catch (err: unknown) {
+      logVerbose(`before_reset hook failed: ${String(err)}`);
+    }
+  })();
+}
+
 export async function emitResetCommandHooks(params: {
   action: ResetCommandAction;
   ctx: HandleCommandsParams["ctx"];
@@ -139,28 +179,39 @@ export async function emitResetCommandHooks(params: {
     }
   }
 
-  const hookRunner = getGlobalHookRunner();
-  if (hookRunner?.hasHooks("before_reset")) {
-    const prevEntry = params.previousSessionEntry;
-    void (async () => {
-      const { sessionFile, messages } = await loadBeforeResetTranscript({
-        sessionFile: prevEntry?.sessionFile,
-      });
-
-      try {
-        await hookRunner.runBeforeReset(
-          { sessionFile, messages, reason: params.action },
-          {
-            agentId: resolveAgentIdFromSessionKey(params.sessionKey),
-            sessionKey: params.sessionKey,
-            sessionId: prevEntry?.sessionId,
-            workspaceDir: params.workspaceDir,
-          },
-        );
-      } catch (err: unknown) {
-        logVerbose(`before_reset hook failed: ${String(err)}`);
-      }
-    })();
-  }
+  emitBeforeResetPluginHook({
+    reason: params.action,
+    previousSessionEntry: params.previousSessionEntry,
+    sessionKey: params.sessionKey,
+    workspaceDir: params.workspaceDir,
+  });
   return { routedReply };
+}
+
+export async function emitSessionRolloverResetHooks(params: {
+  cfg: OpenClawConfig;
+  sessionKey: string;
+  sessionEntry: SessionEntry;
+  previousSessionEntry: SessionEntry;
+  previousSessionEndReason: ResetHookReason;
+  workspaceDir: string;
+  agentId: string;
+}): Promise<void> {
+  const hookEvent = createInternalHookEvent("command", "reset", params.sessionKey, {
+    sessionEntry: params.sessionEntry,
+    previousSessionEntry: params.previousSessionEntry,
+    previousSessionEndReason: params.previousSessionEndReason,
+    commandSource: "session-rollover",
+    workspaceDir: params.workspaceDir,
+    cfg: params.cfg,
+  });
+  await triggerInternalHook(hookEvent);
+
+  emitBeforeResetPluginHook({
+    reason: params.previousSessionEndReason,
+    previousSessionEntry: params.previousSessionEntry,
+    sessionKey: params.sessionKey,
+    workspaceDir: params.workspaceDir,
+    agentId: params.agentId,
+  });
 }

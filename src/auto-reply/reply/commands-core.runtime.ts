@@ -1,1 +1,1 @@
-export { emitResetCommandHooks } from "./commands-reset-hooks.js";
+export { emitResetCommandHooks, emitSessionRolloverResetHooks } from "./commands-reset-hooks.js";
