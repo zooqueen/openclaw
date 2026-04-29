@@ -227,8 +227,8 @@ function buildMediaGenerationReplyInstruction(params: {
   if (params.status === "ok") {
     return [
       `A completed ${params.completionLabel} generation task is ready for user delivery.`,
-      `Prefer the message tool for delivery: use action="send" to the current/original chat, put your user-facing caption in message, attach each generated file with path/filePath using the exact path from the result, then reply ONLY: ${SILENT_REPLY_TOKEN}.`,
-      `If you cannot use the message tool, reply in your normal assistant voice and include the exact MEDIA: lines from the result so OpenClaw attaches the finished ${params.completionLabel}.`,
+      "Use the current chat delivery mode: if normal assistant replies are visible here, reply with a user-facing caption plus the exact MEDIA: lines from the result.",
+      `If this chat requires explicit sends, use the message tool with action="send" to the current/original chat, put your user-facing caption in message, attach each generated file with path/filePath using the exact path from the result, then reply ONLY: ${SILENT_REPLY_TOKEN}.`,
       "Keep internal task/session details private and do not copy the internal event text verbatim.",
     ].join(" ");
   }

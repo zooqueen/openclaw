@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import * as ttsRuntime from "../../tts/tts.js";
 import { createTtsTool } from "./tts-tool.js";
 
@@ -11,13 +10,13 @@ describe("createTtsTool", () => {
     textToSpeechSpy = vi.spyOn(ttsRuntime, "textToSpeech");
   });
 
-  it("uses SILENT_REPLY_TOKEN in guidance text", () => {
+  it("describes current-chat media delivery", () => {
     const tool = createTtsTool();
 
-    expect(tool.description).toContain(SILENT_REPLY_TOKEN);
+    expect(tool.description).toContain("current chat mode");
   });
 
-  it("stores audio delivery in details.media and returns the path for assistant forwarding", async () => {
+  it("stores audio delivery in details.media and returns the path for assistant-loop delivery", async () => {
     textToSpeechSpy.mockResolvedValue({
       success: true,
       audioPath: "/tmp/reply.opus",

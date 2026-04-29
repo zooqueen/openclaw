@@ -102,7 +102,7 @@ Not every agent run creates a task. Heartbeat turns and normal interactive chat 
   <Accordion title="Notify defaults for cron and media">
     Main-session cron tasks use `silent` notify policy by default — they create records for tracking but do not generate notifications. Isolated cron tasks also default to `silent` but are more visible because they run in their own session.
 
-    Session-backed `music_generate` and `video_generate` runs also use `silent` notify policy. They still create task records, but completion is handed back to the original agent session as an internal wake so the agent can write the follow-up message and attach the finished media itself.
+    Session-backed `music_generate` and `video_generate` runs also use `silent` notify policy. They still create task records, but completion is handed back to the original agent session as an internal wake so the agent can deliver the finished media through the active chat mode: normal forwarded replies where visible, or explicit message-tool sends where required.
 
   </Accordion>
   <Accordion title="Concurrent video_generate guardrail">

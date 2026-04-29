@@ -518,7 +518,7 @@ export function createMusicGenerateTool(options?: {
     name: "music_generate",
     displaySummary: "Generate music",
     description:
-      "Generate music using configured providers. Generated tracks are saved under OpenClaw-managed media storage and returned as MEDIA paths; call the message tool with path/filePath to send them to the user.",
+      "Generate music using configured providers. Generated tracks are saved under OpenClaw-managed media storage and returned as MEDIA paths; deliver them through the current chat mode, either as normal assistant MEDIA lines or with the message tool when explicit sends are required.",
     parameters: MusicGenerateToolSchema,
     execute: async (_toolCallId, rawArgs) => {
       const args = rawArgs as Record<string, unknown>;
@@ -649,7 +649,7 @@ export function createMusicGenerateTool(options?: {
           content: [
             {
               type: "text",
-              text: `Background task started for music generation (${taskHandle?.taskId ?? "unknown"}). Do not call music_generate again for this request. Wait for the completion event, then send the returned audio path with the message tool.`,
+              text: `Background task started for music generation (${taskHandle?.taskId ?? "unknown"}). Do not call music_generate again for this request. Wait for the completion event, then deliver the returned audio path through the current chat mode.`,
             },
           ],
           details: {

@@ -166,7 +166,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/screenshot.png"]);
   });
 
-  it("leaves TTS MEDIA tool output for assistant message-tool forwarding", async () => {
+  it("leaves TTS MEDIA tool output for assistant-loop delivery", async () => {
     const onToolResult = vi.fn();
     const ctx = createMockContext({
       shouldEmitToolOutput: false,
@@ -259,7 +259,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual([]);
   });
 
-  it("keeps verbose TTS text and leaves structured media for assistant forwarding", async () => {
+  it("keeps verbose TTS text and leaves structured media for assistant-loop delivery", async () => {
     const ctx = createMockContext({
       shouldEmitToolOutput: true,
       onToolResult: vi.fn(),
@@ -293,7 +293,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolAudioAsVoice).toBe(false);
   });
 
-  it("leaves legacy TTS media directives for assistant forwarding", async () => {
+  it("leaves legacy TTS media directives for assistant-loop delivery", async () => {
     const ctx = createMockContext({
       shouldEmitToolOutput: true,
       onToolResult: vi.fn(),
@@ -577,7 +577,7 @@ describe("handleToolExecutionEnd media emission", () => {
     expect(ctx.state.pendingToolMediaUrls).toEqual(["/tmp/canvas-output.png"]);
   });
 
-  it("leaves structured TTS media for assistant message-tool forwarding", async () => {
+  it("leaves structured TTS media for assistant-loop delivery", async () => {
     const ctx = createMockContext({ shouldEmitToolOutput: false, onToolResult: vi.fn() });
 
     await handleToolExecutionEnd(ctx, {

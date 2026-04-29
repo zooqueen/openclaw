@@ -825,7 +825,7 @@ export function createVideoGenerateTool(options?: {
     name: "video_generate",
     displaySummary: "Generate videos",
     description:
-      "Generate videos using configured providers. Generated videos are saved under OpenClaw-managed media storage and returned as MEDIA paths; call the message tool with path/filePath to send them to the user. Duration requests may be rounded to the nearest provider-supported value.",
+      "Generate videos using configured providers. Generated videos are saved under OpenClaw-managed media storage and returned as MEDIA paths; deliver them through the current chat mode, either as normal assistant MEDIA lines or with the message tool when explicit sends are required. Duration requests may be rounded to the nearest provider-supported value.",
     parameters: VideoGenerateToolSchema,
     execute: async (_toolCallId, rawArgs) => {
       const args = rawArgs as Record<string, unknown>;
@@ -1050,7 +1050,7 @@ export function createVideoGenerateTool(options?: {
           content: [
             {
               type: "text",
-              text: `Background task started for video generation (${taskHandle?.taskId ?? "unknown"}). Do not call video_generate again for this request. Wait for the completion event, then send the returned video path with the message tool.`,
+              text: `Background task started for video generation (${taskHandle?.taskId ?? "unknown"}). Do not call video_generate again for this request. Wait for the completion event, then deliver the returned video path through the current chat mode.`,
             },
           ],
           details: {
