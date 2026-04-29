@@ -964,10 +964,14 @@ export async function runAgentTurnWithFallback(params: {
     provider: string,
     model: string,
   ): Promise<(() => Promise<void>) | undefined> => {
+    const forceRecoveryFallbackSelection =
+      params.followupRun.run.modelRecoveryFallbackSelected === true;
     if (
       !params.sessionKey ||
       !params.activeSessionStore ||
-      (provider === params.followupRun.run.provider && model === params.followupRun.run.model)
+      (!forceRecoveryFallbackSelection &&
+        provider === params.followupRun.run.provider &&
+        model === params.followupRun.run.model)
     ) {
       return undefined;
     }
@@ -1004,7 +1008,7 @@ export async function runAgentTurnWithFallback(params: {
       run: params.followupRun.run,
       provider,
       model,
-      force: params.followupRun.run.modelRecoveryFallbackSelected === true,
+      force: forceRecoveryFallbackSelection,
     });
     const nextState = applied.nextState;
     if (!applied.updated || !nextState) {

@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   isCliProviderMock: vi.fn((_: unknown) => false),
   isInternalMessageChannelMock: vi.fn((_: unknown) => false),
   createBlockReplyDeliveryHandlerMock: vi.fn(),
+  updateSessionStoreMock: vi.fn(),
 }));
 
 const GENERIC_RUN_FAILURE_TEXT =
@@ -96,7 +97,7 @@ vi.mock("../../agents/pi-embedded-helpers.js", () => ({
 vi.mock("../../config/sessions.js", () => ({
   resolveGroupSessionKey: vi.fn(() => null),
   resolveSessionTranscriptPath: vi.fn(),
-  updateSessionStore: vi.fn(),
+  updateSessionStore: (...args: unknown[]) => state.updateSessionStoreMock(...args),
 }));
 
 vi.mock("../../globals.js", () => ({
@@ -399,6 +400,7 @@ describe("runAgentTurnWithFallback", () => {
     state.isInternalMessageChannelMock.mockReturnValue(false);
     state.createBlockReplyDeliveryHandlerMock.mockReset();
     state.createBlockReplyDeliveryHandlerMock.mockReturnValue(undefined);
+    state.updateSessionStoreMock.mockReset();
     state.runWithModelFallbackMock.mockImplementation(async (params: FallbackRunnerParams) => ({
       result: await params.run("anthropic", "claude"),
       provider: "anthropic",
@@ -492,6 +494,57 @@ describe("runAgentTurnWithFallback", () => {
     expect(entry.providerOverride).toBe("openai-codex");
     expect(entry.modelOverride).toBe("gpt-5.4");
     expect(entry.modelOverrideSource).toBe("auto");
+  });
+
+  it("persists a recovery-routed fallback run that already matches the selected model", async () => {
+    state.runWithModelFallbackMock.mockImplementationOnce(async (params: FallbackRunnerParams) => ({
+      result: await params.run("openai-codex", "gpt-5.4"),
+      provider: "openai-codex",
+      model: "gpt-5.4",
+      attempts: [],
+    }));
+    state.runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [{ text: "ok" }],
+      meta: {},
+    });
+
+    const followupRun = createFollowupRun();
+    followupRun.run.provider = "openai-codex";
+    followupRun.run.model = "gpt-5.4";
+    followupRun.run.modelRecoveryFallbackSelected = true;
+    const sessionEntry: SessionEntry = {
+      sessionId: "session",
+      updatedAt: Date.now(),
+    };
+    const persistedSessionEntry: SessionEntry = {
+      sessionId: "session",
+      updatedAt: sessionEntry.updatedAt,
+    };
+    state.updateSessionStoreMock.mockImplementationOnce(
+      async (_storePath: string, update: (store: Record<string, SessionEntry>) => void) => {
+        update({ main: persistedSessionEntry });
+      },
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback({
+      ...createMinimalRunAgentTurnParams({ followupRun }),
+      getActiveSessionEntry: () => sessionEntry,
+      activeSessionStore: { main: sessionEntry },
+      storePath: "/tmp/sessions.json",
+    });
+
+    expect(result.kind).toBe("success");
+    expect(state.updateSessionStoreMock).toHaveBeenCalledWith(
+      "/tmp/sessions.json",
+      expect.any(Function),
+    );
+    expect(sessionEntry.providerOverride).toBe("openai-codex");
+    expect(sessionEntry.modelOverride).toBe("gpt-5.4");
+    expect(sessionEntry.modelOverrideSource).toBe("auto");
+    expect(persistedSessionEntry.providerOverride).toBe("openai-codex");
+    expect(persistedSessionEntry.modelOverride).toBe("gpt-5.4");
+    expect(persistedSessionEntry.modelOverrideSource).toBe("auto");
   });
 
   it("resolves CLI messageProvider from the live session surface when no origin channel is set", async () => {
