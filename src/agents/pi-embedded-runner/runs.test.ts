@@ -158,6 +158,27 @@ describe("pi-embedded runner run registry", () => {
     expect(resolveActiveEmbeddedRunSessionIdByRunId("run-a")).toBeUndefined();
   });
 
+  it("drops stale run ids when a session replaces its active run", () => {
+    const oldHandle = createRunHandle();
+    const newAbort = vi.fn();
+    const newHandle = createRunHandle({ abort: newAbort });
+
+    setActiveEmbeddedRun("session-a", oldHandle, "agent:main:main", "run-old");
+    setActiveEmbeddedRun("session-a", newHandle, "agent:main:main", "run-new");
+    clearActiveEmbeddedRun("session-a", oldHandle, "agent:main:main", "run-old");
+
+    expect(resolveActiveEmbeddedRunSessionIdByRunId("run-old")).toBeUndefined();
+    expect(resolveActiveEmbeddedRunSessionIdByRunId("run-new")).toBe("session-a");
+
+    const oldSessionId = resolveActiveEmbeddedRunSessionIdByRunId("run-old");
+    expect(oldSessionId ? abortEmbeddedPiRun(oldSessionId) : false).toBe(false);
+    expect(newAbort).not.toHaveBeenCalled();
+
+    const newSessionId = resolveActiveEmbeddedRunSessionIdByRunId("run-new");
+    expect(newSessionId ? abortEmbeddedPiRun(newSessionId) : false).toBe(true);
+    expect(newAbort).toHaveBeenCalledTimes(1);
+  });
+
   it("tracks and clears per-session transcript snapshots for active runs", () => {
     const handle = createRunHandle();
 

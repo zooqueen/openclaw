@@ -362,6 +362,7 @@ export function setActiveEmbeddedRun(
   runId?: string,
 ) {
   const wasActive = ACTIVE_EMBEDDED_RUNS.has(sessionId);
+  clearActiveRunIds(sessionId);
   ACTIVE_EMBEDDED_RUNS.set(sessionId, handle);
   setActiveRunSessionKey(sessionKey, sessionId);
   setActiveRunId(runId, sessionId);
