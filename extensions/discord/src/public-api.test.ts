@@ -112,14 +112,14 @@ const FORMER_PUBLIC_API_EXPORTS = [
   "tryHandleDiscordMessageActionGuildAdmin",
 ] as const;
 
-function collectExportedNames(): Set<string> {
+function collectExportedNames(): string[] {
   const source = ts.createSourceFile(
     API_SOURCE_PATH,
     readFileSync(API_SOURCE_PATH, "utf8"),
     ts.ScriptTarget.Latest,
     true,
   );
-  const names = new Set<string>();
+  const names: string[] = [];
   for (const statement of source.statements) {
     if (
       ts.isVariableStatement(statement) &&
@@ -127,7 +127,7 @@ function collectExportedNames(): Set<string> {
     ) {
       for (const declaration of statement.declarationList.declarations) {
         if (ts.isIdentifier(declaration.name)) {
-          names.add(declaration.name.text);
+          names.push(declaration.name.text);
         }
       }
       continue;
@@ -137,7 +137,7 @@ function collectExportedNames(): Set<string> {
     }
     if (ts.isNamedExports(statement.exportClause)) {
       for (const element of statement.exportClause.elements) {
-        names.add(element.name.text);
+        names.push(element.name.text);
       }
     }
   }
@@ -146,11 +146,20 @@ function collectExportedNames(): Set<string> {
 
 describe("discord public API barrel", () => {
   it("keeps compatibility exports for existing @openclaw/discord/api.js consumers", () => {
-    const exportedNames = collectExportedNames();
+    const exportedNames = new Set(collectExportedNames());
 
     for (const exportName of FORMER_PUBLIC_API_EXPORTS) {
       expect(exportedNames).toContain(exportName);
     }
+  });
+
+  it("does not declare duplicate named public exports", () => {
+    const exportedNames = collectExportedNames();
+    const duplicatedNames = exportedNames.filter((name, index) => {
+      return exportedNames.indexOf(name) !== index;
+    });
+
+    expect(duplicatedNames).toEqual([]);
   });
 
   itOnSupportedNode("links restored runtime compatibility exports", async () => {
@@ -170,7 +179,7 @@ describe("discord public API barrel", () => {
   });
 
   it("keeps legacy Carbon component parser aliases aligned with interaction parsers", () => {
-    const exportedNames = collectExportedNames();
+    const exportedNames = new Set(collectExportedNames());
     const customId = buildDiscordComponentCustomId({
       componentId: "approve",
       modalId: "details",
