@@ -494,6 +494,7 @@ param(
   [Parameter(Mandatory = $true)][string]$ProviderKeyEnv,
   [Parameter(Mandatory = $false)][string]$ProviderKey,
   [Parameter(Mandatory = $false)][string]$ProviderKeyFile,
+  [Parameter(Mandatory = $true)][string]$PluginAllowlistJsonBase64,
   [Parameter(Mandatory = $true)][string]$LogPath,
   [Parameter(Mandatory = $true)][string]$DonePath
 )
@@ -979,6 +980,7 @@ try {
   if (-not $ProviderKey) {
     throw "$ProviderKeyEnv is required"
   }
+  $PluginAllowlistJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PluginAllowlistJsonBase64))
   Set-Item -Path ('Env:' + $ProviderKeyEnv) -Value $ProviderKey
   $openclaw = Join-Path $env:APPDATA 'npm\openclaw.cmd'
   Remove-FuturePluginEntries
@@ -996,7 +998,7 @@ try {
   $node = (Get-Command node.exe -ErrorAction Stop).Source
   $entry = Join-Path $env:APPDATA 'npm\node_modules\openclaw\openclaw.mjs'
   $pluginAllowBatch = Join-Path $env:TEMP 'openclaw-release-smoke-plugin-allow.json'
-  Set-Content -Path $pluginAllowBatch -Value '[{"path":"plugins.allow","value":$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON}]' -Encoding UTF8
+  Set-Content -Path $pluginAllowBatch -Value ('[{"path":"plugins.allow","value":' + $PluginAllowlistJson + '}]') -Encoding UTF8
   Invoke-Logged 'openclaw config set plugins.allow' { & $node $entry config set --batch-file $pluginAllowBatch --strict-json }
   # Windows can keep the old hashed dist modules alive across in-place global npm upgrades.
   # Restart the gateway/service before verifying status or the next agent turn.
@@ -1557,7 +1559,7 @@ run_windows_script_via_log() {
   local provider_key="$7"
   local runner_name log_name done_name done_status launcher_state guest_log
   local start_seconds poll_deadline startup_checked poll_rc state_rc log_rc
-  local log_state_path provider_key_b64
+  local log_state_path provider_key_b64 plugin_allow_b64
   runner_name="openclaw-update-$RANDOM-$RANDOM.ps1"
   log_name="openclaw-update-$RANDOM-$RANDOM.log"
   done_name="openclaw-update-$RANDOM-$RANDOM.done"
@@ -1569,6 +1571,14 @@ import base64
 import os
 
 print(base64.b64encode(os.environ["PROVIDER_KEY"].encode("utf-8")).decode("ascii"))
+PY
+  )"
+  plugin_allow_b64="$(
+    PLUGIN_ALLOWLIST_JSON="$RELEASE_SMOKE_PLUGIN_ALLOWLIST_JSON" "$PYTHON_BIN" - <<'PY'
+import base64
+import os
+
+print(base64.b64encode(os.environ["PLUGIN_ALLOWLIST_JSON"].encode("utf-8")).decode("ascii"))
 PY
   )"
   start_seconds="$SECONDS"
@@ -1594,6 +1604,7 @@ Start-Process powershell.exe -ArgumentList @(
   '-ModelId', '$model_id',
   '-ProviderKeyEnv', '$provider_key_env',
   '-ProviderKeyFile', \$providerKeyFile,
+  '-PluginAllowlistJsonBase64', '$plugin_allow_b64',
   '-LogPath', \$log,
   '-DonePath', \$done
 ) -WindowStyle Hidden | Out-Null
