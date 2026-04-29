@@ -23,11 +23,33 @@ export type SentMessageCache = {
 const SENT_MESSAGE_TEXT_TTL_MS = 4_000;
 const SENT_MESSAGE_ID_TTL_MS = 60_000;
 
+function isLeadingIMessageCorruptionCodePoint(codePoint: number): boolean {
+  return (
+    (codePoint >= 0x00 && codePoint <= 0x1f) ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0xfffd ||
+    codePoint === 0xfffe ||
+    codePoint === 0xffff
+  );
+}
+
+function stripLeadingIMessageCorruptionPrefix(text: string): string {
+  let offset = 0;
+  while (offset < text.length) {
+    const codePoint = text.codePointAt(offset);
+    if (codePoint === undefined || !isLeadingIMessageCorruptionCodePoint(codePoint)) {
+      break;
+    }
+    offset += codePoint > 0xffff ? 2 : 1;
+  }
+  return offset > 0 ? text.slice(offset) : text;
+}
+
 function normalizeEchoTextKey(text: string | undefined): string | null {
   if (!text) {
     return null;
   }
-  const normalized = text.replace(/\r\n?/g, "\n").trim();
+  const normalized = stripLeadingIMessageCorruptionPrefix(text.replace(/\r\n?/g, "\n")).trim();
   return normalized ? normalized : null;
 }
 
