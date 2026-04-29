@@ -9,7 +9,7 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
 const DISCORD_API_RETRY_DEFAULTS = {
   attempts: 3,
   minDelayMs: 500,
-  maxDelayMs: 30_000,
+  maxDelayMs: 5 * 60_000,
   jitter: 0.1,
 };
 const DISCORD_API_429_FALLBACK_RETRY_AFTER_SECONDS = 60;
@@ -141,6 +141,18 @@ export class DiscordApiError extends Error {
   }
 }
 
+function getDiscordApiRetryAfterMs(err: unknown): number | undefined {
+  return err instanceof DiscordApiError && typeof err.retryAfter === "number"
+    ? err.retryAfter * 1000
+    : undefined;
+}
+
+function getEffectiveMaxDelayMs(retryConfig: Required<RetryConfig>): number {
+  return Number.isFinite(retryConfig.maxDelayMs) && retryConfig.maxDelayMs > 0
+    ? retryConfig.maxDelayMs
+    : Number.POSITIVE_INFINITY;
+}
+
 export type DiscordFetchOptions = {
   retry?: RetryConfig;
   label?: string;
@@ -158,6 +170,7 @@ export async function fetchDiscord<T>(
   }
 
   const retryConfig = resolveRetryConfig(DISCORD_API_RETRY_DEFAULTS, options?.retry);
+  const maxDelayMs = getEffectiveMaxDelayMs(retryConfig);
   return retryAsync(
     async () => {
       const res = await fetchImpl(`${DISCORD_API_BASE}${path}`, {
@@ -182,11 +195,14 @@ export async function fetchDiscord<T>(
     {
       ...retryConfig,
       label: options?.label ?? path,
-      shouldRetry: (err) => err instanceof DiscordApiError && err.status === 429,
-      retryAfterMs: (err) =>
-        err instanceof DiscordApiError && typeof err.retryAfter === "number"
-          ? err.retryAfter * 1000
-          : undefined,
+      shouldRetry: (err) => {
+        if (!(err instanceof DiscordApiError) || err.status !== 429) {
+          return false;
+        }
+        const retryAfterMs = getDiscordApiRetryAfterMs(err);
+        return retryAfterMs === undefined || retryAfterMs <= maxDelayMs;
+      },
+      retryAfterMs: getDiscordApiRetryAfterMs,
     },
   );
 }

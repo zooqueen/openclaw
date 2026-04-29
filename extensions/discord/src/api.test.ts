@@ -100,6 +100,75 @@ describe("fetchDiscord", () => {
     expect(message).not.toContain("<html");
   });
 
+  it("waits for the full fallback cooldown before retrying guild metadata", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const fetcher = withFetchPreconnect(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      if (calls.length === 1) {
+        return new Response("<html><title>Error 1015</title></html>", {
+          status: 429,
+          headers: { "content-type": "text/html" },
+        });
+      }
+      return jsonResponse([{ id: "1", name: "Guild" }], 200);
+    });
+
+    try {
+      const result = fetchDiscord<Array<{ id: string; name: string }>>(
+        "/users/@me/guilds",
+        "test",
+        fetcher,
+        { retry: { attempts: 2, jitter: 0 } },
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(result).resolves.toHaveLength(1);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toContain("/users/@me/guilds");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for the full Retry-After cooldown before retrying application metadata", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const fetcher = withFetchPreconnect(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      if (calls.length === 1) {
+        return new Response("<html><title>Error 1015</title></html>", {
+          status: 429,
+          headers: { "content-type": "text/html", "retry-after": "120" },
+        });
+      }
+      return jsonResponse({ id: "app" }, 200);
+    });
+
+    try {
+      const result = fetchDiscord<{ id: string }>("/oauth2/applications/@me", "test", fetcher, {
+        retry: { attempts: 2, jitter: 0 },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(result).resolves.toEqual({ id: "app" });
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toContain("/oauth2/applications/@me");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("retries rate limits before succeeding", async () => {
     let calls = 0;
     const fetcher = withFetchPreconnect(async () => {
