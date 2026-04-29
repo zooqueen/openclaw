@@ -156,7 +156,10 @@ describe("scripts/lib/plugin-prerelease-test-plan.mjs", () => {
     expect(manifestScript).toContain(
       "let runPluginPrereleaseSuite =\n  isFullReleaseValidationCiRun && runNodeFull && isCanonicalRepository;",
     );
-    expect(manifestScript).toContain("run_checks_node_extensions: runReleaseOnlyPluginSuites");
+    expect(manifestScript).toContain(
+      "const runChecksNodeExtensions = extensionShardMatrix.include.length > 0;",
+    );
+    expect(manifestScript).toContain("run_checks_node_extensions: runChecksNodeExtensions");
     expect(normalCiScript).toContain(
       'dispatch_and_wait ci.yml -f target_ref="$TARGET_SHA" -f full_release_validation=true',
     );

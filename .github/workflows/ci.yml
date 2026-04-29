@@ -252,6 +252,7 @@ jobs:
                 }))
               : [],
           );
+          const runChecksNodeExtensions = extensionShardMatrix.include.length > 0;
           const checksFastCoreTasks = [];
           if (runNodeFull) {
             checksFastCoreTasks.push(
@@ -310,7 +311,7 @@ jobs:
             channel_contracts_matrix: createMatrix(
               runNodeFull ? createChannelContractTestShards() : [],
             ),
-            run_checks_node_extensions: runReleaseOnlyPluginSuites,
+            run_checks_node_extensions: runChecksNodeExtensions,
             checks_node_extensions_matrix: extensionShardMatrix,
             run_checks: runNodeFull,
             checks_matrix: createMatrix(
