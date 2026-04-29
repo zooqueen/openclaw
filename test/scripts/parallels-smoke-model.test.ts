@@ -65,4 +65,15 @@ describe("Parallels smoke model selection", () => {
       'TIMEOUT_AGENT_S="${OPENCLAW_PARALLELS_WINDOWS_AGENT_TIMEOUT_S:-1500}"',
     );
   });
+
+  it("keeps Windows gateway reachability on a real deadline with start recovery", () => {
+    const script = readFileSync("scripts/e2e/parallels-windows-smoke.sh", "utf8");
+
+    expect(script).toContain(
+      'GATEWAY_RECOVERY_AFTER_S="${OPENCLAW_PARALLELS_WINDOWS_GATEWAY_RECOVERY_AFTER_S:-180}"',
+    );
+    expect(script).toContain("deadline=$((SECONDS + TIMEOUT_GATEWAY_S))");
+    expect(script).toContain("while (( SECONDS < deadline )); do");
+    expect(script).toContain("run_gateway_daemon_action start");
+  });
 });
