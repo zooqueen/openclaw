@@ -23,11 +23,38 @@ export type SentMessageCache = {
 const SENT_MESSAGE_TEXT_TTL_MS = 4_000;
 const SENT_MESSAGE_ID_TTL_MS = 60_000;
 
+function isLeadingImsgEchoCorruptionChar(char: string): boolean {
+  if (char === "\uFFFD") {
+    return true;
+  }
+  const code = char.codePointAt(0);
+  if (code === undefined) {
+    return false;
+  }
+  return (
+    (code >= 0x00 && code <= 0x08) ||
+    (code >= 0x0b && code <= 0x0c) ||
+    (code >= 0x0e && code <= 0x1f) ||
+    (code >= 0x7f && code <= 0x9f)
+  );
+}
+
+function stripLeadingImsgEchoCorruption(text: string): string {
+  let start = 0;
+  for (const char of text) {
+    if (!isLeadingImsgEchoCorruptionChar(char)) {
+      break;
+    }
+    start += char.length;
+  }
+  return start === 0 ? text : text.slice(start);
+}
+
 function normalizeEchoTextKey(text: string | undefined): string | null {
   if (!text) {
     return null;
   }
-  const normalized = text.replace(/\r\n?/g, "\n").trim();
+  const normalized = stripLeadingImsgEchoCorruption(text.replace(/\r\n?/g, "\n").trim()).trim();
   return normalized ? normalized : null;
 }
 
