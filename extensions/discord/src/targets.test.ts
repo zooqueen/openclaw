@@ -157,13 +157,15 @@ describe("discord group policy", () => {
           guilds: {
             guild1: {
               requireMention: false,
+              requireMentionFrom: ["user:guild-bridge"],
               tools: { allow: ["message.guild"] },
               toolsBySender: {
                 "id:user:guild-admin": { allow: ["sessions.list"] },
               },
               channels: {
                 "123": {
-                  requireMention: true,
+                  requireMention: false,
+                  requireMentionFrom: ["user:channel-bridge"],
                   tools: { allow: ["message.channel"] },
                   toolsBySender: {
                     "id:user:channel-admin": { deny: ["exec"] },
@@ -178,6 +180,14 @@ describe("discord group policy", () => {
 
     expect(
       resolveDiscordGroupRequireMention({ cfg: discordCfg, groupSpace: "guild1", groupId: "123" }),
+    ).toBe(false);
+    expect(
+      resolveDiscordGroupRequireMention({
+        cfg: discordCfg,
+        groupSpace: "guild1",
+        groupId: "123",
+        senderId: "channel-bridge",
+      }),
     ).toBe(true);
     expect(
       resolveDiscordGroupRequireMention({
@@ -186,6 +196,14 @@ describe("discord group policy", () => {
         groupId: "missing",
       }),
     ).toBe(false);
+    expect(
+      resolveDiscordGroupRequireMention({
+        cfg: discordCfg,
+        groupSpace: "guild1",
+        groupId: "missing",
+        senderId: "guild-bridge",
+      }),
+    ).toBe(true);
     expect(
       resolveDiscordGroupToolPolicy({
         cfg: discordCfg,

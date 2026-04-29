@@ -1119,6 +1119,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
               requireMention: {
                 type: "boolean",
               },
+              requireMentionFrom: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
               ignoreOtherMentions: {
                 type: "boolean",
               },
@@ -1202,6 +1208,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
                   properties: {
                     requireMention: {
                       type: "boolean",
+                    },
+                    requireMentionFrom: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                      },
                     },
                     ignoreOtherMentions: {
                       type: "boolean",
@@ -2482,6 +2494,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
                     requireMention: {
                       type: "boolean",
                     },
+                    requireMentionFrom: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                      },
+                    },
                     ignoreOtherMentions: {
                       type: "boolean",
                     },
@@ -2565,6 +2583,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
                         properties: {
                           requireMention: {
                             type: "boolean",
+                          },
+                          requireMentionFrom: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
                           },
                           ignoreOtherMentions: {
                             type: "boolean",

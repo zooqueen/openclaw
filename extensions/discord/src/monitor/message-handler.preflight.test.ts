@@ -872,6 +872,84 @@ describe("preflightDiscordMessage", () => {
     expect(result?.shouldRequireMention).toBe(false);
   });
 
+  it("requires mentions only for configured bridge sender IDs in the same allowed channel", async () => {
+    const channelId = "channel-sender-mention-gate";
+    const guildId = "guild-sender-mention-gate";
+    const mentionRequiredSenderId = "111111111111111111";
+    const unlistedAllowedSenderId = "222222222222222222";
+    const guildEntries = {
+      [guildId]: {
+        requireMention: false,
+        requireMentionFrom: [mentionRequiredSenderId],
+        users: [mentionRequiredSenderId, unlistedAllowedSenderId],
+        channels: {
+          [channelId]: {
+            enabled: true,
+            requireMention: false,
+          },
+        },
+      },
+    };
+
+    const blocked = await runGuildPreflight({
+      channelId,
+      guildId,
+      message: createDiscordMessage({
+        id: "m-bridge-blocked",
+        channelId,
+        content: "/new sync completed",
+        author: {
+          id: mentionRequiredSenderId,
+          bot: true,
+          username: "Bridge",
+        },
+      }),
+      discordConfig: { allowBots: true } as DiscordConfig,
+      guildEntries,
+    });
+    expect(blocked).toBeNull();
+
+    const allowedUnlisted = await runGuildPreflight({
+      channelId,
+      guildId,
+      message: createDiscordMessage({
+        id: "m-bridge-open",
+        channelId,
+        content: "sync completed",
+        author: {
+          id: unlistedAllowedSenderId,
+          bot: true,
+          username: "BridgeOpen",
+        },
+      }),
+      discordConfig: { allowBots: true } as DiscordConfig,
+      guildEntries,
+    });
+    expect(allowedUnlisted).not.toBeNull();
+    expect(allowedUnlisted?.shouldRequireMention).toBe(false);
+
+    const allowedMentioned = await runGuildPreflight({
+      channelId,
+      guildId,
+      message: createDiscordMessage({
+        id: "m-bridge-mentioned",
+        channelId,
+        content: "<@openclaw-bot> sync completed",
+        mentionedUsers: [{ id: "openclaw-bot" }],
+        author: {
+          id: mentionRequiredSenderId,
+          bot: true,
+          username: "Bridge",
+        },
+      }),
+      discordConfig: { allowBots: true } as DiscordConfig,
+      guildEntries,
+    });
+    expect(allowedMentioned).not.toBeNull();
+    expect(allowedMentioned?.shouldRequireMention).toBe(true);
+    expect(allowedMentioned?.wasMentioned).toBe(true);
+  });
+
   it("inherits parent thread allowlist when guild object is missing", async () => {
     const threadId = "thread-1";
     const parentId = "parent-1";

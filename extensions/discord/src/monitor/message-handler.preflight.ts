@@ -30,6 +30,7 @@ import {
   resolveDiscordGuildEntry,
   resolveDiscordMemberAccessState,
   resolveDiscordOwnerAccess,
+  resolveDiscordSenderRequiresMention,
   resolveDiscordShouldRequireMention,
   resolveGroupDmAllow,
 } from "./allow-list.js";
@@ -895,16 +896,23 @@ export async function preflightDiscordMessage(
     channelConfig,
     guildInfo,
   });
-  const shouldRequireMention = resolvePreflightMentionRequirement({
-    shouldRequireMention: shouldRequireMentionByConfig,
-    bypassMentionRequirement,
-  });
   const { hasAccessRestrictions, memberAllowed } = resolveDiscordMemberAccessState({
     channelConfig,
     guildInfo,
     memberRoleIds,
     sender,
     allowNameMatching,
+  });
+  const senderRequiresMention =
+    isGuildMessage &&
+    resolveDiscordSenderRequiresMention({
+      channelConfig,
+      guildInfo,
+      sender,
+    });
+  const shouldRequireMention = resolvePreflightMentionRequirement({
+    shouldRequireMention: shouldRequireMentionByConfig || senderRequiresMention,
+    bypassMentionRequirement,
   });
 
   if (isGuildMessage && hasAccessRestrictions && !memberAllowed) {
@@ -999,14 +1007,14 @@ export async function preflightDiscordMessage(
     policy: {
       isGroup: isGuildMessage,
       requireMention: shouldRequireMention,
-      allowTextCommands,
+      allowTextCommands: senderRequiresMention ? false : allowTextCommands,
       hasControlCommand: hasControlCommandInMessage,
       commandAuthorized,
     },
   });
   const effectiveWasMentioned = mentionDecision.effectiveWasMentioned;
   logDebug(
-    `[discord-preflight] shouldRequireMention=${shouldRequireMention} baseRequireMention=${shouldRequireMentionByConfig} boundThreadSession=${isBoundThreadSession} mentionDecision.shouldSkip=${mentionDecision.shouldSkip} wasMentioned=${wasMentioned}`,
+    `[discord-preflight] shouldRequireMention=${shouldRequireMention} baseRequireMention=${shouldRequireMentionByConfig} senderRequiresMention=${senderRequiresMention} boundThreadSession=${isBoundThreadSession} mentionDecision.shouldSkip=${mentionDecision.shouldSkip} wasMentioned=${wasMentioned}`,
   );
   if (isGuildMessage && shouldRequireMention) {
     if (botId && mentionDecision.shouldSkip) {

@@ -25,6 +25,7 @@ const DISCORD_OWNER_ALLOWLIST_PREFIXES = ["discord:", "user:", "pk:"];
 
 type DiscordChannelOverrideConfig = {
   requireMention?: boolean;
+  requireMentionFrom?: string[];
   ignoreOtherMentions?: boolean;
   skills?: string[];
   enabled?: boolean;
@@ -41,6 +42,7 @@ export type DiscordGuildEntryResolved = {
   id?: string;
   slug?: string;
   requireMention?: boolean;
+  requireMentionFrom?: string[];
   ignoreOtherMentions?: boolean;
   reactionNotifications?: "off" | "own" | "all" | "allowlist";
   users?: string[];
@@ -242,6 +244,45 @@ export function resolveDiscordMemberAccessState(params: {
   return { channelUsers, channelRoles, hasAccessRestrictions, memberAllowed } as const;
 }
 
+function normalizeDiscordSenderId(value: string | null | undefined): string {
+  const text = normalizeOptionalString(value) ?? "";
+  if (!text) {
+    return "";
+  }
+  const mentionId = text.replace(/^<@!?/, "").replace(/>$/, "");
+  for (const prefix of ["discord:", "user:", "pk:"]) {
+    if (mentionId.startsWith(prefix)) {
+      return mentionId.slice(prefix.length).trim().toLowerCase();
+    }
+  }
+  return mentionId.toLowerCase();
+}
+
+function senderMatchesDiscordIdList(rawList: string[] | undefined, senderId: string): boolean {
+  if (!rawList || rawList.length === 0) {
+    return false;
+  }
+  const normalizedSenderId = normalizeDiscordSenderId(senderId);
+  if (!normalizedSenderId) {
+    return false;
+  }
+  return rawList.some((raw) => {
+    const candidate = normalizeDiscordSenderId(raw);
+    return candidate === "*" || candidate === normalizedSenderId;
+  });
+}
+
+export function resolveDiscordSenderRequiresMention(params: {
+  channelConfig?: DiscordChannelConfigResolved | null;
+  guildInfo?: DiscordGuildEntryResolved | null;
+  sender: { id: string; name?: string; tag?: string };
+}): boolean {
+  return (
+    senderMatchesDiscordIdList(params.channelConfig?.requireMentionFrom, params.sender.id) ||
+    senderMatchesDiscordIdList(params.guildInfo?.requireMentionFrom, params.sender.id)
+  );
+}
+
 export function resolveDiscordOwnerAllowFrom(params: {
   channelConfig?: DiscordChannelConfigResolved | null;
   guildInfo?: DiscordGuildEntryResolved | null;
@@ -398,6 +439,7 @@ function resolveDiscordChannelConfigEntry(
   const resolved: DiscordChannelConfigResolved = {
     allowed: entry.enabled !== false,
     requireMention: entry.requireMention,
+    requireMentionFrom: entry.requireMentionFrom,
     ignoreOtherMentions: entry.ignoreOtherMentions,
     skills: entry.skills,
     enabled: entry.enabled,

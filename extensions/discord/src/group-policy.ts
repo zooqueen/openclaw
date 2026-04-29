@@ -16,6 +16,7 @@ type SenderScopedToolsEntry = {
   tools?: GroupToolPolicyConfig;
   toolsBySender?: GroupToolPolicyBySenderConfig;
   requireMention?: boolean;
+  requireMentionFrom?: string[];
 };
 
 function resolveDiscordGuildEntry(guilds: DiscordConfig["guilds"], groupSpace?: string | null) {
@@ -76,6 +77,37 @@ function resolveSenderToolsEntry(
   return senderPolicy ?? entry.tools;
 }
 
+function normalizeDiscordSenderId(value: string | null | undefined): string {
+  const text = normalizeOptionalString(value) ?? "";
+  if (!text) {
+    return "";
+  }
+  const mentionId = text.replace(/^<@!?/, "").replace(/>$/, "");
+  for (const prefix of ["discord:", "user:", "pk:"]) {
+    if (mentionId.startsWith(prefix)) {
+      return mentionId.slice(prefix.length).trim().toLowerCase();
+    }
+  }
+  return mentionId.toLowerCase();
+}
+
+function entryRequiresMentionFromSender(
+  entry: SenderScopedToolsEntry | undefined | null,
+  params: ChannelGroupContext,
+): boolean {
+  if (!entry?.requireMentionFrom || entry.requireMentionFrom.length === 0) {
+    return false;
+  }
+  const senderId = normalizeDiscordSenderId(params.senderId);
+  if (!senderId) {
+    return false;
+  }
+  return entry.requireMentionFrom.some((raw) => {
+    const candidate = normalizeDiscordSenderId(raw);
+    return candidate === "*" || candidate === senderId;
+  });
+}
+
 function resolveDiscordPolicyContext(params: ChannelGroupContext) {
   const guilds =
     (params.accountId
@@ -92,6 +124,12 @@ function resolveDiscordPolicyContext(params: ChannelGroupContext) {
 
 export function resolveDiscordGroupRequireMention(params: ChannelGroupContext): boolean {
   const context = resolveDiscordPolicyContext(params);
+  if (
+    entryRequiresMentionFromSender(context.channelEntry, params) ||
+    entryRequiresMentionFromSender(context.guildEntry, params)
+  ) {
+    return true;
+  }
   if (typeof context.channelEntry?.requireMention === "boolean") {
     return context.channelEntry.requireMention;
   }

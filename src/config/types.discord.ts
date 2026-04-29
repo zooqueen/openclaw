@@ -38,6 +38,8 @@ export type DiscordDmConfig = {
 
 export type DiscordGuildChannelConfig = {
   requireMention?: boolean;
+  /** Sender IDs that must mention the bot even when this channel otherwise allows unmentioned messages. */
+  requireMentionFrom?: string[];
   /**
    * If true, drop messages that mention another user/role but not this one (not @everyone/@here).
    * Default: false.
@@ -71,6 +73,8 @@ export type DiscordReactionNotificationMode = "off" | "own" | "all" | "allowlist
 export type DiscordGuildEntry = {
   slug?: string;
   requireMention?: boolean;
+  /** Sender IDs that must mention the bot even when this guild otherwise allows unmentioned messages. */
+  requireMentionFrom?: string[];
   /**
    * If true, drop messages that mention another user/role but not this one (not @everyone/@here).
    * Default: false.

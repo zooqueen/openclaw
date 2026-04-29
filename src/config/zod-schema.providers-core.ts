@@ -448,6 +448,7 @@ export const DiscordThreadSchema = z
 export const DiscordGuildChannelSchema = z
   .object({
     requireMention: z.boolean().optional(),
+    requireMentionFrom: DiscordIdListSchema.optional(),
     ignoreOtherMentions: z.boolean().optional(),
     tools: ToolPolicySchema,
     toolsBySender: ToolPolicyBySenderSchema,
@@ -477,6 +478,7 @@ export const DiscordGuildSchema = z
   .object({
     slug: z.string().optional(),
     requireMention: z.boolean().optional(),
+    requireMentionFrom: DiscordIdListSchema.optional(),
     ignoreOtherMentions: z.boolean().optional(),
     tools: ToolPolicySchema,
     toolsBySender: ToolPolicyBySenderSchema,

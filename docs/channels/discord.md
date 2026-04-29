@@ -442,6 +442,7 @@ Example:
       guilds: {
         "123456789012345678": {
           requireMention: true,
+          requireMentionFrom: ["111222333444555666"],
           ignoreOtherMentions: true,
           users: ["987654321098765432"],
           roles: ["123456789012345678"],
@@ -470,6 +471,7 @@ Example:
     - implicit reply-to-bot behavior in supported cases
 
     `requireMention` is configured per guild/channel (`channels.discord.guilds...`).
+    `requireMentionFrom` can list Discord sender IDs that must mention the bot even when the guild or channel has `requireMention: false`; unlisted allowed senders keep the guild/channel default.
     `ignoreOtherMentions` optionally drops messages that mention another user/role but not the bot (excluding @everyone/@here).
 
     Group DMs:

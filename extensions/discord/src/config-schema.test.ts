@@ -94,9 +94,14 @@ describe("discord config schema", () => {
         "123": {
           slug: "friends-of-openclaw",
           requireMention: false,
+          requireMentionFrom: ["111222333444555666"],
           users: ["steipete"],
           channels: {
-            general: { enabled: true, autoThread: true },
+            general: {
+              enabled: true,
+              autoThread: true,
+              requireMentionFrom: ["777888999000111222"],
+            },
           },
         },
       },
@@ -109,8 +114,12 @@ describe("discord config schema", () => {
     expect(cfg.actions?.stickerUploads).toBe(false);
     expect(cfg.actions?.channels).toBe(true);
     expect(cfg.guilds?.["123"]?.slug).toBe("friends-of-openclaw");
+    expect(cfg.guilds?.["123"]?.requireMentionFrom).toEqual(["111222333444555666"]);
     expect(cfg.guilds?.["123"]?.channels?.general?.enabled).toBe(true);
     expect(cfg.guilds?.["123"]?.channels?.general?.autoThread).toBe(true);
+    expect(cfg.guilds?.["123"]?.channels?.general?.requireMentionFrom).toEqual([
+      "777888999000111222",
+    ]);
   });
 
   it("accepts voice model override field", () => {
@@ -131,8 +140,9 @@ describe("discord config schema", () => {
         "123": {
           users: [111],
           roles: [222],
+          requireMentionFrom: [666],
           channels: {
-            general: { users: [333], roles: [444] },
+            general: { users: [333], roles: [444], requireMentionFrom: [777] },
           },
         },
       },
@@ -144,8 +154,10 @@ describe("discord config schema", () => {
     expect(cfg.dm?.groupChannels).toEqual(["789"]);
     expect(cfg.guilds?.["123"]?.users).toEqual(["111"]);
     expect(cfg.guilds?.["123"]?.roles).toEqual(["222"]);
+    expect(cfg.guilds?.["123"]?.requireMentionFrom).toEqual(["666"]);
     expect(cfg.guilds?.["123"]?.channels?.general?.users).toEqual(["333"]);
     expect(cfg.guilds?.["123"]?.channels?.general?.roles).toEqual(["444"]);
+    expect(cfg.guilds?.["123"]?.channels?.general?.requireMentionFrom).toEqual(["777"]);
     expect(cfg.execApprovals?.approvers).toEqual(["555"]);
   });
 
