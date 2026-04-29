@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthProfileStore } from "../../agents/auth-profiles/types.js";
 import { createModelListAuthIndex } from "./list.auth-index.js";
@@ -90,6 +93,28 @@ describe("createModelListAuthIndex", () => {
     });
 
     expect(index.hasProviderAuth("google-vertex")).toBe(true);
+  });
+
+  it("keeps google vertex ADC auth when manifest env metadata is present", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-list-google-adc-"));
+    const credentialsPath = path.join(tempDir, "adc.json");
+    await fs.writeFile(credentialsPath, "{}", "utf8");
+
+    try {
+      const index = createModelListAuthIndex({
+        cfg: {},
+        authStore: emptyStore,
+        env: {
+          GOOGLE_APPLICATION_CREDENTIALS: credentialsPath,
+          GOOGLE_CLOUD_LOCATION: "us-central1",
+          GOOGLE_CLOUD_PROJECT: "vertex-project",
+        },
+      });
+
+      expect(index.hasProviderAuth("google-vertex")).toBe(true);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("records configured provider API keys", () => {
