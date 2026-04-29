@@ -28,9 +28,9 @@ vi.mock("../../config/sessions/paths.js", () => ({
 }));
 
 vi.mock("../../agents/agent-scope.js", async () => {
-  const { normalizeAgentId } = await vi.importActual<
-    typeof import("../../routing/session-key.js")
-  >("../../routing/session-key.js");
+  const { normalizeAgentId } = await vi.importActual<typeof import("../../routing/session-key.js")>(
+    "../../routing/session-key.js",
+  );
   return {
     listAgentIds: mocks.listAgentIds,
     resolveDefaultAgentId: (cfg: OpenClawConfig) => {
@@ -100,6 +100,65 @@ describe("resolveSessionKeyForRequest", () => {
 
     expect(result.sessionKey).toBe("agent:mybot:main");
     expect(result.storePath).toBe(MYBOT_STORE_PATH);
+  });
+
+  it("derives selected-agent --to before implicit agent main fallback", async () => {
+    setupMainAndMybotStorePaths();
+    mocks.resolveExplicitAgentSessionKey.mockReturnValue("agent:mybot:main");
+    mockStoresByPath({
+      [MYBOT_STORE_PATH]: {
+        "agent:mybot:main": { sessionId: "main-session-id", updatedAt: 1 },
+      },
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      agentId: "mybot",
+      to: "telegram:group:-100123",
+    });
+
+    expect(result.sessionKey).toBe("agent:mybot:telegram:group:-100123");
+    expect(result.storePath).toBe(MYBOT_STORE_PATH);
+    expect(mocks.resolveExplicitAgentSessionKey).not.toHaveBeenCalled();
+  });
+
+  it("preserves explicit --session-key over selected-agent --to", async () => {
+    setupMainAndMybotStorePaths();
+    mockStoresByPath({
+      [MYBOT_STORE_PATH]: {
+        "agent:mybot:manual": { sessionId: "manual-session-id", updatedAt: 1 },
+      },
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      agentId: "mybot",
+      sessionKey: "agent:mybot:manual",
+      to: "telegram:group:-100123",
+    });
+
+    expect(result.sessionKey).toBe("agent:mybot:manual");
+    expect(result.storePath).toBe(MYBOT_STORE_PATH);
+    expect(mocks.resolveExplicitAgentSessionKey).not.toHaveBeenCalled();
+  });
+
+  it("treats blank --session-key as absent for selected-agent --to", async () => {
+    setupMainAndMybotStorePaths();
+    mocks.resolveExplicitAgentSessionKey.mockReturnValue("agent:mybot:main");
+    mockStoresByPath({
+      [MYBOT_STORE_PATH]: {},
+    });
+
+    const result = resolveSessionKeyForRequest({
+      cfg: baseCfg,
+      agentId: "mybot",
+      sessionKey: "   ",
+      to: "telegram:group:-100123",
+    });
+
+    expect(result.sessionKey).toBe("agent:mybot:telegram:group:-100123");
+    expect(result.storePath).toBe(MYBOT_STORE_PATH);
+    expect(mocks.resolveExplicitAgentSessionKey).not.toHaveBeenCalled();
   });
 
   it("migrates legacy main-store main-key sessions for plain --to default-agent requests", async () => {

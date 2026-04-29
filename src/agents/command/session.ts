@@ -206,14 +206,7 @@ export function resolveSessionKeyForRequest(opts: {
   const defaultAgentId = normalizeAgentId(resolveDefaultAgentId(opts.cfg));
   const requestedAgentId = opts.agentId?.trim() ? normalizeAgentId(opts.agentId) : undefined;
   const requestedSessionId = opts.sessionId?.trim() || undefined;
-  const explicitSessionKey =
-    opts.sessionKey?.trim() ||
-    (!requestedSessionId
-      ? resolveExplicitAgentSessionKey({
-          cfg: opts.cfg,
-          agentId: requestedAgentId,
-        })
-      : undefined);
+  const explicitSessionKey = opts.sessionKey?.trim() || undefined;
   const storeAgentId = explicitSessionKey
     ? resolveAgentIdFromSessionKey(explicitSessionKey)
     : (requestedAgentId ?? defaultAgentId);
@@ -225,6 +218,13 @@ export function resolveSessionKeyForRequest(opts: {
   const ctx: MsgContext | undefined = opts.to?.trim() ? { From: opts.to } : undefined;
   let sessionKey: string | undefined =
     explicitSessionKey ?? (ctx ? resolveSessionKey(scope, ctx, mainKey, storeAgentId) : undefined);
+
+  if (!sessionKey && !requestedSessionId) {
+    sessionKey = resolveExplicitAgentSessionKey({
+      cfg: opts.cfg,
+      agentId: requestedAgentId,
+    });
+  }
 
   if (ctx && !requestedAgentId && !requestedSessionId && !explicitSessionKey) {
     const legacyMainSession = resolveLegacyMainStoreSessionForDefaultAgent({
