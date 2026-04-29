@@ -1,6 +1,25 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { describe, expect, it } from "vitest";
-import { sanitizeReplayToolCallIdsForStream } from "./attempt.tool-call-normalization.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  sanitizeReplayToolCallIdsForStream,
+  wrapStreamFnSanitizeMalformedToolCalls,
+} from "./attempt.tool-call-normalization.js";
+
+type FakeWrappedStream = {
+  result: () => Promise<unknown>;
+  [Symbol.asyncIterator]: () => AsyncIterator<unknown>;
+};
+
+function createFakeStream(): FakeWrappedStream {
+  return {
+    async result() {
+      return { role: "assistant", content: [] };
+    },
+    [Symbol.asyncIterator]() {
+      return (async function* () {})();
+    },
+  };
+}
 
 describe("sanitizeReplayToolCallIdsForStream", () => {
   it("drops orphaned tool results after strict id sanitization", () => {
@@ -163,4 +182,41 @@ describe("sanitizeReplayToolCallIdsForStream", () => {
       },
     ]);
   });
+});
+
+describe("wrapStreamFnSanitizeMalformedToolCalls", () => {
+  it.each(["tool_call", "tool_use", "function_call"] as const)(
+    "drops malformed snake_case %s blocks from outbound replay",
+    async (toolCallType) => {
+      const messages = [
+        {
+          role: "assistant",
+          stopReason: "error",
+          content: [{ type: toolCallType, id: "call_bad", name: "read" }],
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "retry" }],
+        },
+      ];
+      const baseFn = vi.fn((_model, _context) => createFakeStream());
+
+      const wrapped = wrapStreamFnSanitizeMalformedToolCalls(baseFn as never, new Set(["read"]), {
+        validateAnthropicTurns: true,
+        preserveSignatures: true,
+        dropThinkingBlocks: false,
+      } as never);
+      await Promise.resolve(wrapped({} as never, { messages } as never, {} as never));
+
+      expect(baseFn).toHaveBeenCalledTimes(1);
+      const seenContext = baseFn.mock.calls[0]?.[1] as { messages: unknown[] };
+      expect(seenContext.messages).toEqual([
+        {
+          role: "user",
+          content: [{ type: "text", text: "retry" }],
+        },
+      ]);
+      expect(seenContext.messages).not.toBe(messages);
+    },
+  );
 });

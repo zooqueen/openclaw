@@ -220,8 +220,17 @@ function normalizeToolCallNameForDispatch(
   return resolveStructuredAllowedToolName(trimmed, allowedToolNames) ?? trimmed;
 }
 
+const TOOL_CALL_BLOCK_TYPES = new Set([
+  "toolCall",
+  "toolUse",
+  "functionCall",
+  "tool_call",
+  "tool_use",
+  "function_call",
+]);
+
 function isToolCallBlockType(type: unknown): boolean {
-  return type === "toolCall" || type === "toolUse" || type === "functionCall";
+  return typeof type === "string" && TOOL_CALL_BLOCK_TYPES.has(type);
 }
 
 const REPLAY_TOOL_CALL_NAME_MAX_CHARS = 64;
