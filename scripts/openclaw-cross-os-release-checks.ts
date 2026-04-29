@@ -10,7 +10,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readlinkSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -56,6 +55,19 @@ const providerConfig = {
   },
 };
 
+const RELEASE_SMOKE_PLUGIN_ALLOWLIST_BASE = [
+  "acpx",
+  "bonjour",
+  "browser",
+  "device-pair",
+  "phone-control",
+  "talk-voice",
+];
+
+export function buildCrossOsReleaseSmokePluginAllowlist(providerMeta) {
+  return [...new Set([providerMeta.extensionId, ...RELEASE_SMOKE_PLUGIN_ALLOWLIST_BASE])];
+}
+
 const PACKAGE_DIST_INVENTORY_RELATIVE_PATH = "dist/postinstall-inventory.json";
 const OMITTED_QA_EXTENSION_PREFIXES = [
   "dist/extensions/qa-channel/",
@@ -69,8 +81,6 @@ export const CROSS_OS_GATEWAY_STATUS_COMMAND_TIMEOUT_MS =
   CROSS_OS_GATEWAY_STATUS_RPC_TIMEOUT_MS + 45_000;
 export const CROSS_OS_GATEWAY_READY_TIMEOUT_MS = 3 * 60_000;
 export const CROSS_OS_WINDOWS_GATEWAY_READY_TIMEOUT_MS = 5 * 60_000;
-export const CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS = 15 * 60;
-export const CROSS_OS_AGENT_TURN_TIMEOUT_MS = 20 * 60_000;
 
 if (isMainModule()) {
   try {
@@ -695,18 +705,22 @@ async function runUpgradeLane(params) {
       "--timeout",
       String(updateStepTimeoutSeconds()),
     ];
-    await runOpenClaw({
+    const updateResult = await runOpenClaw({
       lane,
       env: updateEnv,
       args: updateArgs,
       logPath: join(params.logsDir, "upgrade-update.log"),
       timeoutMs: updateTimeoutMs(),
+      check: false,
+    });
+    verifyPackagedUpgradeUpdateResult(updateResult, {
+      candidateVersion: params.build.candidateVersion,
     });
 
     logLanePhase(lane, "update-status");
     await runOpenClaw({
       lane,
-      env,
+      env: updateEnv,
       args: ["update", "status", "--json"],
       logPath: join(params.logsDir, "upgrade-update-status.log"),
       timeoutMs: 2 * 60 * 1000,
@@ -1222,9 +1236,53 @@ export function shouldSkipInstallerDaemonHealthCheck(platform = process.platform
 }
 
 export function buildRealUpdateEnv(env) {
-  const updateEnv = { ...env };
+  const updateEnv = {
+    ...env,
+    NODE_DISABLE_COMPILE_CACHE: "1",
+  };
   delete updateEnv.OPENCLAW_DISABLE_BUNDLED_PLUGIN_POSTINSTALL;
+  delete updateEnv.NODE_COMPILE_CACHE;
   return updateEnv;
+}
+
+export function verifyPackagedUpgradeUpdateResult(result, options) {
+  if (result.exitCode === 0) {
+    return;
+  }
+
+  let payload = null;
+  try {
+    payload = JSON.parse(result.stdout);
+  } catch {
+    payload = null;
+  }
+
+  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+  const allStepsSucceeded = steps.every((step) => step?.exitCode === 0);
+  const afterVersion = typeof payload?.after?.version === "string" ? payload.after.version : "";
+  if (
+    payload?.status === "ok" &&
+    afterVersion === options.candidateVersion &&
+    allStepsSucceeded &&
+    isSelfSwappedPackageProcessExit(result.stderr)
+  ) {
+    return;
+  }
+
+  throw new Error(
+    `Packaged upgrade failed (${result.exitCode}): ${trimForSummary(
+      `${result.stdout}\n${result.stderr}`,
+    )}`,
+  );
+}
+
+function isSelfSwappedPackageProcessExit(stderr) {
+  return (
+    typeof stderr === "string" &&
+    stderr.includes("[openclaw] Failed to start CLI:") &&
+    stderr.includes("ERR_MODULE_NOT_FOUND") &&
+    /[\\/]node_modules[\\/]openclaw[\\/]dist[\\/]/u.test(stderr)
+  );
 }
 
 export function resolveExplicitBaselineVersion(baselineSpec) {
@@ -1305,59 +1363,7 @@ export function resolveInstalledPrefixDirFromCliPath(cliPath, platform = process
   return dirname(dirname(resolvedCliPath));
 }
 
-export function resolveInstalledPackageRootFromCliPath(cliPath, platform = process.platform) {
-  const resolvedCliPath =
-    platform === "win32" ? normalizeWindowsInstalledCliPath(cliPath) : String(cliPath ?? "");
-  const packageRoots: string[] = [];
-  const addPackageRoot = (candidate?: string) => {
-    if (candidate && !packageRoots.includes(candidate)) {
-      packageRoots.push(candidate);
-    }
-  };
-
-  addPackageRoot(
-    installedPackageRoot(resolveInstalledPrefixDirFromCliPath(resolvedCliPath, platform)),
-  );
-
-  if (platform !== "win32") {
-    try {
-      const realpath = realpathSync(resolvedCliPath);
-      const marker = "/node_modules/openclaw/";
-      const markerIndex = realpath.indexOf(marker);
-      if (markerIndex >= 0) {
-        addPackageRoot(realpath.slice(0, markerIndex + marker.length - 1));
-      }
-    } catch {}
-
-    try {
-      const linkTarget = readlinkSync(resolvedCliPath);
-      const absoluteTarget = linkTarget.startsWith("/")
-        ? linkTarget
-        : join(dirname(resolvedCliPath), linkTarget);
-      const marker = "/node_modules/openclaw/";
-      const markerIndex = absoluteTarget.indexOf(marker);
-      if (markerIndex >= 0) {
-        addPackageRoot(absoluteTarget.slice(0, markerIndex + marker.length - 1));
-      }
-    } catch {}
-
-    try {
-      const shim = readFileSync(resolvedCliPath, "utf8");
-      const match = /(?<root>\/[^ "'\n\r]+\/node_modules\/openclaw)(?:\/|["'\s]|$)/u.exec(shim);
-      addPackageRoot(match?.groups?.root);
-    } catch {}
-
-    if (resolvedCliPath.endsWith("/.local/bin/openclaw")) {
-      const homeDir = dirname(dirname(dirname(resolvedCliPath)));
-      addPackageRoot(join(homeDir, ".npm-global", "lib", "node_modules", "openclaw"));
-    }
-  }
-
-  const found = packageRoots.find((packageRoot) => existsSync(join(packageRoot, "package.json")));
-  return found ?? packageRoots[0];
-}
-
-export function readInstalledMetadataFromCliPath(cliPath, platform = process.platform) {
+function readInstalledMetadataFromCliPath(cliPath, platform = process.platform) {
   return readInstalledMetadataFromPackageRoot(
     resolveInstalledPackageRootFromCliPath(cliPath, platform),
   );
@@ -1853,6 +1859,20 @@ async function runInstalledModelsSet(params) {
   });
   await runInstalledCli({
     cliPath: params.cliPath,
+    args: [
+      "config",
+      "set",
+      "plugins.allow",
+      JSON.stringify(buildCrossOsReleaseSmokePluginAllowlist(params.providerConfig)),
+      "--strict-json",
+    ],
+    cwd: params.cwd,
+    env: params.env,
+    logPath: params.logPath,
+    timeoutMs: 2 * 60 * 1000,
+  });
+  await runInstalledCli({
+    cliPath: params.cliPath,
     args: ["config", "set", "agents.defaults.skipBootstrap", "true", "--strict-json"],
     cwd: params.cwd,
     env: params.env,
@@ -1873,14 +1893,14 @@ async function runInstalledAgentTurn(params) {
       sessionId,
       "--message",
       "Reply with exact ASCII text OK only.",
-      "--timeout",
-      String(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS),
+      "--thinking",
+      "minimal",
       "--json",
     ],
     cwd: params.cwd,
     env: params.env,
     logPath: params.logPath,
-    timeoutMs: CROSS_OS_AGENT_TURN_TIMEOUT_MS,
+    timeoutMs: 10 * 60 * 1000,
   });
   if (!agentOutputHasExpectedOkMarker(result.stdout, { logPath: params.logPath })) {
     throw new Error("Agent output did not contain the expected OK marker.");
@@ -2610,6 +2630,19 @@ async function runModelsSet(params) {
   await runOpenClaw({
     lane: params.lane,
     env: params.env,
+    args: [
+      "config",
+      "set",
+      "plugins.allow",
+      JSON.stringify(buildCrossOsReleaseSmokePluginAllowlist(params.providerConfig)),
+      "--strict-json",
+    ],
+    logPath: params.logPath,
+    timeoutMs: 2 * 60 * 1000,
+  });
+  await runOpenClaw({
+    lane: params.lane,
+    env: params.env,
     args: ["config", "set", "agents.defaults.skipBootstrap", "true", "--strict-json"],
     logPath: params.logPath,
     timeoutMs: 2 * 60 * 1000,
@@ -2632,12 +2665,12 @@ async function runAgentTurn(params) {
           sessionId,
           "--message",
           "Reply with exact ASCII text OK only.",
-          "--timeout",
-          String(CROSS_OS_AGENT_REPLY_TIMEOUT_SECONDS),
+          "--thinking",
+          "minimal",
           "--json",
         ],
         logPath: params.logPath,
-        timeoutMs: CROSS_OS_AGENT_TURN_TIMEOUT_MS,
+        timeoutMs: 10 * 60 * 1000,
       });
       if (!agentOutputHasExpectedOkMarker(result.stdout, { logPath: params.logPath })) {
         throw new Error("Agent output did not contain the expected OK marker.");
@@ -2661,10 +2694,8 @@ async function runAgentTurn(params) {
 
 export function shouldRetryCrossOsAgentTurnError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /failed to (?:install|stage) bundled runtime deps|failed to stage bundled runtime deps after/u.test(
-      message,
-    ) || /plugin load failed: .*ENOENT: .*plugin-runtime-deps.*\/dist\//su.test(message)
+  return /failed to (?:install|stage) bundled runtime deps|failed to stage bundled runtime deps after/u.test(
+    message,
   );
 }
 
@@ -2844,7 +2875,8 @@ async function runOpenClaw(params) {
 }
 
 function readInstalledPackageManifest(prefixDir) {
-  return readInstalledPackageManifestFromPackageRoot(installedPackageRoot(prefixDir));
+  const packageRoot = installedPackageRoot(prefixDir);
+  return readInstalledPackageManifestFromPackageRoot(packageRoot);
 }
 
 function readInstalledPackageManifestFromPackageRoot(packageRoot) {
@@ -2864,11 +2896,16 @@ export function readInstalledVersion(prefixDir) {
 }
 
 function readInstalledMetadata(prefixDir) {
-  return readInstalledMetadataFromPackageRoot(installedPackageRoot(prefixDir));
+  const { packageJson, packageRoot } = readInstalledPackageManifest(prefixDir);
+  return readInstalledMetadataFromManifest(packageJson, packageRoot);
 }
 
 function readInstalledMetadataFromPackageRoot(packageRoot) {
   const { packageJson } = readInstalledPackageManifestFromPackageRoot(packageRoot);
+  return readInstalledMetadataFromManifest(packageJson, packageRoot);
+}
+
+function readInstalledMetadataFromManifest(packageJson, packageRoot) {
   const buildInfoPath = join(packageRoot, "dist", "build-info.json");
   if (!existsSync(buildInfoPath)) {
     throw new Error(`Installed build info missing: ${buildInfoPath}`);
@@ -2895,8 +2932,55 @@ function verifyInstalledCandidate(installed, build) {
   }
 }
 
-function installedPackageRoot(prefixDir) {
-  return process.platform === "win32"
+export function resolveInstalledPackageRootFromCliPath(
+  cliPath,
+  platform = process.platform,
+  env = process.env,
+) {
+  const prefixDir = resolveInstalledPrefixDirFromCliPath(cliPath, platform);
+  const candidates = [installedPackageRoot(prefixDir, platform)];
+
+  if (platform !== "win32") {
+    const resolvedCliPath = String(cliPath ?? "").trim();
+    if (resolvedCliPath) {
+      try {
+        const realCliPath = realpathSync(resolvedCliPath);
+        candidates.push(dirname(realCliPath));
+        candidates.push(dirname(dirname(realCliPath)));
+      } catch {
+        // Some installer shims are shell wrappers, not symlinks. Fall through to
+        // common user-local npm prefixes below.
+      }
+    }
+
+    for (const prefix of [
+      env.NPM_CONFIG_PREFIX,
+      env.npm_config_prefix,
+      env.HOME && join(env.HOME, ".npm-global"),
+      env.HOME && join(env.HOME, ".local"),
+    ]) {
+      if (typeof prefix === "string" && prefix.trim()) {
+        candidates.push(installedPackageRoot(prefix, platform));
+      }
+    }
+  }
+
+  const checked: string[] = [];
+  for (const candidate of candidates) {
+    if (!candidate || checked.includes(candidate)) {
+      continue;
+    }
+    checked.push(candidate);
+    if (existsSync(join(candidate, "package.json"))) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`Installed package manifest missing. Checked: ${checked.join(", ")}`);
+}
+
+function installedPackageRoot(prefixDir, platform = process.platform) {
+  return platform === "win32"
     ? join(prefixDir, "node_modules", "openclaw")
     : join(prefixDir, "lib", "node_modules", "openclaw");
 }
