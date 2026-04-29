@@ -1,4 +1,11 @@
+import type { OpenClawConfig } from "../../../../src/config/config.js";
+import type { MemoryPluginPublicArtifact } from "../../../../src/plugins/memory-state.js";
+
 // Agent/runtime helpers.
+async function loadMemoryRuntime() {
+  return await import("../../../../src/plugins/memory-runtime.js");
+}
+
 export { resolveCronStyleNow } from "../../../../src/agents/current-time.js";
 export {
   resolveAgentContextLimits,
@@ -107,7 +114,12 @@ export {
   buildMemoryPromptSection as buildActiveMemoryPromptSection,
   getMemoryCapabilityRegistration,
 } from "../../../../src/plugins/memory-state.js";
-export { listActiveMemoryPublicArtifacts } from "../../../../src/plugins/memory-runtime.js";
+export async function listActiveMemoryPublicArtifacts(params: {
+  cfg: OpenClawConfig;
+}): Promise<MemoryPluginPublicArtifact[]> {
+  const runtime = await loadMemoryRuntime();
+  return await runtime.listActiveMemoryPublicArtifacts(params);
+}
 export type {
   MemoryFlushPlan,
   MemoryFlushPlanResolver,

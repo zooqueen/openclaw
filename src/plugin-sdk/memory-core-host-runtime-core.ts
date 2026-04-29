@@ -1,4 +1,11 @@
+import type { OpenClawConfig } from "../config/config.js";
+import type { MemoryPluginPublicArtifact } from "../plugins/memory-state.js";
+
 export * from "../../packages/memory-host-sdk/src/runtime-core.js";
+
+async function loadMemoryRuntime() {
+  return await import("../plugins/memory-runtime.js");
+}
 export { DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR } from "../agents/pi-settings.js";
 export {
   asToolParamsRecord,
@@ -38,6 +45,11 @@ export {
   registerMemoryCapability,
   registerMemoryCorpusSupplement,
 } from "../plugins/memory-state.js";
-export { listActiveMemoryPublicArtifacts } from "../plugins/memory-runtime.js";
+export async function listActiveMemoryPublicArtifacts(params: {
+  cfg: OpenClawConfig;
+}): Promise<MemoryPluginPublicArtifact[]> {
+  const runtime = await loadMemoryRuntime();
+  return await runtime.listActiveMemoryPublicArtifacts(params);
+}
 export type { OpenClawPluginApi } from "../plugins/types.js";
 export { parseAgentSessionKey } from "../routing/session-key.js";
