@@ -1040,12 +1040,13 @@ export class NpmUpdateSmoke {
     timeoutMs: number,
     ctx: UpdateJobContext,
   ): Promise<void> {
+    const macosExecArgs = this.resolveMacosUpdateExecArgs(ctx);
     const scriptPath = this.writeGuestScript(
       this.macosVm,
       script,
       "openclaw-parallels-npm-update-macos",
+      { execArgs: macosExecArgs, mode: "700" },
     );
-    const macosExecArgs = this.resolveMacosUpdateExecArgs(ctx);
     const sudoUserArgIndex = macosExecArgs.indexOf("-u");
     const sudoUser =
       sudoUserArgIndex >= 0 && sudoUserArgIndex + 1 < macosExecArgs.length
@@ -1204,9 +1205,16 @@ export class NpmUpdateSmoke {
     }
   }
 
-  private writeGuestScript(vm: string, script: string, prefix: string): string {
+  private writeGuestScript(
+    vm: string,
+    script: string,
+    prefix: string,
+    options: { execArgs?: string[]; mode?: "700" | "755" } = {},
+  ): string {
+    const execArgs = options.execArgs ?? [];
+    const mode = options.mode ?? "755";
     const scriptPath = `/tmp/${prefix}-${randomUUID()}.sh`;
-    const write = run("prlctl", ["exec", vm, "/usr/bin/tee", scriptPath], {
+    const write = run("prlctl", ["exec", vm, ...execArgs, "/usr/bin/tee", scriptPath], {
       check: false,
       input: script,
       quiet: true,
@@ -1216,7 +1224,7 @@ export class NpmUpdateSmoke {
       throw new Error(`failed to write guest script ${scriptPath}: ${write.stderr.trim()}`);
     }
     try {
-      const chmod = run("prlctl", ["exec", vm, "/bin/chmod", "755", scriptPath], {
+      const chmod = run("prlctl", ["exec", vm, ...execArgs, "/bin/chmod", mode, scriptPath], {
         check: false,
         quiet: true,
         timeoutMs: 30_000,

@@ -871,6 +871,15 @@ exit 7
     );
   });
 
+  it("writes macOS update scripts through the desktop user transport", () => {
+    const script = readFileSync(SCRIPT_PATH, "utf8");
+
+    expect(script).toContain("const macosExecArgs = this.resolveMacosUpdateExecArgs(ctx)");
+    expect(script).toContain('{ execArgs: macosExecArgs, mode: "700" }');
+    expect(script).toContain('["exec", vm, ...execArgs, "/usr/bin/tee", scriptPath]');
+    expect(script).toContain('["exec", vm, ...execArgs, "/bin/chmod", mode, scriptPath]');
+  });
+
   it("scrubs future plugin entries before invoking old same-guest updaters", () => {
     const script = readFileSync(UPDATE_SCRIPTS_PATH, "utf8");
     const macosScript = macosUpdateScript({
