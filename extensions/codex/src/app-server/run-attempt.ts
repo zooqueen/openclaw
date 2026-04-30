@@ -193,10 +193,7 @@ function createCodexSteeringQueue(params: {
         void flushBatch();
       }, debounceMs);
     },
-    cancel() {
-      clearBatchTimer();
-      batchedTexts = [];
-    },
+    drain: flushBatch,
   };
 }
 
@@ -999,7 +996,7 @@ export async function runCodexAppServerAttempt(
     nativeHookRelay?.unregister();
     runAbortController.signal.removeEventListener("abort", abortListener);
     params.abortSignal?.removeEventListener("abort", abortFromUpstream);
-    steeringQueue.cancel();
+    await steeringQueue.drain();
     clearActiveEmbeddedRun(params.sessionId, handle, params.sessionKey);
   }
 }
