@@ -111,6 +111,7 @@ Docs: https://docs.openclaw.ai
 - Core/channels: tighten selected runtime, media, and plugin edge-case handling while preserving existing behavior. Thanks @jesse-merhi.
 - Channels/WhatsApp: strip leaked plural tool-call XML wrappers on every WhatsApp-visible outbound path and allow `channels.whatsapp.exposeErrorText` to suppress visible error text per channel or account. (#71830) Thanks @rubencu.
 - Agents/embedded-runner: inject the resolved OAuth bearer (and forward the run abort signal) on the boundary-aware embedded stream fallback so models that route through `openai-codex-responses` and other boundary-aware transports stop failing with `401 Unauthorized: Missing bearer or basic authentication in header`. Fixes #73559. (#73588) Thanks @openperf.
+- Gateway/plugins: enable the native `require()` fast path on Windows for bundled plugin modules so plugin loading uses `require()` instead of Jiti's transform pipeline, reducing startup from ~39s to ~2s on typical 6-plugin setups. Fixes #68656. (#74173) Thanks @galiniliev.
 
 ## 2026.4.27
 
