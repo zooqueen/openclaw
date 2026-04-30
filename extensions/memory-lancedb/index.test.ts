@@ -2192,11 +2192,14 @@ describe("memory plugin e2e", () => {
     const toArray = vi.fn(async () => fakeRows);
     const limitFn = vi.fn(() => ({ toArray }));
     const vectorSearch = vi.fn(() => ({ limit: limitFn }));
+    const embeddingsCreate = vi.fn(async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }));
 
     vi.resetModules();
     vi.doMock("openai", () => ({
       default: class MockOpenAI {
-        post = vi.fn(async () => ({ data: [{ embedding: [0.1, 0.2, 0.3] }] }));
+        post = vi.fn((_path: string, opts: { body?: unknown }) =>
+          invokeEmbeddingCreate(embeddingsCreate, opts.body),
+        );
       },
     }));
     vi.doMock("@lancedb/lancedb", () => ({
