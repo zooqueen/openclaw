@@ -441,10 +441,11 @@ class NpmUpdateSmoke {
     timeoutMs: number,
     ctx: UpdateJobContext,
   ): Promise<void> {
+    const scriptPath = this.writePosixGuestScript(macosVm, "macos", script);
     const macosExecArgs = this.resolveMacosUpdateExecArgs(ctx);
     const status = await this.runStreamingToJobLog(
       "prlctl",
-      ["exec", macosVm, ...macosExecArgs, "/bin/bash", "-lc", script],
+      ["exec", macosVm, ...macosExecArgs, "/bin/bash", scriptPath],
       timeoutMs,
       ctx,
     );
@@ -688,15 +689,29 @@ Remove-Item -Path $scriptPath, $logPath, $donePath, $exitPath -Force -ErrorActio
     timeoutMs: number,
     ctx: UpdateJobContext,
   ): Promise<void> {
+    const scriptPath = this.writePosixGuestScript(this.linuxVm, "linux", script);
     const status = await this.runStreamingToJobLog(
       "prlctl",
-      ["exec", this.linuxVm, "/usr/bin/env", "HOME=/root", "bash", "-lc", script],
+      ["exec", this.linuxVm, "/usr/bin/env", "HOME=/root", "bash", scriptPath],
       timeoutMs,
       ctx,
     );
     if (status !== 0) {
       throw new Error(`Linux update command failed with exit code ${status}`);
     }
+  }
+
+  private writePosixGuestScript(vmName: string, label: string, script: string): string {
+    const scriptPath = `/tmp/openclaw-parallels-npm-update-${label}-${process.pid}-${Date.now()}.sh`;
+    run("prlctl", ["exec", vmName, "/bin/dd", `of=${scriptPath}`, "bs=1048576"], {
+      input: script,
+      timeoutMs: 120_000,
+    });
+    run("prlctl", ["exec", vmName, "/bin/chmod", "700", scriptPath], {
+      check: false,
+      timeoutMs: 30_000,
+    });
+    return scriptPath;
   }
 
   private async runStreamingToJobLog(
