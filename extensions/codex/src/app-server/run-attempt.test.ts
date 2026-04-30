@@ -143,6 +143,14 @@ function assistantMessage(text: string, timestamp: number) {
   };
 }
 
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+}
+
+function completedTurnKey(threadId: string, turnId: string): string {
+  return `${threadId}:${turnId}`;
+}
+
 function createAppServerHarness(
   requestImpl: (method: string, params: unknown) => Promise<unknown>,
   options: {
@@ -150,9 +158,33 @@ function createAppServerHarness(
   } = {},
 ) {
   const requests: Array<{ method: string; params: unknown }> = [];
+  const completedTurns = new Set<string>();
   let notify: (notification: CodexServerNotification) => Promise<void> = async () => undefined;
+  const sendNotification = async (notification: CodexServerNotification) => {
+    if (notification.method === "turn/completed") {
+      const notificationParams = readRecord(notification.params);
+      const threadId = notificationParams?.threadId;
+      const turnId = notificationParams?.turnId;
+      if (typeof threadId === "string" && typeof turnId === "string") {
+        completedTurns.add(completedTurnKey(threadId, turnId));
+      }
+    }
+    await notify(notification);
+  };
   const request = vi.fn(async (method: string, params?: unknown) => {
     requests.push({ method, params });
+    if (method === "turn/steer") {
+      const requestParams = readRecord(params);
+      const threadId = requestParams?.threadId;
+      const turnId = requestParams?.expectedTurnId;
+      if (
+        typeof threadId === "string" &&
+        typeof turnId === "string" &&
+        completedTurns.has(completedTurnKey(threadId, turnId))
+      ) {
+        throw new Error("turn/steer requires an active turn");
+      }
+    }
     return requestImpl(method, params);
   });
 
@@ -189,10 +221,10 @@ function createAppServerHarness(
       );
     },
     async notify(notification: CodexServerNotification) {
-      await notify(notification);
+      await sendNotification(notification);
     },
     async completeTurn(params: { threadId: string; turnId: string }) {
-      await notify({
+      await sendNotification({
         method: "turn/completed",
         params: {
           threadId: params.threadId,
@@ -1089,7 +1121,7 @@ describe("runCodexAppServerAttempt", () => {
     await run;
   });
 
-  it("flushes pending default queued steering during normal turn cleanup", async () => {
+  it("does not flush pending default queued steering after terminal turn completion", async () => {
     const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
 
     const run = runCodexAppServerAttempt(
@@ -1100,18 +1132,10 @@ describe("runCodexAppServerAttempt", () => {
     expect(queueAgentHarnessMessage("session-1", "late steer", { debounceMs: 30_000 })).toBe(true);
 
     await completeTurn({ threadId: "thread-1", turnId: "turn-1" });
+    expect(queueAgentHarnessMessage("session-1", "after completion")).toBe(false);
     await run;
 
-    expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([
-      {
-        method: "turn/steer",
-        params: {
-          threadId: "thread-1",
-          expectedTurnId: "turn-1",
-          input: [{ type: "text", text: "late steer", text_elements: [] }],
-        },
-      },
-    ]);
+    expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([]);
   });
 
   it("keeps legacy queue steering as separate turn/steer requests", async () => {

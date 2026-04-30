@@ -196,6 +196,9 @@ function createCodexSteeringQueue(params: {
     async flushPending() {
       await flushBatch();
     },
+    hasPending() {
+      return batchedTexts.length > 0;
+    },
     cancel() {
       clearBatchTimer();
       batchedTexts = [];
@@ -458,6 +461,7 @@ export async function runCodexAppServerAttempt(
   let userInputBridge: ReturnType<typeof createCodexUserInputBridge> | undefined;
   let steeringQueue: ReturnType<typeof createCodexSteeringQueue> | undefined;
   let completed = false;
+  let activeSteerableTurnCompleted = false;
   let timedOut = false;
   let turnCompletionIdleTimedOut = false;
   let turnCompletionIdleTimeoutMessage: string | undefined;
@@ -590,7 +594,10 @@ export async function runCodexAppServerAttempt(
       });
     } finally {
       if (isTurnCompletion) {
-        if (!timedOut && !runAbortController.signal.aborted) {
+        activeSteerableTurnCompleted = true;
+        if (steeringQueue?.hasPending()) {
+          steeringQueue.cancel();
+        } else if (!timedOut && !runAbortController.signal.aborted) {
           await steeringQueue?.flushPending();
         }
         completed = true;
@@ -833,7 +840,7 @@ export async function runCodexAppServerAttempt(
     kind: "embedded" as const,
     queueMessage: async (text: string, options?: CodexSteeringQueueOptions) =>
       activeSteeringQueue.queue(text, options),
-    isStreaming: () => !completed,
+    isStreaming: () => !completed && !activeSteerableTurnCompleted,
     isCompacting: () => projector?.isCompacting() ?? false,
     cancel: () => runAbortController.abort("cancelled"),
     abort: () => runAbortController.abort("aborted"),
@@ -999,7 +1006,7 @@ export async function runCodexAppServerAttempt(
         await trajectoryRecorder?.flush();
       },
     });
-    if (!timedOut && !runAbortController.signal.aborted) {
+    if (!timedOut && !runAbortController.signal.aborted && !activeSteerableTurnCompleted) {
       await steeringQueue?.flushPending();
     }
     userInputBridge?.cancelPending();
