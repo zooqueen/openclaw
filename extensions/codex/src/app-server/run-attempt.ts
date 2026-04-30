@@ -176,22 +176,23 @@ function createCodexSteeringQueue(params: {
   };
 
   return {
-    async queue(text: string, options?: CodexSteeringQueueOptions) {
+    queue(text: string, options?: CodexSteeringQueueOptions) {
       if (params.answerPendingUserInput(text)) {
-        return;
+        return true;
       }
       if (options?.steeringMode === "one-at-a-time") {
-        await flushBatch();
-        await enqueueSend([text]);
-        return;
+        return (async () => {
+          await flushBatch();
+          await enqueueSend([text]);
+        })();
+      }
+      const debounceMs = normalizeCodexSteerDebounceMs(options?.debounceMs);
+      if (debounceMs > 0) {
+        return false;
       }
       batchedTexts.push(text);
       clearBatchTimer();
-      const debounceMs = normalizeCodexSteerDebounceMs(options?.debounceMs);
-      batchTimer = setTimeout(() => {
-        batchTimer = undefined;
-        void flushBatch();
-      }, debounceMs);
+      return flushBatch();
     },
     async flushPending() {
       await flushBatch();
@@ -838,7 +839,7 @@ export async function runCodexAppServerAttempt(
   steeringQueue = activeSteeringQueue;
   const handle = {
     kind: "embedded" as const,
-    queueMessage: async (text: string, options?: CodexSteeringQueueOptions) =>
+    queueMessage: (text: string, options?: CodexSteeringQueueOptions) =>
       activeSteeringQueue.queue(text, options),
     isStreaming: () => !completed && !activeSteerableTurnCompleted,
     isCompacting: () => projector?.isCompacting() ?? false,

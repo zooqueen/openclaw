@@ -1047,7 +1047,9 @@ describe("runCodexAppServerAttempt", () => {
     );
     await waitForMethod("turn/start");
 
-    expect(queueAgentHarnessMessage("session-1", "more context")).toBe(true);
+    expect(
+      queueAgentHarnessMessage("session-1", "more context", { steeringMode: "one-at-a-time" }),
+    ).toBe(true);
     await vi.waitFor(
       () => expect(requests.some((entry) => entry.method === "turn/steer")).toBe(true),
       { interval: 1 },
@@ -1088,7 +1090,7 @@ describe("runCodexAppServerAttempt", () => {
     );
   });
 
-  it("batches default queued steering before sending turn/steer", async () => {
+  it("rejects debounced all-mode steering so callers can enqueue a follow-up", async () => {
     const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
 
     const run = runCodexAppServerAttempt(
@@ -1096,32 +1098,16 @@ describe("runCodexAppServerAttempt", () => {
     );
     await waitForMethod("turn/start");
 
-    expect(queueAgentHarnessMessage("session-1", "first", { debounceMs: 5 })).toBe(true);
-    expect(queueAgentHarnessMessage("session-1", "second", { debounceMs: 5 })).toBe(true);
-
-    await vi.waitFor(
-      () =>
-        expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([
-          {
-            method: "turn/steer",
-            params: {
-              threadId: "thread-1",
-              expectedTurnId: "turn-1",
-              input: [
-                { type: "text", text: "first", text_elements: [] },
-                { type: "text", text: "second", text_elements: [] },
-              ],
-            },
-          },
-        ]),
-      { interval: 1 },
-    );
+    expect(queueAgentHarnessMessage("session-1", "first", { debounceMs: 5 })).toBe(false);
+    expect(queueAgentHarnessMessage("session-1", "second", { debounceMs: 5 })).toBe(false);
 
     await completeTurn({ threadId: "thread-1", turnId: "turn-1" });
     await run;
+
+    expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([]);
   });
 
-  it("does not flush pending default queued steering after terminal turn completion", async () => {
+  it("rejects late debounced steering before terminal turn completion can drop it", async () => {
     const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
 
     const run = runCodexAppServerAttempt(
@@ -1129,7 +1115,7 @@ describe("runCodexAppServerAttempt", () => {
     );
     await waitForMethod("turn/start");
 
-    expect(queueAgentHarnessMessage("session-1", "late steer", { debounceMs: 30_000 })).toBe(true);
+    expect(queueAgentHarnessMessage("session-1", "late steer", { debounceMs: 30_000 })).toBe(false);
 
     await completeTurn({ threadId: "thread-1", turnId: "turn-1" });
     expect(queueAgentHarnessMessage("session-1", "after completion")).toBe(false);

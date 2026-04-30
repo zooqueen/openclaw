@@ -93,6 +93,17 @@ describe("pi-embedded runner run registry", () => {
     expect(queueMessage).toHaveBeenCalledWith("continue", { steeringMode: "all" });
   });
 
+  it("reports active embedded queue rejection to callers", () => {
+    const queueMessage = vi.fn(() => false);
+    setActiveEmbeddedRun("session-reject", {
+      ...createRunHandle(),
+      queueMessage,
+    });
+
+    expect(queueEmbeddedPiMessage("session-reject", "continue")).toBe(false);
+    expect(queueMessage).toHaveBeenCalledWith("continue", { steeringMode: "all" });
+  });
+
   it("force-clears an aborted run that does not drain", async () => {
     vi.useFakeTimers();
     try {

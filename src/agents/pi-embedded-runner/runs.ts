@@ -82,8 +82,23 @@ export function queueEmbeddedPiMessage(
     diag.debug(`queue message failed: sessionId=${sessionId} reason=compacting`);
     return false;
   }
+  let queueResult: boolean | void | Promise<void>;
+  try {
+    queueResult = handle.queueMessage(text, options ?? { steeringMode: "all" });
+  } catch (err) {
+    diag.debug(
+      `queue message failed: sessionId=${sessionId} reason=queue_rejected err=${String(err)}`,
+    );
+    return false;
+  }
+  if (queueResult === false) {
+    diag.debug(`queue message failed: sessionId=${sessionId} reason=queue_rejected`);
+    return false;
+  }
   logMessageQueued({ sessionId, source: "pi-embedded-runner" });
-  void handle.queueMessage(text, options ?? { steeringMode: "all" });
+  void Promise.resolve(queueResult).catch((error: unknown) => {
+    diag.debug(`queue message async failure: sessionId=${sessionId} err=${String(error)}`);
+  });
   return true;
 }
 
