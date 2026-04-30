@@ -472,7 +472,13 @@ describe("noteMemorySearchHealth", () => {
     });
 
     await noteMemorySearchHealth(cfg, {
-      gatewayMemoryProbe: { checked: false, ready: false, skipped: true },
+      gatewayMemoryProbe: {
+        checked: false,
+        ready: false,
+        error:
+          "memory embedding readiness not checked; run `openclaw memory status --deep` to probe",
+        skipped: true,
+      },
     });
 
     expect(note).not.toHaveBeenCalled();
