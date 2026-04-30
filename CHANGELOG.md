@@ -2,13 +2,6 @@
 
 Docs: https://docs.openclaw.ai
 
-## Unreleased
-
-### Fixes
-
-- CLI/progress: suppress nested progress spinners and line clears while TUI input owns raw stdin, so Crestodian `/status` no longer disturbs the active input row. (#75003) Thanks @velvet-shark.
-- Telegram: use durable message edits for streaming previews instead of native draft state, so generated replies no longer flicker through draft-to-message transitions that look like duplicates. (#75073) Thanks @obviyus.
-
 ## 2026.4.29
 
 ### Highlights
@@ -60,7 +53,9 @@ Docs: https://docs.openclaw.ai
 - Config: accept documented `browser.tabCleanup` keys in strict root config validation, so configured tab cleanup no longer fails before runtime reads it. Fixes #74577. Thanks @lonexreb and @ezdlp.
 - Cron: validate disabled job schedule edits before persisting updates, so invalid cron changes no longer partially mutate stored jobs. Fixes #74459. Thanks @yfge.
 - CLI/cron: warn when `openclaw cron add --message` omits a nonblank `--agent`, including blank agent values and session-key jobs, so scheduled agent-turn jobs make default-agent fallback explicit while system events stay quiet. Fixes #42196; carries forward #42245. Thanks @ethanclaw.
+- CLI/progress: suppress nested progress spinners and line clears while TUI input owns raw stdin, so Crestodian `/status` no longer disturbs the active input row. (#75003) Thanks @velvet-shark.
 - Channels/status: keep Telegram, Slack, and Google Chat read-only allowlist/default-target accessors on config-only paths, so status and channel summaries do not resolve SecretRef-backed runtime credentials. Thanks @eusine.
+- Telegram: use durable message edits for streaming previews instead of native draft state, so generated replies no longer flicker through draft-to-message transitions that look like duplicates. (#75073) Thanks @obviyus.
 - Active Memory: clarify the deprecated `modelFallbackPolicy` warning and config help so `modelFallback` is described as a chain-resolution last resort, not runtime failover. (#74602) Thanks @jeffrey701.
 - Channels/Discord: keep read-only allowlist/default-target accessors from resolving SecretRef-backed bot tokens, so status and channel summaries no longer fail when tokens are only available in gateway runtime. (#74737) Thanks @eusine.
 - Gateway/sessions: align session abort wait semantics across `chat`, `agent`, and `sessions` server methods so abort RPCs return after the targeted sessions actually halt instead of resolving early while runs are still draining. (#74751) Thanks @BunsDev.
