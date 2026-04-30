@@ -522,9 +522,8 @@ function runPackedTaskRegistryControlRuntimeSmoke(packageRoot: string): void {
   if (!existsSync(runtimePath)) {
     throw new Error("release-check: packed task-registry control runtime is missing.");
   }
-  const runtimeImportExpression = "import(" + JSON.stringify(pathToFileURL(runtimePath).href) + ")";
   const source = `
-const runtime = await ${runtimeImportExpression};
+const runtime = await import(${JSON.stringify(pathToFileURL(runtimePath).href)});
 if (typeof runtime.getAcpSessionManager !== "function") {
   throw new Error("missing getAcpSessionManager export");
 }
