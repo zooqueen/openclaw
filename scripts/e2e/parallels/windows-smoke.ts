@@ -666,7 +666,7 @@ if (!(Test-Path $scriptPath)) { throw "background script was not written" }`,
     );
     let launched = false;
     let lastLaunchStatus = 0;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 5; attempt++) {
       this.waitForGuestReady(120);
       const launchLogPath = path.join(this.runDir, `${safeLabel}-launch-${attempt}.log`);
       const launchStatus = await runStreaming(
@@ -675,18 +675,21 @@ if (!(Test-Path $scriptPath)) { throw "background script was not written" }`,
           "exec",
           this.options.vmName,
           "--current-user",
-          "cmd.exe",
-          "/d",
-          "/s",
-          "/c",
-          `start "" /min powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%TEMP%\\${fileBase}.ps1"`,
+          "powershell.exe",
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-EncodedCommand",
+          encodePowerShell(`${pathsScript}
+Start-Process -FilePath powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath)
+'started'`),
         ],
-        { logPath: launchLogPath, quiet: true, timeoutMs: this.remainingPhaseTimeoutMs(20_000) },
+        { logPath: launchLogPath, quiet: true, timeoutMs: this.remainingPhaseTimeoutMs(30_000) },
       );
       const launchLog = await readFile(launchLogPath, "utf8").catch(() => "");
       this.log(launchLog);
       if (launchStatus === 0 || launchStatus === 124) {
-        const materialized = this.waitForBackgroundMaterialized(pathsScript, 20_000);
+        const materialized = this.waitForBackgroundMaterialized(pathsScript, 45_000);
         if (!materialized) {
           warn(`${label} launch retry ${attempt}: background log/done file did not materialize`);
           lastLaunchStatus = launchStatus;
