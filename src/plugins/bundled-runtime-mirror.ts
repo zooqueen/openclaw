@@ -107,6 +107,19 @@ export function materializeBundledRuntimeMirrorFile(sourcePath: string, targetPa
   }
 }
 
+function isBundledRuntimeMirrorFileAlreadyMaterialized(
+  sourcePath: string,
+  targetPath: string,
+): boolean {
+  const sourceStat = fs.lstatSync(sourcePath);
+  const targetStat = fs.lstatSync(targetPath);
+  return (
+    sourceStat.isFile() &&
+    targetStat.isFile() &&
+    sourceStat.dev === targetStat.dev &&
+    sourceStat.ino === targetStat.ino
+  );
+}
 function chmodBundledRuntimeMirrorFileReadable(sourcePath: string, targetPath: string): void {
   try {
     const sourceMode = fs.statSync(sourcePath).mode;
