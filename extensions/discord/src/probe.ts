@@ -119,6 +119,11 @@ function getResolvedFetch(fetcher: typeof fetch): typeof fetch {
   return fetchImpl;
 }
 
+function resolveRemainingProbeTimeoutMs(started: number, timeoutMs: number): number | undefined {
+  const remainingMs = timeoutMs - (Date.now() - started);
+  return remainingMs > 0 ? Math.floor(remainingMs) : undefined;
+}
+
 export async function probeDiscord(
   token: string,
   timeoutMs: number,
@@ -160,8 +165,11 @@ export async function probeDiscord(
       username: json.username ?? null,
     };
     if (includeApplication) {
-      result.application =
-        (await fetchDiscordApplicationSummary(normalized, timeoutMs, fetcher)) ?? undefined;
+      const applicationTimeoutMs = resolveRemainingProbeTimeoutMs(started, timeoutMs);
+      result.application = applicationTimeoutMs
+        ? ((await fetchDiscordApplicationSummary(normalized, applicationTimeoutMs, fetcher)) ??
+          undefined)
+        : undefined;
     }
     return { ...result, elapsedMs: Date.now() - started };
   } catch (err) {

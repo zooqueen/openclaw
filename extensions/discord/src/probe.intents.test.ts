@@ -1,11 +1,12 @@
 import { withFetchPreconnect } from "openclaw/plugin-sdk/test-env";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   fetchDiscordApplicationId,
   fetchDiscordApplicationSummary,
+  probeDiscord,
   resolveDiscordPrivilegedIntentsFromFlags,
 } from "./probe.js";
-import { jsonResponse } from "./test-http-helpers.js";
+import { jsonResponse, urlToString } from "./test-http-helpers.js";
 
 describe("resolveDiscordPrivilegedIntentsFromFlags", () => {
   it("reports disabled when no bits set", () => {
@@ -76,6 +77,32 @@ describe("resolveDiscordPrivilegedIntentsFromFlags", () => {
       fetchDiscordApplicationSummary("unparseable.token", 1_000, fetcher),
     ).resolves.toBeUndefined();
     expect(calls).toBe(1);
+  });
+
+  it("does not start application summary probes after the probe timeout is spent", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(2_001)
+      .mockReturnValue(2_001);
+    const calls: string[] = [];
+    const fetcher = withFetchPreconnect(async (input) => {
+      calls.push(urlToString(input));
+      return jsonResponse({ id: "bot-1", username: "Molty" });
+    });
+
+    try {
+      await expect(
+        probeDiscord("unparseable.token", 1_000, { fetcher, includeApplication: true }),
+      ).resolves.toMatchObject({
+        ok: true,
+        application: undefined,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(calls).toEqual(["https://discord.com/api/v10/users/@me"]);
   });
 
   it("derives application id from parseable tokens before probing REST", async () => {
