@@ -40,6 +40,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Cron: reject invalid cron schedule edits before mutating disabled jobs and make failed enable attempts roll back cleanly, so bad expressions do not persist or leave jobs enabled after an error. Fixes #74459. Thanks @yfge and @bittoby.
 - Channels/status: keep Telegram, Slack, and Google Chat read-only allowlist/default-target accessors on config-only paths, so status and channel summaries do not resolve SecretRef-backed runtime credentials. Thanks @eusine.
 - Channels/Discord: keep read-only allowlist/default-target accessors from resolving SecretRef-backed bot tokens, so status and channel summaries no longer fail when tokens are only available in gateway runtime. (#74737) Thanks @eusine.
 - Gateway/sessions: align session abort wait semantics across `chat`, `agent`, and `sessions` server methods so abort RPCs return after the targeted sessions actually halt instead of resolving early while runs are still draining. (#74751) Thanks @BunsDev.
