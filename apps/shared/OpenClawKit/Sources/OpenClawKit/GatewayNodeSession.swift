@@ -634,13 +634,41 @@ public actor GatewayNodeSession {
         guard let channel = self.channel else { return }
         let params: [String: AnyCodable] = [
             "nodeId": AnyCodable(nodeId),
-            "mcpServers": AnyCodable(mcpServers.map(GatewayChannel.encodeMcpServerDescriptor)),
+            "mcpServers": AnyCodable(mcpServers.map(Self.encodeMcpServerDescriptor)),
         ]
         do {
             try await channel.send(method: "node.mcp.servers.update", params: params)
         } catch {
             self.logger.error("node MCP server update failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private static func encodeMcpServerDescriptor(_ descriptor: NodeMcpServerDescriptor) -> [String: Any] {
+        var encoded: [String: Any] = [
+            "id": descriptor.id,
+        ]
+        if let displayname = descriptor.displayname {
+            encoded["displayName"] = displayname
+        }
+        if let provider = descriptor.provider {
+            encoded["provider"] = provider
+        }
+        if let transport = descriptor.transport {
+            encoded["transport"] = transport
+        }
+        if let source = descriptor.source {
+            encoded["source"] = source
+        }
+        if let status = descriptor.status {
+            encoded["status"] = status
+        }
+        if let requiredpermissions = descriptor.requiredpermissions {
+            encoded["requiredPermissions"] = requiredpermissions
+        }
+        if let metadata = descriptor.metadata {
+            encoded["metadata"] = metadata
+        }
+        return encoded
     }
 
     private func decodeParamsJSON(
