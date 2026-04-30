@@ -94,6 +94,7 @@ function rememberPersistentThreadParticipation(params: {
   }
   void store
     .register(params.key, {
+      // Stored for future per-agent thread routing; current reads only need presence.
       ...(params.agentId ? { agentId: params.agentId } : {}),
       repliedAt: Date.now(),
     })
@@ -163,9 +164,14 @@ export async function hasSlackThreadParticipationForConfig(params: {
   if (threadParticipation.peek(key)) {
     return true;
   }
-  return await lookupPersistentThreadParticipation({ cfg: params.cfg, key });
+  const found = await lookupPersistentThreadParticipation({ cfg: params.cfg, key });
+  if (found) {
+    threadParticipation.check(key);
+  }
+  return found;
 }
 
 export function clearSlackThreadParticipationCache(): void {
   threadParticipation.clear();
+  persistentStore = undefined;
 }

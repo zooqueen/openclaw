@@ -131,6 +131,18 @@ describe("slack sent-thread-cache", () => {
         threadTs: "1700000000.000002",
       }),
     ).resolves.toBe(true);
+    expect(openKeyedStore).toHaveBeenCalledTimes(2);
     expect(lookup).toHaveBeenCalledWith("A1:C123:1700000000.000002");
+
+    lookup.mockClear();
+    await expect(
+      hasSlackThreadParticipationForConfig({
+        cfg,
+        accountId: "A1",
+        channelId: "C123",
+        threadTs: "1700000000.000002",
+      }),
+    ).resolves.toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
   });
 });

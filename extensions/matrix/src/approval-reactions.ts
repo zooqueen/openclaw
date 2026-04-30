@@ -60,6 +60,8 @@ type MatrixApprovalReactionStore = {
   delete(key: string): Promise<boolean>;
 };
 
+type MatrixPluginConfigLookup = Pick<OpenClawConfig, "plugins">;
+
 const matrixApprovalReactionTargets = new Map<string, MatrixApprovalReactionTarget>();
 let persistentStore: MatrixApprovalReactionStore | undefined;
 
@@ -72,11 +74,10 @@ function buildReactionTargetKey(roomId: string, eventId: string): string | null 
   return `${normalizedRoomId}:${normalizedEventId}`;
 }
 
-function isPersistentApprovalReactionStateEnabled(cfg: CoreConfig | undefined): boolean {
-  return (
-    resolvePluginConfigObject(cfg as unknown as OpenClawConfig | undefined, "matrix")
-      ?.experimentalPersistentState === true
-  );
+function isPersistentApprovalReactionStateEnabled(
+  cfg: MatrixPluginConfigLookup | undefined,
+): boolean {
+  return resolvePluginConfigObject(cfg, "matrix")?.experimentalPersistentState === true;
 }
 
 function getPersistentApprovalReactionStore(): MatrixApprovalReactionStore | undefined {
@@ -336,4 +337,5 @@ export async function resolveMatrixApprovalReactionTargetForConfig(params: {
 
 export function clearMatrixApprovalReactionTargetsForTest(): void {
   matrixApprovalReactionTargets.clear();
+  persistentStore = undefined;
 }

@@ -153,24 +153,25 @@ describe("discord component registry", () => {
       version: 1,
       entry: { id: "mdl_persisted", title: "Persisted", fields: [] },
     });
-    const openKeyedStore = vi
-      .fn()
-      .mockReturnValueOnce({
-        register: componentRegister,
-        lookup: componentLookup,
-        consume: vi.fn(),
-        delete: vi.fn(),
-        entries: vi.fn(),
-        clear: vi.fn(),
-      })
-      .mockReturnValueOnce({
-        register: modalRegister,
-        lookup: modalLookup,
-        consume: vi.fn(),
-        delete: vi.fn(),
-        entries: vi.fn(),
-        clear: vi.fn(),
-      });
+    const componentStore = {
+      register: componentRegister,
+      lookup: componentLookup,
+      consume: vi.fn(),
+      delete: vi.fn(),
+      entries: vi.fn(),
+      clear: vi.fn(),
+    };
+    const modalStore = {
+      register: modalRegister,
+      lookup: modalLookup,
+      consume: vi.fn(),
+      delete: vi.fn(),
+      entries: vi.fn(),
+      clear: vi.fn(),
+    };
+    const openKeyedStore = vi.fn((opts: { namespace: string }) =>
+      opts.namespace === "discord.components" ? componentStore : modalStore,
+    );
     const { setDiscordRuntime } = await import("./runtime.js");
     setDiscordRuntime({
       state: { openKeyedStore },
@@ -214,5 +215,6 @@ describe("discord component registry", () => {
     ).resolves.toMatchObject({ id: "mdl_persisted" });
     expect(componentLookup).toHaveBeenCalledWith("btn_persisted");
     expect(modalLookup).toHaveBeenCalledWith("mdl_persisted");
+    expect(openKeyedStore).toHaveBeenCalledTimes(4);
   });
 });

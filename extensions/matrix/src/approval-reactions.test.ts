@@ -166,6 +166,7 @@ describe("matrix approval reactions", () => {
         reactionKey: "❌",
       }),
     ).resolves.toEqual({ approvalId: "req-persisted", decision: "deny" });
+    expect(openKeyedStore).toHaveBeenCalledTimes(2);
     expect(lookup).toHaveBeenCalledWith("!ops:example.org:$approval-msg-2");
   });
 });

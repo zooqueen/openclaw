@@ -50,6 +50,14 @@ describe("msteams sent message cache", () => {
     await expect(
       wasMSTeamsMessageSentForConfig({ cfg, conversationId: "conv-1", messageId: "msg-2" }),
     ).resolves.toBe(true);
+    expect(openKeyedStore).toHaveBeenCalledTimes(2);
     expect(lookup).toHaveBeenCalledWith("conv-1:msg-2");
+
+    lookup.mockClear();
+    await expect(
+      wasMSTeamsMessageSentForConfig({ cfg, conversationId: "conv-1", messageId: "msg-2" }),
+    ).resolves.toBe(true);
+    expect(wasMSTeamsMessageSent("conv-1", "msg-2")).toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
   });
 });

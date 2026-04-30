@@ -332,4 +332,6 @@ export async function resolveDiscordModalEntryForConfig(params: {
 export function clearDiscordComponentEntries(): void {
   getComponentEntries().clear();
   getModalEntries().clear();
+  persistentComponentStore = undefined;
+  persistentModalStore = undefined;
 }

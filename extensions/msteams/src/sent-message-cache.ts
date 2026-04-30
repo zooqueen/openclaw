@@ -75,6 +75,23 @@ function cleanupExpired(scopeKey: string, entry: Map<string, number>, now: numbe
   }
 }
 
+function rememberSentMessageInMemory(
+  conversationId: string,
+  messageId: string,
+  sentAt: number,
+): void {
+  const store = getSentMessageCache();
+  let entry = store.get(conversationId);
+  if (!entry) {
+    entry = new Map<string, number>();
+    store.set(conversationId, entry);
+  }
+  entry.set(messageId, sentAt);
+  if (entry.size > 200) {
+    cleanupExpired(conversationId, entry, sentAt);
+  }
+}
+
 function rememberPersistentSentMessage(params: {
   cfg?: OpenClawConfig;
   conversationId: string;
@@ -134,16 +151,7 @@ export function recordMSTeamsSentMessage(
     return;
   }
   const now = Date.now();
-  const store = getSentMessageCache();
-  let entry = store.get(conversationId);
-  if (!entry) {
-    entry = new Map<string, number>();
-    store.set(conversationId, entry);
-  }
-  entry.set(messageId, now);
-  if (entry.size > 200) {
-    cleanupExpired(conversationId, entry, now);
-  }
+  rememberSentMessageInMemory(conversationId, messageId, now);
   rememberPersistentSentMessage({ cfg: opts?.cfg, conversationId, messageId, sentAt: now });
 }
 
@@ -167,9 +175,14 @@ export async function wasMSTeamsMessageSentForConfig(params: {
   if (wasMSTeamsMessageSent(params.conversationId, params.messageId)) {
     return true;
   }
-  return await lookupPersistentSentMessage(params);
+  const found = await lookupPersistentSentMessage(params);
+  if (found) {
+    rememberSentMessageInMemory(params.conversationId, params.messageId, Date.now());
+  }
+  return found;
 }
 
 export function clearMSTeamsSentMessageCache(): void {
   getSentMessageCache().clear();
+  persistentStore = undefined;
 }
