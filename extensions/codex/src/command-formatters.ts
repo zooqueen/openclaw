@@ -103,6 +103,16 @@ export function formatComputerUseStatus(status: CodexComputerUseStatus): string 
   if (status.marketplaceName) {
     lines.push(`Marketplace: ${status.marketplaceName}`);
   }
+  if (status.packagePath) {
+    lines.push(`Package: ${status.packagePath}`);
+  }
+  if (status.nativeHost) {
+    lines.push(
+      `OpenClaw.app host: ${status.nativeHost.ready ? "ready" : "not ready"}${
+        status.nativeHost.nodeId ? ` (${status.nativeHost.nodeId})` : ""
+      }`,
+    );
+  }
   if (status.tools.length > 0) {
     lines.push(`Tools: ${status.tools.slice(0, 8).join(", ")}`);
   }

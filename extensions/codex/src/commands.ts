@@ -3,11 +3,13 @@ import type {
   PluginCommandContext,
   PluginCommandResult,
 } from "openclaw/plugin-sdk/plugin-entry";
+import type { NativeComputerUseInstaller } from "./app-server/native-computer-use-install.js";
 import type { CodexCommandDeps } from "./command-handlers.js";
 
 export function createCodexCommand(options: {
   pluginConfig?: unknown;
   deps?: Partial<CodexCommandDeps>;
+  nativeComputerUseInstaller?: NativeComputerUseInstaller;
 }): OpenClawPluginCommandDefinition {
   return {
     name: "codex",
@@ -25,7 +27,11 @@ export function createCodexCommand(options: {
 
 export async function handleCodexCommand(
   ctx: PluginCommandContext,
-  options: { pluginConfig?: unknown; deps?: Partial<CodexCommandDeps> } = {},
+  options: {
+    pluginConfig?: unknown;
+    deps?: Partial<CodexCommandDeps>;
+    nativeComputerUseInstaller?: NativeComputerUseInstaller;
+  } = {},
 ): Promise<PluginCommandResult> {
   const { handleCodexSubcommand } = await import("./command-handlers.js");
   return await handleCodexSubcommand(ctx, options);

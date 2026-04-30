@@ -154,7 +154,8 @@ enable Codex plugin support.
 
 `install` enables Codex app-server plugin support, optionally adds a configured
 marketplace source, installs or re-enables the configured plugin through Codex
-app-server, reloads MCP servers, and verifies that the MCP server exposes tools.
+app-server, reloads MCP servers, verifies that the MCP server exposes tools, and
+copies the installed package into OpenClaw.app through the paired native node.
 
 ## Marketplace choices
 
@@ -203,8 +204,14 @@ local marketplace file path or run `/codex computer-use install --source
 <marketplace-source>` once.
 
 The native Mac node host does not launch the MCP backend directly from the
-Gateway. OpenClaw.app owns the permission-sensitive child process. It resolves
-the backend in this order:
+Gateway. OpenClaw.app owns the permission-sensitive child process. During
+`/codex computer-use install`, OpenClaw asks Codex app-server to install the
+`computer-use` plugin, resolves the plugin's local package directory, streams
+the package over the Gateway to OpenClaw.app, and stores it in OpenClaw-managed
+Application Support storage. OpenClaw.app then advertises the MCP server as
+ready without requiring a Gateway restart.
+
+At launch time, OpenClaw.app resolves the backend in this order:
 
 1. `OPENCLAW_COMPUTER_USE_MCP_COMMAND`, with optional
    `OPENCLAW_COMPUTER_USE_MCP_ARGS` as a JSON array.
@@ -217,8 +224,8 @@ the backend in this order:
 5. The standard Codex desktop bundle at
    `/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use`.
 
-When OpenClaw.app finds the approved Codex desktop bundle, it copies the whole
-`computer-use` package into OpenClaw-managed Application Support storage and
+When OpenClaw.app receives or finds an approved package, it copies the whole
+`computer-use` directory into OpenClaw-managed Application Support storage and
 launches the stdio server from that managed copy. Copying the package preserves
 relative resources and nested app helpers declared by `.mcp.json`; copying only
 the executable is not enough. OpenClaw refreshes the managed copy when the
@@ -274,6 +281,9 @@ status for chat:
 | `plugin_disabled`            | Plugin is installed but disabled in Codex config.      | Run install to re-enable it.                  |
 | `remote_install_unsupported` | Selected marketplace is remote-only.                   | Use `marketplaceSource` or `marketplacePath`. |
 | `mcp_missing`                | Plugin is enabled, but the MCP server is unavailable.  | Check Codex Computer Use and OS permissions.  |
+| `package_missing`            | Codex did not expose a local package path.             | Use a local marketplace path or source.       |
+| `native_host_missing`        | No paired OpenClaw.app node can host the package.      | Open and pair OpenClaw.app, then retry.       |
+| `native_install_failed`      | Package transfer or native install failed.             | Check Gateway and OpenClaw.app logs.          |
 | `ready`                      | Plugin and MCP tools are available.                    | Start the Codex-mode turn.                    |
 | `check_failed`               | A Codex app-server request failed during status check. | Check app-server connectivity and logs.       |
 | `auto_install_blocked`       | Turn-start setup would need to add a new source.       | Run explicit install first.                   |

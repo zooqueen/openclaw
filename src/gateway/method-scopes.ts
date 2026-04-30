@@ -34,6 +34,7 @@ const NODE_ROLE_METHODS = new Set([
   "node.mcp.session.open.result",
   "node.mcp.session.output",
   "node.mcp.session.closed",
+  "node.mcp.servers.update",
   "node.event",
   "node.pending.drain",
   "node.canvas.capability.refresh",

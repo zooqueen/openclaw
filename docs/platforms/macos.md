@@ -65,8 +65,11 @@ the node WebSocket, but the Mac app owns the executable mapping, signing checks,
 TCC prompts, and child-process lifetime. This keeps CLI-hatched and remote
 Gateways working while preserving the app as the macOS permission boundary.
 For Codex Computer Use, OpenClaw.app launches an approved package from its own
-managed Application Support location, bootstrapping that package from the
-bundled app resources or the standard Codex desktop bundle when needed.
+managed Application Support location. `/codex computer-use install` installs the
+package through Codex app-server, streams it to the paired Mac node over the
+Gateway, and updates the node's `mcpServers` descriptor when the host is ready.
+The app can also bootstrap from bundled app resources or the standard Codex
+desktop bundle when needed.
 
 Node service + app IPC:
 

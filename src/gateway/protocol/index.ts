@@ -181,6 +181,8 @@ import {
   NodeEventResultSchema,
   type NodeMcpServerDescriptor,
   NodeMcpServerDescriptorSchema,
+  type NodeMcpServersUpdateParams,
+  NodeMcpServersUpdateParamsSchema,
   type NodeMcpSessionClosedParams,
   NodeMcpSessionClosedParamsSchema,
   type NodeMcpSessionCloseEvent,
@@ -411,6 +413,9 @@ export const validateNodeEventParams = ajv.compile<NodeEventParams>(NodeEventPar
 export const validateNodeEventResult = ajv.compile<NodeEventResult>(NodeEventResultSchema);
 export const validateNodeMcpServerDescriptor = ajv.compile<NodeMcpServerDescriptor>(
   NodeMcpServerDescriptorSchema,
+);
+export const validateNodeMcpServersUpdateParams = ajv.compile<NodeMcpServersUpdateParams>(
+  NodeMcpServersUpdateParamsSchema,
 );
 export const validateNodeMcpSessionOpenEvent = ajv.compile<NodeMcpSessionOpenEvent>(
   NodeMcpSessionOpenEventSchema,

@@ -49,6 +49,7 @@ describe("Codex Computer Use setup", () => {
         pluginEnabled: true,
         mcpServerAvailable: true,
         marketplaceName: "desktop-tools",
+        packagePath: "/marketplaces/desktop-tools/plugins/computer-use",
         tools: ["list_apps"],
         message: "Computer Use is ready.",
       }),
@@ -258,6 +259,57 @@ describe("Codex Computer Use setup", () => {
     expect(request).toHaveBeenCalledWith("plugin/install", {
       marketplacePath: "/marketplaces/desktop-tools/.agents/plugins/marketplace.json",
       pluginName: "computer-use",
+    });
+  });
+
+  it("copies the installed package into a native OpenClaw app host during install", async () => {
+    const request = createComputerUseRequest({ installed: false });
+    const nativeInstaller = vi.fn(async () => ({
+      ready: true,
+      nodeId: "mac-node",
+      files: 2,
+      bytes: 123,
+      message: "Installed Computer Use package into OpenClaw.app on Mac.",
+    }));
+
+    await expect(
+      installCodexComputerUse({
+        pluginConfig: { computerUse: { marketplaceName: "desktop-tools" } },
+        request,
+        nativeInstaller,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ready: true,
+        nativeHost: expect.objectContaining({ ready: true, nodeId: "mac-node" }),
+        message: "Computer Use is ready. Installed Computer Use package into OpenClaw.app on Mac.",
+      }),
+    );
+    expect(nativeInstaller).toHaveBeenCalledWith({
+      packagePath: "/marketplaces/desktop-tools/plugins/computer-use",
+      pluginName: "computer-use",
+      mcpServerName: "computer-use",
+      signal: undefined,
+    });
+  });
+
+  it("fails closed when native OpenClaw app hosting fails during install", async () => {
+    const request = createComputerUseRequest({ installed: true });
+
+    await expect(
+      installCodexComputerUse({
+        pluginConfig: { computerUse: { marketplaceName: "desktop-tools" } },
+        request,
+        nativeInstaller: vi.fn(async () => {
+          throw new Error("No connected OpenClaw.app node can install native MCP packages.");
+        }),
+      }),
+    ).rejects.toMatchObject({
+      status: expect.objectContaining({
+        ready: false,
+        reason: "native_host_missing",
+        nativeHost: expect.objectContaining({ ready: false }),
+      }),
     });
   });
 

@@ -1,5 +1,5 @@
 import type { AgentThreadMcpServers } from "../agents/thread-mcp.js";
-import { isNodeMcpServerOpenable } from "../shared/node-mcp-types.js";
+import { isNodeMcpServerOpenable, type NodeMcpServerDescriptor } from "../shared/node-mcp-types.js";
 import {
   ensureMcpLoopbackServer,
   getActiveMcpLoopbackRuntime,
@@ -8,6 +8,13 @@ import {
 import type { GatewayRequestContext } from "./server-methods/shared-types.js";
 
 const COMPUTER_USE_MCP_SERVER_ID = "computer-use";
+
+function isComputerUseThreadConfigCandidate(descriptor: NodeMcpServerDescriptor): boolean {
+  return (
+    descriptor.id === COMPUTER_USE_MCP_SERVER_ID &&
+    (isNodeMcpServerOpenable(descriptor) || descriptor.status === "missing_backend")
+  );
+}
 
 function compareOptionalLabel(left: string | undefined, right: string | undefined): number {
   return (left ?? "").localeCompare(right ?? "");
@@ -32,7 +39,7 @@ export async function resolveNodeHostedThreadMcpServers(params: {
   for (const node of candidates) {
     const descriptor = (node.mcpServers ?? [])
       .filter((entry) => entry.id === COMPUTER_USE_MCP_SERVER_ID)
-      .find((entry) => isNodeMcpServerOpenable(entry));
+      .find(isComputerUseThreadConfigCandidate);
     if (!descriptor) {
       continue;
     }

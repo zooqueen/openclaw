@@ -130,6 +130,7 @@ const BASE_METHODS = [
   "node.mcp.session.open.result",
   "node.mcp.session.output",
   "node.mcp.session.closed",
+  "node.mcp.servers.update",
   "node.event",
   "node.canvas.capability.refresh",
   "cron.list",

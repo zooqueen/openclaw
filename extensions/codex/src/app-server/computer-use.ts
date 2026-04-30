@@ -7,6 +7,10 @@ import {
   type CodexComputerUseConfig,
   type ResolvedCodexComputerUseConfig,
 } from "./config.js";
+import type {
+  NativeComputerUseInstaller,
+  NativeComputerUseInstallResult,
+} from "./native-computer-use-install.js";
 import type { v2 } from "./protocol-generated/typescript/index.js";
 import type { JsonValue } from "./protocol.js";
 import { requestCodexAppServerJson } from "./request.js";
@@ -23,6 +27,9 @@ export type CodexComputerUseStatusReason =
   | "plugin_disabled"
   | "remote_install_unsupported"
   | "mcp_missing"
+  | "package_missing"
+  | "native_host_missing"
+  | "native_install_failed"
   | "ready"
   | "check_failed"
   | "auto_install_blocked";
@@ -38,6 +45,8 @@ export type CodexComputerUseStatus = {
   mcpServerName: string;
   marketplaceName?: string;
   marketplacePath?: string;
+  packagePath?: string;
+  nativeHost?: NativeComputerUseInstallResult;
   tools: string[];
   message: string;
 };
@@ -61,6 +70,7 @@ export type CodexComputerUseSetupParams = {
   signal?: AbortSignal;
   forceEnable?: boolean;
   defaultBundledMarketplacePath?: string;
+  nativeInstaller?: NativeComputerUseInstaller;
 };
 
 type MarketplaceRef =
@@ -181,6 +191,7 @@ async function inspectCodexComputerUse(params: {
   config: ResolvedCodexComputerUseConfig;
   installPlugin: boolean;
   defaultBundledMarketplacePath?: string;
+  nativeInstaller?: NativeComputerUseInstaller;
 }): Promise<CodexComputerUseStatus> {
   const request = createComputerUseRequest(params);
   if (params.installPlugin) {
@@ -218,11 +229,17 @@ async function inspectCodexComputerUse(params: {
     return pluginInspection.status;
   }
 
-  return await readComputerUseTools({
+  const status = await readComputerUseTools({
     request,
     config: params.config,
     plugin: pluginInspection.plugin,
     installPlugin: params.installPlugin,
+  });
+  return await maybeInstallNativeComputerUse({
+    status,
+    config: params.config,
+    nativeInstaller: params.nativeInstaller,
+    signal: params.signal,
   });
 }
 
@@ -318,6 +335,7 @@ async function readComputerUseTools(params: {
     tools: Object.keys(server.tools).toSorted(),
     reason: "ready",
     message: "Computer Use is ready.",
+    packagePath: resolveComputerUsePackagePath(params.plugin),
   });
 }
 
@@ -584,12 +602,97 @@ function remoteInstallUnsupportedMessage(
   return `Computer Use is ${state} in remote Codex marketplace ${marketplaceName}, but Codex app-server does not support remote plugin install yet. Configure computerUse.marketplaceSource or computerUse.marketplacePath for a local marketplace, then run /codex computer-use install.`;
 }
 
+async function maybeInstallNativeComputerUse(params: {
+  status: CodexComputerUseStatus;
+  config: ResolvedCodexComputerUseConfig;
+  nativeInstaller?: NativeComputerUseInstaller;
+  signal?: AbortSignal;
+}): Promise<CodexComputerUseStatus> {
+  if (!params.status.ready || !params.nativeInstaller) {
+    return params.status;
+  }
+  if (!params.status.packagePath) {
+    return {
+      ...params.status,
+      ready: false,
+      reason: "package_missing",
+      message:
+        "Computer Use is installed in Codex, but Codex did not expose a local package path that OpenClaw.app can host.",
+    };
+  }
+  try {
+    const nativeHost = await params.nativeInstaller({
+      packagePath: params.status.packagePath,
+      pluginName: params.config.pluginName,
+      mcpServerName: params.config.mcpServerName,
+      signal: params.signal,
+    });
+    return {
+      ...params.status,
+      nativeHost,
+      message: `${params.status.message} ${nativeHost.message}`.trim(),
+    };
+  } catch (error) {
+    const message = describeControlFailure(error);
+    const reason =
+      message.includes("No connected OpenClaw.app node") || message.includes("OpenClaw.app")
+        ? "native_host_missing"
+        : "native_install_failed";
+    return {
+      ...params.status,
+      ready: false,
+      reason,
+      nativeHost: {
+        ready: false,
+        message,
+      },
+      message: `Computer Use is installed in Codex, but OpenClaw.app could not host it: ${message}`,
+    };
+  }
+}
+
+function resolveComputerUsePackagePath(plugin: v2.PluginDetail): string | undefined {
+  const source = plugin.summary.source;
+  if (!source || source.type !== "local") {
+    return undefined;
+  }
+  const rawPath = source.path.trim();
+  if (!rawPath) {
+    return undefined;
+  }
+  if (rawPath.startsWith("/")) {
+    return rawPath;
+  }
+  const marketplacePath = plugin.marketplacePath?.trim();
+  if (!marketplacePath) {
+    return rawPath;
+  }
+  const marketplaceRoot = resolveMarketplaceRoot(marketplacePath);
+  return pathJoin(marketplaceRoot, rawPath);
+}
+
+function resolveMarketplaceRoot(marketplacePath: string): string {
+  const normalized = marketplacePath.replaceAll("\\", "/");
+  if (normalized.endsWith("/.agents/plugins/marketplace.json")) {
+    return normalized.slice(0, -"/.agents/plugins/marketplace.json".length);
+  }
+  return normalized.slice(0, normalized.lastIndexOf("/")) || ".";
+}
+
+function pathJoin(root: string, relativePath: string): string {
+  const normalizedRoot = root.endsWith("/") ? root.slice(0, -1) : root;
+  const normalizedRelative = relativePath.replace(/^\.\//, "");
+  return `${normalizedRoot}/${normalizedRelative}`;
+}
+
 function statusFromPlugin(params: {
   config: ResolvedCodexComputerUseConfig;
   plugin: v2.PluginDetail;
   tools: string[];
   reason: CodexComputerUseStatusReason;
   message: string;
+  packagePath?: string;
+  nativeHost?: NativeComputerUseInstallResult;
 }): CodexComputerUseStatus {
   return {
     enabled: true,
@@ -603,6 +706,8 @@ function statusFromPlugin(params: {
     mcpServerName: params.config.mcpServerName,
     marketplaceName: params.plugin.marketplaceName,
     ...(params.plugin.marketplacePath ? { marketplacePath: params.plugin.marketplacePath } : {}),
+    ...(params.packagePath ? { packagePath: params.packagePath } : {}),
+    ...(params.nativeHost ? { nativeHost: params.nativeHost } : {}),
     tools: params.tools,
     message: params.message,
   };

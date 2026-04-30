@@ -45,6 +45,7 @@ import {
   validateNodeMcpSessionClosedParams,
   validateNodeMcpSessionOpenResultParams,
   validateNodeMcpSessionOutputParams,
+  validateNodeMcpServersUpdateParams,
   validateNodePendingAckParams,
   validateNodePairApproveParams,
   validateNodePairListParams,
@@ -1256,6 +1257,27 @@ export const nodeHandlers: GatewayRequestHandlers = {
       signal: p.signal,
       error: p.error ?? null,
     });
+    respond(true, { ok: true, ignored: !handled }, undefined);
+  },
+  "node.mcp.servers.update": async ({ params, respond, context, client }) => {
+    if (!validateNodeMcpServersUpdateParams(params)) {
+      respondInvalidParams({
+        respond,
+        method: "node.mcp.servers.update",
+        validator: validateNodeMcpServersUpdateParams,
+      });
+      return;
+    }
+    const p = params as {
+      nodeId: string;
+      mcpServers: unknown[];
+    };
+    const callerNodeId = client?.connect?.device?.id ?? client?.connect?.client?.id;
+    if (callerNodeId && callerNodeId !== p.nodeId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId mismatch"));
+      return;
+    }
+    const handled = context.nodeRegistry.updateMcpServers(p.nodeId, p.mcpServers);
     respond(true, { ok: true, ignored: !handled }, undefined);
   },
   "node.event": async ({ params, respond, context, client }) => {

@@ -505,7 +505,7 @@ public actor GatewayChannelActor {
         }
     }
 
-    private static func encodeMcpServerDescriptor(_ descriptor: NodeMcpServerDescriptor) -> [String: Any] {
+    static func encodeMcpServerDescriptor(_ descriptor: NodeMcpServerDescriptor) -> [String: Any] {
         var encoded: [String: Any] = [
             "id": descriptor.id,
         ]

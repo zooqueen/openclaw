@@ -186,6 +186,15 @@ export class NodeRegistry {
     return this.nodesById.get(nodeId);
   }
 
+  updateMcpServers(nodeId: string, mcpServers: unknown): boolean {
+    const node = this.nodesById.get(nodeId);
+    if (!node) {
+      return false;
+    }
+    node.mcpServers = normalizeNodeMcpServerDescriptors(mcpServers);
+    return true;
+  }
+
   async invoke(params: {
     nodeId: string;
     command: string;

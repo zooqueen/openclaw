@@ -1152,6 +1152,24 @@ public struct NodeMcpServerDescriptor: Codable, Sendable {
     }
 }
 
+public struct NodeMcpServersUpdateParams: Codable, Sendable {
+    public let nodeid: String
+    public let mcpservers: [NodeMcpServerDescriptor]
+
+    public init(
+        nodeid: String,
+        mcpservers: [NodeMcpServerDescriptor])
+    {
+        self.nodeid = nodeid
+        self.mcpservers = mcpservers
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case nodeid = "nodeId"
+        case mcpservers = "mcpServers"
+    }
+}
+
 public struct NodeMcpSessionOpenEvent: Codable, Sendable {
     public let sessionid: String
     public let nodeid: String

@@ -36,6 +36,7 @@ export type NodeInvokeResultParams = SchemaType<"NodeInvokeResultParams">;
 export type NodeEventParams = SchemaType<"NodeEventParams">;
 export type NodeEventResult = SchemaType<"NodeEventResult">;
 export type NodeMcpServerDescriptor = SchemaType<"NodeMcpServerDescriptor">;
+export type NodeMcpServersUpdateParams = SchemaType<"NodeMcpServersUpdateParams">;
 export type NodeMcpSessionOpenEvent = SchemaType<"NodeMcpSessionOpenEvent">;
 export type NodeMcpSessionOpenResultParams = SchemaType<"NodeMcpSessionOpenResultParams">;
 export type NodeMcpSessionInputEvent = SchemaType<"NodeMcpSessionInputEvent">;

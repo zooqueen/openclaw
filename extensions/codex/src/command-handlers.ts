@@ -8,6 +8,7 @@ import {
 } from "./app-server/computer-use.js";
 import type { CodexComputerUseConfig } from "./app-server/config.js";
 import { listAllCodexAppServerModels } from "./app-server/models.js";
+import type { NativeComputerUseInstaller } from "./app-server/native-computer-use-install.js";
 import { isJsonObject, type JsonValue } from "./app-server/protocol.js";
 import {
   clearCodexAppServerBinding,
@@ -176,7 +177,11 @@ export function resetCodexDiagnosticsFeedbackStateForTests(): void {
 
 export async function handleCodexSubcommand(
   ctx: PluginCommandContext,
-  options: { pluginConfig?: unknown; deps?: Partial<CodexCommandDeps> },
+  options: {
+    pluginConfig?: unknown;
+    deps?: Partial<CodexCommandDeps>;
+    nativeComputerUseInstaller?: NativeComputerUseInstaller;
+  },
 ): Promise<PluginCommandResult> {
   const deps: CodexCommandDeps = { ...defaultCodexCommandDeps, ...options.deps };
   const [subcommand = "status", ...rest] = splitArgs(ctx.args);
@@ -257,7 +262,12 @@ export async function handleCodexSubcommand(
   }
   if (normalized === "computer-use" || normalized === "computeruse") {
     return {
-      text: await handleComputerUseCommand(deps, options.pluginConfig, rest),
+      text: await handleComputerUseCommand(
+        deps,
+        options.pluginConfig,
+        rest,
+        options.nativeComputerUseInstaller,
+      ),
     };
   }
   if (normalized === "mcp") {
@@ -298,6 +308,7 @@ async function handleComputerUseCommand(
   deps: CodexCommandDeps,
   pluginConfig: unknown,
   args: string[],
+  nativeComputerUseInstaller?: NativeComputerUseInstaller,
 ): Promise<string> {
   const parsed = parseComputerUseArgs(args);
   if (parsed.help) {
@@ -310,6 +321,9 @@ async function handleComputerUseCommand(
     pluginConfig,
     forceEnable: parsed.action === "install" || parsed.hasOverrides,
     ...(Object.keys(parsed.overrides).length > 0 ? { overrides: parsed.overrides } : {}),
+    ...(parsed.action === "install" && nativeComputerUseInstaller
+      ? { nativeInstaller: nativeComputerUseInstaller }
+      : {}),
   };
   if (parsed.action === "install") {
     return formatComputerUseStatus(await deps.installCodexComputerUse(params));

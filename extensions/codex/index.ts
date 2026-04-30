@@ -4,6 +4,7 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { createCodexAppServerAgentHarness } from "./harness.js";
 import { buildCodexMediaUnderstandingProvider } from "./media-understanding-provider.js";
 import { buildCodexProvider } from "./provider.js";
+import { createNativeComputerUseInstaller } from "./src/app-server/native-computer-use-install.js";
 import { createCodexCommand } from "./src/commands.js";
 import {
   handleCodexConversationBindingResolved,
@@ -24,13 +25,24 @@ export default definePluginEntry({
         "codex",
         api.pluginConfig as Record<string, unknown>,
       ) ?? api.pluginConfig;
-    api.registerAgentHarness(createCodexAppServerAgentHarness({ pluginConfig: api.pluginConfig }));
+    const nativeComputerUseInstaller = createNativeComputerUseInstaller(api.runtime.nodes);
+    api.registerAgentHarness(
+      createCodexAppServerAgentHarness({
+        pluginConfig: api.pluginConfig,
+        nativeComputerUseInstaller,
+      }),
+    );
     api.registerProvider(buildCodexProvider({ pluginConfig: api.pluginConfig }));
     api.registerMediaUnderstandingProvider(
       buildCodexMediaUnderstandingProvider({ pluginConfig: api.pluginConfig }),
     );
     api.registerMigrationProvider(buildCodexMigrationProvider());
-    api.registerCommand(createCodexCommand({ pluginConfig: api.pluginConfig }));
+    api.registerCommand(
+      createCodexCommand({
+        pluginConfig: api.pluginConfig,
+        nativeComputerUseInstaller,
+      }),
+    );
     api.on("inbound_claim", (event, ctx) =>
       handleCodexConversationInboundClaim(event, ctx, {
         pluginConfig: resolveCurrentPluginConfig(),

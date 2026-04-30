@@ -14,6 +14,10 @@ private let computerUseAppSupportDirName = "CodexComputerUseMCP"
 private let computerUsePackageDirName = "computer-use"
 private let computerUseBundledResourcePath = "CodexComputerUseMCP/computer-use"
 private let computerUseManagedMetadataFileName = ".openclaw-computer-use-source.json"
+private let computerUsePackageInstallBeginCommand = "mcp.package.install.begin"
+private let computerUsePackageInstallChunkCommand = "mcp.package.install.chunk"
+private let computerUsePackageInstallFinishCommand = "mcp.package.install.finish"
+private let computerUsePackageInstallCancelCommand = "mcp.package.install.cancel"
 
 struct MacMcpLaunchConfig {
     var command: URL
@@ -39,6 +43,31 @@ private struct MacMcpManagedPackageMetadata: Codable, Equatable {
     var sourceFingerprint: MacMcpPackageFingerprint
 }
 
+private struct MacMcpPackageInstallBeginParams: Decodable {
+    var transferId: String
+    var nodeId: String
+    var serverId: String
+    var packageName: String?
+    var sourcePath: String?
+    var fileCount: Int?
+    var totalBytes: UInt64?
+}
+
+private struct MacMcpPackageInstallChunkParams: Decodable {
+    var transferId: String
+    var relativePath: String
+    var dataBase64: String
+    var executable: Bool?
+}
+
+private struct MacMcpPackageInstallFinishParams: Decodable {
+    var transferId: String
+}
+
+private struct MacMcpPackageInstallCancelParams: Decodable {
+    var transferId: String
+}
+
 private struct CodexMcpManifest: Decodable {
     struct Server: Decodable {
         var command: String
@@ -47,6 +76,14 @@ private struct CodexMcpManifest: Decodable {
     }
 
     var mcpServers: [String: Server]
+}
+
+private struct MacMcpPackageInstallPayload: Encodable {
+    var ok: Bool
+    var transferId: String
+    var serverId: String?
+    var fileCount: Int?
+    var totalBytes: UInt64?
 }
 
 private final class ActiveMacMcpSession: @unchecked Sendable {
@@ -65,9 +102,36 @@ private final class ActiveMacMcpSession: @unchecked Sendable {
     }
 }
 
+private struct ActiveMacMcpPackageInstall {
+    var transferId: String
+    var nodeId: String
+    var serverId: String
+    var sourcePath: String
+    var expectedFileCount: Int?
+    var expectedTotalBytes: UInt64?
+    var directory: URL
+    var files: Set<String> = []
+    var totalBytes: UInt64 = 0
+}
+
 actor MacComputerUseMcpHost {
     private let logger = Logger(subsystem: "ai.openclaw", category: "mac-mcp")
+    private let appSupportRoot: URL?
     private var sessions: [String: ActiveMacMcpSession] = [:]
+    private var activeInstall: ActiveMacMcpPackageInstall?
+
+    init(appSupportRoot: URL? = nil) {
+        self.appSupportRoot = appSupportRoot
+    }
+
+    nonisolated static var packageInstallCommands: [String] {
+        [
+            computerUsePackageInstallBeginCommand,
+            computerUsePackageInstallChunkCommand,
+            computerUsePackageInstallFinishCommand,
+            computerUsePackageInstallCancelCommand,
+        ]
+    }
 
     nonisolated static func computerUseDescriptor(permissions: [String: Bool]) -> NodeMcpServerDescriptor {
         let hasRequiredPermissions = computerUseRequiredPermissions.allSatisfy { permissions[$0] == true }
@@ -93,6 +157,37 @@ actor MacComputerUseMcpHost {
             status: status,
             requiredpermissions: computerUseRequiredPermissions,
             metadata: metadata.isEmpty ? nil : metadata)
+    }
+
+    func handleInvoke(
+        _ req: BridgeInvokeRequest,
+        permissions: [String: Bool],
+        sendMcpServersUpdate: (@Sendable (String, [NodeMcpServerDescriptor]) async -> Void)? = nil) async
+        -> BridgeInvokeResponse?
+    {
+        do {
+            switch req.command {
+            case computerUsePackageInstallBeginCommand:
+                return try self.handlePackageInstallBegin(req)
+            case computerUsePackageInstallChunkCommand:
+                return try self.handlePackageInstallChunk(req)
+            case computerUsePackageInstallFinishCommand:
+                let nodeId = self.activeInstall?.nodeId
+                let response = try self.handlePackageInstallFinish(req)
+                if response.ok, let nodeId {
+                    await sendMcpServersUpdate?(
+                        nodeId,
+                        [Self.computerUseDescriptor(permissions: permissions)])
+                }
+                return response
+            case computerUsePackageInstallCancelCommand:
+                return try self.handlePackageInstallCancel(req)
+            default:
+                return nil
+            }
+        } catch {
+            return Self.errorResponse(req, code: .unavailable, message: error.localizedDescription)
+        }
     }
 
     func open(_ event: NodeMcpSessionOpenEvent, gateway: GatewayNodeSession) async {
@@ -238,6 +333,195 @@ actor MacComputerUseMcpHost {
                 "code": AnyCodable(errorCode),
                 "message": AnyCodable(message),
             ])
+    }
+
+    private func handlePackageInstallBegin(_ req: BridgeInvokeRequest) throws -> BridgeInvokeResponse {
+        let params = try Self.decodeInvokeParams(MacMcpPackageInstallBeginParams.self, from: req)
+        guard params.serverId == computerUseServerId else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: unsupported MCP server")
+        }
+
+        if let activeInstall {
+            try? FileManager.default.removeItem(at: activeInstall.directory)
+        }
+
+        let destination = Self.managedPackageDirectory(
+            env: ProcessInfo.processInfo.environment,
+            fileManager: .default,
+            appSupportRoot: self.appSupportRoot)
+        let parent = destination.deletingLastPathComponent()
+        let transferDir = parent.appendingPathComponent(
+            ".\(computerUsePackageDirName).\(params.transferId).transfer",
+            isDirectory: true)
+        if FileManager.default.fileExists(atPath: transferDir.path) {
+            try FileManager.default.removeItem(at: transferDir)
+        }
+        try FileManager.default.createDirectory(at: transferDir, withIntermediateDirectories: true)
+
+        self.activeInstall = ActiveMacMcpPackageInstall(
+            transferId: params.transferId,
+            nodeId: params.nodeId,
+            serverId: params.serverId,
+            sourcePath: params.sourcePath ?? "gateway-transfer",
+            expectedFileCount: params.fileCount,
+            expectedTotalBytes: params.totalBytes,
+            directory: transferDir)
+        return try Self.payloadResponse(
+            req,
+            MacMcpPackageInstallPayload(
+                ok: true,
+                transferId: params.transferId,
+                serverId: params.serverId,
+                fileCount: params.fileCount,
+                totalBytes: params.totalBytes))
+    }
+
+    private func handlePackageInstallChunk(_ req: BridgeInvokeRequest) throws -> BridgeInvokeResponse {
+        let params = try Self.decodeInvokeParams(MacMcpPackageInstallChunkParams.self, from: req)
+        guard var activeInstall, activeInstall.transferId == params.transferId else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: no active package transfer")
+        }
+        guard let relativePath = Self.safePackageRelativePath(params.relativePath) else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: unsafe package path")
+        }
+        guard let data = Data(base64Encoded: params.dataBase64) else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: package chunk is not base64")
+        }
+
+        let destination = Self.packageFileURL(base: activeInstall.directory, relativePath: relativePath)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: destination.path) {
+            _ = FileManager.default.createFile(atPath: destination.path, contents: nil)
+        }
+        let handle = try FileHandle(forWritingTo: destination)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: data)
+        if params.executable == true {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
+        }
+
+        activeInstall.files.insert(relativePath)
+        activeInstall.totalBytes += UInt64(data.count)
+        self.activeInstall = activeInstall
+        return try Self.payloadResponse(
+            req,
+            MacMcpPackageInstallPayload(
+                ok: true,
+                transferId: params.transferId,
+                serverId: activeInstall.serverId,
+                fileCount: activeInstall.files.count,
+                totalBytes: activeInstall.totalBytes))
+    }
+
+    private func handlePackageInstallFinish(_ req: BridgeInvokeRequest) throws -> BridgeInvokeResponse {
+        let params = try Self.decodeInvokeParams(MacMcpPackageInstallFinishParams.self, from: req)
+        guard let activeInstall, activeInstall.transferId == params.transferId else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: no active package transfer")
+        }
+        if let expectedFileCount = activeInstall.expectedFileCount,
+           activeInstall.files.count != expectedFileCount
+        {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: incomplete package transfer")
+        }
+        if let expectedTotalBytes = activeInstall.expectedTotalBytes,
+           activeInstall.totalBytes != expectedTotalBytes
+        {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: package transfer byte count mismatch")
+        }
+        guard
+            Self.resolvePackageLaunchConfig(
+                packageDir: activeInstall.directory,
+                source: "gateway-transfer",
+                fileManager: .default) != nil
+        else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: transferred package does not expose computer-use MCP")
+        }
+        guard let fingerprint = Self.packageFingerprint(
+            packageDir: activeInstall.directory,
+            fileManager: .default)
+        else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: transferred package is empty")
+        }
+
+        let destination = Self.managedPackageDirectory(
+            env: ProcessInfo.processInfo.environment,
+            fileManager: .default,
+            appSupportRoot: self.appSupportRoot)
+        let metadata = MacMcpManagedPackageMetadata(
+            source: "gateway-transfer",
+            sourcePath: activeInstall.sourcePath,
+            sourceFingerprint: fingerprint)
+        let metadataData = try JSONEncoder().encode(metadata)
+        try metadataData.write(
+            to: activeInstall.directory.appendingPathComponent(computerUseManagedMetadataFileName),
+            options: [.atomic])
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: activeInstall.directory, to: destination)
+        self.activeInstall = nil
+
+        return try Self.payloadResponse(
+            req,
+            MacMcpPackageInstallPayload(
+                ok: true,
+                transferId: params.transferId,
+                serverId: activeInstall.serverId,
+                fileCount: activeInstall.files.count,
+                totalBytes: activeInstall.totalBytes))
+    }
+
+    private func handlePackageInstallCancel(_ req: BridgeInvokeRequest) throws -> BridgeInvokeResponse {
+        let params = try Self.decodeInvokeParams(MacMcpPackageInstallCancelParams.self, from: req)
+        guard let activeInstall, activeInstall.transferId == params.transferId else {
+            return Self.errorResponse(
+                req,
+                code: .invalidRequest,
+                message: "INVALID_REQUEST: no active package transfer")
+        }
+        try? FileManager.default.removeItem(at: activeInstall.directory)
+        self.activeInstall = nil
+        return try Self.payloadResponse(
+            req,
+            MacMcpPackageInstallPayload(
+                ok: true,
+                transferId: params.transferId,
+                serverId: activeInstall.serverId,
+                fileCount: activeInstall.files.count,
+                totalBytes: activeInstall.totalBytes))
     }
 
     nonisolated static func resolveComputerUseLaunchConfig(
@@ -405,6 +689,9 @@ actor MacComputerUseMcpHost {
         else {
             return true
         }
+        if metadata.source == "gateway-transfer" {
+            return false
+        }
         return metadata != MacMcpManagedPackageMetadata(
             source: source.source,
             sourcePath: source.directory.path,
@@ -488,6 +775,58 @@ actor MacComputerUseMcpHost {
             fileCount: fileCount,
             totalSize: totalSize,
             latestModifiedAt: latestModifiedAt)
+    }
+
+    private nonisolated static func decodeInvokeParams<T: Decodable>(
+        _ type: T.Type,
+        from req: BridgeInvokeRequest) throws -> T
+    {
+        guard let paramsJSON = req.paramsJSON, let data = paramsJSON.data(using: .utf8) else {
+            throw NSError(domain: "MacComputerUseMcpHost", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "INVALID_REQUEST: missing params",
+            ])
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private nonisolated static func payloadResponse<T: Encodable>(
+        _ req: BridgeInvokeRequest,
+        _ payload: T) throws -> BridgeInvokeResponse
+    {
+        let data = try JSONEncoder().encode(payload)
+        return BridgeInvokeResponse(
+            id: req.id,
+            ok: true,
+            payloadJSON: String(data: data, encoding: .utf8))
+    }
+
+    private nonisolated static func errorResponse(
+        _ req: BridgeInvokeRequest,
+        code: OpenClawNodeErrorCode,
+        message: String) -> BridgeInvokeResponse
+    {
+        BridgeInvokeResponse(
+            id: req.id,
+            ok: false,
+            error: OpenClawNodeError(code: code, message: message))
+    }
+
+    private nonisolated static func safePackageRelativePath(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("/") else { return nil }
+        let parts = trimmed.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard !parts.isEmpty else { return nil }
+        guard !parts.contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+        guard !parts.contains(computerUseManagedMetadataFileName) else { return nil }
+        return parts.joined(separator: "/")
+    }
+
+    private nonisolated static func packageFileURL(base: URL, relativePath: String) -> URL {
+        relativePath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .reduce(base) { partial, component in
+                partial.appendingPathComponent(String(component), isDirectory: false)
+            }
     }
 
     private nonisolated static func parseEnvArgs(_ raw: String?) -> [String]? {

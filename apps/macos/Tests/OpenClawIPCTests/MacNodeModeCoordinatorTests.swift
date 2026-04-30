@@ -15,6 +15,7 @@ struct MacNodeModeCoordinatorTests {
         #expect(!caps.contains(OpenClawCapability.browser.rawValue))
         #expect(caps.contains(OpenClawCapability.mcpHost.rawValue))
         #expect(!commands.contains(OpenClawBrowserCommand.proxy.rawValue))
+        #expect(commands.contains("mcp.package.install.begin"))
         #expect(commands.contains(OpenClawCanvasCommand.present.rawValue))
         #expect(commands.contains(OpenClawSystemCommand.notify.rawValue))
     }

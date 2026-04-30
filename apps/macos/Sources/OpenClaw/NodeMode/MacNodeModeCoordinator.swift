@@ -112,6 +112,15 @@ final class MacNodeModeCoordinator {
                                 ok: false,
                                 error: OpenClawNodeError(code: .unavailable, message: "UNAVAILABLE: node not ready"))
                         }
+                        if let response = await mcpHost.handleInvoke(
+                            req,
+                            permissions: await self.currentPermissions(),
+                            sendMcpServersUpdate: { nodeId, mcpServers in
+                                await nodeSession.sendMcpServersUpdate(nodeId: nodeId, mcpServers: mcpServers)
+                            })
+                        {
+                            return response
+                        }
                         return await self.runtime.handleInvoke(req)
                     },
                     onMcpSessionOpen: { event in
@@ -199,6 +208,9 @@ final class MacNodeModeCoordinator {
         ]
 
         let capsSet = Set(caps)
+        if capsSet.contains(OpenClawCapability.mcpHost.rawValue) {
+            commands.append(contentsOf: MacComputerUseMcpHost.packageInstallCommands)
+        }
         if capsSet.contains(OpenClawCapability.browser.rawValue) {
             commands.append(OpenClawBrowserCommand.proxy.rawValue)
         }

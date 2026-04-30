@@ -630,6 +630,19 @@ public actor GatewayNodeSession {
         }
     }
 
+    public func sendMcpServersUpdate(nodeId: String, mcpServers: [NodeMcpServerDescriptor]) async {
+        guard let channel = self.channel else { return }
+        let params: [String: AnyCodable] = [
+            "nodeId": AnyCodable(nodeId),
+            "mcpServers": AnyCodable(mcpServers.map(GatewayChannel.encodeMcpServerDescriptor)),
+        ]
+        do {
+            try await channel.send(method: "node.mcp.servers.update", params: params)
+        } catch {
+            self.logger.error("node MCP server update failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func decodeParamsJSON(
         _ paramsJSON: String?) throws -> [String: AnyCodable]?
     {

@@ -59,6 +59,14 @@ export const NodeMcpServerDescriptorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const NodeMcpServersUpdateParamsSchema = Type.Object(
+  {
+    nodeId: NonEmptyString,
+    mcpServers: Type.Array(NodeMcpServerDescriptorSchema),
+  },
+  { additionalProperties: false },
+);
+
 export const NodePairRequestParamsSchema = Type.Object(
   {
     nodeId: NonEmptyString,

@@ -1,4 +1,5 @@
 import Foundation
+import OpenClawKit
 import Testing
 @testable import OpenClaw
 
@@ -90,6 +91,129 @@ import Testing
         #expect(copiedScript.contains("echo two"))
     }
 
+    @Test func `gateway package transfer installs openclaw managed backend`() async throws {
+        let fixture = try Self.makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let sourcePackage = fixture.root.appendingPathComponent("source-package", isDirectory: true)
+        let sourceExecutable = try Self.writeComputerUsePackage(at: sourcePackage)
+        let manifestData = try Data(contentsOf: sourcePackage.appendingPathComponent(".mcp.json"))
+        let executableData = try Data(contentsOf: sourceExecutable)
+        let host = MacComputerUseMcpHost(appSupportRoot: fixture.appSupport)
+
+        let begin = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "begin",
+                command: "mcp.package.install.begin",
+                paramsJSON: Self.json([
+                    "transferId": "transfer-1",
+                    "nodeId": "mac-node",
+                    "serverId": "computer-use",
+                    "packageName": "computer-use",
+                    "sourcePath": sourcePackage.path,
+                    "fileCount": 2,
+                    "totalBytes": manifestData.count + executableData.count,
+                ])),
+            permissions: [:]))
+        #expect(begin.ok)
+
+        let manifestChunk = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "manifest",
+                command: "mcp.package.install.chunk",
+                paramsJSON: Self.json([
+                    "transferId": "transfer-1",
+                    "relativePath": ".mcp.json",
+                    "dataBase64": manifestData.base64EncodedString(),
+                ])),
+            permissions: [:]))
+        #expect(manifestChunk.ok)
+
+        let executableChunk = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "executable",
+                command: "mcp.package.install.chunk",
+                paramsJSON: Self.json([
+                    "transferId": "transfer-1",
+                    "relativePath": "bin/computer-use-test",
+                    "dataBase64": executableData.base64EncodedString(),
+                    "executable": true,
+                ])),
+            permissions: [:]))
+        #expect(executableChunk.ok)
+
+        let finish = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "finish",
+                command: "mcp.package.install.finish",
+                paramsJSON: Self.json(["transferId": "transfer-1"])),
+            permissions: [
+                "accessibility": true,
+                "screenRecording": true,
+            ]))
+        #expect(finish.ok)
+
+        let launch = try #require(MacComputerUseMcpHost.resolveComputerUseLaunchConfig(
+            env: [:],
+            resourceURL: nil,
+            codexPluginDir: fixture.root.appendingPathComponent("missing-codex", isDirectory: true),
+            appSupportRoot: fixture.appSupport))
+        #expect(launch.source == "openclaw-managed")
+        #expect(launch.command.path == fixture.managedPackage.appendingPathComponent("bin/computer-use-test").path)
+
+        let codexPackage = fixture.root.appendingPathComponent("Codex.app-computer-use", isDirectory: true)
+        try Self.writeComputerUsePackage(at: codexPackage, script: "#!/bin/sh\necho codex\n")
+        let launchWithCodexFallback = try #require(MacComputerUseMcpHost.resolveComputerUseLaunchConfig(
+            env: [:],
+            resourceURL: nil,
+            codexPluginDir: codexPackage,
+            appSupportRoot: fixture.appSupport))
+        #expect(launchWithCodexFallback.source == "openclaw-managed")
+    }
+
+    @Test func `gateway package transfer rejects incomplete package`() async throws {
+        let fixture = try Self.makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let sourcePackage = fixture.root.appendingPathComponent("source-package", isDirectory: true)
+        _ = try Self.writeComputerUsePackage(at: sourcePackage)
+        let host = MacComputerUseMcpHost(appSupportRoot: fixture.appSupport)
+
+        let begin = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "begin",
+                command: "mcp.package.install.begin",
+                paramsJSON: Self.json([
+                    "transferId": "transfer-1",
+                    "nodeId": "mac-node",
+                    "serverId": "computer-use",
+                    "fileCount": 2,
+                    "totalBytes": 100,
+                ])),
+            permissions: [:]))
+        #expect(begin.ok)
+
+        let manifestData = try Data(contentsOf: sourcePackage.appendingPathComponent(".mcp.json"))
+        let manifestChunk = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "manifest",
+                command: "mcp.package.install.chunk",
+                paramsJSON: Self.json([
+                    "transferId": "transfer-1",
+                    "relativePath": ".mcp.json",
+                    "dataBase64": manifestData.base64EncodedString(),
+                ])),
+            permissions: [:]))
+        #expect(manifestChunk.ok)
+
+        let finish = try #require(await host.handleInvoke(
+            BridgeInvokeRequest(
+                id: "finish",
+                command: "mcp.package.install.finish",
+                paramsJSON: Self.json(["transferId": "transfer-1"])),
+            permissions: [:]))
+        #expect(!finish.ok)
+        #expect(!FileManager.default.fileExists(atPath: fixture.managedPackage.path))
+    }
+
     private static func makeFixture() throws -> (
         root: URL,
         appSupport: URL,
@@ -103,6 +227,11 @@ import Testing
             .appendingPathComponent("computer-use", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return (root, appSupport, managedPackage)
+    }
+
+    private static func json(_ value: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: value)
+        return try #require(String(data: data, encoding: .utf8))
     }
 
     @discardableResult

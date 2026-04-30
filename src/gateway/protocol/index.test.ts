@@ -6,6 +6,7 @@ import {
   validateModelsListParams,
   validateNodeEventResult,
   validateNodeMcpServerDescriptor,
+  validateNodeMcpServersUpdateParams,
   validateNodeMcpSessionInputEvent,
   validateNodeMcpSessionOpenResultParams,
   validateNodeMcpSessionOutputParams,
@@ -285,6 +286,15 @@ describe("node MCP protocol validators", () => {
         seq: 0,
         stream: "stdout",
         dataBase64: "e30K",
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts node MCP descriptor update frames", () => {
+    expect(
+      validateNodeMcpServersUpdateParams({
+        nodeId: "mac-node",
+        mcpServers: [{ id: "computer-use", status: "ready" }],
       }),
     ).toBe(true);
   });

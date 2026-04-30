@@ -49,6 +49,7 @@ import { projectContextEngineAssemblyForCodex } from "./context-engine-projectio
 import { createCodexDynamicToolBridge, type CodexDynamicToolBridge } from "./dynamic-tools.js";
 import { handleCodexAppServerElicitationRequest } from "./elicitation-bridge.js";
 import { CodexAppServerEventProjector } from "./event-projector.js";
+import type { NativeComputerUseInstaller } from "./native-computer-use-install.js";
 import {
   buildCodexNativeHookRelayDisabledConfig,
   buildCodexNativeHookRelayConfig,
@@ -229,6 +230,7 @@ export async function runCodexAppServerAttempt(
     };
     turnCompletionIdleTimeoutMs?: number;
     turnTerminalIdleTimeoutMs?: number;
+    nativeComputerUseInstaller?: NativeComputerUseInstaller;
   } = {},
 ): Promise<EmbeddedRunAttemptResult> {
   const attemptStartedAt = Date.now();
@@ -421,6 +423,7 @@ export async function runCodexAppServerAttempt(
           pluginConfig: options.pluginConfig,
           timeoutMs: appServer.requestTimeoutMs,
           signal: runAbortController.signal,
+          nativeInstaller: options.nativeComputerUseInstaller,
         });
         const startupThread = await startOrResumeThread({
           client: startupClient,

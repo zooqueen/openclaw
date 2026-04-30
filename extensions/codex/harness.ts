@@ -4,6 +4,7 @@ import type {
   CodexAppServerModel,
   CodexAppServerModelListResult,
 } from "./src/app-server/models.js";
+import type { NativeComputerUseInstaller } from "./src/app-server/native-computer-use-install.js";
 
 const DEFAULT_CODEX_HARNESS_PROVIDER_IDS = new Set(["codex"]);
 
@@ -14,6 +15,7 @@ export function createCodexAppServerAgentHarness(options?: {
   label?: string;
   providerIds?: Iterable<string>;
   pluginConfig?: unknown;
+  nativeComputerUseInstaller?: NativeComputerUseInstaller;
 }): AgentHarness {
   const providerIds = new Set(
     [...(options?.providerIds ?? DEFAULT_CODEX_HARNESS_PROVIDER_IDS)].map((id) =>
@@ -35,7 +37,10 @@ export function createCodexAppServerAgentHarness(options?: {
     },
     runAttempt: async (params) => {
       const { runCodexAppServerAttempt } = await import("./src/app-server/run-attempt.js");
-      return runCodexAppServerAttempt(params, { pluginConfig: options?.pluginConfig });
+      return runCodexAppServerAttempt(params, {
+        pluginConfig: options?.pluginConfig,
+        nativeComputerUseInstaller: options?.nativeComputerUseInstaller,
+      });
     },
     compact: async (params) => {
       const { maybeCompactCodexAppServerSession } = await import("./src/app-server/compact.js");

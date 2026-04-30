@@ -25,6 +25,13 @@ const CAMERA_DANGEROUS_COMMANDS = ["camera.snap", "camera.clip"];
 const SCREEN_COMMANDS = ["screen.snapshot"];
 const SCREEN_DANGEROUS_COMMANDS = ["screen.record"];
 
+const MCP_PACKAGE_INSTALL_COMMANDS = [
+  "mcp.package.install.begin",
+  "mcp.package.install.chunk",
+  "mcp.package.install.finish",
+  "mcp.package.install.cancel",
+];
+
 const LOCATION_COMMANDS = ["location.get"];
 const NOTIFICATION_COMMANDS = ["notifications.list"];
 const ANDROID_NOTIFICATION_COMMANDS = [...NOTIFICATION_COMMANDS, "notifications.actions"];
@@ -114,6 +121,7 @@ const PLATFORM_DEFAULTS: Record<string, string[]> = {
     ...MOTION_COMMANDS,
     ...SYSTEM_COMMANDS,
     ...SCREEN_COMMANDS,
+    ...MCP_PACKAGE_INSTALL_COMMANDS,
   ],
   linux: [...SYSTEM_COMMANDS],
   windows: [

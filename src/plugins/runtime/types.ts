@@ -63,6 +63,16 @@ export type RuntimeNodeListResult = {
     connected?: boolean;
     caps?: string[];
     commands?: string[];
+    mcpServers?: Array<{
+      id: string;
+      displayName?: string;
+      provider?: string;
+      transport?: "stdio";
+      source?: string;
+      status?: string;
+      requiredPermissions?: string[];
+      metadata?: Record<string, unknown>;
+    }>;
   }>;
 };
 

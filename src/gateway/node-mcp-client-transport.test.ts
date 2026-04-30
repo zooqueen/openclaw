@@ -63,6 +63,53 @@ function assignTransportHandlers(
 }
 
 describe("NodeMcpClientTransport", () => {
+  it("uses refreshed node MCP descriptors without requiring reconnect", async () => {
+    const registry = new NodeRegistry();
+    const { client, sent } = createNodeClient({
+      mcpServers: [{ id: "computer-use", displayName: "Computer Use", status: "missing_backend" }],
+    });
+    registry.register(client, {});
+
+    expect(
+      registry.updateMcpServers("mac-node", [
+        { id: "computer-use", displayName: "Computer Use", status: "ready" },
+      ]),
+    ).toBe(true);
+
+    const open = registry.openMcpSession({
+      nodeId: "mac-node",
+      serverId: "computer-use",
+      sessionId: "session-1",
+      timeoutMs: 1000,
+    });
+
+    expect(sent.at(-1)).toEqual({
+      event: "node.mcp.session.open",
+      payload: {
+        sessionId: "session-1",
+        nodeId: "mac-node",
+        serverId: "computer-use",
+        timeoutMs: 1000,
+      },
+    });
+    registry.handleMcpSessionOpenResult({
+      sessionId: "session-1",
+      nodeId: "mac-node",
+      serverId: "computer-use",
+      ok: true,
+      pid: 42,
+    });
+
+    await expect(open).resolves.toEqual({
+      sessionId: "session-1",
+      nodeId: "mac-node",
+      serverId: "computer-use",
+      ok: true,
+      pid: 42,
+      error: null,
+    });
+  });
+
   it("opens a declared node-hosted MCP server and forwards JSON-RPC over stdout", async () => {
     const registry = new NodeRegistry();
     const { client, sent } = createNodeClient({
