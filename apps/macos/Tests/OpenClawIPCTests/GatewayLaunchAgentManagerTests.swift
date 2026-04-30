@@ -26,6 +26,32 @@ struct GatewayLaunchAgentManagerTests {
         #expect(GatewayLaunchAgentManager.testingDaemonCommandCallsSnapshot().isEmpty)
     }
 
+    @Test func `attach only marker skips launch agent uninstall command`() async throws {
+        let dir = FileManager().temporaryDirectory
+            .appendingPathComponent("openclaw-attach-only-\(UUID().uuidString)", isDirectory: true)
+        let marker = dir.appendingPathComponent("disable-launchagent")
+        try FileManager().createDirectory(at: dir, withIntermediateDirectories: true)
+        _ = FileManager().createFile(atPath: marker.path, contents: nil)
+        defer { try? FileManager().removeItem(at: dir) }
+        defer {
+            GatewayLaunchAgentManager.setTestingDisableLaunchAgentMarkerURL(nil)
+            GatewayLaunchAgentManager.setTestingInterceptDaemonCommands(false)
+            GatewayLaunchAgentManager.clearTestingDaemonCommandCalls()
+        }
+
+        GatewayLaunchAgentManager.setTestingDisableLaunchAgentMarkerURL(marker)
+        GatewayLaunchAgentManager.setTestingInterceptDaemonCommands(true)
+        GatewayLaunchAgentManager.clearTestingDaemonCommandCalls()
+
+        let error = await GatewayLaunchAgentManager.set(
+            enabled: false,
+            bundlePath: "/tmp/OpenClaw.app",
+            port: 18789)
+
+        #expect(error == nil)
+        #expect(GatewayLaunchAgentManager.testingDaemonCommandCallsSnapshot().isEmpty)
+    }
+
     @Test func `launch agent plist snapshot parses args and env`() throws {
         let url = FileManager().temporaryDirectory
             .appendingPathComponent("openclaw-launchd-\(UUID().uuidString).plist")
