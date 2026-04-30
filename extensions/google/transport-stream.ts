@@ -230,7 +230,16 @@ function resolveGoogleVertexLocation(options: GoogleTransportOptions | undefined
   return location;
 }
 
-function resolveGoogleVertexBaseOrigin(model: GoogleTransportModel, location: string): string {
+function resolveOptionalGoogleVertexLocation(
+  options: GoogleTransportOptions | undefined,
+): string | undefined {
+  return (
+    normalizeOptionalString((options as { location?: unknown } | undefined)?.location) ||
+    normalizeOptionalString(process.env.GOOGLE_CLOUD_LOCATION)
+  );
+}
+
+function resolveGoogleVertexBaseOrigin(model: GoogleTransportModel, location?: string): string {
   const configured = normalizeOptionalString(model.baseUrl);
   if (configured && !configured.includes("{location}")) {
     try {
@@ -243,21 +252,56 @@ function resolveGoogleVertexBaseOrigin(model: GoogleTransportModel, location: st
       return configured.replace(/\/+$/u, "");
     }
   }
-  if (location === "global") {
+  if (!location || location === "global") {
     return "https://aiplatform.googleapis.com";
   }
   return `https://${location}-aiplatform.googleapis.com`;
 }
 
+function resolveGoogleVertexModelPath(modelId: string): string {
+  if (
+    modelId.startsWith("projects/") ||
+    modelId.startsWith("publishers/") ||
+    modelId.startsWith("models/")
+  ) {
+    return modelId;
+  }
+  if (modelId.includes("/")) {
+    const [publisher, modelName] = modelId.split("/", 2);
+    return `publishers/${publisher}/models/${modelName}`;
+  }
+  return `publishers/google/models/${modelId}`;
+}
+
+function encodeGoogleVertexResourcePath(resourcePath: string): string {
+  return resourcePath.split("/").map(encodeURIComponent).join("/");
+}
+
+function resolveGoogleVertexRequestModelPath(params: {
+  modelId: string;
+  apiKey: string | undefined;
+  options: GoogleTransportOptions | undefined;
+}): string {
+  const modelPath = resolveGoogleVertexModelPath(params.modelId);
+  if (!isGoogleVertexCredentialsMarker(params.apiKey) || modelPath.startsWith("projects/")) {
+    return modelPath;
+  }
+  const project = resolveGoogleVertexProject(params.options);
+  const location = resolveGoogleVertexLocation(params.options);
+  return `projects/${project}/locations/${location}/${modelPath}`;
+}
+
 function buildGoogleVertexRequestUrl(
   model: GoogleTransportModel,
   options: GoogleTransportOptions | undefined,
+  apiKey: string | undefined,
 ): string {
-  const project = encodeURIComponent(resolveGoogleVertexProject(options));
-  const location = encodeURIComponent(resolveGoogleVertexLocation(options));
-  const modelId = encodeURIComponent(model.id);
-  const origin = resolveGoogleVertexBaseOrigin(model, decodeURIComponent(location));
-  return `${origin}/${GOOGLE_VERTEX_DEFAULT_API_VERSION}/projects/${project}/locations/${location}/publishers/google/models/${modelId}:streamGenerateContent?alt=sse`;
+  const location = resolveOptionalGoogleVertexLocation(options);
+  const modelPath = encodeGoogleVertexResourcePath(
+    resolveGoogleVertexRequestModelPath({ modelId: model.id, apiKey, options }),
+  );
+  const origin = resolveGoogleVertexBaseOrigin(model, location);
+  return `${origin}/${GOOGLE_VERTEX_DEFAULT_API_VERSION}/${modelPath}:streamGenerateContent?alt=sse`;
 }
 
 function resolveThinkingLevel(level: ThinkingLevel, modelId: string): GoogleThinkingLevel {
@@ -624,9 +668,10 @@ function buildGoogleTransportRequestUrl(
   kind: GoogleTransportApi,
   model: GoogleTransportModel,
   options: GoogleTransportOptions | undefined,
+  apiKey: string | undefined,
 ): string {
   return kind === "google-vertex"
-    ? buildGoogleVertexRequestUrl(model, options)
+    ? buildGoogleVertexRequestUrl(model, options, apiKey)
     : buildGoogleGenerativeAiRequestUrl(model);
 }
 
@@ -766,18 +811,21 @@ function createGoogleTransportStreamFn(kind: GoogleTransportApi): StreamFn {
         if (nextParams !== undefined) {
           params = nextParams as GoogleGenerateContentRequest;
         }
-        const response = await guardedFetch(buildGoogleTransportRequestUrl(kind, model, options), {
-          method: "POST",
-          headers: await buildGoogleTransportHeaders({
-            kind,
-            model,
-            apiKey,
-            optionHeaders: options?.headers,
-            fetchImpl: (options as { fetch?: typeof fetch } | undefined)?.fetch,
-          }),
-          body: JSON.stringify(params),
-          signal: options?.signal,
-        });
+        const response = await guardedFetch(
+          buildGoogleTransportRequestUrl(kind, model, options, apiKey),
+          {
+            method: "POST",
+            headers: await buildGoogleTransportHeaders({
+              kind,
+              model,
+              apiKey,
+              optionHeaders: options?.headers,
+              fetchImpl: (options as { fetch?: typeof fetch } | undefined)?.fetch,
+            }),
+            body: JSON.stringify(params),
+            signal: options?.signal,
+          },
+        );
         if (!response.ok) {
           throw await createProviderHttpError(
             response,

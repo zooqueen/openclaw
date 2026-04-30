@@ -18,6 +18,7 @@ type GoogleVertexAuthorizedUserToken = {
 };
 
 const GCP_VERTEX_CREDENTIALS_MARKER = "gcp-vertex-credentials";
+const GOOGLE_VERTEX_AUTHENTICATED_PLACEHOLDER = "<authenticated>";
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 let cachedGoogleVertexAuthorizedUserToken: GoogleVertexAuthorizedUserToken | undefined;
@@ -28,8 +29,15 @@ function normalizeOptionalString(value: unknown): string | undefined {
 
 export function isGoogleVertexCredentialsMarker(
   apiKey: string | undefined,
-): apiKey is undefined | typeof GCP_VERTEX_CREDENTIALS_MARKER {
-  return apiKey === undefined || apiKey === GCP_VERTEX_CREDENTIALS_MARKER;
+): apiKey is
+  | undefined
+  | typeof GCP_VERTEX_CREDENTIALS_MARKER
+  | typeof GOOGLE_VERTEX_AUTHENTICATED_PLACEHOLDER {
+  return (
+    apiKey === undefined ||
+    apiKey === GCP_VERTEX_CREDENTIALS_MARKER ||
+    apiKey === GOOGLE_VERTEX_AUTHENTICATED_PLACEHOLDER
+  );
 }
 
 function resolveGoogleApplicationCredentialsPath(
@@ -86,6 +94,15 @@ export function hasGoogleVertexAuthorizedUserAdcSync(
   } catch {
     return false;
   }
+}
+
+export function shouldUseGoogleVertexAuthorizedUserAdcSync(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (normalizeOptionalString(env.GOOGLE_CLOUD_API_KEY)) {
+    return false;
+  }
+  return hasGoogleVertexAuthorizedUserAdcSync(env);
 }
 
 async function refreshGoogleVertexAuthorizedUserAccessToken(params: {

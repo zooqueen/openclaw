@@ -17,6 +17,7 @@ vi.mock("openclaw/plugin-sdk/provider-transport-runtime", async (importOriginal)
 let buildGoogleGenerativeAiParams: typeof import("./transport-stream.js").buildGoogleGenerativeAiParams;
 let createGoogleGenerativeAiTransportStreamFn: typeof import("./transport-stream.js").createGoogleGenerativeAiTransportStreamFn;
 let createGoogleVertexTransportStreamFn: typeof import("./transport-stream.js").createGoogleVertexTransportStreamFn;
+let buildGoogleProvider: typeof import("./provider-registration.js").buildGoogleProvider;
 let hasGoogleVertexAuthorizedUserAdcSync: typeof import("./vertex-adc.js").hasGoogleVertexAuthorizedUserAdcSync;
 
 const MODEL_PROVIDER_REQUEST_TRANSPORT_SYMBOL = Symbol.for(
@@ -73,6 +74,7 @@ describe("google transport stream", () => {
       createGoogleGenerativeAiTransportStreamFn,
       createGoogleVertexTransportStreamFn,
     } = await import("./transport-stream.js"));
+    ({ buildGoogleProvider } = await import("./provider-registration.js"));
     ({ hasGoogleVertexAuthorizedUserAdcSync } = await import("./vertex-adc.js"));
   });
 
@@ -352,6 +354,155 @@ describe("google transport stream", () => {
       content: [{ type: "text", text: "ok" }],
     });
   });
+
+  it("does not select the Google Vertex ADC fallback when API-key env auth is present", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-google-vertex-adc-api-key-"));
+    const credentialsPath = path.join(tempDir, "application_default_credentials.json");
+    await writeFile(
+      credentialsPath,
+      JSON.stringify({
+        type: "authorized_user",
+        client_id: "client-id",
+        client_secret: "client-secret",
+        refresh_token: "refresh-token",
+      }),
+      "utf8",
+    );
+    vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
+    vi.stubEnv("GOOGLE_CLOUD_API_KEY", "vertex-api-key");
+
+    const model = {
+      id: "gemini-3.1-pro-preview",
+      name: "Gemini 3.1 Pro Preview",
+      api: "google-vertex",
+      provider: "google-vertex",
+      baseUrl: "https://{location}-aiplatform.googleapis.com",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000,
+      maxTokens: 8192,
+    } satisfies Model<"google-vertex">;
+
+    expect(hasGoogleVertexAuthorizedUserAdcSync()).toBe(true);
+    expect(
+      buildGoogleProvider().createStreamFn?.({
+        provider: "google-vertex",
+        modelId: model.id,
+        model,
+      } as never),
+    ).toBeUndefined();
+  });
+
+  it("uses the SDK-compatible Vertex API-key URL without project or location", async () => {
+    guardedFetchMock.mockResolvedValueOnce(buildSseResponse([]));
+
+    const model = {
+      id: "gemini-3.1-pro-preview",
+      name: "Gemini 3.1 Pro Preview",
+      api: "google-vertex",
+      provider: "google-vertex",
+      baseUrl: "https://{location}-aiplatform.googleapis.com",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000,
+      maxTokens: 8192,
+    } satisfies Model<"google-vertex">;
+
+    const streamFn = createGoogleVertexTransportStreamFn();
+    const stream = await Promise.resolve(
+      streamFn(
+        model,
+        {
+          messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        } as Parameters<typeof streamFn>[1],
+        {
+          apiKey: "vertex-api-key",
+        } as Parameters<typeof streamFn>[2],
+      ),
+    );
+    await stream.result();
+
+    expect(guardedFetchMock).toHaveBeenCalledWith(
+      "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-goog-api-key": "vertex-api-key",
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    [
+      "publishers/google/models/gemini-3.1-pro-preview",
+      "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/publishers/google/models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse",
+    ],
+    [
+      "projects/other-project/locations/us-central1/publishers/google/models/gemini-3.1-pro-preview",
+      "https://aiplatform.googleapis.com/v1/projects/other-project/locations/us-central1/publishers/google/models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse",
+    ],
+  ] as const)(
+    "preserves Google Vertex model resource paths for %s",
+    async (modelId, expectedUrl) => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-google-vertex-model-path-"));
+      const credentialsPath = path.join(tempDir, "application_default_credentials.json");
+      await writeFile(
+        credentialsPath,
+        JSON.stringify({
+          type: "authorized_user",
+          client_id: "client-id",
+          client_secret: "client-secret",
+          refresh_token: `refresh-token-${modelId}`,
+        }),
+        "utf8",
+      );
+      vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
+      vi.stubEnv("GOOGLE_CLOUD_PROJECT", "vertex-project");
+      vi.stubEnv("GOOGLE_CLOUD_LOCATION", "global");
+      const tokenFetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ access_token: "ya29.vertex-token", expires_in: 3600 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      guardedFetchMock.mockResolvedValueOnce(buildSseResponse([]));
+
+      const model = {
+        id: modelId,
+        name: "Gemini 3.1 Pro Preview",
+        api: "google-vertex",
+        provider: "google-vertex",
+        baseUrl: "https://{location}-aiplatform.googleapis.com",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 8192,
+      } satisfies Model<"google-vertex">;
+
+      const streamFn = createGoogleVertexTransportStreamFn();
+      const stream = await Promise.resolve(
+        streamFn(
+          model,
+          {
+            messages: [{ role: "user", content: "hello", timestamp: 0 }],
+          } as Parameters<typeof streamFn>[1],
+          {
+            apiKey: "gcp-vertex-credentials",
+            fetch: tokenFetchMock,
+          } as Parameters<typeof streamFn>[2],
+        ),
+      );
+      await stream.result();
+
+      expect(guardedFetchMock).toHaveBeenCalledWith(
+        expectedUrl,
+        expect.objectContaining({ method: "POST" }),
+      );
+    },
+  );
 
   it("coerces replayed malformed tool-call args to an object for Google payloads", () => {
     const params = buildGoogleGenerativeAiParams(buildGeminiModel(), {
