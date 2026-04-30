@@ -122,6 +122,88 @@ function readBundledPluginRuntimeDepsManifest(
   return runtimeDepsManifest;
 }
 
+function addConfiguredProviderId(out: Set<string>, value: unknown): void {
+  if (typeof value !== "string") {
+    return;
+  }
+  const normalized = normalizeOptionalLowercaseString(value);
+  if (normalized) {
+    out.add(normalized);
+  }
+}
+
+function addConfiguredProviderFromModelRef(out: Set<string>, value: unknown): void {
+  if (typeof value !== "string") {
+    return;
+  }
+  const slash = value.indexOf("/");
+  if (slash <= 0) {
+    return;
+  }
+  addConfiguredProviderId(out, value.slice(0, slash));
+}
+
+function addConfiguredProvidersFromModelConfig(out: Set<string>, value: unknown): void {
+  if (typeof value === "string") {
+    addConfiguredProviderFromModelRef(out, value);
+    return;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return;
+  }
+  const model = value as { primary?: unknown; fallbacks?: unknown };
+  addConfiguredProviderFromModelRef(out, model.primary);
+  if (Array.isArray(model.fallbacks)) {
+    for (const fallback of model.fallbacks) {
+      addConfiguredProviderFromModelRef(out, fallback);
+    }
+  }
+}
+
+function collectConfiguredProviderIds(config: OpenClawConfig): ReadonlySet<string> {
+  const providerIds = new Set<string>();
+  for (const providerId of Object.keys(config.models?.providers ?? {})) {
+    addConfiguredProviderId(providerIds, providerId);
+  }
+  for (const profile of Object.values(config.auth?.profiles ?? {})) {
+    addConfiguredProviderId(providerIds, profile?.provider);
+  }
+  for (const providerId of Object.keys(config.auth?.order ?? {})) {
+    addConfiguredProviderId(providerIds, providerId);
+  }
+
+  const defaults = config.agents?.defaults;
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.model);
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.imageModel);
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.imageGenerationModel);
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.videoGenerationModel);
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.musicGenerationModel);
+  addConfiguredProvidersFromModelConfig(providerIds, defaults?.pdfModel);
+  for (const modelRef of Object.keys(defaults?.models ?? {})) {
+    addConfiguredProviderFromModelRef(providerIds, modelRef);
+  }
+
+  for (const agent of config.agents?.list ?? []) {
+    addConfiguredProvidersFromModelConfig(providerIds, agent.model);
+    addConfiguredProvidersFromModelConfig(providerIds, agent.subagents?.model);
+  }
+  return providerIds;
+}
+
+function isBundledProviderConfiguredForRuntimeDeps(params: {
+  config: OpenClawConfig;
+  providers: readonly string[];
+}): boolean {
+  if (params.providers.length === 0) {
+    return false;
+  }
+  const configuredProviderIds = collectConfiguredProviderIds(params.config);
+  return params.providers.some((providerId) => {
+    const normalizedProviderId = normalizeOptionalLowercaseString(providerId);
+    return Boolean(normalizedProviderId && configuredProviderIds.has(normalizedProviderId));
+  });
+}
+
 const BUILT_IN_RUNTIME_DEPS_PLUGIN_ALIAS_FALLBACKS: ReadonlyArray<
   readonly [alias: string, pluginId: string]
 > = [
@@ -280,7 +362,15 @@ export function isBundledPluginConfiguredForRuntimeDeps(params: {
   if (hasConfiguredChannel) {
     return true;
   }
-  return manifest.enabledByDefault;
+  if (
+    isBundledProviderConfiguredForRuntimeDeps({
+      config: params.config,
+      providers: manifest.providers,
+    })
+  ) {
+    return true;
+  }
+  return manifest.enabledByDefault && manifest.providers.length === 0;
 }
 
 function isBundledPluginExplicitlyDisabledForRuntimeDeps(params: {

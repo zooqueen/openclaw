@@ -1147,6 +1147,50 @@ describe("scanBundledPluginRuntimeDeps config policy", () => {
     expect(result.conflicts).toEqual([]);
   });
 
+  it("includes provider plugin deps only when the provider is configured", () => {
+    const packageRoot = makeTempDir();
+    writeBundledPluginPackage({
+      packageRoot,
+      pluginId: "anthropic-vertex",
+      deps: { "@anthropic-ai/vertex-sdk": "^0.16.0" },
+      enabledByDefault: true,
+      providers: ["anthropic-vertex"],
+    });
+
+    const inactive = scanBundledPluginRuntimeDeps({
+      packageRoot,
+      config: {},
+    });
+    const configuredProvider = scanBundledPluginRuntimeDeps({
+      packageRoot,
+      config: {
+        models: {
+          providers: {
+            "anthropic-vertex": { auth: "aws-sdk", baseUrl: "", models: [] },
+          },
+        },
+      },
+    });
+    const configuredModelRef = scanBundledPluginRuntimeDeps({
+      packageRoot,
+      config: {
+        agents: {
+          defaults: {
+            model: "anthropic-vertex/claude-sonnet-4-6",
+          },
+        },
+      },
+    });
+
+    expect(inactive.deps).toEqual([]);
+    expect(configuredProvider.deps.map((dep) => `${dep.name}@${dep.version}`)).toEqual([
+      "@anthropic-ai/vertex-sdk@^0.16.0",
+    ]);
+    expect(configuredModelRef.deps.map((dep) => `${dep.name}@${dep.version}`)).toEqual([
+      "@anthropic-ai/vertex-sdk@^0.16.0",
+    ]);
+  });
+
   it("honors deny and disabled entries when scanning an explicit effective plugin set", () => {
     const packageRoot = setupPolicyPackageRoot();
 

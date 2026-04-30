@@ -38,6 +38,23 @@ function writeBundledChannelOwnerPlugin(
   });
 }
 
+function writeBundledProviderPlugin(
+  root: string,
+  id: string,
+  providers: string[],
+  dependencies: Record<string, string>,
+) {
+  writeJson(path.join(root, "dist", "extensions", id, "package.json"), {
+    dependencies,
+  });
+  writeJson(path.join(root, "dist", "extensions", id, "openclaw.plugin.json"), {
+    id,
+    enabledByDefault: true,
+    providers,
+    configSchema: { type: "object" },
+  });
+}
+
 function writeDefaultEnabledBundledChannelPlugin(
   root: string,
   id: string,
@@ -457,17 +474,7 @@ describe("doctor bundled plugin runtime deps", () => {
   it("does not repair inactive default-enabled provider deps", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-bundled-"));
     writeJson(path.join(root, "package.json"), { name: "openclaw" });
-    writeJson(path.join(root, "dist", "extensions", "bedrock", "package.json"), {
-      dependencies: {
-        "bedrock-only": "1.0.0",
-      },
-    });
-    writeJson(path.join(root, "dist", "extensions", "bedrock", "openclaw.plugin.json"), {
-      id: "bedrock",
-      enabledByDefault: true,
-      providers: ["bedrock"],
-      configSchema: { type: "object" },
-    });
+    writeBundledProviderPlugin(root, "bedrock", ["bedrock"], { "bedrock-only": "1.0.0" });
     const installed = createInstalledRuntimeDeps();
 
     await maybeRepairBundledPluginRuntimeDeps({
@@ -489,17 +496,7 @@ describe("doctor bundled plugin runtime deps", () => {
   it("repairs explicitly enabled provider deps", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-bundled-"));
     writeJson(path.join(root, "package.json"), { name: "openclaw" });
-    writeJson(path.join(root, "dist", "extensions", "bedrock", "package.json"), {
-      dependencies: {
-        "bedrock-only": "1.0.0",
-      },
-    });
-    writeJson(path.join(root, "dist", "extensions", "bedrock", "openclaw.plugin.json"), {
-      id: "bedrock",
-      enabledByDefault: true,
-      providers: ["bedrock"],
-      configSchema: { type: "object" },
-    });
+    writeBundledProviderPlugin(root, "bedrock", ["bedrock"], { "bedrock-only": "1.0.0" });
     const installed = createInstalledRuntimeDeps();
 
     await maybeRepairBundledPluginRuntimeDeps({
@@ -524,6 +521,41 @@ describe("doctor bundled plugin runtime deps", () => {
         installRoot: resolveBundledRuntimeDependencyPackageInstallRoot(root),
         missingSpecs: ["bedrock-only@1.0.0"],
         installSpecs: ["bedrock-only@1.0.0"],
+      },
+    ]);
+  });
+
+  it("repairs configured provider deps", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-bundled-"));
+    writeJson(path.join(root, "package.json"), { name: "openclaw" });
+    writeBundledProviderPlugin(root, "anthropic-vertex", ["anthropic-vertex"], {
+      "@anthropic-ai/vertex-sdk": "^0.16.0",
+    });
+    const installed = createInstalledRuntimeDeps();
+
+    await maybeRepairBundledPluginRuntimeDeps({
+      runtime: createRuntime(),
+      prompter: createNonInteractivePrompter(),
+      packageRoot: root,
+      config: {
+        plugins: { enabled: true },
+        agents: {
+          defaults: {
+            model: "anthropic-vertex/claude-sonnet-4-6",
+          },
+        },
+      },
+      installDeps: (params) => {
+        installed.push(params);
+        materializeRuntimeDeps(params);
+      },
+    });
+
+    expect(installed).toEqual([
+      {
+        installRoot: resolveBundledRuntimeDependencyPackageInstallRoot(root),
+        missingSpecs: ["@anthropic-ai/vertex-sdk@^0.16.0"],
+        installSpecs: ["@anthropic-ai/vertex-sdk@^0.16.0"],
       },
     ]);
   });
