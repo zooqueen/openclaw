@@ -1,14 +1,17 @@
 import { importFreshModule } from "openclaw/plugin-sdk/test-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearSlackRuntime, setSlackRuntime } from "./runtime.js";
 import {
   clearSlackThreadParticipationCache,
   hasSlackThreadParticipation,
+  hasSlackThreadParticipationForConfig,
   recordSlackThreadParticipation,
 } from "./sent-thread-cache.js";
 
 describe("slack sent-thread-cache", () => {
   afterEach(() => {
     clearSlackThreadParticipationCache();
+    clearSlackRuntime();
     vi.restoreAllMocks();
   });
 
@@ -87,5 +90,47 @@ describe("slack sent-thread-cache", () => {
 
     expect(hasSlackThreadParticipation("A1", "C123", "1700000000.000000")).toBe(false);
     expect(hasSlackThreadParticipation("A1", "C123", "1700000000.005000")).toBe(true);
+  });
+
+  it("writes and reads persistent thread participation only when opted in", async () => {
+    const register = vi.fn().mockResolvedValue(undefined);
+    const lookup = vi.fn().mockResolvedValue({ repliedAt: 123 });
+    const openKeyedStore = vi.fn(() => ({
+      register,
+      lookup,
+      consume: vi.fn(),
+      delete: vi.fn(),
+      entries: vi.fn(),
+      clear: vi.fn(),
+    }));
+    setSlackRuntime({
+      state: { openKeyedStore },
+      logging: { getChildLogger: () => ({ warn: vi.fn() }) },
+    } as never);
+
+    recordSlackThreadParticipation("A1", "C123", "1700000000.000001");
+    expect(openKeyedStore).not.toHaveBeenCalled();
+
+    const cfg = {
+      plugins: { entries: { slack: { config: { experimentalPersistentState: true } } } },
+    };
+    recordSlackThreadParticipation("A1", "C123", "1700000000.000002", { cfg });
+
+    await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(register).toHaveBeenCalledWith(
+      "A1:C123:1700000000.000002",
+      expect.objectContaining({ repliedAt: expect.any(Number) }),
+    );
+
+    clearSlackThreadParticipationCache();
+    await expect(
+      hasSlackThreadParticipationForConfig({
+        cfg,
+        accountId: "A1",
+        channelId: "C123",
+        threadTs: "1700000000.000002",
+      }),
+    ).resolves.toBe(true);
+    expect(lookup).toHaveBeenCalledWith("A1:C123:1700000000.000002");
   });
 });

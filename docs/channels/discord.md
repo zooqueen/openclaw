@@ -348,6 +348,8 @@ Supported blocks:
 
 By default, components are single use. Set `components.reusable=true` to allow buttons, selects, and forms to be used multiple times until they expire.
 
+Set `plugins.entries.discord.config.experimentalPersistentState: true` to opt in to the experimental SDK-backed persistent component/modal registry, so valid buttons, selects, and forms can survive a Gateway restart until their normal TTL expires. The default remains the previous process-local registry.
+
 To restrict who can click a button, set `allowedUsers` on that button (Discord user IDs, tags, or `*`). When configured, unmatched users receive an ephemeral denial.
 
 The `/model` and `/models` slash commands open an interactive model picker with provider, model, and compatible runtime dropdowns plus a Submit step. `/models add` is deprecated and now returns a deprecation message instead of registering models from chat. The picker reply is ephemeral and only the invoking user can use it.

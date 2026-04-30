@@ -511,28 +511,30 @@ export const matrixApprovalNativeRuntime = createChannelApprovalNativeRuntimeAda
     },
   },
   interactions: {
-    bindPending: ({ entry, pendingPayload }) => {
+    bindPending: (params) => {
       const target = normalizeReactionTargetRef({
-        roomId: entry.roomId,
-        eventId: entry.reactionEventId,
+        roomId: params.entry.roomId,
+        eventId: params.entry.reactionEventId,
       });
       if (!target) {
         return null;
       }
       registerMatrixApprovalReactionTarget({
+        cfg: params.cfg as CoreConfig,
         roomId: target.roomId,
         eventId: target.eventId,
-        approvalId: pendingPayload.approvalId,
-        allowedDecisions: pendingPayload.allowedDecisions,
+        approvalId: params.pendingPayload.approvalId,
+        allowedDecisions: params.pendingPayload.allowedDecisions,
+        ttlMs: params.view.expiresAtMs - Date.now(),
       });
       return target;
     },
-    unbindPending: ({ binding }) => {
-      const target = normalizeReactionTargetRef(binding);
+    unbindPending: (params) => {
+      const target = normalizeReactionTargetRef(params.binding);
       if (!target) {
         return;
       }
-      unregisterMatrixApprovalReactionTarget(target);
+      unregisterMatrixApprovalReactionTarget({ ...target, cfg: params.cfg as CoreConfig });
     },
   },
 });

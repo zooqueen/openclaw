@@ -1,6 +1,6 @@
 import { logError } from "openclaw/plugin-sdk/text-runtime";
 import { parseDiscordModalCustomIdForInteraction } from "../component-custom-id.js";
-import { resolveDiscordModalEntry } from "../components-registry.js";
+import { resolveDiscordModalEntryForConfig } from "../components-registry.js";
 import { Modal, type ComponentData, type ModalInteraction } from "../internal/discord.js";
 import {
   type AgentComponentContext,
@@ -41,7 +41,11 @@ export class DiscordComponentModal extends Modal {
       return;
     }
 
-    const modalEntry = resolveDiscordModalEntry({ id: modalId, consume: false });
+    const modalEntry = await resolveDiscordModalEntryForConfig({
+      cfg: this.ctx.cfg,
+      id: modalId,
+      consume: false,
+    });
     if (!modalEntry) {
       try {
         await interaction.reply({
@@ -94,7 +98,8 @@ export class DiscordComponentModal extends Modal {
       return;
     }
 
-    const consumed = resolveDiscordModalEntry({
+    const consumed = await resolveDiscordModalEntryForConfig({
+      cfg: this.ctx.cfg,
       id: modalId,
       consume: !modalEntry.reusable,
     });

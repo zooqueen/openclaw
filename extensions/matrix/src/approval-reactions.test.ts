@@ -1,15 +1,18 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildMatrixApprovalReactionHint,
   clearMatrixApprovalReactionTargetsForTest,
   listMatrixApprovalReactionBindings,
   registerMatrixApprovalReactionTarget,
   resolveMatrixApprovalReactionTarget,
+  resolveMatrixApprovalReactionTargetForConfig,
   unregisterMatrixApprovalReactionTarget,
 } from "./approval-reactions.js";
+import { setMatrixRuntime } from "./runtime.js";
 
 afterEach(() => {
   clearMatrixApprovalReactionTargetsForTest();
+  vi.restoreAllMocks();
 });
 
 describe("matrix approval reactions", () => {
@@ -103,5 +106,66 @@ describe("matrix approval reactions", () => {
         reactionKey: "✅",
       }),
     ).toBeNull();
+  });
+
+  it("persists approval reaction targets only when opted in", async () => {
+    const register = vi.fn().mockResolvedValue(undefined);
+    const lookup = vi.fn().mockResolvedValue({
+      version: 1,
+      target: { approvalId: "req-persisted", allowedDecisions: ["deny"] },
+    });
+    const openKeyedStore = vi.fn(() => ({
+      register,
+      lookup,
+      consume: vi.fn(),
+      delete: vi.fn(),
+      entries: vi.fn(),
+      clear: vi.fn(),
+    }));
+    setMatrixRuntime({
+      state: { openKeyedStore },
+      logging: { getChildLogger: () => ({ warn: vi.fn() }) },
+    } as never);
+
+    registerMatrixApprovalReactionTarget({
+      roomId: "!ops:example.org",
+      eventId: "$approval-msg",
+      approvalId: "req-ignored",
+      allowedDecisions: ["deny"],
+    });
+    expect(openKeyedStore).not.toHaveBeenCalled();
+
+    const cfg = {
+      plugins: { entries: { matrix: { config: { experimentalPersistentState: true } } } },
+    };
+    registerMatrixApprovalReactionTarget({
+      cfg,
+      roomId: "!ops:example.org",
+      eventId: "$approval-msg-2",
+      approvalId: "req-123",
+      allowedDecisions: ["allow-once", "deny"],
+      ttlMs: 1000,
+    });
+
+    await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(register).toHaveBeenCalledWith(
+      "!ops:example.org:$approval-msg-2",
+      {
+        version: 1,
+        target: { approvalId: "req-123", allowedDecisions: ["allow-once", "deny"] },
+      },
+      { ttlMs: 1000 },
+    );
+
+    clearMatrixApprovalReactionTargetsForTest();
+    await expect(
+      resolveMatrixApprovalReactionTargetForConfig({
+        cfg,
+        roomId: "!ops:example.org",
+        eventId: "$approval-msg-2",
+        reactionKey: "❌",
+      }),
+    ).resolves.toEqual({ approvalId: "req-persisted", decision: "deny" });
+    expect(lookup).toHaveBeenCalledWith("!ops:example.org:$approval-msg-2");
   });
 });
