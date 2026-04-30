@@ -112,9 +112,10 @@ final class MacNodeModeCoordinator {
                                 ok: false,
                                 error: OpenClawNodeError(code: .unavailable, message: "UNAVAILABLE: node not ready"))
                         }
+                        let permissions = await self.currentPermissions()
                         if let response = await mcpHost.handleInvoke(
                             req,
-                            permissions: await self.currentPermissions(),
+                            permissions: permissions,
                             sendMcpServersUpdate: { nodeId, mcpServers in
                                 await nodeSession.sendMcpServersUpdate(nodeId: nodeId, mcpServers: mcpServers)
                             })

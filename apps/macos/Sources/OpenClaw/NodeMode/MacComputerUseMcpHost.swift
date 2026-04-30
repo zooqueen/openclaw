@@ -789,9 +789,9 @@ actor MacComputerUseMcpHost {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private nonisolated static func payloadResponse<T: Encodable>(
+    private nonisolated static func payloadResponse(
         _ req: BridgeInvokeRequest,
-        _ payload: T) throws -> BridgeInvokeResponse
+        _ payload: some Encodable) throws -> BridgeInvokeResponse
     {
         let data = try JSONEncoder().encode(payload)
         return BridgeInvokeResponse(
