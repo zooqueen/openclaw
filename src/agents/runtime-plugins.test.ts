@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
   resolveRuntimePluginRegistry: vi.fn(),
+  resolveCompatibleRuntimePluginRegistry: vi.fn(),
   getActivePluginRuntimeSubagentMode: vi.fn<() => "default" | "explicit" | "gateway-bindable">(
     () => "default",
   ),
@@ -12,6 +13,7 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("../plugins/loader.js", () => ({
   resolveRuntimePluginRegistry: hoisted.resolveRuntimePluginRegistry,
+  resolveCompatibleRuntimePluginRegistry: hoisted.resolveCompatibleRuntimePluginRegistry,
 }));
 
 vi.mock("../plugins/runtime.js", () => ({
@@ -30,6 +32,8 @@ describe("ensureRuntimePluginsLoaded", () => {
   beforeEach(async () => {
     hoisted.resolveRuntimePluginRegistry.mockReset();
     hoisted.resolveRuntimePluginRegistry.mockReturnValue(undefined);
+    hoisted.resolveCompatibleRuntimePluginRegistry.mockReset();
+    hoisted.resolveCompatibleRuntimePluginRegistry.mockReturnValue(undefined);
     hoisted.getActivePluginRuntimeSubagentMode.mockReset();
     hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("default");
     hoisted.isReplyCapableChannelsLive.mockReset();
@@ -51,6 +55,19 @@ describe("ensureRuntimePluginsLoaded", () => {
     });
 
     expect(hoisted.resolveRuntimePluginRegistry).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns early when readiness already prepared a compatible registry", async () => {
+    hoisted.isReplyRuntimePluginRegistryPrepared.mockReturnValue(true);
+    hoisted.resolveCompatibleRuntimePluginRegistry.mockReturnValue({});
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/workspace",
+    });
+
+    expect(hoisted.resolveCompatibleRuntimePluginRegistry).toHaveBeenCalledTimes(1);
+    expect(hoisted.resolveRuntimePluginRegistry).not.toHaveBeenCalled();
   });
 
   it("resolves runtime plugins through the shared runtime helper", async () => {

@@ -48,6 +48,7 @@ vi.mock("../../agents/model-auth.js", () => ({
   ensureAuthProfileStore: () => mockStore,
   resolveUsableCustomProviderApiKey: () => null,
   resolveAuthProfileOrder: () => mockOrder,
+  resolvePreparedAuthProfileOrder: () => mockOrder,
   resolveEnvApiKey: (
     provider?: string,
     env?: NodeJS.ProcessEnv,

@@ -3,6 +3,7 @@ import { getRuntimeConfig } from "../config/config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { augmentModelCatalogWithProviderPlugins } from "../plugins/provider-runtime.runtime.js";
+import { resolveProcessScopedMap } from "../shared/process-scoped-map.js";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
@@ -49,6 +50,15 @@ let hasLoggedModelCatalogError = false;
 const defaultImportPiSdk = () => import("./pi-model-discovery-runtime.js");
 let importPiSdk = defaultImportPiSdk;
 let modelSuppressionPromise: Promise<typeof import("./model-suppression.runtime.js")> | undefined;
+const REPLY_RUNTIME_PREPARED_MODEL_CATALOG_CACHE_KEY = Symbol.for(
+  "openclaw.replyRuntimePreparedModelCatalogCache",
+);
+
+function getReplyRuntimePreparedModelCatalogCache() {
+  return resolveProcessScopedMap<ModelCatalogEntry[]>(
+    REPLY_RUNTIME_PREPARED_MODEL_CATALOG_CACHE_KEY,
+  );
+}
 
 function shouldLogModelCatalogTiming(): boolean {
   return process.env.OPENCLAW_DEBUG_INGRESS_TIMING === "1";
@@ -62,6 +72,7 @@ function loadModelSuppression() {
 export function resetModelCatalogCache() {
   modelCatalogPromise = null;
   hasLoggedModelCatalogError = false;
+  getReplyRuntimePreparedModelCatalogCache().clear();
 }
 
 export function resetModelCatalogCacheForTest() {
@@ -244,6 +255,25 @@ export async function loadModelCatalog(params?: {
 
   modelCatalogPromise = loadCatalog();
   return modelCatalogPromise;
+}
+
+export async function prepareReplyRuntimeModelCatalog(params?: {
+  config?: OpenClawConfig;
+}): Promise<ModelCatalogEntry[]> {
+  const catalog = await loadModelCatalog({ config: params?.config });
+  const cache = getReplyRuntimePreparedModelCatalogCache();
+  cache.set("active", catalog);
+  return catalog;
+}
+
+export function getPreparedReplyRuntimeModelCatalog(): ModelCatalogEntry[] | undefined {
+  return getReplyRuntimePreparedModelCatalogCache().get("active");
+}
+
+export async function loadPreparedReplyRuntimeModelCatalog(params?: {
+  config?: OpenClawConfig;
+}): Promise<ModelCatalogEntry[]> {
+  return getPreparedReplyRuntimeModelCatalog() ?? loadModelCatalog({ config: params?.config });
 }
 
 /**

@@ -4,7 +4,10 @@ import {
   isReplyRuntimePluginRegistryPrepared,
   logReplyRuntimeColdPathViolation,
 } from "../gateway/reply-runtime-readiness-monitor.js";
-import { resolveRuntimePluginRegistry } from "../plugins/loader.js";
+import {
+  resolveCompatibleRuntimePluginRegistry,
+  resolveRuntimePluginRegistry,
+} from "../plugins/loader.js";
 import { getActivePluginRuntimeSubagentMode } from "../plugins/runtime.js";
 import { resolveUserPath } from "../utils.js";
 
@@ -30,6 +33,12 @@ export function ensureRuntimePluginsLoaded(params: {
         }
       : undefined,
   };
+  if (
+    isReplyRuntimePluginRegistryPrepared() &&
+    resolveCompatibleRuntimePluginRegistry(loadOptions)
+  ) {
+    return;
+  }
   const shouldWarnLateColdLoad =
     isReplyCapableChannelsLive() && !isReplyRuntimePluginRegistryPrepared();
   const startedAt = shouldWarnLateColdLoad ? Date.now() : 0;

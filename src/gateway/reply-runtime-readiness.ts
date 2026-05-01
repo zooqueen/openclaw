@@ -5,8 +5,12 @@ import {
 } from "../agents/agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { selectAgentHarness } from "../agents/harness/selection.js";
-import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../agents/model-auth.js";
-import { loadModelCatalog } from "../agents/model-catalog.js";
+import {
+  ensureAuthProfileStore,
+  resolvePreparedAuthProfileOrder,
+  shouldPreferExplicitConfigApiKeyAuth,
+} from "../agents/model-auth.js";
+import { prepareReplyRuntimeModelCatalog } from "../agents/model-catalog.js";
 import {
   buildModelAliasIndex,
   resolveModelRefFromString,
@@ -20,7 +24,10 @@ import { resolveStorePath } from "../config/sessions/paths.js";
 import { loadSessionStore } from "../config/sessions/store.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
-import { resolveProviderRuntimePlugin } from "../plugins/provider-hook-runtime.js";
+import {
+  resolveProviderAuthProfileId,
+  resolveProviderRuntimePlugin,
+} from "../plugins/provider-hook-runtime.js";
 import { resolveOwningPluginIdsForProvider } from "../plugins/providers.js";
 import { buildAgentMainSessionKey } from "../routing/session-key.js";
 import {
@@ -86,10 +93,13 @@ function resolveSelectedHarnessAuthProfileId(params: {
   const authStore = ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
-  return resolveAuthProfileOrder({
+  return resolvePreparedAuthProfileOrder({
     cfg: params.cfg,
     store: authStore,
     provider: runtimeAuthPlan.harnessAuthProvider,
+    agentDir: params.agentDir,
+    workspaceDir: params.workspaceDir,
+    primeReplyRuntimeCache: true,
   })[0]?.trim();
 }
 
@@ -167,6 +177,54 @@ function collectReplyRuntimeWarmTargets(params: {
   return [...targets.values()];
 }
 
+function resolvePiReplyRuntimeProfileCandidates(params: {
+  cfg: OpenClawConfig;
+  agentDir: string;
+  workspaceDir: string;
+  provider: string;
+  modelId: string;
+}): string[] {
+  if (shouldPreferExplicitConfigApiKeyAuth(params.cfg, params.provider)) {
+    return [];
+  }
+  const authStore = ensureAuthProfileStore(params.agentDir, {
+    allowKeychainPrompt: false,
+  });
+  const profileOrder = resolvePreparedAuthProfileOrder({
+    cfg: params.cfg,
+    store: authStore,
+    provider: params.provider,
+    agentDir: params.agentDir,
+    workspaceDir: params.workspaceDir,
+    primeReplyRuntimeCache: true,
+  });
+  const providerPreferredProfileId = resolveProviderAuthProfileId({
+    provider: params.provider,
+    config: params.cfg,
+    workspaceDir: params.workspaceDir,
+    env: process.env,
+    context: {
+      config: params.cfg,
+      agentDir: params.agentDir,
+      workspaceDir: params.workspaceDir,
+      provider: params.provider,
+      modelId: params.modelId,
+      preferredProfileId: undefined,
+      lockedProfileId: undefined,
+      profileOrder,
+      authStore,
+    },
+  });
+  const orderedProfiles =
+    providerPreferredProfileId && profileOrder.includes(providerPreferredProfileId)
+      ? [
+          providerPreferredProfileId,
+          ...profileOrder.filter((profileId) => profileId !== providerPreferredProfileId),
+        ]
+      : profileOrder;
+  return orderedProfiles;
+}
+
 export async function prepareReplyRuntimeForChannels(params: {
   cfg: OpenClawConfig;
   workspaceDir?: string;
@@ -239,7 +297,7 @@ export async function prepareReplyRuntimeForChannels(params: {
       "selected-model-metadata",
       `prepared metadata for ${warmTargets.length} reply model target(s)`,
       async () => {
-        const catalog = await loadModelCatalog({ config: params.cfg });
+        const catalog = await prepareReplyRuntimeModelCatalog({ config: params.cfg });
         for (const target of warmTargets) {
           if (
             !catalog.some(
@@ -343,11 +401,33 @@ export async function prepareReplyRuntimeForChannels(params: {
             provider: target.provider,
             modelId: target.model,
             agentDir,
+            workspaceDir,
             allowMissingApiKeyModes: ["aws-sdk"],
             primeReplyRuntimeCache: true,
           });
           if ("error" in prepared) {
             throw new Error(prepared.error);
+          }
+          for (const profileId of resolvePiReplyRuntimeProfileCandidates({
+            cfg: params.cfg,
+            agentDir,
+            workspaceDir,
+            provider: target.provider,
+            modelId: target.model,
+          })) {
+            const profilePrepared = await prepareSimpleCompletionModel({
+              cfg: params.cfg,
+              provider: target.provider,
+              modelId: target.model,
+              agentDir,
+              workspaceDir,
+              ...(profileId ? { profileId } : {}),
+              allowMissingApiKeyModes: ["aws-sdk"],
+              primeReplyRuntimeCache: true,
+            });
+            if ("error" in profilePrepared) {
+              throw new Error(profilePrepared.error);
+            }
           }
           markReplyRuntimeProviderAuthPrepared(target.provider);
         }

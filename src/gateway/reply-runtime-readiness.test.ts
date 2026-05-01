@@ -58,6 +58,7 @@ vi.mock("../agents/model-auth.js", async (importOriginal) => {
     ...actual,
     ensureAuthProfileStore: hoisted.ensureAuthProfileStore,
     resolveAuthProfileOrder: hoisted.resolveAuthProfileOrder,
+    resolvePreparedAuthProfileOrder: hoisted.resolveAuthProfileOrder,
   };
 });
 
@@ -70,11 +71,13 @@ vi.mock("../agents/model-catalog.js", async (importOriginal) => {
   return {
     ...actual,
     loadModelCatalog: hoisted.loadModelCatalog,
+    prepareReplyRuntimeModelCatalog: hoisted.loadModelCatalog,
   };
 });
 
 vi.mock("../plugins/provider-hook-runtime.js", () => ({
   resolveProviderRuntimePlugin: hoisted.resolveProviderRuntimePlugin,
+  resolveProviderAuthProfileId: vi.fn(() => undefined),
 }));
 
 vi.mock("../plugins/providers.js", async (importOriginal) => {
@@ -309,6 +312,51 @@ describe("reply-runtime readiness", () => {
       expect.objectContaining({
         provider: "amazon-bedrock",
         modelId: "us.anthropic.claude-opus-4-6-v1:0",
+        workspaceDir: "/tmp/openclaw-workspace",
+        primeReplyRuntimeCache: true,
+      }),
+    );
+  });
+
+  it("primes PI auth profile candidates with the same runtime workspace", async () => {
+    hoisted.loadModelCatalog.mockResolvedValueOnce([
+      {
+        provider: "openai",
+        id: "gpt-5.4",
+        name: "GPT-5.4",
+        reasoning: true,
+      },
+    ]);
+    hoisted.resolveAuthProfileOrder.mockReturnValueOnce(["openai:work"]);
+
+    const result = await prepareReplyRuntimeForChannels({
+      cfg: {
+        agents: {
+          defaults: {
+            model: { primary: "openai/gpt-5.4" },
+          },
+        },
+      } as OpenClawConfig,
+      workspaceDir: "/tmp/openclaw-workspace",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(hoisted.prepareSimpleCompletionModel).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        provider: "openai",
+        modelId: "gpt-5.4",
+        workspaceDir: "/tmp/openclaw-workspace",
+        primeReplyRuntimeCache: true,
+      }),
+    );
+    expect(hoisted.prepareSimpleCompletionModel).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        provider: "openai",
+        modelId: "gpt-5.4",
+        profileId: "openai:work",
+        workspaceDir: "/tmp/openclaw-workspace",
         primeReplyRuntimeCache: true,
       }),
     );

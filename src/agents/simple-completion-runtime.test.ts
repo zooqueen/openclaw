@@ -121,6 +121,35 @@ describe("prepareSimpleCompletionModel", () => {
     expect(hoisted.setRuntimeApiKeyMock).toHaveBeenCalledWith("anthropic", "sk-test");
   });
 
+  it("forwards workspace and lock state when priming reply-runtime auth", async () => {
+    await prepareSimpleCompletionModel({
+      cfg: undefined,
+      provider: "anthropic",
+      modelId: "claude-opus-4-6",
+      agentDir: "/tmp/openclaw-agent",
+      workspaceDir: "/tmp/openclaw-workspace",
+      profileId: "anthropic:work",
+      lockedProfile: true,
+      primeReplyRuntimeCache: true,
+    });
+
+    expect(hoisted.getApiKeyForModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentDir: "/tmp/openclaw-agent",
+        workspaceDir: "/tmp/openclaw-workspace",
+        profileId: "anthropic:work",
+        lockedProfile: true,
+        primeReplyRuntimeCache: true,
+      }),
+    );
+    expect(hoisted.prepareProviderRuntimeAuthMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceDir: "/tmp/openclaw-workspace",
+        primeReplyRuntimeCache: true,
+      }),
+    );
+  });
+
   it("returns error when model resolution fails", async () => {
     hoisted.resolveModelMock.mockReturnValueOnce({
       error: "Unknown model: anthropic/missing-model",

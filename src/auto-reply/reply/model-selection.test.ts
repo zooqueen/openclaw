@@ -1,21 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MODEL_CONTEXT_TOKEN_CACHE } from "../../agents/context-cache.js";
-import { loadModelCatalog } from "../../agents/model-catalog.runtime.js";
+import {
+  loadPreparedReplyRuntimeModelCatalog,
+  resetModelCatalogCache,
+} from "../../agents/model-catalog.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { createModelSelectionState, resolveContextTokens } from "./model-selection.js";
 
-vi.mock("../../agents/model-catalog.runtime.js", () => ({
-  loadModelCatalog: vi.fn(async () => [
-    { provider: "anthropic", id: "claude-opus-4-6", name: "Claude Opus 4.5" },
-    { provider: "inferencer", id: "deepseek-v3-4bit-mlx", name: "DeepSeek V3" },
-    { provider: "kimi", id: "kimi-code", name: "Kimi Code" },
-    { provider: "openai", id: "gpt-4o-mini", name: "GPT-4o mini" },
-    { provider: "openai", id: "gpt-4o", name: "GPT-4o" },
-    { provider: "xai", id: "grok-4", name: "Grok 4" },
-    { provider: "xai", id: "grok-4.20-reasoning", name: "Grok 4.20 (Reasoning)" },
-  ]),
-}));
+vi.mock("../../agents/model-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/model-catalog.js")>();
+  return {
+    ...actual,
+    loadPreparedReplyRuntimeModelCatalog: vi.fn(async () => [
+      { provider: "anthropic", id: "claude-opus-4-6", name: "Claude Opus 4.5" },
+      { provider: "inferencer", id: "deepseek-v3-4bit-mlx", name: "DeepSeek V3" },
+      { provider: "kimi", id: "kimi-code", name: "Kimi Code" },
+      { provider: "openai", id: "gpt-4o-mini", name: "GPT-4o mini" },
+      { provider: "openai", id: "gpt-4o", name: "GPT-4o" },
+      { provider: "xai", id: "grok-4", name: "Grok 4" },
+      { provider: "xai", id: "grok-4.20-reasoning", name: "Grok 4.20 (Reasoning)" },
+    ]),
+  };
+});
 
 vi.mock("../../channels/plugins/session-conversation.js", () => ({
   resolveSessionParentSessionKey: (sessionKey?: string) =>
@@ -24,6 +31,7 @@ vi.mock("../../channels/plugins/session-conversation.js", () => ({
 
 afterEach(() => {
   MODEL_CONTEXT_TOKEN_CACHE.clear();
+  resetModelCatalogCache();
 });
 
 const makeConfiguredModel = (overrides: Record<string, unknown> = {}) => ({
@@ -39,7 +47,7 @@ const makeConfiguredModel = (overrides: Record<string, unknown> = {}) => ({
 
 describe("createModelSelectionState catalog loading", () => {
   it("skips full catalog loading for ordinary allowlist-backed turns", async () => {
-    vi.mocked(loadModelCatalog).mockClear();
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockClear();
     const cfg = {
       agents: {
         defaults: {
@@ -72,11 +80,11 @@ describe("createModelSelectionState catalog loading", () => {
     expect(state.allowedModelKeys.has("openai-codex/gpt-5.4")).toBe(true);
     await expect(state.resolveDefaultThinkingLevel()).resolves.toBe("low");
     await expect(state.resolveDefaultReasoningLevel()).resolves.toBe("on");
-    expect(loadModelCatalog).not.toHaveBeenCalled();
+    expect(loadPreparedReplyRuntimeModelCatalog).not.toHaveBeenCalled();
   });
 
   it("uses the implicit model default when no global thinking default is configured", async () => {
-    vi.mocked(loadModelCatalog).mockClear();
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockClear();
     const cfg = {
       agents: {
         defaults: {
@@ -106,12 +114,12 @@ describe("createModelSelectionState catalog loading", () => {
     });
 
     await expect(state.resolveDefaultThinkingLevel()).resolves.toBe("medium");
-    expect(loadModelCatalog).not.toHaveBeenCalled();
+    expect(loadPreparedReplyRuntimeModelCatalog).not.toHaveBeenCalled();
   });
 
   it("hydrates runtime catalog metadata when the configured allowlist entry lacks reasoning", async () => {
-    vi.mocked(loadModelCatalog).mockClear();
-    vi.mocked(loadModelCatalog).mockResolvedValueOnce([
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockClear();
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockResolvedValueOnce([
       { provider: "openai-codex", id: "gpt-5.4", name: "GPT-5.4", reasoning: true },
     ]);
     const cfg = {
@@ -143,11 +151,11 @@ describe("createModelSelectionState catalog loading", () => {
     });
 
     await expect(state.resolveDefaultThinkingLevel()).resolves.toBe("medium");
-    expect(loadModelCatalog).toHaveBeenCalledOnce();
+    expect(loadPreparedReplyRuntimeModelCatalog).toHaveBeenCalledOnce();
   });
 
   it("prefers per-agent thinkingDefault over model and global defaults", async () => {
-    vi.mocked(loadModelCatalog).mockClear();
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockClear();
     const cfg = {
       agents: {
         defaults: {
@@ -182,7 +190,7 @@ describe("createModelSelectionState catalog loading", () => {
   });
 
   it("loads the full catalog for explicit model directives", async () => {
-    vi.mocked(loadModelCatalog).mockClear();
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockClear();
     const cfg = {
       agents: {
         defaults: {
@@ -203,7 +211,7 @@ describe("createModelSelectionState catalog loading", () => {
       hasModelDirective: true,
     });
 
-    expect(loadModelCatalog).toHaveBeenCalledOnce();
+    expect(loadPreparedReplyRuntimeModelCatalog).toHaveBeenCalledOnce();
   });
 });
 
@@ -781,8 +789,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
 
 describe("createModelSelectionState resolveDefaultReasoningLevel", () => {
   it("returns on when catalog model has reasoning true", async () => {
-    const { loadModelCatalog } = await import("../../agents/model-catalog.runtime.js");
-    vi.mocked(loadModelCatalog).mockResolvedValueOnce([
+    vi.mocked(loadPreparedReplyRuntimeModelCatalog).mockResolvedValueOnce([
       { provider: "openrouter", id: "x-ai/grok-4.1-fast", name: "Grok", reasoning: true },
     ]);
     const state = await createModelSelectionState({

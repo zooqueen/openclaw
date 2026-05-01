@@ -158,8 +158,10 @@ export async function prepareSimpleCompletionModel(params: {
   provider: string;
   modelId: string;
   agentDir?: string;
+  workspaceDir?: string;
   profileId?: string;
   preferredProfile?: string;
+  lockedProfile?: boolean;
   allowMissingApiKeyModes?: ReadonlyArray<AllowedMissingApiKeyMode>;
   skipPiDiscovery?: boolean;
   primeReplyRuntimeCache?: boolean;
@@ -184,8 +186,10 @@ export async function prepareSimpleCompletionModel(params: {
       model: resolved.model,
       cfg: params.cfg,
       agentDir: params.agentDir,
+      workspaceDir: params.workspaceDir,
       profileId: params.profileId,
       preferredProfile: params.preferredProfile,
+      lockedProfile: params.lockedProfile,
       primeReplyRuntimeCache: params.primeReplyRuntimeCache,
     });
   } catch (err) {
@@ -216,7 +220,7 @@ export async function prepareSimpleCompletionModel(params: {
       apiKey: rawApiKey,
       authMode: auth.mode,
       cfg: params.cfg,
-      workspaceDir: params.agentDir,
+      workspaceDir: params.workspaceDir ?? params.agentDir,
       profileId: auth.profileId,
       primeReplyRuntimeCache: params.primeReplyRuntimeCache,
     });

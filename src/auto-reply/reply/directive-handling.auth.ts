@@ -6,7 +6,7 @@ import {
 } from "../../agents/auth-profiles.js";
 import {
   ensureAuthProfileStore,
-  resolveAuthProfileOrder,
+  resolvePreparedAuthProfileOrder,
   resolveEnvApiKey,
   resolveUsableCustomProviderApiKey,
 } from "../../agents/model-auth.js";
@@ -62,7 +62,13 @@ export const resolveAuthLabel = async (
   const store = ensureAuthProfileStore(agentDir, {
     allowKeychainPrompt: false,
   });
-  const order = resolveAuthProfileOrder({ cfg, store, provider });
+  const order = resolvePreparedAuthProfileOrder({
+    cfg,
+    store,
+    provider,
+    agentDir,
+    workspaceDir,
+  });
   const providerKey = normalizeProviderId(provider);
   const lastGood = findNormalizedProviderValue(store.lastGood, providerKey);
   const nextProfileId = order[0];

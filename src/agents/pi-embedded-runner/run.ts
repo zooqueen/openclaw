@@ -53,7 +53,7 @@ import {
   applyLocalNoAuthHeaderOverride,
   ensureAuthProfileStore,
   type ResolvedProviderAuth,
-  resolveAuthProfileOrder,
+  resolvePreparedAuthProfileOrder,
   shouldPreferExplicitConfigApiKeyAuth,
 } from "../model-auth.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
@@ -543,10 +543,12 @@ export async function runEmbeddedPiAgent(
         const harnessAuthStore = ensureAuthProfileStore(agentDir, {
           allowKeychainPrompt: false,
         });
-        return resolveAuthProfileOrder({
+        return resolvePreparedAuthProfileOrder({
           cfg: params.config,
           store: harnessAuthStore,
           provider: harnessAuthProvider,
+          agentDir,
+          workspaceDir: resolvedWorkspace,
         })[0]?.trim();
       };
       const preferredProfileId = pluginHarnessOwnsTransport
@@ -612,11 +614,13 @@ export async function runEmbeddedPiAgent(
       }
       const profileOrder = shouldPreferExplicitConfigApiKeyAuth(params.config, provider)
         ? []
-        : resolveAuthProfileOrder({
+        : resolvePreparedAuthProfileOrder({
             cfg: params.config,
             store: authStore,
             provider,
             preferredProfile: preferredProfileId,
+            agentDir,
+            workspaceDir: resolvedWorkspace,
           });
       const providerPreferredProfileId = lockedProfileId
         ? undefined

@@ -5,6 +5,7 @@ import {
 } from "../../config/model-input.js";
 import type { AgentModelConfig } from "../../config/types.agents-shared.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { resolveProcessScopedMap } from "../../shared/process-scoped-map.js";
 import {
   externalCliDiscoveryForProviderAuth,
   ensureAuthProfileStore,
@@ -16,6 +17,20 @@ import { resolveEnvApiKey } from "../model-auth.js";
 import { resolveConfiguredModelRef } from "../model-selection.js";
 
 export type ToolModelConfig = { primary?: string; fallbacks?: string[]; timeoutMs?: number };
+const REPLY_RUNTIME_TOOL_PROVIDER_AUTH_CACHE_KEY = Symbol.for(
+  "openclaw.replyRuntimeToolProviderAuthCache",
+);
+
+function getReplyRuntimeToolProviderAuthCache() {
+  return resolveProcessScopedMap<boolean>(REPLY_RUNTIME_TOOL_PROVIDER_AUTH_CACHE_KEY);
+}
+
+function buildReplyRuntimeToolProviderAuthCacheKey(params: {
+  provider: string;
+  agentDir?: string;
+}): string {
+  return JSON.stringify([params.provider.trim().toLowerCase(), params.agentDir?.trim() || ""]);
+}
 
 export function hasToolModelConfig(model: ToolModelConfig | undefined): boolean {
   return Boolean(
@@ -36,20 +51,30 @@ export function resolveDefaultModelRef(cfg?: OpenClawConfig): { provider: string
 }
 
 export function hasAuthForProvider(params: { provider: string; agentDir?: string }): boolean {
+  const cacheKey = buildReplyRuntimeToolProviderAuthCacheKey(params);
+  const cache = getReplyRuntimeToolProviderAuthCache();
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const cacheResolved = (value: boolean) => {
+    cache.set(cacheKey, value);
+    return value;
+  };
   if (resolveEnvApiKey(params.provider)?.apiKey) {
-    return true;
+    return cacheResolved(true);
   }
   const agentDir = params.agentDir?.trim();
   if (!agentDir) {
-    return false;
+    return cacheResolved(false);
   }
   if (!hasAnyAuthProfileStoreSource(agentDir)) {
-    return false;
+    return cacheResolved(false);
   }
   const store = ensureAuthProfileStore(agentDir, {
     externalCli: externalCliDiscoveryForProviderAuth({ provider: params.provider }),
   });
-  return listProfilesForProvider(store, params.provider).length > 0;
+  return cacheResolved(listProfilesForProvider(store, params.provider).length > 0);
 }
 
 export function coerceToolModelConfig(model?: AgentModelConfig): ToolModelConfig {

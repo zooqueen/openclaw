@@ -52,6 +52,9 @@ export type ProviderCredentialPrecedence = "profile-first" | "env-first";
 const log = createSubsystemLogger("model-auth");
 
 const REPLY_RUNTIME_PROVIDER_AUTH_CACHE_KEY = Symbol.for("openclaw.replyRuntimeProviderAuthCache");
+const REPLY_RUNTIME_AUTH_PROFILE_ORDER_CACHE_KEY = Symbol.for(
+  "openclaw.replyRuntimeAuthProfileOrderCache",
+);
 
 type ReplyRuntimeProviderAuthCacheValue =
   | {
@@ -67,6 +70,10 @@ function getReplyRuntimeProviderAuthCache() {
   return resolveProcessScopedMap<ReplyRuntimeProviderAuthCacheValue>(
     REPLY_RUNTIME_PROVIDER_AUTH_CACHE_KEY,
   );
+}
+
+function getReplyRuntimeAuthProfileOrderCache() {
+  return resolveProcessScopedMap<string[]>(REPLY_RUNTIME_AUTH_PROFILE_ORDER_CACHE_KEY);
 }
 
 function buildReplyRuntimeProviderAuthCacheKey(params: {
@@ -95,6 +102,56 @@ function cloneResolvedProviderAuth(value: ResolvedProviderAuth): ResolvedProvide
 
 export function resetReplyRuntimeProviderAuthCacheForTest(): void {
   getReplyRuntimeProviderAuthCache().clear();
+}
+
+export function resetReplyRuntimeAuthProfileOrderCacheForTest(): void {
+  getReplyRuntimeAuthProfileOrderCache().clear();
+}
+
+function buildReplyRuntimeAuthProfileOrderCacheKey(params: {
+  provider: string;
+  preferredProfile?: string;
+  agentDir?: string;
+  workspaceDir?: string;
+}): string {
+  return JSON.stringify([
+    normalizeProviderId(params.provider),
+    params.preferredProfile?.trim() || "",
+    params.agentDir?.trim() || "",
+    params.workspaceDir?.trim() || "",
+  ]);
+}
+
+export function resolvePreparedAuthProfileOrder(params: {
+  cfg?: OpenClawConfig;
+  store: AuthProfileStore;
+  provider: string;
+  preferredProfile?: string;
+  agentDir?: string;
+  workspaceDir?: string;
+  primeReplyRuntimeCache?: boolean;
+}): string[] {
+  const cacheKey = buildReplyRuntimeAuthProfileOrderCacheKey({
+    provider: params.provider,
+    preferredProfile: params.preferredProfile,
+    agentDir: params.agentDir,
+    workspaceDir: params.workspaceDir,
+  });
+  const cache = getReplyRuntimeAuthProfileOrderCache();
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) {
+    return [...cached];
+  }
+  const resolved = resolveAuthProfileOrder({
+    cfg: params.cfg,
+    store: params.store,
+    provider: params.provider,
+    preferredProfile: params.preferredProfile,
+  });
+  if (params.primeReplyRuntimeCache === true) {
+    cache.set(cacheKey, [...resolved]);
+  }
+  return resolved;
 }
 
 function resolveConfigAwareEnvApiKey(
@@ -700,11 +757,14 @@ export async function resolveApiKeyForProvider(params: {
       provider,
       preferredProfile,
     });
-  const order = resolveAuthProfileOrder({
+  const order = resolvePreparedAuthProfileOrder({
     cfg,
     store,
     provider,
     preferredProfile,
+    agentDir: params.agentDir,
+    workspaceDir: params.workspaceDir,
+    primeReplyRuntimeCache: params.primeReplyRuntimeCache,
   });
   let deferredAuthProfileResult: ResolvedProviderAuth | null = null;
   for (const candidate of order) {
@@ -917,11 +977,13 @@ export async function hasAvailableAuthForProvider(params: {
       provider,
       preferredProfile,
     });
-  const order = resolveAuthProfileOrder({
+  const order = resolvePreparedAuthProfileOrder({
     cfg,
     store,
     provider,
     preferredProfile,
+    agentDir: params.agentDir,
+    workspaceDir: params.workspaceDir,
   });
   for (const candidate of order) {
     try {
