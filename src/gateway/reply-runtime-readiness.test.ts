@@ -481,6 +481,39 @@ describe("reply-runtime readiness", () => {
     );
   });
 
+  it("does not degrade when a warmed target is absent from the prepared catalog", async () => {
+    hoisted.loadModelCatalog.mockResolvedValueOnce([
+      { provider: "openai", id: "gpt-5.4", name: "GPT-5.4", reasoning: true },
+    ]);
+    hoisted.loadSessionStore.mockReturnValueOnce({
+      "agent:default:main": {
+        modelProvider: "custom-provider",
+        model: "custom-model",
+      },
+    });
+
+    const result = await prepareReplyRuntimeForChannels({
+      cfg: {
+        agents: {
+          defaults: {
+            model: { primary: "openai/gpt-5.4" },
+          },
+        },
+      } as OpenClawConfig,
+      workspaceDir: "/tmp/openclaw-workspace",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(hoisted.prepareSimpleCompletionModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "custom-provider",
+        modelId: "custom-model",
+        workspaceDir: "/tmp/openclaw-workspace",
+        primeReplyRuntimeCache: true,
+      }),
+    );
+  });
+
   it("primes PI auth profile candidates with the same runtime workspace", async () => {
     hoisted.loadModelCatalog.mockResolvedValueOnce([
       {

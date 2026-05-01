@@ -457,18 +457,11 @@ export async function prepareReplyRuntimeForChannels(params: {
       "selected-model-metadata",
       `prepared metadata for ${warmTargets.length} reply model target(s) across ${warmAgents.size} agent(s)`,
       async () => {
-        const catalog = await prepareReplyRuntimeModelCatalog({ config: params.cfg });
-        for (const target of warmTargets) {
-          if (
-            !catalog.some(
-              (entry) => entry.provider === target.provider && entry.id === target.model,
-            )
-          ) {
-            throw new Error(
-              `Reply model ${target.provider}/${target.model} is not available after readiness model preparation.`,
-            );
-          }
-        }
+        // Catalog preparation only warms shared model metadata. Persisted or
+        // dynamically normalized runtime targets can still resolve later via
+        // provider hooks / PI discovery even when they are absent from the
+        // static catalog snapshot.
+        await prepareReplyRuntimeModelCatalog({ config: params.cfg });
       },
     ))
   ) {

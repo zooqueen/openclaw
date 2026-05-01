@@ -274,8 +274,7 @@ export async function startGatewaySidecars(params: {
       );
       if (readiness.status !== "ready") {
         const message = `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}`;
-        params.logChannels.error(`${message}: ${readiness.reasons.join("; ")}`);
-        throw new Error(message);
+        params.log.warn(`${message}: ${readiness.reasons.join("; ")}; continuing startup`);
       }
       await measureStartup(params.startupTrace, "sidecars.channel-start", async () => {
         try {
