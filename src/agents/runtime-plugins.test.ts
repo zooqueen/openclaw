@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const hoisted = vi.hoisted(() => ({
   resolveRuntimePluginRegistry: vi.fn(),
   resolveCompatibleRuntimePluginRegistry: vi.fn(),
+  getActivePluginRegistry: vi.fn(),
+  getActivePluginRegistryWorkspaceDir: vi.fn<() => string | undefined>(() => undefined),
   getActivePluginRuntimeSubagentMode: vi.fn<() => "default" | "explicit" | "gateway-bindable">(
     () => "default",
   ),
@@ -17,6 +19,8 @@ vi.mock("../plugins/loader.js", () => ({
 }));
 
 vi.mock("../plugins/runtime.js", () => ({
+  getActivePluginRegistry: hoisted.getActivePluginRegistry,
+  getActivePluginRegistryWorkspaceDir: hoisted.getActivePluginRegistryWorkspaceDir,
   getActivePluginRuntimeSubagentMode: hoisted.getActivePluginRuntimeSubagentMode,
 }));
 
@@ -34,6 +38,10 @@ describe("ensureRuntimePluginsLoaded", () => {
     hoisted.resolveRuntimePluginRegistry.mockReturnValue(undefined);
     hoisted.resolveCompatibleRuntimePluginRegistry.mockReset();
     hoisted.resolveCompatibleRuntimePluginRegistry.mockReturnValue(undefined);
+    hoisted.getActivePluginRegistry.mockReset();
+    hoisted.getActivePluginRegistry.mockReturnValue(undefined);
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReset();
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReturnValue(undefined);
     hoisted.getActivePluginRuntimeSubagentMode.mockReset();
     hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("default");
     hoisted.isReplyCapableChannelsLive.mockReset();
@@ -82,6 +90,23 @@ describe("ensureRuntimePluginsLoaded", () => {
     expect(hoisted.resolveCompatibleRuntimePluginRegistry).toHaveBeenCalledTimes(1);
     expect(hoisted.resolveRuntimePluginRegistry).not.toHaveBeenCalled();
     expect(hoisted.logReplyRuntimeColdPathViolation).not.toHaveBeenCalled();
+  });
+
+  it("reuses the active gateway startup registry during readiness before channels are live", async () => {
+    hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("gateway-bindable");
+    hoisted.getActivePluginRegistry.mockReturnValue({
+      plugins: [{ id: "openai", status: "loaded" }],
+    });
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReturnValue("/tmp/workspace");
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/workspace",
+      source: "runtime-plugins.test",
+    });
+
+    expect(hoisted.resolveCompatibleRuntimePluginRegistry).toHaveBeenCalledTimes(1);
+    expect(hoisted.resolveRuntimePluginRegistry).not.toHaveBeenCalled();
   });
 
   it("resolves runtime plugins through the shared runtime helper", async () => {

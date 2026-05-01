@@ -43,8 +43,14 @@ import { resolveOwningPluginIdsForProvider } from "../plugins/providers.js";
 import { buildAgentMainSessionKey } from "../routing/session-key.js";
 import { getActiveRuntimeWebToolsMetadata } from "../secrets/runtime.js";
 import { prepareWebContentExtractors } from "../web-fetch/content-extractors.runtime.js";
-import { listWebFetchProviders, prepareWebFetchDefinition } from "../web-fetch/runtime.js";
-import { listWebSearchProviders, prepareWebSearchDefinition } from "../web-search/runtime.js";
+import {
+  listConfiguredWebFetchProviders,
+  prepareWebFetchDefinition,
+} from "../web-fetch/runtime.js";
+import {
+  listConfiguredWebSearchProviders,
+  prepareWebSearchDefinition,
+} from "../web-search/runtime.js";
 import {
   markReplyRuntimePluginRegistryPrepared,
   markReplyRuntimeProviderAuthPrepared,
@@ -330,7 +336,7 @@ function resolvePiReplyRuntimeProfileCandidates(params: {
 async function warmPreparedReplyRuntimeWebSurfaces(config: OpenClawConfig): Promise<void> {
   const runtimeWebTools = getActiveRuntimeWebToolsMetadata();
   const searchProviderIds = collectOrderedProviderIds({
-    listedIds: listWebSearchProviders({ config }).map((provider) => provider.id),
+    listedIds: listConfiguredWebSearchProviders({ config }).map((provider) => provider.id),
     preferredIds: [
       runtimeWebTools?.search?.selectedProvider,
       runtimeWebTools?.search?.providerConfigured,
@@ -339,19 +345,17 @@ async function warmPreparedReplyRuntimeWebSurfaces(config: OpenClawConfig): Prom
   prepareWebSearchDefinition({
     config,
     runtimeWebSearch: runtimeWebTools?.search,
-    preferRuntimeProviders: true,
   });
   for (const providerId of searchProviderIds) {
     prepareWebSearchDefinition({
       config,
       providerId,
       runtimeWebSearch: runtimeWebTools?.search,
-      preferRuntimeProviders: true,
     });
   }
 
   const fetchProviderIds = collectOrderedProviderIds({
-    listedIds: listWebFetchProviders({ config }).map((provider) => provider.id),
+    listedIds: listConfiguredWebFetchProviders({ config }).map((provider) => provider.id),
     preferredIds: [
       runtimeWebTools?.fetch?.selectedProvider,
       runtimeWebTools?.fetch?.providerConfigured,
@@ -360,14 +364,12 @@ async function warmPreparedReplyRuntimeWebSurfaces(config: OpenClawConfig): Prom
   prepareWebFetchDefinition({
     config,
     runtimeWebFetch: runtimeWebTools?.fetch,
-    preferRuntimeProviders: true,
   });
   for (const providerId of fetchProviderIds) {
     prepareWebFetchDefinition({
       config,
       providerId,
       runtimeWebFetch: runtimeWebTools?.fetch,
-      preferRuntimeProviders: true,
     });
   }
   await prepareWebContentExtractors({ config });

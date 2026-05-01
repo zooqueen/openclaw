@@ -8,8 +8,35 @@ import {
   resolveCompatibleRuntimePluginRegistry,
   resolveRuntimePluginRegistry,
 } from "../plugins/loader.js";
-import { getActivePluginRuntimeSubagentMode } from "../plugins/runtime.js";
+import {
+  getActivePluginRegistry,
+  getActivePluginRegistryWorkspaceDir,
+  getActivePluginRuntimeSubagentMode,
+} from "../plugins/runtime.js";
 import { resolveUserPath } from "../utils.js";
+
+function hasReusableActiveGatewayRegistry(params: {
+  workspaceDir?: string;
+  allowGatewaySubagentBinding: boolean;
+}): boolean {
+  if (isReplyCapableChannelsLive()) {
+    return false;
+  }
+  if (
+    !params.allowGatewaySubagentBinding &&
+    getActivePluginRuntimeSubagentMode() !== "gateway-bindable"
+  ) {
+    return false;
+  }
+  if (!getActivePluginRegistry()) {
+    return false;
+  }
+  const activeWorkspaceDir = getActivePluginRegistryWorkspaceDir();
+  if (!activeWorkspaceDir || !params.workspaceDir) {
+    return activeWorkspaceDir === params.workspaceDir;
+  }
+  return resolveUserPath(activeWorkspaceDir) === params.workspaceDir;
+}
 
 export function ensureRuntimePluginsLoaded(params: {
   config?: OpenClawConfig;
@@ -34,6 +61,9 @@ export function ensureRuntimePluginsLoaded(params: {
       : undefined,
   };
   if (resolveCompatibleRuntimePluginRegistry(loadOptions)) {
+    return;
+  }
+  if (hasReusableActiveGatewayRegistry({ workspaceDir, allowGatewaySubagentBinding })) {
     return;
   }
   const shouldWarnLateColdLoad =

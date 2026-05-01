@@ -54,8 +54,8 @@ const hoisted = vi.hoisted(() => ({
   resolveAgentDir: vi.fn((_: OpenClawConfig, agentId?: string) =>
     agentId === "worker" ? "/tmp/openclaw-agent-worker" : "/tmp/openclaw-agent",
   ),
-  listWebSearchProviders: vi.fn(() => []),
-  listWebFetchProviders: vi.fn(() => []),
+  listConfiguredWebSearchProviders: vi.fn(() => []),
+  listConfiguredWebFetchProviders: vi.fn(() => []),
   prepareWebSearchDefinition: vi.fn(() => null),
   prepareWebFetchDefinition: vi.fn(() => null),
   prepareWebContentExtractors: vi.fn(async () => undefined),
@@ -133,12 +133,12 @@ vi.mock("../config/sessions/store.js", () => ({
 }));
 
 vi.mock("../web-search/runtime.js", () => ({
-  listWebSearchProviders: hoisted.listWebSearchProviders,
+  listConfiguredWebSearchProviders: hoisted.listConfiguredWebSearchProviders,
   prepareWebSearchDefinition: hoisted.prepareWebSearchDefinition,
 }));
 
 vi.mock("../web-fetch/runtime.js", () => ({
-  listWebFetchProviders: hoisted.listWebFetchProviders,
+  listConfiguredWebFetchProviders: hoisted.listConfiguredWebFetchProviders,
   prepareWebFetchDefinition: hoisted.prepareWebFetchDefinition,
 }));
 
@@ -318,10 +318,10 @@ describe("reply-runtime readiness", () => {
     hoisted.resolveOwningPluginIdsForProvider.mockClear();
     hoisted.resolveStorePath.mockClear();
     hoisted.loadSessionStore.mockClear();
-    hoisted.listWebSearchProviders.mockReset();
-    hoisted.listWebSearchProviders.mockReturnValue([]);
-    hoisted.listWebFetchProviders.mockReset();
-    hoisted.listWebFetchProviders.mockReturnValue([]);
+    hoisted.listConfiguredWebSearchProviders.mockReset();
+    hoisted.listConfiguredWebSearchProviders.mockReturnValue([]);
+    hoisted.listConfiguredWebFetchProviders.mockReset();
+    hoisted.listConfiguredWebFetchProviders.mockReturnValue([]);
     hoisted.prepareWebSearchDefinition.mockClear();
     hoisted.prepareWebFetchDefinition.mockClear();
     hoisted.prepareWebContentExtractors.mockClear();
@@ -790,8 +790,11 @@ describe("reply-runtime readiness", () => {
         },
       },
     } as OpenClawConfig;
-    hoisted.listWebSearchProviders.mockReturnValue([{ id: "perplexity" }, { id: "brave" }]);
-    hoisted.listWebFetchProviders.mockReturnValue([{ id: "firecrawl" }, { id: "jina" }]);
+    hoisted.listConfiguredWebSearchProviders.mockReturnValue([
+      { id: "perplexity" },
+      { id: "brave" },
+    ]);
+    hoisted.listConfiguredWebFetchProviders.mockReturnValue([{ id: "firecrawl" }, { id: "jina" }]);
 
     const result = await prepareReplyRuntimeForChannels({
       cfg: config,
@@ -802,41 +805,35 @@ describe("reply-runtime readiness", () => {
     expect(hoisted.prepareWebSearchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.prepareWebSearchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         providerId: "perplexity",
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.prepareWebSearchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         providerId: "brave",
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.prepareWebFetchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.prepareWebFetchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         providerId: "firecrawl",
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.prepareWebFetchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         providerId: "jina",
-        preferRuntimeProviders: true,
       }),
     );
     expect(hoisted.createBundleLspToolRuntime).toHaveBeenCalledWith(
