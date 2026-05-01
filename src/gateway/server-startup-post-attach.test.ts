@@ -563,37 +563,39 @@ describe("startGatewayPostAttachRuntime", () => {
           error: vi.fn(),
         };
 
-        await startGatewaySidecars({
-          cfg: {
-            hooks: { internal: { enabled: false } },
-            agents: { defaults: { model: "openai/gpt-5.4" } },
-          } as never,
-          pluginRegistry: createPostAttachParams().pluginRegistry,
-          defaultWorkspaceDir: "/tmp/openclaw-workspace",
-          deps: {} as never,
-          startChannels,
-          prepareReplyRuntimeForChannels: vi.fn(async () => ({
-            status: "degraded",
-            provider: "openai",
-            model: "gpt-5.4",
-            phases: [
-              {
-                phase: "selected-provider-auth",
-                status: "degraded",
-                durationMs: 1,
-                detail: "selected-provider-auth: missing credential",
-              },
-            ],
-            reasons: ["selected-provider-auth: missing credential"],
-          })) as never,
-          log: { warn: vi.fn() },
-          logHooks: {
-            info: vi.fn(),
-            warn: vi.fn(),
-            error: vi.fn(),
-          },
-          logChannels,
-        });
+        await expect(
+          startGatewaySidecars({
+            cfg: {
+              hooks: { internal: { enabled: false } },
+              agents: { defaults: { model: "openai/gpt-5.4" } },
+            } as never,
+            pluginRegistry: createPostAttachParams().pluginRegistry,
+            defaultWorkspaceDir: "/tmp/openclaw-workspace",
+            deps: {} as never,
+            startChannels,
+            prepareReplyRuntimeForChannels: vi.fn(async () => ({
+              status: "degraded",
+              provider: "openai",
+              model: "gpt-5.4",
+              phases: [
+                {
+                  phase: "selected-provider-auth",
+                  status: "degraded",
+                  durationMs: 1,
+                  detail: "selected-provider-auth: missing credential",
+                },
+              ],
+              reasons: ["selected-provider-auth: missing credential"],
+            })) as never,
+            log: { warn: vi.fn() },
+            logHooks: {
+              info: vi.fn(),
+              warn: vi.fn(),
+              error: vi.fn(),
+            },
+            logChannels,
+          }),
+        ).rejects.toThrow(/reply-runtime readiness degraded for openai\/gpt-5\.4/);
 
         expect(startChannels).not.toHaveBeenCalled();
         expect(logChannels.error).toHaveBeenCalledWith(
@@ -603,6 +605,50 @@ describe("startGatewayPostAttachRuntime", () => {
         await Promise.resolve();
       },
     );
+  });
+
+  it("keeps startup-gated methods unavailable when reply-runtime readiness degrades before channels start", async () => {
+    const unavailableGatewayMethods = new Set<string>(STARTUP_UNAVAILABLE_GATEWAY_METHODS);
+    const onSidecarsReady = vi.fn();
+    const log = { info: vi.fn(), warn: vi.fn() };
+    const logChannels = { info: vi.fn(), error: vi.fn() };
+
+    hoisted.prepareReplyRuntimeForChannels.mockResolvedValueOnce({
+      status: "degraded",
+      provider: "openai",
+      model: "gpt-5.4",
+      phases: [
+        {
+          phase: "selected-provider-auth",
+          status: "degraded",
+          durationMs: 1,
+          detail: "selected-provider-auth: missing credential",
+        },
+      ],
+      reasons: ["selected-provider-auth: missing credential"],
+    });
+
+    await expect(
+      startGatewayPostAttachRuntime({
+        ...createPostAttachParams(),
+        log,
+        logChannels,
+        unavailableGatewayMethods,
+        onSidecarsReady,
+        gatewayPluginConfigAtStart: {
+          hooks: { internal: { enabled: false } },
+          agents: { defaults: { model: "openai/gpt-5.4" } },
+        } as never,
+      }),
+    ).rejects.toThrow(/reply-runtime readiness degraded for openai\/gpt-5\.4/);
+
+    expect(onSidecarsReady).not.toHaveBeenCalled();
+    expect([...unavailableGatewayMethods]).toEqual([...STARTUP_UNAVAILABLE_GATEWAY_METHODS]);
+    expect(log.info).not.toHaveBeenCalledWith("gateway ready");
+    expect(logChannels.error).toHaveBeenCalledWith(
+      expect.stringContaining("reply-runtime readiness degraded for openai/gpt-5.4"),
+    );
+    expect(isReplyCapableChannelsLive()).toBe(false);
   });
 
   it("preserves origin/main channel-start failure semantics after reply-runtime readiness passes", async () => {
