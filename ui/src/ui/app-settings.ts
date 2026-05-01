@@ -43,6 +43,7 @@ import { loadNodes, type NodesState } from "./controllers/nodes.ts";
 import { loadPresence, type PresenceState } from "./controllers/presence.ts";
 import { loadSessions, type SessionsState } from "./controllers/sessions.ts";
 import { loadSkills, type SkillsState } from "./controllers/skills.ts";
+import { loadTtsStatus, loadTtsProviders, type TtsState } from "./controllers/tts.ts";
 import { loadUsage, type UsageState } from "./controllers/usage.ts";
 import { syncCustomThemeStyleTag } from "./custom-theme.ts";
 import { isMonitoredAuthProvider } from "./model-auth-helpers.ts";
@@ -124,6 +125,7 @@ type SettingsAppHost = SettingsHost &
   PresenceState &
   SessionsState &
   SkillsState &
+  TtsState &
   ModelAuthStatusState &
   UsageState & {
     overviewLogCursor: number | null;
@@ -336,6 +338,10 @@ export async function refreshActiveTab(host: SettingsHost) {
   const app = host as unknown as SettingsAppHost;
   switch (host.tab) {
     case "config":
+      await loadConfigSchema(app);
+      await loadConfig(app);
+      void Promise.all([loadTtsStatus(app), loadTtsProviders(app)]);
+      return;
     case "communications":
     case "appearance":
     case "automation":

@@ -26,6 +26,8 @@ const BASE_METHODS = [
   "tts.disable",
   "tts.convert",
   "tts.setProvider",
+  "tts.setVoice",
+  "tts.preview",
   "tts.setPersona",
   "config.get",
   "config.set",

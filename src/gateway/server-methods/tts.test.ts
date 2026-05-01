@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorCodes } from "../protocol/index.js";
 
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(() => Buffer.from("fake-audio-data")),
+}));
+
 const mocks = vi.hoisted(() => ({
   getRuntimeConfig: vi.fn(() => ({})),
   resolveExplicitTtsOverrides: vi.fn(() => ({})),
@@ -28,6 +32,7 @@ vi.mock("../../tts/tts.js", () => ({
   getResolvedSpeechProviderConfig: vi.fn(),
   getTtsPersona: vi.fn(() => undefined),
   getTtsProvider: vi.fn(() => "openai"),
+  getTtsVoiceByProvider: vi.fn(() => ({})),
   isTtsEnabled: vi.fn(() => true),
   isTtsProviderConfigured: vi.fn(() => true),
   listTtsPersonas: vi.fn(() => []),
@@ -40,6 +45,7 @@ vi.mock("../../tts/tts.js", () => ({
   setTtsEnabled: vi.fn(),
   setTtsPersona: vi.fn(),
   setTtsProvider: vi.fn(),
+  setTtsVoice: vi.fn(),
   textToSpeech: mocks.textToSpeech as typeof import("../../tts/tts.js").textToSpeech,
 }));
 

@@ -112,6 +112,12 @@ export const setTtsProvider: FacadeModule["setTtsProvider"] = createLazyFacadeRu
   loadFacadeModule,
   "setTtsProvider",
 );
+export const setTtsVoice: FacadeModule["setTtsVoice"] = createLazyFacadeRuntimeValue(
+  loadFacadeModule,
+  "setTtsVoice",
+);
+export const getTtsVoiceByProvider: FacadeModule["getTtsVoiceByProvider"] =
+  createLazyFacadeRuntimeValue(loadFacadeModule, "getTtsVoiceByProvider");
 export const synthesizeSpeech: FacadeModule["synthesizeSpeech"] = createLazyFacadeRuntimeValue(
   loadFacadeModule,
   "synthesizeSpeech",

@@ -114,6 +114,15 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills.ts";
+import {
+  loadTtsStatus,
+  loadTtsProviders,
+  setTtsEnabled,
+  setTtsProvider,
+  setTtsVoice,
+  playTtsPreview,
+  type TtsState,
+} from "./controllers/tts.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "./external-link.ts";
 import { icons } from "./icons.ts";
 import { createLazyView, renderLazyView } from "./lazy-view.ts";
@@ -1123,6 +1132,33 @@ export function renderApp(state: AppViewState) {
             gatewayUrl: state.settings.gatewayUrl,
             assistantName: state.assistantName,
             version: state.hello?.server?.version ?? "",
+            ttsEnabled: state.ttsEnabled,
+            ttsProvider: state.ttsProvider,
+            ttsVoiceByProvider: state.ttsVoiceByProvider,
+            ttsProviders: state.ttsProviders,
+            ttsLoading: state.ttsLoading,
+            ttsPreviewBusy: state.ttsPreviewBusy,
+            ttsPreviewError: state.ttsPreviewError,
+            onTtsToggle: () => {
+              void setTtsEnabled(state as unknown as TtsState, !state.ttsEnabled).then(() =>
+                requestHostUpdate?.(),
+              );
+            },
+            onTtsProviderChange: (provider) => {
+              void setTtsProvider(state as unknown as TtsState, provider).then(() =>
+                requestHostUpdate?.(),
+              );
+            },
+            onTtsVoiceChange: (provider, voice) => {
+              void setTtsVoice(state as unknown as TtsState, provider, voice).then(() =>
+                requestHostUpdate?.(),
+              );
+            },
+            onTtsPlaySample: (provider, voice) => {
+              void playTtsPreview(state as unknown as TtsState, provider, voice).then(() =>
+                requestHostUpdate?.(),
+              );
+            },
           });
         }
         // Advanced mode — full config form with accordion groups

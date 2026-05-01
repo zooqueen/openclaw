@@ -100,6 +100,19 @@ export type QuickSettingsProps = {
   // Navigation
   onAdvancedSettings?: () => void;
 
+  // Text-to-Speech
+  ttsEnabled?: boolean;
+  ttsProvider?: string | null;
+  ttsVoiceByProvider?: Record<string, string>;
+  ttsProviders?: Array<{ id: string; name: string; configured: boolean; voices: string[] }>;
+  ttsLoading?: boolean;
+  ttsPreviewBusy?: boolean;
+  ttsPreviewError?: string | null;
+  onTtsToggle?: () => void;
+  onTtsProviderChange?: (provider: string) => void;
+  onTtsVoiceChange?: (provider: string, voice: string | null) => void;
+  onTtsPlaySample?: (provider: string | null, voice: string | null) => void;
+
   // Connection
   connected: boolean;
   gatewayUrl: string;
@@ -989,6 +1002,130 @@ function renderPresetsCard(props: QuickSettingsProps) {
   `;
 }
 
+function renderTtsCard(props: QuickSettingsProps) {
+  const providers = props.ttsProviders ?? [];
+  const configuredProviders = providers.filter((p) => p.configured);
+  const activeProvider = props.ttsProvider ?? null;
+  const activeProviderInfo = providers.find((p) => p.id === activeProvider);
+  const activeVoice = activeProvider ? (props.ttsVoiceByProvider?.[activeProvider] ?? null) : null;
+  const availableVoices = activeProviderInfo?.voices ?? [];
+
+  const handleToggle = () => {
+    props.onTtsToggle?.();
+  };
+
+  const handleProviderChange = (e: Event) => {
+    const select = e.target as HTMLSelectElement;
+    if (select.value) {
+      props.onTtsProviderChange?.(select.value);
+    }
+  };
+
+  const handleVoiceChange = (e: Event) => {
+    const select = e.target as HTMLSelectElement;
+    if (activeProvider) {
+      props.onTtsVoiceChange?.(activeProvider, select.value.length > 0 ? select.value : null);
+    }
+  };
+
+  const handlePlaySample = () => {
+    props.onTtsPlaySample?.(activeProvider, activeVoice);
+  };
+
+  return html`
+    <div class="qs-card qs-card--tts">
+      <div class="qs-card__header">
+        <div class="qs-card__header-left">
+          <span class="qs-card__icon">${icons.volume2}</span>
+          <h3 class="qs-card__title">Text-to-Speech</h3>
+        </div>
+        <button
+          class="qs-toggle ${props.ttsEnabled ? "qs-toggle--on" : ""}"
+          role="switch"
+          aria-checked=${props.ttsEnabled ? "true" : "false"}
+          aria-label="Enable text-to-speech"
+          @click=${handleToggle}
+          ?disabled=${props.ttsLoading}
+        >
+          <span class="qs-toggle__thumb"></span>
+        </button>
+      </div>
+      <div class="qs-card__body">
+        <div class="qs-row">
+          <span class="qs-row__label">Read replies aloud when supported</span>
+          <span class="qs-row__value ${props.ttsEnabled ? "" : "muted"}">
+            ${props.ttsEnabled ? "On" : "Off"}
+          </span>
+        </div>
+        ${configuredProviders.length > 0
+          ? html`
+              <div class="qs-row qs-row--col">
+                <span class="qs-row__label qs-row__label--sm">Provider</span>
+                <select
+                  class="qs-select"
+                  .value=${activeProvider ?? ""}
+                  @change=${handleProviderChange}
+                  ?disabled=${!props.ttsEnabled}
+                  aria-label="TTS provider"
+                >
+                  ${providers.map(
+                    (p) => html`
+                      <option
+                        value=${p.id}
+                        .selected=${p.id === activeProvider}
+                        ?disabled=${!p.configured}
+                      >
+                        ${p.name}${p.configured ? "" : " (not configured)"}
+                      </option>
+                    `,
+                  )}
+                </select>
+              </div>
+              ${availableVoices.length > 0
+                ? html`
+                    <div class="qs-row qs-row--col">
+                      <span class="qs-row__label qs-row__label--sm">Voice</span>
+                      <select
+                        class="qs-select"
+                        .value=${activeVoice ?? ""}
+                        @change=${handleVoiceChange}
+                        ?disabled=${!props.ttsEnabled}
+                        aria-label="TTS voice"
+                      >
+                        <option value="">Default</option>
+                        ${availableVoices.map(
+                          (v) => html`
+                            <option value=${v} .selected=${v === activeVoice}>${v}</option>
+                          `,
+                        )}
+                      </select>
+                    </div>
+                  `
+                : nothing}
+              <div class="qs-row">
+                <button
+                  class="qs-row__value--action"
+                  @click=${handlePlaySample}
+                  ?disabled=${!props.ttsEnabled || props.ttsPreviewBusy}
+                  aria-label="Play TTS sample"
+                >
+                  ${props.ttsPreviewBusy ? "Playing…" : "Play sample"}
+                </button>
+                ${props.ttsPreviewError
+                  ? html`<span class="qs-tts-error muted">${props.ttsPreviewError}</span>`
+                  : nothing}
+              </div>
+            `
+          : html`
+              <div class="qs-row">
+                <span class="qs-row__value muted">No TTS providers configured</span>
+              </div>
+            `}
+      </div>
+    </div>
+  `;
+}
+
 function renderConnectionFooter(props: QuickSettingsProps) {
   return html`
     <div class="qs-footer">
@@ -1020,7 +1157,7 @@ export function renderQuickSettings(props: QuickSettingsProps) {
         <div class="qs-side-stack">
           ${renderAppearanceCard(props)} ${renderAutomationsCard(props)}
         </div>
-        ${renderPresetsCard(props)}
+        ${renderTtsCard(props)} ${renderPresetsCard(props)}
       </div>
 
       ${renderConnectionFooter(props)}

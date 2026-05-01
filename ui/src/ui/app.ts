@@ -552,6 +552,16 @@ export class OpenClawApp extends LitElement {
   @state() logsMaxBytes = 250_000;
   @state() logsAtBottom = true;
 
+  @state() ttsLoading = false;
+  @state() ttsError: string | null = null;
+  @state() ttsEnabled = false;
+  @state() ttsProvider: string | null = null;
+  @state() ttsVoiceByProvider: Record<string, string> = {};
+  @state() ttsProviders: import("./controllers/tts.ts").TtsProviderOption[] = [];
+  @state() ttsProvidersLoading = false;
+  @state() ttsPreviewBusy = false;
+  @state() ttsPreviewError: string | null = null;
+
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;
   private chatScrollTimeout: number | null = null;

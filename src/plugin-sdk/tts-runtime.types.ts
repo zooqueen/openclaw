@@ -220,6 +220,8 @@ export type TtsRuntimeFacade = {
   setTtsMaxLength: (prefsPath: string, maxLength: number) => void;
   setTtsPersona: (prefsPath: string, persona: string | null | undefined) => void;
   setTtsProvider: (prefsPath: string, provider: TtsProvider) => void;
+  setTtsVoice: (prefsPath: string, provider: TtsProvider, voice: string | null) => void;
+  getTtsVoiceByProvider: (prefsPath: string) => Record<string, string>;
   synthesizeSpeech: (params: TtsRequestParams) => Promise<TtsSynthesisResult>;
   textToSpeech: TextToSpeech;
   textToSpeechTelephony: TextToSpeechTelephony;

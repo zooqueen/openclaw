@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import {
   canonicalizeSpeechProviderId,
@@ -8,6 +9,7 @@ import {
   getResolvedSpeechProviderConfig,
   getTtsPersona,
   getTtsProvider,
+  getTtsVoiceByProvider,
   isTtsEnabled,
   isTtsProviderConfigured,
   listTtsPersonas,
@@ -19,6 +21,7 @@ import {
   setTtsEnabled,
   setTtsPersona,
   setTtsProvider,
+  setTtsVoice,
   textToSpeech,
 } from "../../tts/tts.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
@@ -46,10 +49,12 @@ export const ttsHandlers: GatewayRequestHandlers = {
           timeoutMs: config.timeoutMs,
         }),
       }));
+      const voiceByProvider = getTtsVoiceByProvider(prefsPath);
       respond(true, {
         enabled: isTtsEnabled(config, prefsPath),
         auto: autoMode,
         provider,
+        voiceByProvider,
         persona: persona?.id ?? null,
         personas: listTtsPersonas(config).map((entry) => ({
           id: entry.id,
@@ -237,6 +242,93 @@ export const ttsHandlers: GatewayRequestHandlers = {
           voices: [...(provider.voices ?? [])],
         })),
         active: getTtsProvider(config, prefsPath),
+      });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+  "tts.setVoice": async ({ params, respond, context }) => {
+    try {
+      const provider = normalizeOptionalString(params.provider);
+      const voice = normalizeOptionalString(params.voice);
+      if (!provider) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "tts.setVoice requires provider"),
+        );
+        return;
+      }
+      const cfg = context.getRuntimeConfig();
+      const config = resolveTtsConfig(cfg);
+      const prefsPath = resolveTtsPrefsPath(config);
+      const canonicalized = canonicalizeSpeechProviderId(provider);
+      if (!canonicalized) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Unknown TTS provider: ${provider}`),
+        );
+        return;
+      }
+      setTtsVoice(prefsPath, canonicalized, voice ?? null);
+      respond(true, { provider: canonicalized, voice: voice ?? null });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+  "tts.preview": async ({ params, respond, context }) => {
+    try {
+      const text =
+        normalizeOptionalString(params.text) ?? "Hello! This is a text-to-speech preview.";
+      const providerParam = normalizeOptionalString(params.provider);
+      const voiceParam = normalizeOptionalString(params.voice);
+      const cfg = context.getRuntimeConfig();
+      const config = resolveTtsConfig(cfg);
+      const prefsPath = resolveTtsPrefsPath(config);
+
+      const overrides =
+        providerParam || voiceParam
+          ? resolveExplicitTtsOverrides({
+              cfg,
+              prefsPath,
+              provider: providerParam,
+              voiceId: voiceParam,
+            })
+          : undefined;
+
+      const result = await textToSpeech({
+        text,
+        cfg,
+        prefsPath,
+        overrides,
+        timeoutMs: 15000,
+      });
+
+      if (!result.success || !result.audioPath) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, result.error ?? "TTS preview failed"),
+        );
+        return;
+      }
+
+      const audioBuffer = await readFile(result.audioPath);
+      const audioBase64 = audioBuffer.toString("base64");
+      const mimeType = result.audioPath.endsWith(".mp3")
+        ? "audio/mpeg"
+        : result.audioPath.endsWith(".wav")
+          ? "audio/wav"
+          : result.audioPath.endsWith(".ogg")
+            ? "audio/ogg"
+            : "audio/mpeg";
+      const audioDataUrl = `data:${mimeType};base64,${audioBase64}`;
+
+      respond(true, {
+        audioDataUrl,
+        provider: result.provider,
+        latencyMs: result.latencyMs,
       });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));

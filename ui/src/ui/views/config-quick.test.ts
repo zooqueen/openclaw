@@ -385,3 +385,103 @@ describe("renderQuickSettings", () => {
     expect(onOpenCustomThemeImport).not.toHaveBeenCalled();
   });
 });
+
+describe("TTS card", () => {
+  it("renders the TTS card in the settings grid", () => {
+    const container = document.createElement("div");
+    render(renderQuickSettings(createProps()), container);
+    expect(container.querySelector(".qs-card--tts")).not.toBeNull();
+  });
+
+  it("renders TTS toggle in off state by default", () => {
+    const container = document.createElement("div");
+    render(renderQuickSettings(createProps({ ttsEnabled: false })), container);
+    const toggle = container.querySelector("[role=switch]");
+    expect(toggle?.getAttribute("aria-checked")).toBe("false");
+    expect(toggle?.classList.contains("qs-toggle--on")).toBe(false);
+  });
+
+  it("renders TTS toggle in on state when enabled", () => {
+    const container = document.createElement("div");
+    render(renderQuickSettings(createProps({ ttsEnabled: true })), container);
+    const toggle = container.querySelector("[role=switch]");
+    expect(toggle?.getAttribute("aria-checked")).toBe("true");
+    expect(toggle?.classList.contains("qs-toggle--on")).toBe(true);
+  });
+
+  it("shows provider selector when configured providers are present", () => {
+    const container = document.createElement("div");
+    render(
+      renderQuickSettings(
+        createProps({
+          ttsEnabled: true,
+          ttsProvider: "openai",
+          ttsProviders: [
+            { id: "openai", name: "OpenAI", configured: true, voices: ["alloy", "nova"] },
+            { id: "microsoft", name: "Microsoft", configured: false, voices: [] },
+          ],
+        }),
+      ),
+      container,
+    );
+    const selects = container.querySelectorAll("select[aria-label='TTS provider']");
+    expect(selects.length).toBeGreaterThan(0);
+  });
+
+  it("shows voice selector when provider has voices", () => {
+    const container = document.createElement("div");
+    render(
+      renderQuickSettings(
+        createProps({
+          ttsEnabled: true,
+          ttsProvider: "openai",
+          ttsProviders: [
+            { id: "openai", name: "OpenAI", configured: true, voices: ["alloy", "nova"] },
+          ],
+        }),
+      ),
+      container,
+    );
+    expect(container.querySelector("select[aria-label='TTS voice']")).not.toBeNull();
+  });
+
+  it("shows no providers message when no configured providers", () => {
+    const container = document.createElement("div");
+    render(
+      renderQuickSettings(
+        createProps({
+          ttsProviders: [],
+        }),
+      ),
+      container,
+    );
+    const card = container.querySelector(".qs-card--tts");
+    expect(card?.textContent).toContain("No TTS providers configured");
+  });
+
+  it("calls onTtsToggle when toggle is clicked", () => {
+    const onTtsToggle = vi.fn();
+    const container = document.createElement("div");
+    render(renderQuickSettings(createProps({ ttsEnabled: false, onTtsToggle })), container);
+    const toggle = container.querySelector("[role=switch]") as HTMLButtonElement;
+    toggle?.click();
+    expect(onTtsToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Play sample button when configured provider is present", () => {
+    const container = document.createElement("div");
+    render(
+      renderQuickSettings(
+        createProps({
+          ttsEnabled: true,
+          ttsProviders: [{ id: "openai", name: "OpenAI", configured: true, voices: [] }],
+        }),
+      ),
+      container,
+    );
+    const buttons = Array.from(container.querySelectorAll("button")).map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(buttons).toContain("Play sample");
+  });
+});

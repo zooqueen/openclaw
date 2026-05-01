@@ -13,6 +13,7 @@ import type {
   ClawHubSkillDetail,
   SkillMessage,
 } from "./controllers/skills.ts";
+import type { TtsProviderOption } from "./controllers/tts.ts";
 import type { EmbedSandboxMode } from "./embed-sandbox.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
@@ -392,6 +393,15 @@ export type AppViewState = {
     logsLimit: number;
     logsMaxBytes: number;
     logsAtBottom: boolean;
+    ttsLoading: boolean;
+    ttsError: string | null;
+    ttsEnabled: boolean;
+    ttsProvider: string | null;
+    ttsVoiceByProvider: Record<string, string>;
+    ttsProviders: TtsProviderOption[];
+    ttsProvidersLoading: boolean;
+    ttsPreviewBusy: boolean;
+    ttsPreviewError: string | null;
     updateAvailable: import("./types.js").UpdateAvailable | null;
     attentionItems: AttentionItem[];
     paletteOpen: boolean;

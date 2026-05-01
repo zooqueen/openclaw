@@ -80,6 +80,7 @@ type TtsUserPrefs = {
     persona?: string | null;
     maxLength?: number;
     summarize?: boolean;
+    voiceByProvider?: Record<string, string>;
   };
 };
 
@@ -676,6 +677,34 @@ export function setTtsProvider(prefsPath: string, provider: TtsProvider): void {
   });
 }
 
+export function setTtsVoice(prefsPath: string, provider: TtsProvider, voice: string | null): void {
+  updatePrefs(prefsPath, (prefs) => {
+    const canonicalized = canonicalizeSpeechProviderId(provider) ?? provider;
+    const existing = prefs.tts?.voiceByProvider ?? {};
+    const next = { ...existing };
+    if (voice && voice.trim()) {
+      next[canonicalized] = voice.trim();
+    } else {
+      delete next[canonicalized];
+    }
+    prefs.tts = { ...prefs.tts, voiceByProvider: Object.keys(next).length > 0 ? next : undefined };
+  });
+}
+
+export function getTtsVoiceByProvider(prefsPath: string): Record<string, string> {
+  const prefs = readPrefs(prefsPath);
+  return prefs.tts?.voiceByProvider ?? {};
+}
+
+function getPrefsVoiceForProvider(prefsPath: string, provider: string): string | undefined {
+  const prefs = readPrefs(prefsPath);
+  const voiceByProvider = prefs.tts?.voiceByProvider;
+  if (!voiceByProvider) {
+    return undefined;
+  }
+  return voiceByProvider[provider] ?? undefined;
+}
+
 export function resolveExplicitTtsOverrides(params: {
   cfg: OpenClawConfig;
   prefsPath?: string;
@@ -1204,6 +1233,7 @@ export async function synthesizeSpeech(params: {
   const { cfg, config, persona, providers } = setup;
   const timeoutMs = params.timeoutMs ?? config.timeoutMs;
   const target = resolveTtsSynthesisTarget(params.channel);
+  const prefsPath = params.prefsPath ?? resolveTtsPrefsPath(config);
 
   const errors: string[] = [];
   const attemptedProviders: string[] = [];
@@ -1238,12 +1268,26 @@ export async function synthesizeSpeech(params: {
         logVerbose(`TTS: provider ${provider} skipped (${resolvedProvider.message})`);
         continue;
       }
+      // Apply pref voice when no explicit voice override is set in per-provider overrides
+      const explicitProviderOverrides =
+        params.overrides?.providerOverrides?.[resolvedProvider.provider.id];
+      const explicitOverridesRecord = explicitProviderOverrides as
+        | Record<string, unknown>
+        | undefined;
+      const hasExplicitVoice =
+        explicitOverridesRecord?.voice != null || explicitOverridesRecord?.voiceId != null;
+      const prefVoice = !hasExplicitVoice
+        ? getPrefsVoiceForProvider(prefsPath, provider)
+        : undefined;
+      const providerConfig = prefVoice
+        ? { ...resolvedProvider.providerConfig, voice: prefVoice, voiceId: prefVoice }
+        : resolvedProvider.providerConfig;
       const prepared = await prepareSpeechSynthesis({
         provider: resolvedProvider.provider,
         text: params.text,
         cfg,
-        providerConfig: resolvedProvider.providerConfig,
-        providerOverrides: params.overrides?.providerOverrides?.[resolvedProvider.provider.id],
+        providerConfig,
+        providerOverrides: explicitProviderOverrides,
         persona: resolvedProvider.synthesisPersona,
         personaProviderConfig: resolvedProvider.personaProviderConfig,
         target,
