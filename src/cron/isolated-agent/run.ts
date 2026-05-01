@@ -55,6 +55,7 @@ import {
   resolveSupportedThinkingLevel,
   resolveSessionTranscriptPath,
   resolveThinkingDefault,
+  resolveThinkingDefaultDecision,
   setSessionRuntimeModel,
 } from "./run.runtime.js";
 import type { RunCronAgentTurnResult } from "./run.types.js";
@@ -600,18 +601,30 @@ async function prepareCronRunContext(params: {
     catalog.find((entry) => entry.provider === provider && entry.id === model);
   const resolveThinkingDefaultWithFallback = async () => {
     const cached = await loadCatalog("cacheOnly");
-    const cachedDefault = resolveThinkingDefault({
+    const cachedDecision = resolveThinkingDefaultDecision({
       cfg: cfgWithAgentDefaults,
       provider,
       model,
       catalog: cached,
     });
-    if (cachedDefault !== "off") {
-      return { catalog: cached, level: cachedDefault };
+    if (!cachedDecision.dependsOnCatalog) {
+      return { catalog: cached, level: cachedDecision.level };
     }
     const discovered = await loadCatalog("runtimeDiscovery");
     if (!resolveModelCatalogEntry(discovered)) {
-      return { catalog: cached, level: cachedDefault };
+      return { catalog: cached, level: cachedDecision.level };
+    }
+    const discoveredDecision = resolveThinkingDefaultDecision({
+      cfg: cfgWithAgentDefaults,
+      provider,
+      model,
+      catalog: discovered,
+    });
+    if (discoveredDecision.level === cachedDecision.level) {
+      return {
+        catalog: cached,
+        level: cachedDecision.level,
+      };
     }
     return {
       catalog: discovered,

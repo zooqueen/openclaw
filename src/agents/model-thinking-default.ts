@@ -10,12 +10,17 @@ import { normalizeModelSelection } from "./model-selection-resolve.js";
 
 type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive" | "max";
 
-export function resolveThinkingDefault(params: {
+export type ThinkingDefaultDecision = {
+  level: ThinkLevel;
+  dependsOnCatalog: boolean;
+};
+
+export function resolveThinkingDefaultDecision(params: {
   cfg: OpenClawConfig;
   provider: string;
   model: string;
   catalog?: ModelCatalogEntry[];
-}): ThinkLevel {
+}): ThinkingDefaultDecision {
   const normalizedProvider = normalizeProviderId(params.provider);
   const normalizedModel = normalizeLowercaseStringOrEmpty(params.model).replace(/\./g, "-");
   const catalogCandidate = Array.isArray(params.catalog)
@@ -49,17 +54,26 @@ export function resolveThinkingDefault(params: {
     perModelThinking === "adaptive" ||
     perModelThinking === "max"
   ) {
-    return perModelThinking;
+    return {
+      level: perModelThinking,
+      dependsOnCatalog: false,
+    };
   }
   const configured = params.cfg.agents?.defaults?.thinkingDefault;
   if (configured) {
-    return configured;
+    return {
+      level: configured,
+      dependsOnCatalog: false,
+    };
   }
   if (
     normalizedProvider === "anthropic" &&
     (normalizedModel.startsWith("claude-opus-4-7") || normalizedModel.startsWith("claude-opus-4.7"))
   ) {
-    return "off";
+    return {
+      level: "off",
+      dependsOnCatalog: false,
+    };
   }
   if (
     normalizedProvider === "anthropic" &&
@@ -69,11 +83,26 @@ export function resolveThinkingDefault(params: {
     (normalizedModel.startsWith("claude-opus-4-6") ||
       normalizedModel.startsWith("claude-sonnet-4-6"))
   ) {
-    return "adaptive";
+    return {
+      level: "adaptive",
+      dependsOnCatalog: true,
+    };
   }
-  return resolveThinkingDefaultForModel({
-    provider: params.provider,
-    model: params.model,
-    catalog: params.catalog,
-  });
+  return {
+    level: resolveThinkingDefaultForModel({
+      provider: params.provider,
+      model: params.model,
+      catalog: params.catalog,
+    }),
+    dependsOnCatalog: true,
+  };
+}
+
+export function resolveThinkingDefault(params: {
+  cfg: OpenClawConfig;
+  provider: string;
+  model: string;
+  catalog?: ModelCatalogEntry[];
+}): ThinkLevel {
+  return resolveThinkingDefaultDecision(params).level;
 }

@@ -37,10 +37,18 @@ export function createCodexAppServerAgentHarness(options?: {
       };
     },
     prepareReplyRuntime: async (params) => {
-      const { getSharedCodexAppServerClient } = await import("./src/app-server/shared-client.js");
+      const [{ resolveCodexAppServerRuntimeOptions }, { getSharedCodexAppServerClient }] =
+        await Promise.all([
+          import("./src/app-server/config.js"),
+          import("./src/app-server/shared-client.js"),
+        ]);
+      const { requestTimeoutMs } = resolveCodexAppServerRuntimeOptions({
+        pluginConfig: options?.pluginConfig,
+      });
       await getSharedCodexAppServerClient({
         agentDir: params.agentDir,
         authProfileId: params.authProfileId,
+        timeoutMs: requestTimeoutMs,
       });
     },
     runAttempt: async (params) => {

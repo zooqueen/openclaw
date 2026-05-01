@@ -369,6 +369,42 @@ describe("reply-runtime readiness", () => {
     ]);
   });
 
+  it("degrades readiness when non-pi harness warmup times out", async () => {
+    hoisted.resolveAuthProfileOrder.mockReturnValueOnce(["openai-codex:work"]);
+    hoisted.selectAgentHarness.mockReturnValueOnce({
+      id: "codex",
+      label: "Codex",
+      prepareReplyRuntime: vi.fn(async () => {
+        throw new Error("codex app-server initialize timed out");
+      }),
+    });
+
+    const result = await prepareReplyRuntimeForChannels({
+      cfg: {
+        agents: {
+          defaults: {
+            model: { primary: "openai/gpt-5.4" },
+            agentRuntime: { id: "codex", fallback: "none" },
+          },
+        },
+      } as OpenClawConfig,
+      workspaceDir: "/tmp/openclaw-workspace",
+    });
+
+    expect(result.status).toBe("degraded");
+    expect(result.reasons).toContain(
+      "selected-provider-auth: codex app-server initialize timed out",
+    );
+    expect(result.phases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "selected-provider-auth",
+          status: "degraded",
+        }),
+      ]),
+    );
+  });
+
   it("keeps createOpenClawTools contracts unchanged before and after readiness warmup", async () => {
     const cases: OpenClawConfig[] = [
       {

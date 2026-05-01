@@ -113,7 +113,13 @@ describe("codex plugin", () => {
   });
 
   it("warms the shared app-server through the harness readiness hook", async () => {
-    const harness = createCodexAppServerAgentHarness();
+    const harness = createCodexAppServerAgentHarness({
+      pluginConfig: {
+        appServer: {
+          requestTimeoutMs: 4321,
+        },
+      },
+    });
 
     await harness.prepareReplyRuntime?.({
       config: {} as never,
@@ -127,6 +133,7 @@ describe("codex plugin", () => {
     expect(mocks.getSharedCodexAppServerClient).toHaveBeenCalledWith({
       agentDir: "/tmp/openclaw-agent-codex",
       authProfileId: "openai-codex:work",
+      timeoutMs: 4321,
     });
   });
 });

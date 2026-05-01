@@ -12,6 +12,7 @@ import {
   resolveConfiguredModelRefMock,
   resolveCronSessionMock,
   resolveThinkingDefaultMock,
+  resolveThinkingDefaultDecisionMock,
   resolveSupportedThinkingLevelMock,
   resetRunCronIsolatedAgentTurnHarness,
   restoreFastTestEnv,
@@ -358,6 +359,12 @@ describe("runCronIsolatedAgentTurn — cron model override forwarding (#58065)",
       ({ catalog }: { catalog?: Array<{ reasoning?: boolean }> }) =>
         catalog?.[0]?.reasoning === true ? "low" : "off",
     );
+    resolveThinkingDefaultDecisionMock.mockImplementation(
+      ({ catalog }: { catalog?: Array<{ reasoning?: boolean }> }) => ({
+        level: catalog?.[0]?.reasoning === true ? "low" : "off",
+        dependsOnCatalog: true,
+      }),
+    );
     isThinkingLevelSupportedMock.mockReturnValue(true);
     runWithModelFallbackMock.mockImplementation(async ({ provider, model, run }) => {
       const result = await run(provider, model);
@@ -382,6 +389,79 @@ describe("runCronIsolatedAgentTurn — cron model override forwarding (#58065)",
     );
     expect(runEmbeddedPiAgentMock).toHaveBeenCalledWith(
       expect.objectContaining({ provider: "ollama", model: "qwen3:0.6b", thinkLevel: "low" }),
+    );
+  });
+
+  it("falls back to runtime discovery before keeping a weaker Claude 4.6 cache-only default", async () => {
+    resolveAllowedModelRefMock.mockImplementation(() => ({
+      ref: { provider: "anthropic", model: "claude-sonnet-4-6" },
+    }));
+    loadModelCatalogMock
+      .mockResolvedValueOnce([
+        {
+          provider: "anthropic",
+          id: "claude-sonnet-4-6",
+          name: "claude-sonnet-4-6",
+          reasoning: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          provider: "anthropic",
+          id: "claude-sonnet-4-6",
+          name: "claude-sonnet-4-6",
+          reasoning: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          provider: "anthropic",
+          id: "claude-sonnet-4-6",
+          name: "Claude Sonnet 4.6",
+          reasoning: true,
+        },
+      ]);
+    resolveThinkingDefaultMock.mockImplementation(
+      ({ catalog }: { catalog?: Array<{ name?: string }> }) =>
+        catalog?.[0]?.name === "Claude Sonnet 4.6" ? "adaptive" : "low",
+    );
+    resolveThinkingDefaultDecisionMock.mockImplementation(
+      ({ catalog }: { catalog?: Array<{ name?: string }> }) => ({
+        level: catalog?.[0]?.name === "Claude Sonnet 4.6" ? "adaptive" : "low",
+        dependsOnCatalog: true,
+      }),
+    );
+    isThinkingLevelSupportedMock.mockImplementation(
+      ({ level }: { level?: string }) => level === "adaptive",
+    );
+    resolveSupportedThinkingLevelMock.mockReturnValue("adaptive");
+    runWithModelFallbackMock.mockImplementation(async ({ provider, model, run }) => {
+      const result = await run(provider, model);
+      return { result, provider, model, attempts: [] };
+    });
+
+    await runCronIsolatedAgentTurn(
+      makeParams({
+        job: makeJob({
+          payload: {
+            kind: "agentTurn",
+            message: "summarize",
+            model: "anthropic/claude-sonnet-4-6",
+          },
+        }),
+      }),
+    );
+
+    expect(loadModelCatalogMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ intent: "runtimeDiscovery", source: "cron.thinking.discovery" }),
+    );
+    expect(runEmbeddedPiAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        thinkLevel: "adaptive",
+      }),
     );
   });
 
