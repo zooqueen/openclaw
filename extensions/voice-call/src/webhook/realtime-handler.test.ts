@@ -89,11 +89,12 @@ function makeHandler(
 
 const startRealtimeServer = async (
   handler: RealtimeCallHandler,
+  params?: URLSearchParams,
 ): Promise<{
   url: string;
   close: () => Promise<void>;
 }> => {
-  const payload = handler.buildTwiMLPayload(makeRequest("/voice/webhook"));
+  const payload = handler.buildTwiMLPayload(makeRequest("/voice/webhook"), params);
   const match = payload.body.match(/wss:\/\/[^/]+(\/[^"]+)/);
   if (!match) {
     throw new Error("Failed to extract realtime stream path");
@@ -214,6 +215,68 @@ describe("RealtimeCallHandler path routing", () => {
     }
   });
 
+  it("emits an inbound realtime greeting without an initial message", async () => {
+    let callbacks:
+      | {
+          onReady?: () => void;
+        }
+      | undefined;
+    const triggerGreeting = vi.fn();
+    const createBridge = vi.fn(
+      (request: Parameters<RealtimeVoiceProviderPlugin["createBridge"]>[0]) => {
+        callbacks = request;
+        return makeBridge({ triggerGreeting });
+      },
+    );
+    const getCallByProviderCallId = vi.fn(
+      (): CallRecord => ({
+        callId: "call-1",
+        providerCallId: "CA-inbound",
+        provider: "twilio",
+        direction: "inbound",
+        state: "ringing",
+        from: "+15550001234",
+        to: "+15550009999",
+        startedAt: Date.now(),
+        transcript: [],
+        processedEventIds: [],
+        metadata: {},
+      }),
+    );
+    const handler = makeHandler(undefined, {
+      manager: {
+        getCallByProviderCallId,
+      },
+      realtimeProvider: makeRealtimeProvider(createBridge),
+    });
+    const server = await startRealtimeServer(handler);
+
+    try {
+      const ws = await connectWs(server.url);
+      try {
+        ws.send(
+          JSON.stringify({
+            event: "start",
+            start: { streamSid: "MZ-inbound", callSid: "CA-inbound" },
+          }),
+        );
+        await vi.waitFor(() => {
+          expect(createBridge).toHaveBeenCalled();
+        });
+
+        callbacks?.onReady?.();
+
+        expect(triggerGreeting).toHaveBeenCalledWith("Be helpful.");
+      } finally {
+        if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
+          ws.close();
+        }
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
   it("does not emit an outbound realtime greeting without an initial message", async () => {
     let callbacks:
       | {
@@ -248,7 +311,14 @@ describe("RealtimeCallHandler path routing", () => {
       },
       realtimeProvider: makeRealtimeProvider(createBridge),
     });
-    const server = await startRealtimeServer(handler);
+    const server = await startRealtimeServer(
+      handler,
+      new URLSearchParams({
+        Direction: "outbound-dial",
+        From: "+15550001234",
+        To: "+15550009999",
+      }),
+    );
 
     try {
       const ws = await connectWs(server.url);

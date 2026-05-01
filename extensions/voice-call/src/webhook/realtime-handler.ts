@@ -38,10 +38,11 @@ function normalizePath(pathname: string): string {
 function buildGreetingInstructions(
   baseInstructions: string | undefined,
   greeting: string | undefined,
+  direction: "inbound" | "outbound",
 ): string | undefined {
   const trimmedGreeting = greeting?.trim();
   if (!trimmedGreeting) {
-    return undefined;
+    return direction === "outbound" ? undefined : baseInstructions;
   }
   const intro =
     "Start the call by greeting the caller naturally. Include this greeting in your first spoken reply:";
@@ -412,6 +413,7 @@ export class RealtimeCallHandler {
       initialGreetingInstructions: buildGreetingInstructions(
         this.config.instructions,
         initialGreeting,
+        callRecord.direction,
       ),
     };
   }
