@@ -36,12 +36,34 @@ Hydrate it through the repository workflow:
 pnpm crabbox:hydrate -- --id <cbx_id-or-slug>
 ```
 
+Hydration uses `.crabbox.yaml` `actions.fields` to opt into Docker/buildx cache
+prep and shared Docker E2E image warmup. Use `CRABBOX_BIN=/path/to/crabbox` when
+the checked-out Crabbox CLI is newer than the installed Homebrew binary.
+
 Run broad proof:
 
 ```sh
 pnpm crabbox:run -- --id <cbx_id-or-slug> --shell "OPENCLAW_TESTBOX=1 pnpm check:changed"
 pnpm crabbox:run -- --id <cbx_id-or-slug> --shell "corepack enable && pnpm install --frozen-lockfile && pnpm test"
 ```
+
+## Cached AWS Image Flow
+
+Use this only for maintainer/operator work. Hydrate and warm an AWS lease first,
+then prove Docker state before baking:
+
+```sh
+pnpm crabbox:warmup -- --idle-timeout 90m
+pnpm crabbox:hydrate -- --id <cbx_id-or-slug>
+pnpm crabbox:run -- --id <cbx_id-or-slug> --shell 'source "$HOME/.crabbox/actions/<cbx_id>.env.sh"; docker image inspect "$OPENCLAW_DOCKER_E2E_BARE_IMAGE"; docker image inspect "$OPENCLAW_DOCKER_E2E_FUNCTIONAL_IMAGE"; du -sh /var/cache/crabbox/openclaw-docker-buildx'
+crabbox image create --id <cbx_id-or-slug> --name openclaw-crabbox-YYYYMMDD-HHMM --wait
+crabbox image promote <ami-id>
+```
+
+`image promote` writes the AMI to user Crabbox config. Do not commit
+account-specific AMI IDs to `.crabbox.yaml`. If `crabbox image` returns 404, the
+coordinator is older than the image API; deploy Crabbox first or use valid direct
+AWS credentials.
 
 Stop boxes you created before handoff:
 
