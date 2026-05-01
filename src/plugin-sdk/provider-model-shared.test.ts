@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { KilocodeModelCatalogEntry } from "./provider-model-shared.js";
 import {
   ANTHROPIC_BY_MODEL_REPLAY_HOOKS,
   buildProviderReplayFamilyHooks,
@@ -9,6 +10,17 @@ import {
 } from "./provider-model-shared.js";
 
 describe("buildProviderReplayFamilyHooks", () => {
+  it("keeps the deprecated Kilocode catalog entry type available", () => {
+    expectTypeOf<KilocodeModelCatalogEntry>().toEqualTypeOf<{
+      id: string;
+      name: string;
+      reasoning: boolean;
+      input: Array<"text" | "image">;
+      contextWindow?: number;
+      maxTokens?: number;
+    }>();
+  });
+
   it("covers the replay family matrix", async () => {
     const cases = [
       {

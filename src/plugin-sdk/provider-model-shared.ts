@@ -40,6 +40,20 @@ export type {
 } from "../agents/provider-attribution.js";
 export type { ProviderPlugin } from "../plugins/types.js";
 
+/**
+ * @deprecated Kilocode-owned catalog entries now live in the Kilocode plugin.
+ * This compatibility alias preserves the public SDK type for existing plugin
+ * consumers without making the SDK facade import the bundled Kilocode plugin.
+ */
+export type KilocodeModelCatalogEntry = {
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: Array<"text" | "image">;
+  contextWindow?: number;
+  maxTokens?: number;
+};
+
 export { DEFAULT_CONTEXT_TOKENS } from "../agents/defaults.js";
 export {
   GPT5_BEHAVIOR_CONTRACT,
