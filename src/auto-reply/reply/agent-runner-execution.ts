@@ -1156,7 +1156,7 @@ export async function runAgentTurnWithFallback(params: {
         }
         return { text: sanitized, skip: false };
       };
-      const handlePartialForTyping = async (payload: ReplyPayload): Promise<string | undefined> => {
+      const handlePartialForTyping = (payload: ReplyPayload): string | undefined => {
         if (isSilentReplyPrefixText(payload.text, SILENT_REPLY_TOKEN)) {
           return undefined;
         }
@@ -1164,7 +1164,9 @@ export async function runAgentTurnWithFallback(params: {
         if (skip || !text) {
           return undefined;
         }
-        await params.typingSignals.signalTextDelta(text);
+        void params.typingSignals.signalTextDelta(text).catch((err) => {
+          logVerbose(`typing signal failed: ${String(err)}`);
+        });
         return text;
       };
       const blockReplyPipeline = params.blockReplyPipeline;
@@ -1450,7 +1452,7 @@ export async function runAgentTurnWithFallback(params: {
                 blockReplyBreak: params.resolvedBlockStreamingBreak,
                 blockReplyChunking: params.blockReplyChunking,
                 onPartialReply: async (payload) => {
-                  const textForTyping = await handlePartialForTyping(payload);
+                  const textForTyping = handlePartialForTyping(payload);
                   if (!params.opts?.onPartialReply || textForTyping === undefined) {
                     return;
                   }
@@ -1460,7 +1462,9 @@ export async function runAgentTurnWithFallback(params: {
                   });
                 },
                 onAssistantMessageStart: async () => {
-                  await params.typingSignals.signalMessageStart();
+                  void params.typingSignals.signalMessageStart().catch((err) => {
+                    logVerbose(`typing signal failed: ${String(err)}`);
+                  });
                   await params.opts?.onAssistantMessageStart?.();
                 },
                 onReasoningStream:
@@ -1469,7 +1473,9 @@ export async function runAgentTurnWithFallback(params: {
                         if (params.followupRun.run.silentExpected) {
                           return;
                         }
-                        await params.typingSignals.signalReasoningDelta();
+                        void params.typingSignals.signalReasoningDelta().catch((err) => {
+                          logVerbose(`typing signal failed: ${String(err)}`);
+                        });
                         await params.opts?.onReasoningStream?.({
                           text: payload.text,
                           mediaUrls: payload.mediaUrls,
@@ -1493,13 +1499,13 @@ export async function runAgentTurnWithFallback(params: {
                   if (evt.stream !== "lifecycle" || hasLifecyclePhase) {
                     notifyAgentRunStart();
                   }
-                  // Trigger typing when tools start executing.
-                  // Must await to ensure typing indicator starts before tool summaries are emitted.
                   if (evt.stream === "tool") {
                     const phase = readStringValue(evt.data.phase) ?? "";
                     const name = readStringValue(evt.data.name);
                     if (phase === "start" || phase === "update") {
-                      await params.typingSignals.signalToolStart();
+                      void params.typingSignals.signalToolStart().catch((err) => {
+                        logVerbose(`typing signal failed: ${String(err)}`);
+                      });
                       await params.opts?.onToolStart?.({ name, phase });
                     }
                   }
@@ -1650,7 +1656,9 @@ export async function runAgentTurnWithFallback(params: {
                               return;
                             }
                             if (text !== undefined) {
-                              await params.typingSignals.signalTextDelta(text);
+                              void params.typingSignals.signalTextDelta(text).catch((err) => {
+                                logVerbose(`typing signal failed: ${String(err)}`);
+                              });
                             }
                             await onToolResult({
                               ...payload,

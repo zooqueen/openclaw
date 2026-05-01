@@ -64,7 +64,6 @@ import {
 } from "../model-auth.js";
 import { isFallbackSummaryError, runWithModelFallback } from "../model-fallback.js";
 import { supportsModelTools } from "../model-tool-support.js";
-import { ensureOpenClawModelsJson } from "../models-config.js";
 import { resolveOwnerDisplaySetting } from "../owner-display.js";
 import { createBundleLspToolRuntime } from "../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../pi-bundle-mcp-tools.js";
@@ -132,6 +131,7 @@ import { hardenManualCompactionBoundary } from "./manual-compaction-boundary.js"
 import { buildEmbeddedMessageActionDiscoveryInput } from "./message-action-discovery-input.js";
 import { readPiModelContextTokens } from "./model-context-tokens.js";
 import { buildModelAliasLines, resolveModelAsync } from "./model.js";
+import { resolvePreparedPiRunBootstrapState } from "./prepared-bootstrap-state.js";
 import { sanitizeSessionHistory, validateReplayTurns } from "./replay-history.js";
 import { shouldUseOpenAIWebSocketTransport } from "./run/attempt.thread-helpers.js";
 import { buildEmbeddedSandboxInfo } from "./sandbox-info.js";
@@ -476,7 +476,6 @@ async function compactEmbeddedPiSessionDirectOnce(
     };
   };
   const agentDir = params.agentDir ?? resolveOpenClawAgentDir();
-  await ensureOpenClawModelsJson(params.config, agentDir);
   const { model, error, authStorage, modelRegistry } = await resolveModelAsync(
     provider,
     modelId,
@@ -491,10 +490,22 @@ async function compactEmbeddedPiSessionDirectOnce(
   let apiKeyInfo: Awaited<ReturnType<typeof getApiKeyForModel>> | null = null;
   let hasRuntimeAuthExchange = false;
   try {
+    const requestedProfileId = authProfileId?.trim();
+    const preparedPiBootstrapState = requestedProfileId
+      ? null
+      : resolvePreparedPiRunBootstrapState({
+          config: params.config,
+          agentDir,
+          workspaceDir: resolvedWorkspace,
+          provider: runtimeModel.provider,
+          modelId,
+        });
     apiKeyInfo = await getApiKeyForModel({
       model: runtimeModel,
       cfg: params.config,
-      profileId: authProfileId,
+      profileId: requestedProfileId,
+      preferredProfile: preparedPiBootstrapState?.preparedPiProviderOrderedProfiles[0],
+      store: preparedPiBootstrapState?.authStore,
       agentDir,
       workspaceDir: resolvedWorkspace,
     });

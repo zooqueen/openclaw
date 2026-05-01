@@ -568,6 +568,41 @@ describe("runPreparedReply media-only handling", () => {
     expect(vi.mocked(runReplyAgent)).not.toHaveBeenCalled();
   });
 
+  it("does not wait for typing start before returning the empty-body reply", async () => {
+    let releaseTypingStart!: () => void;
+    const typingStartBlocked = new Promise<void>((resolve) => {
+      releaseTypingStart = resolve;
+    });
+    const onReplyStart = vi.fn(async () => typingStartBlocked);
+
+    const result = await runPreparedReply(
+      baseParams({
+        ctx: {
+          Body: "",
+          RawBody: "",
+          CommandBody: "",
+        },
+        sessionCtx: {
+          Body: "",
+          BodyStripped: "",
+          Provider: "slack",
+        },
+        typing: {
+          onReplyStart,
+          cleanup: vi.fn(),
+        } as never,
+      }),
+    );
+
+    expect(result).toEqual({
+      text: "I didn't receive any text in your message. Please resend or add a caption.",
+    });
+    expect(onReplyStart).toHaveBeenCalledOnce();
+
+    releaseTypingStart();
+    await Promise.resolve();
+  });
+
   it("still skips metadata-only turns when inbound context adds chat_id", async () => {
     vi.mocked(buildInboundUserContextPrefix).mockReturnValueOnce(
       [

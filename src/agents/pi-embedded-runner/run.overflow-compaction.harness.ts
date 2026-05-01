@@ -219,6 +219,7 @@ export const mockedGetApiKeyForModel = vi.fn(
   }),
 );
 export const mockedResolveAuthProfileOrder = vi.fn(() => [] as string[]);
+export const mockedResolvePreparedAuthProfileOrder = vi.fn(() => [] as string[]);
 export const mockedShouldPreferExplicitConfigApiKeyAuth = vi.fn(() => false);
 
 export const overflowBaseRunParams = {
@@ -388,6 +389,8 @@ export function resetRunOverflowCompactionHarnessMocks(): void {
   );
   mockedResolveAuthProfileOrder.mockReset();
   mockedResolveAuthProfileOrder.mockReturnValue([]);
+  mockedResolvePreparedAuthProfileOrder.mockReset();
+  mockedResolvePreparedAuthProfileOrder.mockReturnValue([]);
   mockedShouldPreferExplicitConfigApiKeyAuth.mockReset();
   mockedShouldPreferExplicitConfigApiKeyAuth.mockReturnValue(false);
   mockedRunPostCompactionSideEffects.mockReset();
@@ -428,10 +431,12 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
   }));
 
   vi.doMock("../auth-profiles.js", () => ({
+    ensureAuthProfileStore: vi.fn(() => ({ version: 1, profiles: {} })),
     isProfileInCooldown: vi.fn(() => false),
     markAuthProfileFailure: vi.fn(async () => {}),
     markAuthProfileGood: vi.fn(async () => {}),
     markAuthProfileUsed: vi.fn(async () => {}),
+    resolveAuthProfileEligibility: vi.fn(() => ({ eligible: true })),
     resolveProfilesUnavailableReason: vi.fn(() => undefined),
   }));
 
@@ -503,6 +508,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     ensureAuthProfileStore: vi.fn(() => ({})),
     getApiKeyForModel: mockedGetApiKeyForModel,
     resolveAuthProfileOrder: mockedResolveAuthProfileOrder,
+    resolvePreparedAuthProfileOrder: mockedResolvePreparedAuthProfileOrder,
     shouldPreferExplicitConfigApiKeyAuth: mockedShouldPreferExplicitConfigApiKeyAuth,
   }));
 

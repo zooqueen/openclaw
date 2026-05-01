@@ -137,7 +137,9 @@ export function createTypingController(params: {
   };
 
   const scheduleTyping = async () => {
-    void triggerTyping();
+    queueMicrotask(() => {
+      void triggerTyping();
+    });
     await Promise.resolve();
   };
 

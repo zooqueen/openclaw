@@ -45,6 +45,19 @@ export const resolveModelMock: Mock<
   authStorage: { setRuntimeApiKey: vi.fn() },
   modelRegistry: {},
 }));
+export const ensureOpenClawModelsJsonMock: Mock<
+  (cfg?: unknown, agentDir?: string) => Promise<void>
+> = vi.fn(async () => {});
+export const getApiKeyForModelMock: Mock<(params?: unknown) => Promise<unknown>> = vi.fn(
+  async () => ({ apiKey: "test", mode: "env" }),
+);
+export const resolvePreparedPiRunBootstrapStateMock: Mock<(params?: unknown) => unknown> = vi.fn(
+  () => ({
+    authStore: { version: 1, profiles: {} },
+    preparedPiProfileOrder: [],
+    preparedPiProviderOrderedProfiles: [],
+  }),
+);
 export const sessionCompactImpl = vi.fn(async () => ({
   summary: "summary",
   firstKeptEntryId: "entry-1",
@@ -179,6 +192,16 @@ export function resetCompactHooksHarnessMocks(): void {
     authStorage: { setRuntimeApiKey: vi.fn() },
     modelRegistry: {},
   });
+  ensureOpenClawModelsJsonMock.mockReset();
+  ensureOpenClawModelsJsonMock.mockResolvedValue(undefined);
+  getApiKeyForModelMock.mockReset();
+  getApiKeyForModelMock.mockResolvedValue({ apiKey: "test", mode: "env" });
+  resolvePreparedPiRunBootstrapStateMock.mockReset();
+  resolvePreparedPiRunBootstrapStateMock.mockReturnValue({
+    authStore: { version: 1, profiles: {} },
+    preparedPiProfileOrder: [],
+    preparedPiProviderOrderedProfiles: [],
+  });
 
   sessionCompactImpl.mockReset();
   sessionCompactImpl.mockResolvedValue({
@@ -307,13 +330,13 @@ export async function loadCompactHooksHarness(): Promise<{
   }));
 
   vi.doMock("../models-config.js", () => ({
-    ensureOpenClawModelsJson: vi.fn(async () => {}),
+    ensureOpenClawModelsJson: ensureOpenClawModelsJsonMock,
   }));
 
   vi.doMock("../model-auth.js", () => ({
     applyAuthHeaderOverride: vi.fn((model: unknown) => model),
     applyLocalNoAuthHeaderOverride: vi.fn((model: unknown) => model),
-    getApiKeyForModel: vi.fn(async () => ({ apiKey: "test", mode: "env" })),
+    getApiKeyForModel: getApiKeyForModelMock,
     resolveModelAuthMode: vi.fn(() => "env"),
   }));
 
@@ -582,6 +605,10 @@ export async function loadCompactHooksHarness(): Promise<{
       async (provider: string, modelId: string, agentDir?: string, cfg?: unknown) =>
         resolveModelMock(provider, modelId, agentDir, cfg),
     ),
+  }));
+
+  vi.doMock("./prepared-bootstrap-state.js", () => ({
+    resolvePreparedPiRunBootstrapState: resolvePreparedPiRunBootstrapStateMock,
   }));
 
   vi.doMock("./session-manager-cache.js", () => ({

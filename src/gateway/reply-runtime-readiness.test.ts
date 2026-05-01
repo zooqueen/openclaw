@@ -53,9 +53,9 @@ const hoisted = vi.hoisted(() => ({
   resolveAgentDir: vi.fn((_: OpenClawConfig, agentId?: string) =>
     agentId === "worker" ? "/tmp/openclaw-agent-worker" : "/tmp/openclaw-agent",
   ),
-  resolveWebSearchDefinition: vi.fn(() => null),
-  resolveWebFetchDefinition: vi.fn(() => null),
-  extractReadableContent: vi.fn(async () => null),
+  prepareWebSearchDefinition: vi.fn(() => null),
+  prepareWebFetchDefinition: vi.fn(() => null),
+  prepareWebContentExtractors: vi.fn(async () => undefined),
 }));
 
 vi.mock("../agents/runtime-plugins.js", () => ({
@@ -111,15 +111,15 @@ vi.mock("../config/sessions/store.js", () => ({
 }));
 
 vi.mock("../web-search/runtime.js", () => ({
-  resolveWebSearchDefinition: hoisted.resolveWebSearchDefinition,
+  prepareWebSearchDefinition: hoisted.prepareWebSearchDefinition,
 }));
 
 vi.mock("../web-fetch/runtime.js", () => ({
-  resolveWebFetchDefinition: hoisted.resolveWebFetchDefinition,
+  prepareWebFetchDefinition: hoisted.prepareWebFetchDefinition,
 }));
 
 vi.mock("../web-fetch/content-extractors.runtime.js", () => ({
-  extractReadableContent: hoisted.extractReadableContent,
+  prepareWebContentExtractors: hoisted.prepareWebContentExtractors,
 }));
 
 vi.mock("../agents/agent-scope.js", async (importOriginal) => {
@@ -292,9 +292,9 @@ describe("reply-runtime readiness", () => {
     hoisted.resolveOwningPluginIdsForProvider.mockClear();
     hoisted.resolveStorePath.mockClear();
     hoisted.loadSessionStore.mockClear();
-    hoisted.resolveWebSearchDefinition.mockClear();
-    hoisted.resolveWebFetchDefinition.mockClear();
-    hoisted.extractReadableContent.mockClear();
+    hoisted.prepareWebSearchDefinition.mockClear();
+    hoisted.prepareWebFetchDefinition.mockClear();
+    hoisted.prepareWebContentExtractors.mockClear();
     hoisted.listAgentIds.mockReset().mockReturnValue(["default"]);
     hoisted.resolveAgentWorkspaceDir
       .mockReset()
@@ -643,23 +643,18 @@ describe("reply-runtime readiness", () => {
     });
 
     expect(result.status).toBe("ready");
-    expect(hoisted.resolveWebSearchDefinition).toHaveBeenCalledWith(
+    expect(hoisted.prepareWebSearchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         preferRuntimeProviders: true,
       }),
     );
-    expect(hoisted.resolveWebFetchDefinition).toHaveBeenCalledWith(
+    expect(hoisted.prepareWebFetchDefinition).toHaveBeenCalledWith(
       expect.objectContaining({
         config,
         preferRuntimeProviders: true,
       }),
     );
-    expect(hoisted.extractReadableContent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config,
-        extractMode: "markdown",
-      }),
-    );
+    expect(hoisted.prepareWebContentExtractors).toHaveBeenCalledWith({ config });
   });
 });

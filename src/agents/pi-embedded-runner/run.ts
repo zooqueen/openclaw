@@ -27,6 +27,7 @@ import {
 import {
   type AuthProfileFailureReason,
   type AuthProfileStore,
+  ensureAuthProfileStore,
   markAuthProfileFailure,
   resolveAuthProfileEligibility,
   markAuthProfileGood,
@@ -51,7 +52,6 @@ import { shouldSwitchToLiveModel, clearLiveModelSwitchPending } from "../live-mo
 import {
   applyAuthHeaderOverride,
   applyLocalNoAuthHeaderOverride,
-  ensureAuthProfileStore,
   type ResolvedProviderAuth,
   resolvePreparedAuthProfileOrder,
   shouldPreferExplicitConfigApiKeyAuth,
@@ -91,6 +91,7 @@ import { resolveEmbeddedRunFailureSignal } from "./failure-signal.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
 import { resolveModelAsync } from "./model.js";
+import { resolvePreparedPiRunBootstrapState } from "./prepared-bootstrap-state.js";
 import { createEmbeddedRunReplayState, observeReplayMetadata } from "./replay-state.js";
 import { handleAssistantFailover } from "./run/assistant-failover.js";
 import {
@@ -511,16 +512,27 @@ export async function runEmbeddedPiAgent(
       let effectiveModel = resolvedRuntimeModel.effectiveModel;
       startupStages.mark("model-resolution");
 
+      const requestedProfileId = params.authProfileId?.trim();
+      const preparedPiBootstrapState =
+        !pluginHarnessOwnsTransport && !requestedProfileId
+          ? resolvePreparedPiRunBootstrapState({
+              config: params.config,
+              agentDir,
+              workspaceDir: resolvedWorkspace,
+              provider,
+              modelId,
+            })
+          : null;
       const authStore = pluginHarnessOwnsTransport
         ? createEmptyAuthProfileStore()
-        : ensureAuthProfileStore(agentDir, {
+        : (preparedPiBootstrapState?.authStore ??
+          ensureAuthProfileStore(agentDir, {
             externalCli: externalCliDiscoveryForProviderAuth({
               cfg: params.config,
               provider,
-              preferredProfile: params.authProfileId,
+              preferredProfile: requestedProfileId,
             }),
-          });
-      const requestedProfileId = params.authProfileId?.trim();
+          }));
       const resolvePluginHarnessPreferredProfileId = (): string | undefined => {
         if (requestedProfileId) {
           return requestedProfileId;
@@ -614,34 +626,43 @@ export async function runEmbeddedPiAgent(
       }
       const profileOrder = shouldPreferExplicitConfigApiKeyAuth(params.config, provider)
         ? []
-        : resolvePreparedAuthProfileOrder({
-            cfg: params.config,
-            store: authStore,
-            provider,
-            preferredProfile: preferredProfileId,
-            agentDir,
-            workspaceDir: resolvedWorkspace,
-          });
+        : preparedPiBootstrapState
+          ? preparedPiBootstrapState.preparedPiProfileOrder
+          : requestedProfileId
+            ? resolvePreparedAuthProfileOrder({
+                cfg: params.config,
+                store: authStore,
+                provider,
+                preferredProfile: preferredProfileId,
+                agentDir,
+                workspaceDir: resolvedWorkspace,
+              })
+            : [];
       const providerPreferredProfileId = lockedProfileId
         ? undefined
-        : resolveProviderAuthProfileId({
-            provider,
-            config: params.config,
-            workspaceDir: resolvedWorkspace,
-            context: {
-              config: params.config,
-              agentDir,
-              workspaceDir: resolvedWorkspace,
-              provider,
-              modelId,
-              preferredProfileId,
-              lockedProfileId,
-              profileOrder,
-              authStore,
-            },
-          });
-      const providerOrderedProfiles =
-        providerPreferredProfileId && profileOrder.includes(providerPreferredProfileId)
+        : preparedPiBootstrapState
+          ? undefined
+          : requestedProfileId
+            ? resolveProviderAuthProfileId({
+                provider,
+                config: params.config,
+                workspaceDir: resolvedWorkspace,
+                context: {
+                  config: params.config,
+                  agentDir,
+                  workspaceDir: resolvedWorkspace,
+                  provider,
+                  modelId,
+                  preferredProfileId,
+                  lockedProfileId,
+                  profileOrder,
+                  authStore,
+                },
+              })
+            : undefined;
+      const providerOrderedProfiles = preparedPiBootstrapState
+        ? preparedPiBootstrapState.preparedPiProviderOrderedProfiles
+        : providerPreferredProfileId && profileOrder.includes(providerPreferredProfileId)
           ? [
               providerPreferredProfileId,
               ...profileOrder.filter((profileId) => profileId !== providerPreferredProfileId),

@@ -44,6 +44,17 @@ export type {
   RuntimeWebSearchToolDefinition,
 } from "./runtime-types.js";
 
+type ResolvedWebSearchDefinition = {
+  provider: PluginWebSearchProviderEntry;
+  definition: WebSearchProviderToolDefinition;
+};
+
+let preparedWebSearchDefinitionsByConfig = new WeakMap<
+  OpenClawConfig,
+  Map<string, ResolvedWebSearchDefinition>
+>();
+const preparedWebSearchDefinitionsWithoutConfig = new Map<string, ResolvedWebSearchDefinition>();
+
 function resolveSearchConfig(cfg?: OpenClawConfig): WebSearchConfig {
   return resolveWebProviderConfig(cfg, "search") as NonNullable<WebSearchConfig> | undefined;
 }
@@ -181,30 +192,93 @@ export function resolveWebSearchProviderId(params: {
   return providers[0]?.id ?? "";
 }
 
-export function resolveWebSearchDefinition(
-  options?: ResolveWebSearchDefinitionParams,
-): { provider: PluginWebSearchProviderEntry; definition: WebSearchProviderToolDefinition } | null {
-  const config = resolveWebSearchRuntimeConfig(options?.config);
-  const search = resolveSearchConfig(config);
-  const runtimeWebSearch = options?.runtimeWebSearch ?? getActiveRuntimeWebToolsMetadata()?.search;
+function getPreparedWebSearchDefinitionCache(
+  config: OpenClawConfig | undefined,
+): Map<string, ResolvedWebSearchDefinition> {
+  if (!config) {
+    return preparedWebSearchDefinitionsWithoutConfig;
+  }
+  let cache = preparedWebSearchDefinitionsByConfig.get(config);
+  if (!cache) {
+    cache = new Map<string, ResolvedWebSearchDefinition>();
+    preparedWebSearchDefinitionsByConfig.set(config, cache);
+  }
+  return cache;
+}
+
+function createPreparedWebSearchDefinitionCacheKey(params: {
+  providerId?: string;
+  sandboxed?: boolean;
+  preferRuntimeProviders?: boolean;
+  runtimeWebSearch?: RuntimeWebSearchMetadata;
+}): string {
+  return JSON.stringify({
+    providerId: normalizeLowercaseStringOrEmpty(params.providerId),
+    sandboxed: params.sandboxed === true,
+    preferRuntimeProviders: params.preferRuntimeProviders === true,
+    runtimeSelectedProvider: normalizeLowercaseStringOrEmpty(
+      params.runtimeWebSearch?.selectedProvider,
+    ),
+    runtimeProviderConfigured: normalizeLowercaseStringOrEmpty(
+      params.runtimeWebSearch?.providerConfigured,
+    ),
+    runtimeProviderSource: params.runtimeWebSearch?.providerSource ?? "",
+    runtimeSelectedProviderKeySource: params.runtimeWebSearch?.selectedProviderKeySource ?? "",
+    runtimePerplexityTransport: params.runtimeWebSearch?.perplexityTransport ?? "",
+  });
+}
+
+function readPreparedWebSearchDefinition(params: {
+  config?: OpenClawConfig;
+  providerId?: string;
+  sandboxed?: boolean;
+  preferRuntimeProviders?: boolean;
+  runtimeWebSearch?: RuntimeWebSearchMetadata;
+}): ResolvedWebSearchDefinition | undefined {
+  return getPreparedWebSearchDefinitionCache(params.config).get(
+    createPreparedWebSearchDefinitionCacheKey(params),
+  );
+}
+
+function storePreparedWebSearchDefinition(params: {
+  config?: OpenClawConfig;
+  providerId?: string;
+  sandboxed?: boolean;
+  preferRuntimeProviders?: boolean;
+  runtimeWebSearch?: RuntimeWebSearchMetadata;
+  resolved: ResolvedWebSearchDefinition;
+}): ResolvedWebSearchDefinition {
+  const cache = getPreparedWebSearchDefinitionCache(params.config);
+  cache.set(createPreparedWebSearchDefinitionCacheKey(params), params.resolved);
+  return params.resolved;
+}
+
+function resolveWebSearchDefinitionUncached(params: {
+  config?: OpenClawConfig;
+  providerId?: string;
+  sandboxed?: boolean;
+  preferRuntimeProviders?: boolean;
+  runtimeWebSearch?: RuntimeWebSearchMetadata;
+}): ResolvedWebSearchDefinition | null {
+  const search = resolveSearchConfig(params.config);
   const providers = sortWebSearchProvidersForAutoDetect(
-    options?.preferRuntimeProviders
+    params.preferRuntimeProviders
       ? resolveRuntimeWebSearchProviders({
-          config,
+          config: params.config,
           bundledAllowlistCompat: true,
         })
       : resolvePluginWebSearchProviders({
-          config,
+          config: params.config,
           bundledAllowlistCompat: true,
           origin: "bundled",
         }),
   );
   return resolveWebProviderDefinition({
-    config,
+    config: params.config,
     toolConfig: search as Record<string, unknown> | undefined,
-    runtimeMetadata: runtimeWebSearch,
-    sandboxed: options?.sandboxed,
-    providerId: options?.providerId,
+    runtimeMetadata: params.runtimeWebSearch,
+    sandboxed: params.sandboxed,
+    providerId: params.providerId,
     providers,
     resolveEnabled: ({ toolConfig, sandboxed }) =>
       resolveWebSearchEnabled({
@@ -230,6 +304,64 @@ export function resolveWebSearchDefinition(
         runtimeMetadata,
       }),
   });
+}
+
+export function prepareWebSearchDefinition(
+  options?: ResolveWebSearchDefinitionParams,
+): ResolvedWebSearchDefinition | null {
+  const config = resolveWebSearchRuntimeConfig(options?.config);
+  const runtimeWebSearch = options?.runtimeWebSearch ?? getActiveRuntimeWebToolsMetadata()?.search;
+  const prepared = readPreparedWebSearchDefinition({
+    config,
+    providerId: options?.providerId,
+    sandboxed: options?.sandboxed,
+    preferRuntimeProviders: options?.preferRuntimeProviders,
+    runtimeWebSearch,
+  });
+  if (prepared) {
+    return prepared;
+  }
+  const resolved = resolveWebSearchDefinitionUncached({
+    config,
+    providerId: options?.providerId,
+    sandboxed: options?.sandboxed,
+    preferRuntimeProviders: options?.preferRuntimeProviders,
+    runtimeWebSearch,
+  });
+  if (!resolved) {
+    return null;
+  }
+  return storePreparedWebSearchDefinition({
+    config,
+    providerId: options?.providerId,
+    sandboxed: options?.sandboxed,
+    preferRuntimeProviders: options?.preferRuntimeProviders,
+    runtimeWebSearch,
+    resolved,
+  });
+}
+
+export function resolveWebSearchDefinition(
+  options?: ResolveWebSearchDefinitionParams,
+): ResolvedWebSearchDefinition | null {
+  const config = resolveWebSearchRuntimeConfig(options?.config);
+  const runtimeWebSearch = options?.runtimeWebSearch ?? getActiveRuntimeWebToolsMetadata()?.search;
+  return (
+    readPreparedWebSearchDefinition({
+      config,
+      providerId: options?.providerId,
+      sandboxed: options?.sandboxed,
+      preferRuntimeProviders: options?.preferRuntimeProviders,
+      runtimeWebSearch,
+    }) ??
+    resolveWebSearchDefinitionUncached({
+      config,
+      providerId: options?.providerId,
+      sandboxed: options?.sandboxed,
+      preferRuntimeProviders: options?.preferRuntimeProviders,
+      runtimeWebSearch,
+    })
+  );
 }
 
 function resolveWebSearchCandidates(
@@ -381,6 +513,14 @@ export async function runWebSearch(params: RunWebSearchParams): Promise<RunWebSe
 }
 
 export const __testing = {
+  clearPreparedWebSearchDefinitionCache(): void {
+    preparedWebSearchDefinitionsByConfig = new WeakMap<
+      OpenClawConfig,
+      Map<string, ResolvedWebSearchDefinition>
+    >();
+    preparedWebSearchDefinitionsWithoutConfig.clear();
+  },
+  createPreparedWebSearchDefinitionCacheKey,
   resolveSearchConfig,
   resolveSearchProvider: resolveWebSearchProviderId,
   resolveWebSearchProviderId,

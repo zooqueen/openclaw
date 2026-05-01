@@ -619,7 +619,7 @@ export async function runPreparedReply(
     // otherwise channels that wire onReplyStart to typing indicators leak
     // visible signals even though outbound delivery is suppressed.
     if (!suppressTyping) {
-      await typing.onReplyStart();
+      void typing.onReplyStart();
     }
     logVerbose("Inbound body empty after normalization; skipping agent run");
     typing.cleanup();

@@ -107,6 +107,9 @@ const SKIP_PI_DISCOVERY_PROVIDER_RUNTIME_HOOKS: ProviderRuntimeHooks = {
 const REPLY_RUNTIME_RESOLVED_MODEL_CACHE_KEY = Symbol.for(
   "openclaw.replyRuntimeResolvedModelCache",
 );
+const PREPARED_PI_DISCOVERY_STORES_CACHE_KEY = Symbol.for(
+  "openclaw.preparedPiDiscoveryStoresCache",
+);
 
 type ReplyRuntimeResolvedModelCacheValue = {
   model?: Model<Api>;
@@ -115,10 +118,19 @@ type ReplyRuntimeResolvedModelCacheValue = {
   modelRegistry: ModelRegistry;
 };
 
+type PreparedPiDiscoveryStores = {
+  authStorage: AuthStorage;
+  modelRegistry: ModelRegistry;
+};
+
 function getReplyRuntimeResolvedModelCache() {
   return resolveProcessScopedMap<ReplyRuntimeResolvedModelCacheValue>(
     REPLY_RUNTIME_RESOLVED_MODEL_CACHE_KEY,
   );
+}
+
+function getPreparedPiDiscoveryStoresCache() {
+  return resolveProcessScopedMap<PreparedPiDiscoveryStores>(PREPARED_PI_DISCOVERY_STORES_CACHE_KEY);
 }
 
 function buildReplyRuntimeResolvedModelCacheKey(params: {
@@ -139,6 +151,10 @@ export function resetReplyRuntimeResolvedModelCacheForTest(): void {
   getReplyRuntimeResolvedModelCache().clear();
 }
 
+export function resetPreparedPiDiscoveryStoresCacheForTest(): void {
+  getPreparedPiDiscoveryStoresCache().clear();
+}
+
 function createEmptyPiDiscoveryStores(): {
   authStorage: AuthStorage;
   modelRegistry: ModelRegistry;
@@ -151,6 +167,94 @@ function createEmptyPiDiscoveryStores(): {
     typeof PiModelRegistryClass.inMemory === "function"
       ? PiModelRegistryClass.inMemory(authStorage)
       : PiModelRegistryClass.create(authStorage);
+  return { authStorage, modelRegistry };
+}
+
+function buildPreparedPiDiscoveryStoresCacheKey(params: {
+  agentDir: string;
+  skipPiDiscovery?: boolean;
+}): string {
+  return JSON.stringify([params.agentDir, params.skipPiDiscovery === true]);
+}
+
+function discoverPiDiscoveryStores(agentDir: string): PreparedPiDiscoveryStores {
+  const authStorage = discoverAuthStorage(agentDir);
+  return {
+    authStorage,
+    modelRegistry: discoverModels(authStorage, agentDir),
+  };
+}
+
+function createPreparedPiDiscoveryStores(params: {
+  agentDir: string;
+  skipPiDiscovery?: boolean;
+}): PreparedPiDiscoveryStores {
+  return params.skipPiDiscovery
+    ? createEmptyPiDiscoveryStores()
+    : discoverPiDiscoveryStores(params.agentDir);
+}
+
+export function preparePiDiscoveryStores(
+  agentDir?: string,
+  options?: {
+    skipPiDiscovery?: boolean;
+  },
+): PreparedPiDiscoveryStores {
+  const resolvedAgentDir = agentDir ?? resolveOpenClawAgentDir();
+  const cacheKey = buildPreparedPiDiscoveryStoresCacheKey({
+    agentDir: resolvedAgentDir,
+    skipPiDiscovery: options?.skipPiDiscovery,
+  });
+  const cache = getPreparedPiDiscoveryStoresCache();
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const prepared = createPreparedPiDiscoveryStores({
+    agentDir: resolvedAgentDir,
+    skipPiDiscovery: options?.skipPiDiscovery,
+  });
+  cache.set(cacheKey, prepared);
+  return prepared;
+}
+
+function resolvePiDiscoveryStores(params: {
+  agentDir: string;
+  authStorage?: AuthStorage;
+  modelRegistry?: ModelRegistry;
+  skipPiDiscovery?: boolean;
+  primeReplyRuntimeCache?: boolean;
+}): PreparedPiDiscoveryStores {
+  if (!params.authStorage && !params.modelRegistry) {
+    const cacheKey = buildPreparedPiDiscoveryStoresCacheKey({
+      agentDir: params.agentDir,
+      skipPiDiscovery: params.skipPiDiscovery,
+    });
+    const cache = getPreparedPiDiscoveryStoresCache();
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const prepared = createPreparedPiDiscoveryStores({
+      agentDir: params.agentDir,
+      skipPiDiscovery: params.skipPiDiscovery,
+    });
+    if (params.primeReplyRuntimeCache === true) {
+      cache.set(cacheKey, prepared);
+    }
+    return prepared;
+  }
+
+  const emptyDiscoveryStores =
+    params.skipPiDiscovery && (!params.authStorage || !params.modelRegistry)
+      ? createEmptyPiDiscoveryStores()
+      : undefined;
+  const authStorage =
+    params.authStorage ?? emptyDiscoveryStores?.authStorage ?? discoverAuthStorage(params.agentDir);
+  const modelRegistry =
+    params.modelRegistry ??
+    emptyDiscoveryStores?.modelRegistry ??
+    discoverModels(authStorage, params.agentDir);
   return { authStorage, modelRegistry };
 }
 
@@ -1101,18 +1205,13 @@ export async function resolveModelAsync(
       return cached;
     }
   }
-  const emptyDiscoveryStores =
-    options?.skipPiDiscovery && (!options.authStorage || !options.modelRegistry)
-      ? createEmptyPiDiscoveryStores()
-      : undefined;
-  const authStorage =
-    options?.authStorage ??
-    emptyDiscoveryStores?.authStorage ??
-    discoverAuthStorage(resolvedAgentDir);
-  const modelRegistry =
-    options?.modelRegistry ??
-    emptyDiscoveryStores?.modelRegistry ??
-    discoverModels(authStorage, resolvedAgentDir);
+  const { authStorage, modelRegistry } = resolvePiDiscoveryStores({
+    agentDir: resolvedAgentDir,
+    authStorage: options?.authStorage,
+    modelRegistry: options?.modelRegistry,
+    skipPiDiscovery: options?.skipPiDiscovery,
+    primeReplyRuntimeCache: options?.primeReplyRuntimeCache,
+  });
   const runtimeHooks = resolveRuntimeHooks(options);
   const explicitModel = resolveExplicitModelWithRegistry({
     provider: normalizedRef.provider,

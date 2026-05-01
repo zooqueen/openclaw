@@ -8,7 +8,10 @@ vi.mock("../../plugins/web-content-extractors.runtime.js", () => ({
   resolvePluginWebContentExtractors: resolvePluginWebContentExtractorsMock,
 }));
 
-import { extractReadableContent } from "../../web-fetch/content-extractors.runtime.js";
+import {
+  extractReadableContent,
+  prepareWebContentExtractors,
+} from "../../web-fetch/content-extractors.runtime.js";
 
 describe("web fetch readability", () => {
   beforeEach(() => {
@@ -69,6 +72,75 @@ describe("web fetch readability", () => {
 
     expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledTimes(1);
     expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledWith({ config });
+  });
+
+  it("reuses prepared extractor loading for later extraction with the same config object", async () => {
+    const config = {};
+    const extract = vi.fn().mockResolvedValue({
+      text: "prepared extractor text",
+    });
+    resolvePluginWebContentExtractorsMock.mockReturnValue([
+      {
+        id: "readability",
+        pluginId: "web-readability",
+        label: "Readability",
+        extract,
+      },
+    ]);
+
+    await prepareWebContentExtractors({ config });
+
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledTimes(1);
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledWith({ config });
+
+    resolvePluginWebContentExtractorsMock.mockImplementation(() => {
+      throw new Error("extractors should reuse the prepared cache");
+    });
+
+    const result = await extractReadableContent({
+      html: "<article><p>prepared</p></article>",
+      url: "https://example.com/prepared",
+      extractMode: "text",
+      config,
+    });
+
+    expect(result).toMatchObject({
+      extractor: "readability",
+      text: "prepared extractor text",
+    });
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps prepared extractor caches separated by config identity", async () => {
+    const preparedConfig = {};
+    const laterConfig = {};
+    resolvePluginWebContentExtractorsMock.mockReturnValue([
+      {
+        id: "readability",
+        pluginId: "web-readability",
+        label: "Readability",
+        extract: vi.fn().mockResolvedValue({
+          text: "separate cache text",
+        }),
+      },
+    ]);
+
+    await prepareWebContentExtractors({ config: preparedConfig });
+    await extractReadableContent({
+      html: "<article><p>later</p></article>",
+      url: "https://example.com/later",
+      extractMode: "text",
+      config: laterConfig,
+    });
+
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenCalledTimes(2);
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenNthCalledWith(1, {
+      config: preparedConfig,
+    });
+    expect(resolvePluginWebContentExtractorsMock).toHaveBeenNthCalledWith(2, {
+      config: laterConfig,
+    });
   });
 
   it("returns null when no extractor produces content", async () => {

@@ -346,6 +346,36 @@ describe("typing controller", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(onReplyStart).toHaveBeenCalledTimes(1);
   });
+
+  it("defers channel typing start off the caller stack", async () => {
+    vi.useFakeTimers();
+    let releaseStart!: () => void;
+    const startBlocked = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    let inline = true;
+    const onReplyStart = vi.fn(() => {
+      expect(inline).toBe(false);
+      return startBlocked;
+    });
+    const typing = createTypingController({
+      onReplyStart,
+      typingIntervalSeconds: 1,
+      typingTtlMs: 30_000,
+    });
+
+    const startPromise = typing.startTypingLoop();
+
+    expect(onReplyStart).not.toHaveBeenCalled();
+    inline = false;
+
+    await startPromise;
+    expect(onReplyStart).toHaveBeenCalledTimes(1);
+
+    releaseStart();
+    typing.cleanup();
+    await Promise.resolve();
+  });
 });
 
 describe("resolveTypingMode", () => {

@@ -98,16 +98,25 @@ function createDuckDuckGoSearchProvider(
 
 describe("web search runtime", () => {
   let runWebSearch: typeof import("./runtime.js").runWebSearch;
+  let resolveWebSearchDefinition: typeof import("./runtime.js").resolveWebSearchDefinition;
+  let prepareWebSearchDefinition: typeof import("./runtime.js").prepareWebSearchDefinition;
+  let runtimeTesting: typeof import("./runtime.js").__testing;
   let activateSecretsRuntimeSnapshot: typeof import("../secrets/runtime.js").activateSecretsRuntimeSnapshot;
   let clearSecretsRuntimeSnapshot: typeof import("../secrets/runtime.js").clearSecretsRuntimeSnapshot;
 
   beforeAll(async () => {
-    ({ runWebSearch } = await import("./runtime.js"));
+    ({
+      runWebSearch,
+      resolveWebSearchDefinition,
+      prepareWebSearchDefinition,
+      __testing: runtimeTesting,
+    } = await import("./runtime.js"));
     ({ activateSecretsRuntimeSnapshot, clearSecretsRuntimeSnapshot } =
       await import("../secrets/runtime.js"));
   });
 
   beforeEach(() => {
+    runtimeTesting.clearPreparedWebSearchDefinitionCache();
     resolvePluginWebSearchProvidersMock.mockReset();
     resolveRuntimeWebSearchProvidersMock.mockReset();
     resolvePluginWebSearchProvidersMock.mockReturnValue([]);
@@ -207,6 +216,70 @@ describe("web search runtime", () => {
         apiKey: "resolved-custom-key",
       },
     });
+  });
+
+  it("reuses a prepared resolved definition for callers that map onto the active runtime config", () => {
+    const createTool = vi.fn(({ config }: { config?: OpenClawConfig }) => ({
+      description: "custom",
+      parameters: {},
+      execute: async (args: Record<string, unknown>) => ({
+        ...args,
+        apiKey: getCustomSearchApiKey(config),
+      }),
+    }));
+    const provider = createCustomSearchProvider({ createTool });
+    resolveRuntimeWebSearchProvidersMock.mockReturnValue([provider]);
+    resolvePluginWebSearchProvidersMock.mockReturnValue([provider]);
+
+    const sourceConfig = createCustomSearchConfig({
+      source: "exec",
+      provider: "mockexec",
+      id: "custom-search/api-key",
+    });
+    const resolvedConfig = createCustomSearchConfig("resolved-custom-key");
+
+    activateSecretsRuntimeSnapshot({
+      sourceConfig,
+      config: resolvedConfig,
+      authStores: [],
+      warnings: [],
+      webTools: {
+        search: {
+          providerSource: "auto-detect",
+          providerConfigured: "custom",
+          selectedProvider: "custom",
+          diagnostics: [],
+        },
+        fetch: {
+          providerSource: "none",
+          diagnostics: [],
+        },
+        diagnostics: [],
+      },
+    });
+
+    const prepared = prepareWebSearchDefinition({
+      config: structuredClone(sourceConfig),
+      preferRuntimeProviders: true,
+    });
+
+    expect(prepared?.provider.id).toBe("custom");
+    expect(createTool).toHaveBeenCalledTimes(1);
+
+    resolveRuntimeWebSearchProvidersMock.mockImplementation(() => {
+      throw new Error("runtime providers should not re-resolve on cache hit");
+    });
+    resolvePluginWebSearchProvidersMock.mockImplementation(() => {
+      throw new Error("plugin providers should not re-resolve on cache hit");
+    });
+
+    const resolved = resolveWebSearchDefinition({
+      config: structuredClone(sourceConfig),
+      preferRuntimeProviders: true,
+    });
+
+    expect(resolved).toBe(prepared);
+    expect(createTool).toHaveBeenCalledTimes(1);
   });
 
   it("treats non-env SecretRefs as configured credentials for provider auto-detect", async () => {

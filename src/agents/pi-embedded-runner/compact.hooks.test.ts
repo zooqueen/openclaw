@@ -4,13 +4,16 @@ import {
   applyExtraParamsToAgentMock,
   contextEngineCompactMock,
   createOpenClawCodingToolsMock,
+  ensureOpenClawModelsJsonMock,
   ensureRuntimePluginsLoaded,
   estimateTokensMock,
+  getApiKeyForModelMock,
   getMemorySearchManagerMock,
   hookRunner,
   loadCompactHooksHarness,
   maybeCompactAgentHarnessSessionMock,
   registerProviderStreamForModelMock,
+  resolvePreparedPiRunBootstrapStateMock,
   resolveContextEngineMock,
   resolveEmbeddedAgentStreamFnMock,
   resolveMemorySearchConfigMock,
@@ -211,6 +214,65 @@ describe("compactEmbeddedPiSessionDirect hooks", () => {
       workspaceDir: "/tmp/workspace",
       allowGatewaySubagentBinding: true,
     });
+  });
+
+  it("does not force models.json generation before compaction model resolution", async () => {
+    await compactEmbeddedPiSessionDirect({
+      sessionId: "session-1",
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp/workspace",
+    });
+
+    expect(ensureOpenClawModelsJsonMock).not.toHaveBeenCalled();
+    expect(resolveModelMock).toHaveBeenCalledWith("openai", "fake-model", "/tmp", undefined);
+  });
+
+  it("reuses prepared PI bootstrap auth state for default compaction auth resolution", async () => {
+    const authStore = { version: 1, profiles: {} };
+    resolvePreparedPiRunBootstrapStateMock.mockReturnValue({
+      authStore,
+      preparedPiProfileOrder: ["profile-b", "profile-a"],
+      preparedPiProviderOrderedProfiles: ["profile-a", "profile-b"],
+    });
+
+    await compactEmbeddedPiSessionDirect({
+      sessionId: "session-1",
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp/workspace",
+    });
+
+    expect(resolvePreparedPiRunBootstrapStateMock).toHaveBeenCalledWith({
+      config: undefined,
+      agentDir: "/tmp",
+      workspaceDir: "/tmp/workspace",
+      provider: "openai",
+      modelId: "fake-model",
+    });
+    expect(getApiKeyForModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: undefined,
+        preferredProfile: "profile-a",
+        store: authStore,
+      }),
+    );
+  });
+
+  it("skips prepared PI bootstrap reuse when compaction locks an explicit auth profile", async () => {
+    await compactEmbeddedPiSessionDirect({
+      sessionId: "session-1",
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp/workspace",
+      authProfileId: "profile-z",
+    });
+
+    expect(resolvePreparedPiRunBootstrapStateMock).not.toHaveBeenCalled();
+    expect(getApiKeyForModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: "profile-z",
+        preferredProfile: undefined,
+        store: undefined,
+      }),
+    );
   });
 
   it("uses sandboxSessionKey only for compaction sandbox resolution", async () => {
