@@ -11,6 +11,32 @@ PACKAGE_TGZ="${OPENCLAW_NPM_TELEGRAM_PACKAGE_TGZ:-${OPENCLAW_CURRENT_PACKAGE_TGZ
 PACKAGE_LABEL="${OPENCLAW_NPM_TELEGRAM_PACKAGE_LABEL:-}"
 OUTPUT_DIR="${OPENCLAW_NPM_TELEGRAM_OUTPUT_DIR:-.artifacts/qa-e2e/npm-telegram-rtt}"
 
+resolve_credential_source() {
+  if [ -n "${OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE:-}" ]; then
+    printf "%s" "$OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE"
+    return 0
+  fi
+  if [ -n "${OPENCLAW_QA_CREDENTIAL_SOURCE:-}" ]; then
+    printf "%s" "$OPENCLAW_QA_CREDENTIAL_SOURCE"
+    return 0
+  fi
+  if [ -n "${CI:-}" ] && [ -n "${OPENCLAW_QA_CONVEX_SITE_URL:-}" ]; then
+    if [ -n "${OPENCLAW_QA_CONVEX_SECRET_CI:-}" ] || [ -n "${OPENCLAW_QA_CONVEX_SECRET_MAINTAINER:-}" ]; then
+      printf "convex"
+    fi
+  fi
+}
+
+resolve_credential_role() {
+  if [ -n "${OPENCLAW_NPM_TELEGRAM_CREDENTIAL_ROLE:-}" ]; then
+    printf "%s" "$OPENCLAW_NPM_TELEGRAM_CREDENTIAL_ROLE"
+    return 0
+  fi
+  if [ -n "${OPENCLAW_QA_CREDENTIAL_ROLE:-}" ]; then
+    printf "%s" "$OPENCLAW_QA_CREDENTIAL_ROLE"
+  fi
+}
+
 validate_openclaw_package_spec() {
   local spec="$1"
   if [[ "$spec" =~ ^openclaw@(main|beta|latest|[0-9]{4}\.[1-9][0-9]*\.[1-9][0-9]*(-[1-9][0-9]*|-beta\.[1-9][0-9]*)?)$ ]]; then
@@ -60,15 +86,22 @@ if [ -z "$PACKAGE_LABEL" ]; then
   fi
 fi
 
-for key in \
-  OPENCLAW_QA_TELEGRAM_GROUP_ID \
-  OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN \
-  OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN; do
-  if [ -z "${!key:-}" ]; then
-    echo "Missing required env: $key" >&2
-    exit 1
-  fi
-done
+credential_source="$(resolve_credential_source)"
+credential_role="$(resolve_credential_role)"
+if [ -z "$credential_role" ] && [ -n "${CI:-}" ] && [ "$credential_source" = "convex" ]; then
+  credential_role="ci"
+fi
+if [ "$credential_source" != "convex" ]; then
+  for key in \
+    OPENCLAW_QA_TELEGRAM_GROUP_ID \
+    OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN \
+    OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN; do
+    if [ -z "${!key:-}" ]; then
+      echo "Missing required env: $key" >&2
+      exit 1
+    fi
+  done
+fi
 
 docker_e2e_build_or_reuse "$IMAGE_NAME" npm-telegram-rtt "$ROOT_DIR/scripts/e2e/Dockerfile" "$ROOT_DIR" "$DOCKER_TARGET"
 
@@ -103,6 +136,34 @@ run_logged() {
   >"$run_log"
 }
 
+forward_env_if_set() {
+  local key="$1"
+  if [ -n "${!key:-}" ]; then
+    docker_env+=(-e "$key")
+  fi
+}
+
+if [ -n "$credential_source" ]; then
+  docker_env+=(-e OPENCLAW_QA_CREDENTIAL_SOURCE="$credential_source")
+fi
+if [ -n "$credential_role" ]; then
+  docker_env+=(-e OPENCLAW_QA_CREDENTIAL_ROLE="$credential_role")
+fi
+
+for key in \
+  OPENCLAW_QA_CONVEX_SITE_URL \
+  OPENCLAW_QA_CONVEX_SECRET_CI \
+  OPENCLAW_QA_CONVEX_SECRET_MAINTAINER \
+  OPENCLAW_QA_CREDENTIAL_LEASE_TTL_MS \
+  OPENCLAW_QA_CREDENTIAL_HEARTBEAT_INTERVAL_MS \
+  OPENCLAW_QA_CREDENTIAL_ACQUIRE_TIMEOUT_MS \
+  OPENCLAW_QA_CREDENTIAL_HTTP_TIMEOUT_MS \
+  OPENCLAW_QA_CONVEX_ENDPOINT_PREFIX \
+  OPENCLAW_QA_CREDENTIAL_OWNER_ID \
+  OPENCLAW_QA_ALLOW_INSECURE_HTTP; do
+  forward_env_if_set "$key"
+done
+
 echo "Running package Telegram RTT Docker E2E ($PACKAGE_LABEL)..."
 run_logged docker run --rm \
   "${docker_env[@]}" \
@@ -118,7 +179,6 @@ export NPM_CONFIG_PREFIX="/npm-global"
 export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
 export OPENAI_API_KEY="sk-openclaw-rtt"
 export GATEWAY_AUTH_TOKEN_REF="openclaw-rtt"
-export TELEGRAM_BOT_TOKEN="$OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN"
 export OPENCLAW_DISABLE_BONJOUR="1"
 
 install_source="${OPENCLAW_NPM_TELEGRAM_INSTALL_SOURCE:?missing OPENCLAW_NPM_TELEGRAM_INSTALL_SOURCE}"
@@ -151,6 +211,11 @@ npm install -g "$install_source" --no-fund --no-audit
 command -v openclaw
 openclaw --version
 installed_version="$(node -p "require('/npm-global/lib/node_modules/openclaw/package.json').version")"
+export OPENCLAW_NPM_TELEGRAM_INSTALLED_VERSION="$installed_version"
+export OPENCLAW_NPM_TELEGRAM_CONFIG_PATH="$config_path"
+export OPENCLAW_NPM_TELEGRAM_GATEWAY_LOG="$gateway_log"
+export OPENCLAW_NPM_TELEGRAM_MOCK_LOG="$mock_log"
+export OPENCLAW_NPM_TELEGRAM_MOCK_PORT="$mock_port"
 
 node /app/scripts/e2e/mock-openai-server.mjs >"$mock_log" 2>&1 &
 mock_pid="$!"
@@ -163,13 +228,39 @@ done
 
 mkdir -p "$(dirname "$config_path")" "$HOME/.openclaw/workspace" "$HOME/.openclaw/agents/main/sessions" "$HOME/workspace"
 
+tsx /app/scripts/e2e/npm-telegram-rtt-credentials.ts run -- bash -s <<'RTT_EOF'
+set -euo pipefail
+
+export TELEGRAM_BOT_TOKEN="$OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN"
+config_path="${OPENCLAW_NPM_TELEGRAM_CONFIG_PATH:?missing OPENCLAW_NPM_TELEGRAM_CONFIG_PATH}"
+gateway_log="${OPENCLAW_NPM_TELEGRAM_GATEWAY_LOG:?missing OPENCLAW_NPM_TELEGRAM_GATEWAY_LOG}"
+mock_log="${OPENCLAW_NPM_TELEGRAM_MOCK_LOG:?missing OPENCLAW_NPM_TELEGRAM_MOCK_LOG}"
+mock_port="${OPENCLAW_NPM_TELEGRAM_MOCK_PORT:?missing OPENCLAW_NPM_TELEGRAM_MOCK_PORT}"
+
+dump_logs() {
+  local status="$1"
+  if [ "$status" -eq 0 ]; then
+    return
+  fi
+  echo "package Telegram RTT failed with exit code $status" >&2
+  for file in \
+    "$mock_log" \
+    "$gateway_log"; do
+    if [ -f "$file" ]; then
+      echo "--- $file ---" >&2
+      sed -n '1,260p' "$file" >&2 || true
+    fi
+  done
+}
+trap 'status=$?; kill ${gateway_pid:-} 2>/dev/null || true; dump_logs "$status"; exit "$status"' EXIT
+
 node /app/scripts/e2e/npm-telegram-rtt-config.mjs \
   "$config_path" \
   "$mock_port" \
   "$OPENCLAW_QA_TELEGRAM_GROUP_ID" \
   "$OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN" \
   "$OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN" \
-  "$installed_version"
+  "$OPENCLAW_NPM_TELEGRAM_INSTALLED_VERSION"
 
 openclaw gateway run --verbose >"$gateway_log" 2>&1 &
 gateway_pid="$!"
@@ -189,6 +280,7 @@ if ! bash -c ":</dev/tcp/127.0.0.1/18789" >/dev/null 2>&1; then
 fi
 
 node /app/scripts/e2e/npm-telegram-rtt-driver.mjs
+RTT_EOF
 EOF
 
 echo "package Telegram RTT Docker E2E passed ($PACKAGE_LABEL)"

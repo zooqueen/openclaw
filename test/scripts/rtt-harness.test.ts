@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { __testing as rttCredentialTesting } from "../../scripts/e2e/npm-telegram-rtt-credentials.ts";
 import {
   appendJsonl,
+  assertRequiredEnv,
   buildRttResult,
   buildRunId,
   createHarnessEnv,
@@ -72,6 +74,78 @@ describe("RTT harness", () => {
     expect(env.OPENCLAW_NPM_TELEGRAM_SAMPLE_TIMEOUT_MS).toBe("30000");
     expect(env.OPENCLAW_QA_TELEGRAM_CANARY_TIMEOUT_MS).toBe("180000");
     expect(env.OPENCLAW_QA_TELEGRAM_SCENARIO_TIMEOUT_MS).toBe("180000");
+  });
+
+  it("accepts Convex credential env for RTT preflight", () => {
+    expect(() =>
+      assertRequiredEnv({
+        OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE: "convex",
+        OPENCLAW_QA_CONVEX_SECRET_MAINTAINER: "secret",
+        OPENCLAW_QA_CONVEX_SITE_URL: "https://example.convex.site",
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertRequiredEnv({
+        OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE: "convex",
+        OPENCLAW_QA_CONVEX_SITE_URL: "https://example.convex.site",
+      }),
+    ).toThrow(/OPENCLAW_QA_CONVEX_SECRET_CI or OPENCLAW_QA_CONVEX_SECRET_MAINTAINER/);
+  });
+
+  it("keeps raw Telegram env preflight for non-Convex credentials", () => {
+    expect(() =>
+      assertRequiredEnv({
+        OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN: "driver",
+        OPENCLAW_QA_TELEGRAM_GROUP_ID: "-100123",
+        OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN: "sut",
+      }),
+    ).not.toThrow();
+
+    expect(() => assertRequiredEnv({})).toThrow(/Missing Telegram QA env/);
+  });
+
+  it("resolves RTT credential-source aliases for the Docker harness", () => {
+    expect(
+      rttCredentialTesting.resolveCredentialSource({
+        OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE: "convex",
+        OPENCLAW_QA_CREDENTIAL_SOURCE: "env",
+      }),
+    ).toBe("convex");
+    expect(
+      rttCredentialTesting.resolveCredentialSource({
+        CI: "1",
+        OPENCLAW_QA_CONVEX_SECRET_CI: "secret",
+        OPENCLAW_QA_CONVEX_SITE_URL: "https://example.convex.site",
+      }),
+    ).toBe("convex");
+    expect(
+      rttCredentialTesting.resolveCredentialRole({
+        OPENCLAW_NPM_TELEGRAM_CREDENTIAL_ROLE: "ci",
+        OPENCLAW_QA_CREDENTIAL_ROLE: "maintainer",
+      }),
+    ).toBe("ci");
+    expect(() =>
+      rttCredentialTesting.parseTelegramPayload({
+        driverToken: "driver",
+        groupId: "not-a-chat-id",
+        sutToken: "sut",
+      }),
+    ).toThrow(/numeric Telegram chat id/);
+  });
+
+  it("wires Convex credential leases through the RTT Docker harness", async () => {
+    const script = await fs.readFile(
+      path.resolve(TEST_DIR, "../../scripts/e2e/npm-telegram-rtt-docker.sh"),
+      "utf8",
+    );
+
+    expect(script).toContain("resolve_credential_source()");
+    expect(script).toContain("OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE");
+    expect(script).toContain('docker_env+=(-e OPENCLAW_QA_CREDENTIAL_SOURCE="$credential_source")');
+    expect(script).toContain("OPENCLAW_QA_CONVEX_SECRET_CI");
+    expect(script).toContain('if [ "$credential_source" != "convex" ]; then');
+    expect(script).toContain("tsx /app/scripts/e2e/npm-telegram-rtt-credentials.ts run -- bash -s");
   });
 
   it("extracts RTT values from Telegram QA summaries", async () => {
@@ -161,6 +235,12 @@ describe("RTT harness", () => {
     await appendJsonl(jsonlPath, { run: 2 });
 
     await expect(fs.readFile(jsonlPath, "utf8")).resolves.toBe('{"run":1}\n{"run":2}\n');
+  });
+
+  it("defaults the harness root to the current checkout", () => {
+    const parsed = cliTesting.parseArgs(["openclaw@beta"]);
+
+    expect(parsed.options.harnessRoot).toBe(process.cwd());
   });
 
   it("parses CLI options", () => {

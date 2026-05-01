@@ -68,7 +68,7 @@ function parseArgs(argv: string[]) {
   let runs = 1;
   let samples = DEFAULT_SAMPLES;
   let sampleTimeoutMs = DEFAULT_SAMPLE_TIMEOUT_MS;
-  let harnessRoot = "~/Developer/clawdbot";
+  let harnessRoot = process.cwd();
   let output = "runs";
   let timeoutMs = DEFAULT_TIMEOUT_MS;
 
