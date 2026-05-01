@@ -24,6 +24,7 @@ import { applyVerboseOverride } from "../sessions/level-overrides.js";
 import { applyModelOverrideToSessionEntry } from "../sessions/model-overrides.js";
 import { resolveSendPolicy } from "../sessions/send-policy.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
+import { findTaskByRunId } from "../tasks/task-registry.js";
 import { sanitizeForLog } from "../terminal/ansi.js";
 import { createTrajectoryRuntimeRecorder } from "../trajectory/runtime.js";
 import { resolveMessageChannel } from "../utils/message-channel.js";
@@ -94,6 +95,14 @@ let acpSessionIdentifiersRuntimePromise: Promise<AcpSessionIdentifiersRuntime> |
 let deliveryRuntimePromise: Promise<DeliveryRuntime> | undefined;
 let sessionStoreRuntimePromise: Promise<SessionStoreRuntime> | undefined;
 let cliCompactionRuntimePromise: Promise<CliCompactionRuntime> | undefined;
+
+function resolveTranscriptTaskIdForRun(runId: string): string | undefined {
+  try {
+    return findTaskByRunId(runId)?.taskId;
+  } catch {
+    return undefined;
+  }
+}
 let transcriptResolveRuntimePromise: Promise<TranscriptResolveRuntime> | undefined;
 let cliDepsRuntimePromise: Promise<CliDepsRuntime> | undefined;
 let execDefaultsRuntimePromise: Promise<ExecDefaultsRuntime> | undefined;
@@ -561,6 +570,8 @@ async function agentCommandInternal(
           body,
           transcriptBody,
           finalText: finalTextRaw,
+          runId,
+          taskId: resolveTranscriptTaskIdForRun(runId),
           sessionId,
           sessionKey,
           sessionEntry,
@@ -1159,6 +1170,8 @@ async function agentCommandInternal(
           body,
           transcriptBody,
           result,
+          runId,
+          taskId: resolveTranscriptTaskIdForRun(runId),
           sessionId,
           sessionKey: sessionKey ?? sessionId,
           sessionEntry,

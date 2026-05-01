@@ -71,6 +71,8 @@ type PersistTextTurnTranscriptParams = {
   body: string;
   transcriptBody?: string;
   finalText: string;
+  runId?: string;
+  taskId?: string;
   sessionId: string;
   sessionKey: string;
   sessionEntry: SessionEntry | undefined;
@@ -206,12 +208,20 @@ async function persistTextTurnTranscript(
     sessionId: params.sessionId,
     cwd: params.sessionCwd,
   });
+  const openclawMeta = {
+    ...(params.runId?.trim() ? { runId: params.runId.trim() } : {}),
+    ...(params.taskId?.trim()
+      ? { taskId: params.taskId.trim(), messageTaskId: params.taskId.trim() }
+      : {}),
+  };
+  const provenance = Object.keys(openclawMeta).length > 0 ? { __openclaw: openclawMeta } : {};
 
   if (promptText) {
     sessionManager.appendMessage({
       role: "user",
       content: promptText,
       timestamp: Date.now(),
+      ...provenance,
     });
   }
 
@@ -225,6 +235,7 @@ async function persistTextTurnTranscript(
       usage: resolveTranscriptUsage(params.assistant.usage),
       stopReason: "stop",
       timestamp: Date.now(),
+      ...provenance,
     });
   }
 
@@ -253,6 +264,8 @@ export async function persistAcpTurnTranscript(params: {
   body: string;
   transcriptBody?: string;
   finalText: string;
+  runId?: string;
+  taskId?: string;
   sessionId: string;
   sessionKey: string;
   sessionEntry: SessionEntry | undefined;
@@ -276,6 +289,8 @@ export async function persistCliTurnTranscript(params: {
   body: string;
   transcriptBody?: string;
   result: EmbeddedPiRunResult;
+  runId?: string;
+  taskId?: string;
   sessionId: string;
   sessionKey: string;
   sessionEntry: SessionEntry | undefined;
@@ -293,6 +308,8 @@ export async function persistCliTurnTranscript(params: {
     body: params.body,
     transcriptBody: params.transcriptBody,
     finalText: replyText,
+    runId: params.runId,
+    taskId: params.taskId,
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
     sessionEntry: params.sessionEntry,

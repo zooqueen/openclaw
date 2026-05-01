@@ -48,6 +48,8 @@ export function appendInjectedAssistantMessageToTranscript(params: {
   /** When set, used as the assistant `content` array (e.g. text + embedded audio blocks). */
   content?: Array<Record<string, unknown>>;
   idempotencyKey?: string;
+  runId?: string;
+  taskId?: string;
   abortMeta?: GatewayInjectedAbortMeta;
   now?: number;
 }): GatewayInjectedTranscriptAppendResult {
@@ -71,6 +73,12 @@ export function appendInjectedAssistantMessageToTranscript(params: {
     label: params.label,
     content: params.content,
   });
+  const runId = params.runId?.trim() || params.abortMeta?.runId.trim();
+  const taskId = params.taskId?.trim();
+  const openclawMeta = {
+    ...(runId ? { runId } : {}),
+    ...(taskId ? { taskId, messageTaskId: taskId } : {}),
+  };
   const messageBody: AppendMessageArg & Record<string, unknown> = {
     role: "assistant",
     // Gateway-injected assistant messages can include non-model content blocks (e.g. embedded TTS audio).
@@ -88,6 +96,7 @@ export function appendInjectedAssistantMessageToTranscript(params: {
     provider: "openclaw",
     model: "gateway-injected",
     ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+    ...(Object.keys(openclawMeta).length > 0 ? { __openclaw: openclawMeta } : {}),
     ...(params.abortMeta
       ? {
           openclawAbort: {

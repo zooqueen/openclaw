@@ -16,6 +16,8 @@ describe("gateway chat.inject transcript writes", () => {
       const appended = appendInjectedAssistantMessageToTranscript({
         transcriptPath,
         message: "hello",
+        runId: "run-inject",
+        taskId: "task-inject",
       });
       expect(appended.ok).toBe(true);
       expect(appended.messageId).toBeTruthy();
@@ -30,6 +32,13 @@ describe("gateway chat.inject transcript writes", () => {
       expect(Object.prototype.hasOwnProperty.call(last, "parentId")).toBe(true);
       expect(last).toHaveProperty("id");
       expect(last).toHaveProperty("message");
+      expect(last.message).toMatchObject({
+        __openclaw: {
+          runId: "run-inject",
+          taskId: "task-inject",
+          messageTaskId: "task-inject",
+        },
+      });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

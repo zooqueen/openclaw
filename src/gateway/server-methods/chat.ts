@@ -37,6 +37,7 @@ import { normalizeInputProvenance, type InputProvenance } from "../../sessions/i
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { parseAgentSessionKey } from "../../sessions/session-key-utils.js";
 import { emitSessionTranscriptUpdate } from "../../sessions/transcript-events.js";
+import { findTaskByRunId } from "../../tasks/task-registry.js";
 import {
   stripInlineDirectiveTagsForDisplay,
   sanitizeReplyDirectiveId,
@@ -117,6 +118,17 @@ import type {
   GatewayRequestHandlerOptions,
   GatewayRequestHandlers,
 } from "./types.js";
+
+function resolveTranscriptTaskIdForRun(runId: string | undefined): string | undefined {
+  if (!runId?.trim()) {
+    return undefined;
+  }
+  try {
+    return findTaskByRunId(runId)?.taskId;
+  } catch {
+    return undefined;
+  }
+}
 
 type TranscriptAppendResult = {
   ok: boolean;
@@ -1310,6 +1322,8 @@ function appendAssistantTranscriptMessage(params: {
   agentId?: string;
   createIfMissing?: boolean;
   idempotencyKey?: string;
+  runId?: string;
+  taskId?: string;
   abortMeta?: {
     aborted: true;
     origin: AbortOrigin;
@@ -1349,6 +1363,8 @@ function appendAssistantTranscriptMessage(params: {
     label: params.label,
     content: params.content,
     idempotencyKey: params.idempotencyKey,
+    runId: params.runId,
+    taskId: params.taskId,
     abortMeta: params.abortMeta,
   });
 }
@@ -1396,6 +1412,8 @@ function persistAbortedPartials(params: {
       sessionFile: entry?.sessionFile,
       createIfMissing: true,
       idempotencyKey: `${snapshot.runId}:assistant`,
+      runId: snapshot.runId,
+      taskId: resolveTranscriptTaskIdForRun(snapshot.runId),
       abortMeta: {
         aborted: true,
         origin: snapshot.abortOrigin,
@@ -2266,6 +2284,8 @@ export const chatHandlers: GatewayRequestHandlers = {
           agentId,
           createIfMissing: true,
           idempotencyKey: `${clientRunId}:assistant-media`,
+          runId: clientRunId,
+          taskId: resolveTranscriptTaskIdForRun(clientRunId),
         });
         if (appended.ok) {
           if (appended.messageId && assistantContent?.length) {
@@ -2472,6 +2492,8 @@ export const chatHandlers: GatewayRequestHandlers = {
                   sessionFile: latestEntry?.sessionFile,
                   agentId,
                   createIfMissing: true,
+                  runId: clientRunId,
+                  taskId: resolveTranscriptTaskIdForRun(clientRunId),
                 });
                 if (appended.ok) {
                   if (appended.messageId && assistantContent?.length) {

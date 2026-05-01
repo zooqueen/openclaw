@@ -69,7 +69,13 @@ async function readSessionMessages(sessionFile: string) {
     .filter((entry) => entry.type === "message")
     .map(
       (entry) =>
-        entry.message as { role?: string; content?: unknown; provider?: string; model?: string },
+        entry.message as {
+          role?: string;
+          content?: unknown;
+          provider?: string;
+          model?: string;
+          __openclaw?: Record<string, unknown>;
+        },
     );
 }
 
@@ -363,6 +369,8 @@ describe("CLI attempt execution", () => {
     const updatedEntry = await persistCliTurnTranscript({
       body: "persist this",
       result: makeCliResult("hello from cli"),
+      runId: "run-cli-transcript",
+      taskId: "task-cli-transcript",
       sessionId: sessionEntry.sessionId,
       sessionKey,
       sessionEntry,
@@ -379,6 +387,11 @@ describe("CLI attempt execution", () => {
     expect(messages[0]).toMatchObject({
       role: "user",
       content: "persist this",
+      __openclaw: {
+        runId: "run-cli-transcript",
+        taskId: "task-cli-transcript",
+        messageTaskId: "task-cli-transcript",
+      },
     });
     expect(messages[1]).toMatchObject({
       role: "assistant",
@@ -386,6 +399,11 @@ describe("CLI attempt execution", () => {
       provider: "claude-cli",
       model: "opus",
       content: [{ type: "text", text: "hello from cli" }],
+      __openclaw: {
+        runId: "run-cli-transcript",
+        taskId: "task-cli-transcript",
+        messageTaskId: "task-cli-transcript",
+      },
     });
   });
 
