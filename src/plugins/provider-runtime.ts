@@ -8,6 +8,11 @@ import { normalizeProviderId } from "../agents/provider-id.js";
 import type { ProviderSystemPromptContribution } from "../agents/system-prompt-contribution.js";
 import type { ModelProviderConfig } from "../config/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import {
+  isReplyCapableChannelsLive,
+  isReplyRuntimeProviderAuthPrepared,
+  logReplyRuntimeColdPathViolation,
+} from "../gateway/reply-runtime-readiness-monitor.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
 import { sanitizeForLog } from "../terminal/ansi.js";
@@ -154,14 +159,18 @@ function resolveProviderPluginsForCatalogHooks(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  onlyPluginIds?: string[];
 }): ProviderPlugin[] {
   const workspaceDir = params.workspaceDir ?? getActivePluginRegistryWorkspaceDirFromState();
   const env = params.env ?? process.env;
-  const onlyPluginIds = resolveCatalogHookProviderPluginIds({
-    config: params.config,
-    workspaceDir,
-    env,
-  });
+  const onlyPluginIds =
+    params.onlyPluginIds && params.onlyPluginIds.length > 0
+      ? params.onlyPluginIds
+      : resolveCatalogHookProviderPluginIds({
+          config: params.config,
+          workspaceDir,
+          env,
+        });
   if (onlyPluginIds.length === 0) {
     return [];
   }
@@ -629,9 +638,22 @@ export async function prepareProviderRuntimeAuth(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  source?: string;
   context: ProviderPrepareRuntimeAuthContext;
 }) {
-  return await resolveProviderRuntimePlugin(params)?.prepareRuntimeAuth?.(params.context);
+  const shouldWarnLateRuntimeAuth =
+    isReplyCapableChannelsLive() && !isReplyRuntimeProviderAuthPrepared(params.provider);
+  const startedAt = shouldWarnLateRuntimeAuth ? Date.now() : 0;
+  const result = await resolveProviderRuntimePlugin(params)?.prepareRuntimeAuth?.(params.context);
+  if (shouldWarnLateRuntimeAuth) {
+    logReplyRuntimeColdPathViolation({
+      kind: "provider-runtime-auth",
+      source: params.source ?? "plugins.provider-runtime",
+      durationMs: Date.now() - startedAt,
+      detail: `provider=${normalizeProviderId(params.provider) || params.provider}`,
+    });
+  }
+  return result;
 }
 
 export async function resolveProviderUsageAuthWithPlugin(params: {
@@ -979,6 +1001,7 @@ export async function augmentModelCatalogWithProviderPlugins(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  onlyPluginIds?: string[];
   context: ProviderAugmentModelCatalogContext;
 }) {
   const supplemental = [] as ProviderAugmentModelCatalogContext["entries"];

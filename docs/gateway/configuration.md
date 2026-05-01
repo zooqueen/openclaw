@@ -286,6 +286,7 @@ cannot roll back unrelated user settings.
     - Default is `15000` milliseconds.
     - `OPENCLAW_HANDSHAKE_TIMEOUT_MS` still takes precedence for one-off service or shell overrides.
     - Prefer fixing startup/event-loop stalls first; this knob is for hosts that are healthy but slow during warmup.
+    - Reply-capable channels wait for reply-runtime readiness before normal startup; do not use handshake or socket timeout tuning to hide first-reply plugin/model/auth/tool cold setup.
 
   </Accordion>
 

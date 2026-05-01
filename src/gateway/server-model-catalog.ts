@@ -5,6 +5,8 @@ export type GatewayModelChoice = import("../agents/model-catalog.js").ModelCatal
 type GatewayModelCatalogConfig = ReturnType<typeof getRuntimeConfig>;
 type LoadModelCatalog = (params: {
   config: GatewayModelCatalogConfig;
+  intent?: "cacheOnly";
+  source?: string;
 }) => Promise<GatewayModelChoice[]>;
 type LoadGatewayModelCatalogParams = {
   getConfig?: () => GatewayModelCatalogConfig;
@@ -43,7 +45,13 @@ function startGatewayModelCatalogRefresh(
   const config = (params?.getConfig ?? getRuntimeConfig)();
   const refreshGeneration = staleGeneration;
   const refresh = resolveLoadModelCatalog(params)
-    .then((loadModelCatalog) => loadModelCatalog({ config }))
+    .then((loadModelCatalog) =>
+      loadModelCatalog({
+        config,
+        intent: "cacheOnly",
+        source: "gateway.model-catalog",
+      }),
+    )
     .then((catalog) => {
       if (catalog.length > 0 && refreshGeneration === staleGeneration) {
         lastSuccessfulCatalog = catalog;

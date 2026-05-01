@@ -584,6 +584,8 @@ Behavior notes:
 
     Ack reactions are independent pre-reply receipts. A successful reaction does not prove that the later text or media reply was accepted by WhatsApp.
 
+    Reply-capable channels now wait for reply-runtime readiness before normal startup so the first live WhatsApp reply does not pay plugin runtime installation, model discovery, auth preparation, or tool-contract cold setup. If the first reply path is still cold, fix that readiness failure instead of raising WhatsApp socket or query timeouts.
+
     Check gateway logs for `auto-reply delivery failed` or `auto-reply was not accepted by WhatsApp provider`.
 
   </Accordion>

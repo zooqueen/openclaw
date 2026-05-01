@@ -47,6 +47,19 @@ describe("loadGatewayModelCatalog", () => {
     expect(loadModelCatalog).toHaveBeenCalledTimes(1);
   });
 
+  it("loads gateway model lists through cache-only catalog intent", async () => {
+    const catalog = [model("gpt-5.4")];
+    const loadModelCatalog = vi.fn(async () => catalog);
+
+    await loadGatewayModelCatalog({ getConfig, loadModelCatalog });
+
+    expect(loadModelCatalog).toHaveBeenCalledWith({
+      config: getConfig(),
+      intent: "cacheOnly",
+      source: "gateway.model-catalog",
+    });
+  });
+
   it("does not cache an empty catalog so the next request retries", async () => {
     const emptyCatalog: GatewayModelChoice[] = [];
     const freshCatalog = [model("gpt-5.5")];

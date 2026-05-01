@@ -140,7 +140,13 @@ export async function createModelSelectionState(params: {
   });
 
   if (needsModelCatalog) {
-    modelCatalog = await (await loadModelCatalogRuntime()).loadModelCatalog({ config: cfg });
+    modelCatalog = await (
+      await loadModelCatalogRuntime()
+    ).loadModelCatalog({
+      config: cfg,
+      intent: "runtimeDiscovery",
+      source: "auto-reply.model-directive",
+    });
     logStage("catalog-loaded", `entries=${modelCatalog.length}`);
     const allowed = buildAllowedModelSet({
       cfg,
@@ -256,7 +262,13 @@ export async function createModelSelectionState(params: {
     const shouldHydrateRuntimeCatalog =
       !modelCatalog && (!selectedCatalogEntry || selectedCatalogEntry.reasoning === undefined);
     if (shouldHydrateRuntimeCatalog) {
-      modelCatalog = await (await loadModelCatalogRuntime()).loadModelCatalog({ config: cfg });
+      modelCatalog = await (
+        await loadModelCatalogRuntime()
+      ).loadModelCatalog({
+        config: cfg,
+        intent: "cacheOnly",
+        source: "auto-reply.default-thinking",
+      });
       logStage("catalog-loaded-for-thinking", `entries=${modelCatalog.length}`);
       const runtimeSelectedEntry = modelCatalog.find(
         (entry) => entry.provider === provider && entry.id === model,
@@ -298,7 +310,13 @@ export async function createModelSelectionState(params: {
   const resolveDefaultReasoningLevel = async (): Promise<"on" | "off"> => {
     let catalogForReasoning = modelCatalog ?? allowedModelCatalog;
     if (!catalogForReasoning || catalogForReasoning.length === 0) {
-      modelCatalog = await (await loadModelCatalogRuntime()).loadModelCatalog({ config: cfg });
+      modelCatalog = await (
+        await loadModelCatalogRuntime()
+      ).loadModelCatalog({
+        config: cfg,
+        intent: "cacheOnly",
+        source: "auto-reply.default-reasoning",
+      });
       logStage("catalog-loaded-for-reasoning", `entries=${modelCatalog.length}`);
       catalogForReasoning = modelCatalog;
     }

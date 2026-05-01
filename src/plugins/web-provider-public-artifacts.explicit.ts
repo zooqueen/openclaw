@@ -83,12 +83,14 @@ function collectProviderFactories<TProvider>(params: {
 function tryLoadBundledPublicArtifactModule(params: {
   dirName: string;
   artifactCandidates: readonly string[];
+  installRuntimeDeps?: boolean;
 }): Record<string, unknown> | null {
   for (const artifactBasename of params.artifactCandidates) {
     try {
       return loadBundledPluginPublicArtifactModuleSync<Record<string, unknown>>({
         dirName: params.dirName,
         artifactBasename,
+        ...(params.installRuntimeDeps === false ? { installRuntimeDeps: false } : {}),
       });
     } catch (error) {
       if (
@@ -113,10 +115,12 @@ function loadBundledProviderEntriesFromDir<TProvider extends object>(params: {
   artifactCandidates: readonly string[];
   suffix: string;
   isProvider: (value: unknown) => value is TProvider;
+  installRuntimeDeps?: boolean;
 }): Array<TProvider & { pluginId: string }> | null {
   const mod = tryLoadBundledPublicArtifactModule({
     dirName: params.dirName,
     artifactCandidates: params.artifactCandidates,
+    ...(params.installRuntimeDeps === false ? { installRuntimeDeps: false } : {}),
   });
   if (!mod) {
     return null;
@@ -142,6 +146,7 @@ export function loadBundledWebSearchProviderEntriesFromDir(params: {
     artifactCandidates: WEB_SEARCH_ARTIFACT_CANDIDATES,
     suffix: "WebSearchProvider",
     isProvider: isWebSearchProviderPlugin,
+    installRuntimeDeps: false,
   });
 }
 
@@ -168,6 +173,7 @@ export function loadBundledWebFetchProviderEntriesFromDir(params: {
     artifactCandidates: WEB_FETCH_ARTIFACT_CANDIDATES,
     suffix: "WebFetchProvider",
     isProvider: isWebFetchProviderPlugin,
+    installRuntimeDeps: false,
   });
 }
 

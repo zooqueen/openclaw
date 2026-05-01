@@ -435,6 +435,7 @@ async function compactEmbeddedPiSessionDirectOnce(
     config: params.config,
     workspaceDir: resolvedWorkspace,
     allowGatewaySubagentBinding: params.allowGatewaySubagentBinding,
+    source: "embedded-runner.compact",
   });
   const resolvedCompactionTarget = resolveEmbeddedCompactionTarget({
     config: params.config,

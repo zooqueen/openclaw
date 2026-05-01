@@ -734,7 +734,11 @@ async function agentCommandInternal(
     let allowAnyModel = !hasAllowlist;
 
     if (needsModelCatalog) {
-      modelCatalog = await loadModelCatalog({ config: cfg });
+      modelCatalog = await loadModelCatalog({
+        config: cfg,
+        intent: "runtimeDiscovery",
+        source: "agent-command.allowlist",
+      });
       const allowed = buildAllowedModelSet({
         cfg,
         catalog: modelCatalog,

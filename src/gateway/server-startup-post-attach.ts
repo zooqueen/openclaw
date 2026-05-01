@@ -14,6 +14,8 @@ import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "./events.js";
+import { markReplyCapableChannelsLive } from "./reply-runtime-readiness-monitor.js";
+import { prepareReplyRuntimeForChannels } from "./reply-runtime-readiness.js";
 import type { refreshLatestUpdateRestartSentinel } from "./server-restart-sentinel.js";
 import type { logGatewayStartup } from "./server-startup-log.js";
 import { STARTUP_UNAVAILABLE_GATEWAY_METHODS } from "./server-startup-unavailable-methods.js";
@@ -277,7 +279,7 @@ export async function startGatewaySidecars(params: {
   defaultWorkspaceDir: string;
   deps: CliDeps;
   startChannels: () => Promise<void>;
-  prewarmPrimaryModel?: typeof prewarmConfiguredPrimaryModel;
+  prepareReplyRuntimeForChannels?: typeof prepareReplyRuntimeForChannels;
   log: { warn: (msg: string) => void };
   logHooks: {
     info: (msg: string) => void;
@@ -350,7 +352,11 @@ export async function startGatewaySidecars(params: {
             defaultProvider: DEFAULT_PROVIDER,
             defaultModel: DEFAULT_MODEL,
           });
-        const catalog = await loadModelCatalog({ config: params.cfg });
+        const catalog = await loadModelCatalog({
+          config: params.cfg,
+          intent: "cacheOnly",
+          source: "gateway.hooks-gmail-model",
+        });
         const status = getModelRefStatus({
           cfg: params.cfg,
           catalog,
@@ -398,22 +404,28 @@ export async function startGatewaySidecars(params: {
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_PROVIDERS);
   await measureStartup(params.startupTrace, "sidecars.channels", async () => {
     if (!skipChannels) {
-      try {
-        schedulePrimaryModelPrewarm(
-          {
+      const readiness = await measureStartup(
+        params.startupTrace,
+        "sidecars.reply-runtime-readiness",
+        () =>
+          (params.prepareReplyRuntimeForChannels ?? prepareReplyRuntimeForChannels)({
             cfg: params.cfg,
             workspaceDir: params.defaultWorkspaceDir,
-            log: params.log,
             startupTrace: params.startupTrace,
-          },
-          params.prewarmPrimaryModel,
+          }),
+      );
+      if (readiness.status !== "ready") {
+        params.logChannels.error(
+          `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}: ${readiness.reasons.join("; ")}`,
         );
-        await measureStartup(params.startupTrace, "sidecars.channel-start", () =>
-          params.startChannels(),
+        throw new Error(
+          `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}`,
         );
-      } catch (err) {
-        params.logChannels.error(`channel startup failed: ${String(err)}`);
       }
+      await measureStartup(params.startupTrace, "sidecars.channel-start", async () => {
+        await params.startChannels();
+        markReplyCapableChannelsLive();
+      });
     } else {
       params.logChannels.info(
         "skipping channel start (OPENCLAW_SKIP_CHANNELS=1 or OPENCLAW_SKIP_PROVIDERS=1)",

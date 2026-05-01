@@ -38,6 +38,13 @@ const hoisted = vi.hoisted(() => {
   }));
   const resolveEmbeddedAgentRuntime = vi.fn(() => "pi");
   const ensureOpenClawModelsJson = vi.fn(async () => undefined);
+  const prepareReplyRuntimeForChannels = vi.fn(async () => ({
+    status: "ready" as const,
+    provider: "openai",
+    model: "gpt-5.4",
+    phases: [],
+    reasons: [],
+  }));
   return {
     startPluginServices,
     startGmailWatcherWithLogs,
@@ -64,6 +71,7 @@ const hoisted = vi.hoisted(() => {
     resolveConfiguredModelRef,
     resolveEmbeddedAgentRuntime,
     ensureOpenClawModelsJson,
+    prepareReplyRuntimeForChannels,
   };
 });
 
@@ -154,6 +162,7 @@ vi.mock("../agents/agent-paths.js", () => ({
 }));
 
 vi.mock("../agents/agent-scope.js", () => ({
+  resolveAgentDir: vi.fn(() => "/tmp/openclaw-state/agents/default/agent"),
   resolveAgentWorkspaceDir: vi.fn(() => "/tmp/openclaw-workspace"),
   resolveDefaultAgentId: vi.fn(() => "default"),
 }));
@@ -180,16 +189,23 @@ vi.mock("./server-tailscale.js", () => ({
   startGatewayTailscaleExposure: hoisted.startGatewayTailscaleExposure,
 }));
 
+vi.mock("./reply-runtime-readiness.js", () => ({
+  prepareReplyRuntimeForChannels: hoisted.prepareReplyRuntimeForChannels,
+}));
+
 const { startGatewayPostAttachRuntime, startGatewaySidecars, __testing } =
   await import("./server-startup-post-attach.js");
 const { STARTUP_UNAVAILABLE_GATEWAY_METHODS } =
   await import("./server-startup-unavailable-methods.js");
+const { resetReplyRuntimeReadinessMonitorForTest } =
+  await import("./reply-runtime-readiness-monitor.js");
 
 type PostAttachParams = Parameters<typeof startGatewayPostAttachRuntime>[0];
 type PostAttachRuntimeDeps = NonNullable<Parameters<typeof startGatewayPostAttachRuntime>[1]>;
 
 describe("startGatewayPostAttachRuntime", () => {
   beforeEach(() => {
+    resetReplyRuntimeReadinessMonitorForTest();
     vi.stubEnv("OPENCLAW_SKIP_CHANNELS", "0");
     vi.stubEnv("OPENCLAW_SKIP_PROVIDERS", "0");
     hoisted.startPluginServices.mockClear();
@@ -221,6 +237,14 @@ describe("startGatewayPostAttachRuntime", () => {
     hoisted.resolveEmbeddedAgentRuntime.mockReturnValue("pi");
     hoisted.ensureOpenClawModelsJson.mockReset();
     hoisted.ensureOpenClawModelsJson.mockResolvedValue(undefined);
+    hoisted.prepareReplyRuntimeForChannels.mockReset();
+    hoisted.prepareReplyRuntimeForChannels.mockResolvedValue({
+      status: "ready",
+      provider: "openai",
+      model: "gpt-5.4",
+      phases: [],
+      reasons: [],
+    });
   });
 
   afterEach(() => {
@@ -459,44 +483,27 @@ describe("startGatewayPostAttachRuntime", () => {
     expect(returned).toBe(true);
   });
 
-  it("continues channel startup when primary model prewarm hangs", async () => {
-    vi.useFakeTimers();
-    const log = { warn: vi.fn() };
-    const prewarm = vi.fn(async () => {
-      await new Promise(() => undefined);
-    });
-
-    try {
-      const promise = __testing.prewarmConfiguredPrimaryModelWithTimeout(
-        {
-          cfg: {} as never,
-          log,
-          timeoutMs: 25,
-        },
-        prewarm as never,
-      );
-
-      await vi.advanceTimersByTimeAsync(25);
-      await promise;
-
-      expect(prewarm).toHaveBeenCalledTimes(1);
-      expect(log.warn).toHaveBeenCalledWith(
-        "startup model warmup timed out after 25ms; continuing without waiting",
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("starts channels without waiting for primary model prewarm completion", async () => {
+  it("waits for reply-runtime readiness before starting channels", async () => {
     await withEnvAsync(
       { OPENCLAW_SKIP_CHANNELS: undefined, OPENCLAW_SKIP_PROVIDERS: undefined },
       async () => {
-        let resolvePrewarm!: () => void;
-        const prewarmPrimaryModel = vi.fn(
+        let finishReadiness!: (value: {
+          status: "ready";
+          provider: string;
+          model: string;
+          phases: [];
+          reasons: [];
+        }) => void;
+        const prepareReadiness = vi.fn(
           async () =>
-            await new Promise<undefined>((resolve) => {
-              resolvePrewarm = () => resolve(undefined);
+            await new Promise<{
+              status: "ready";
+              provider: string;
+              model: string;
+              phases: [];
+              reasons: [];
+            }>((resolve) => {
+              finishReadiness = resolve;
             }),
         );
         const startChannels = vi.fn(async () => undefined);
@@ -510,7 +517,7 @@ describe("startGatewayPostAttachRuntime", () => {
           defaultWorkspaceDir: "/tmp/openclaw-workspace",
           deps: {} as never,
           startChannels,
-          prewarmPrimaryModel: prewarmPrimaryModel as never,
+          prepareReplyRuntimeForChannels: prepareReadiness as never,
           log: { warn: vi.fn() },
           logHooks: {
             info: vi.fn(),
@@ -523,21 +530,72 @@ describe("startGatewayPostAttachRuntime", () => {
           },
         });
 
-        await vi.waitFor(
-          () => {
-            expect(prewarmPrimaryModel).toHaveBeenCalledTimes(1);
-            expect(prewarmPrimaryModel).toHaveBeenCalledWith(
-              expect.objectContaining({
-                workspaceDir: "/tmp/openclaw-workspace",
-              }),
-            );
-            expect(startChannels).toHaveBeenCalledTimes(1);
-          },
-          { timeout: 2_000 },
-        );
-        await sidecarsPromise;
+        await vi.waitFor(() => {
+          expect(prepareReadiness).toHaveBeenCalledTimes(1);
+        });
+        expect(startChannels).not.toHaveBeenCalled();
 
-        resolvePrewarm();
+        finishReadiness({
+          status: "ready",
+          provider: "openai",
+          model: "gpt-5.4",
+          phases: [],
+          reasons: [],
+        });
+        await sidecarsPromise;
+        expect(startChannels).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
+  it("does not start channels when reply-runtime readiness degrades", async () => {
+    await withEnvAsync(
+      { OPENCLAW_SKIP_CHANNELS: undefined, OPENCLAW_SKIP_PROVIDERS: undefined },
+      async () => {
+        const startChannels = vi.fn(async () => undefined);
+        const logChannels = {
+          info: vi.fn(),
+          error: vi.fn(),
+        };
+
+        await expect(
+          startGatewaySidecars({
+            cfg: {
+              hooks: { internal: { enabled: false } },
+              agents: { defaults: { model: "openai/gpt-5.4" } },
+            } as never,
+            pluginRegistry: createPostAttachParams().pluginRegistry,
+            defaultWorkspaceDir: "/tmp/openclaw-workspace",
+            deps: {} as never,
+            startChannels,
+            prepareReplyRuntimeForChannels: vi.fn(async () => ({
+              status: "degraded",
+              provider: "openai",
+              model: "gpt-5.4",
+              phases: [
+                {
+                  phase: "selected-provider-auth",
+                  status: "degraded",
+                  durationMs: 1,
+                  detail: "selected-provider-auth: missing credential",
+                },
+              ],
+              reasons: ["selected-provider-auth: missing credential"],
+            })) as never,
+            log: { warn: vi.fn() },
+            logHooks: {
+              info: vi.fn(),
+              warn: vi.fn(),
+              error: vi.fn(),
+            },
+            logChannels,
+          }),
+        ).rejects.toThrow(/reply-runtime readiness degraded/);
+
+        expect(startChannels).not.toHaveBeenCalled();
+        expect(logChannels.error).toHaveBeenCalledWith(
+          expect.stringContaining("reply-runtime readiness degraded for openai/gpt-5.4"),
+        );
         await Promise.resolve();
       },
     );

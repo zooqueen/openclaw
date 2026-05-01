@@ -126,6 +126,7 @@ export function createEmbeddedRunAuthController(params: {
       config: params.config,
       workspaceDir: params.workspaceDir,
       env: process.env,
+      source: "embedded-runner.auth",
       context: {
         config: params.config,
         agentDir: params.agentDir,

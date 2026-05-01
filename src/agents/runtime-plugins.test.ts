@@ -5,6 +5,9 @@ const hoisted = vi.hoisted(() => ({
   getActivePluginRuntimeSubagentMode: vi.fn<() => "default" | "explicit" | "gateway-bindable">(
     () => "default",
   ),
+  isReplyCapableChannelsLive: vi.fn(() => false),
+  isReplyRuntimePluginRegistryPrepared: vi.fn(() => false),
+  logReplyRuntimeColdPathViolation: vi.fn(),
 }));
 
 vi.mock("../plugins/loader.js", () => ({
@@ -15,6 +18,12 @@ vi.mock("../plugins/runtime.js", () => ({
   getActivePluginRuntimeSubagentMode: hoisted.getActivePluginRuntimeSubagentMode,
 }));
 
+vi.mock("../gateway/reply-runtime-readiness-monitor.js", () => ({
+  isReplyCapableChannelsLive: hoisted.isReplyCapableChannelsLive,
+  isReplyRuntimePluginRegistryPrepared: hoisted.isReplyRuntimePluginRegistryPrepared,
+  logReplyRuntimeColdPathViolation: hoisted.logReplyRuntimeColdPathViolation,
+}));
+
 describe("ensureRuntimePluginsLoaded", () => {
   let ensureRuntimePluginsLoaded: typeof import("./runtime-plugins.js").ensureRuntimePluginsLoaded;
 
@@ -23,6 +32,11 @@ describe("ensureRuntimePluginsLoaded", () => {
     hoisted.resolveRuntimePluginRegistry.mockReturnValue(undefined);
     hoisted.getActivePluginRuntimeSubagentMode.mockReset();
     hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("default");
+    hoisted.isReplyCapableChannelsLive.mockReset();
+    hoisted.isReplyCapableChannelsLive.mockReturnValue(false);
+    hoisted.isReplyRuntimePluginRegistryPrepared.mockReset();
+    hoisted.isReplyRuntimePluginRegistryPrepared.mockReturnValue(false);
+    hoisted.logReplyRuntimeColdPathViolation.mockReset();
     vi.resetModules();
     ({ ensureRuntimePluginsLoaded } = await import("./runtime-plugins.js"));
   });
@@ -83,5 +97,22 @@ describe("ensureRuntimePluginsLoaded", () => {
         allowGatewaySubagentBinding: true,
       },
     });
+  });
+
+  it("logs a readiness violation when runtime plugins cold-load after channels are live", async () => {
+    hoisted.isReplyCapableChannelsLive.mockReturnValue(true);
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/workspace",
+      source: "runtime-plugins.test",
+    });
+
+    expect(hoisted.logReplyRuntimeColdPathViolation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "runtime-plugin-registry",
+        source: "runtime-plugins.test",
+      }),
+    );
   });
 });

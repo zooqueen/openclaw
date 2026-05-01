@@ -220,7 +220,11 @@ async function resolveModelOverride(params: {
     cfg: params.cfg,
     defaultProvider: currentProvider,
   });
-  const catalog = await loadModelCatalog({ config: params.cfg });
+  const catalog = await loadModelCatalog({
+    config: params.cfg,
+    intent: "runtimeDiscovery",
+    source: "session-status.model-override",
+  });
   const allowed = buildAllowedModelSet({
     cfg: params.cfg,
     catalog,
@@ -582,7 +586,11 @@ export function createSessionStatusTool(opts?: {
             !configuredSelectedEntry ||
             configuredSelectedEntry.reasoning === undefined;
           const runtimeCatalog = shouldHydrateRuntimeCatalog
-            ? await loadModelCatalog({ config: cfg })
+            ? await loadModelCatalog({
+                config: cfg,
+                intent: "cacheOnly",
+                source: "session-status.display",
+              })
             : undefined;
           const runtimeSelectedEntry = runtimeCatalog?.find(
             (entry) => entry.provider === providerForCard && entry.id === defaultModelForCard,

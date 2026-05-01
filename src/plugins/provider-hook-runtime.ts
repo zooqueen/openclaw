@@ -1,5 +1,10 @@
 import { normalizeProviderId } from "../agents/provider-id.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import {
+  isReplyCapableChannelsLive,
+  isReplyRuntimeProviderPrepared,
+  logReplyRuntimeColdPathViolation,
+} from "../gateway/reply-runtime-readiness-monitor.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import { resolveProviderConfigApiOwnerHint } from "./provider-config-owner.js";
 import { isPluginProvidersLoadInFlight, resolvePluginProviders } from "./providers.runtime.js";
@@ -13,7 +18,6 @@ import type {
   ProviderFollowupFallbackRouteResult,
   ProviderWrapStreamFnContext,
 } from "./types.js";
-
 const providerRuntimePluginCache = new WeakMap<
   OpenClawConfig,
   Map<string, ProviderPlugin | null>
@@ -28,7 +32,6 @@ type ProviderRuntimePluginLookupParams = {
   bundledProviderAllowlistCompat?: boolean;
   bundledProviderVitestCompat?: boolean;
 };
-
 function matchesProviderId(provider: ProviderPlugin, providerId: string): boolean {
   const normalized = normalizeProviderId(providerId);
   if (!normalized) {
@@ -41,7 +44,6 @@ function matchesProviderId(provider: ProviderPlugin, providerId: string): boolea
     (alias) => normalizeProviderId(alias) === normalized,
   );
 }
-
 function resolveProviderRuntimePluginCacheKey(params: ProviderRuntimePluginLookupParams): string {
   return JSON.stringify({
     provider: normalizeLowercaseStringOrEmpty(params.provider),
@@ -67,7 +69,6 @@ function resolveProviderRuntimePluginCache(
   }
   return cache;
 }
-
 function matchesProviderLiteralId(provider: ProviderPlugin, providerId: string): boolean {
   const normalized = normalizeLowercaseStringOrEmpty(providerId);
   return !!normalized && normalizeLowercaseStringOrEmpty(provider.id) === normalized;
@@ -91,6 +92,7 @@ export function resolveProviderPluginsForHooks(params: {
       workspaceDir,
       env,
       activate: false,
+      cache: false,
       applyAutoEnable: params.applyAutoEnable,
       bundledProviderAllowlistCompat: params.bundledProviderAllowlistCompat ?? true,
       bundledProviderVitestCompat: params.bundledProviderVitestCompat ?? true,
@@ -103,6 +105,7 @@ export function resolveProviderPluginsForHooks(params: {
     workspaceDir,
     env,
     activate: false,
+    cache: false,
     applyAutoEnable: params.applyAutoEnable,
     bundledProviderAllowlistCompat: params.bundledProviderAllowlistCompat ?? true,
     bundledProviderVitestCompat: params.bundledProviderVitestCompat ?? true,
@@ -110,14 +113,20 @@ export function resolveProviderPluginsForHooks(params: {
   return resolved;
 }
 
-export function resolveProviderRuntimePlugin(
-  params: ProviderRuntimePluginLookupParams,
-): ProviderPlugin | undefined {
-  const cache = resolveProviderRuntimePluginCache(params);
-  const cacheKey = cache ? resolveProviderRuntimePluginCacheKey(params) : "";
-  if (cache?.has(cacheKey)) {
-    return cache.get(cacheKey) ?? undefined;
-  }
+export function resolveProviderRuntimePlugin(params: {
+  provider: string;
+  config?: OpenClawConfig;
+  workspaceDir?: string;
+  env?: NodeJS.ProcessEnv;
+  applyAutoEnable?: boolean;
+  bundledProviderAllowlistCompat?: boolean;
+  bundledProviderVitestCompat?: boolean;
+  installBundledRuntimeDeps?: boolean;
+  source?: string;
+}): ProviderPlugin | undefined {
+  const shouldWarnLateActivation =
+    isReplyCapableChannelsLive() && !isReplyRuntimeProviderPrepared(params.provider);
+  const startedAt = shouldWarnLateActivation ? Date.now() : 0;
   const apiOwnerHint = resolveProviderConfigApiOwnerHint({
     provider: params.provider,
     config: params.config,
@@ -138,7 +147,14 @@ export function resolveProviderRuntimePlugin(
     }
     return matchesProviderId(plugin, params.provider);
   });
-  cache?.set(cacheKey, plugin ?? null);
+  if (shouldWarnLateActivation && plugin) {
+    logReplyRuntimeColdPathViolation({
+      kind: "provider-runtime-activation",
+      source: params.source ?? "plugins.provider-hook-runtime",
+      durationMs: Date.now() - startedAt,
+      detail: `provider=${normalizeProviderId(params.provider) || params.provider}`,
+    });
+  }
   return plugin;
 }
 
@@ -175,9 +191,7 @@ export function resolveProviderExtraParamsForTransport(params: {
   env?: NodeJS.ProcessEnv;
   context: ProviderExtraParamsForTransportContext;
 }) {
-  return (
-    resolveProviderRuntimePlugin(params)?.extraParamsForTransport?.(params.context) ?? undefined
-  );
+  return resolveProviderHookPlugin(params)?.extraParamsForTransport?.(params.context) ?? undefined;
 }
 
 export function resolveProviderAuthProfileId(params: {

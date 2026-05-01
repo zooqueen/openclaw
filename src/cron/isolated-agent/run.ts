@@ -497,6 +497,8 @@ async function prepareCronRunContext(params: {
         await loadCronModelCatalogRuntime()
       ).loadModelCatalog({
         config: cfgWithAgentDefaults,
+        intent: "cacheOnly",
+        source: "cron.thinking",
       });
     }
     return catalog;

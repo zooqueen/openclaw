@@ -63,7 +63,11 @@ export async function resolveCronModelSelection(
   let catalog: Awaited<ReturnType<typeof loadModelCatalog>> | undefined;
   const loadCatalogOnce = async () => {
     if (!catalog) {
-      catalog = await loadModelCatalog({ config: params.cfgWithAgentDefaults });
+      catalog = await loadModelCatalog({
+        config: params.cfgWithAgentDefaults,
+        intent: "cacheOnly",
+        source: "cron.model-selection",
+      });
     }
     return catalog;
   };

@@ -109,7 +109,7 @@ describe("createModelSelectionState catalog loading", () => {
     expect(loadModelCatalog).not.toHaveBeenCalled();
   });
 
-  it("hydrates runtime catalog metadata when the configured allowlist entry lacks reasoning", async () => {
+  it("uses cache-only catalog metadata when configured allowlist metadata is incomplete", async () => {
     vi.mocked(loadModelCatalog).mockClear();
     vi.mocked(loadModelCatalog).mockResolvedValueOnce([
       { provider: "openai-codex", id: "gpt-5.4", name: "GPT-5.4", reasoning: true },
@@ -143,7 +143,13 @@ describe("createModelSelectionState catalog loading", () => {
     });
 
     await expect(state.resolveDefaultThinkingLevel()).resolves.toBe("medium");
+    await expect(state.resolveDefaultReasoningLevel()).resolves.toBe("on");
     expect(loadModelCatalog).toHaveBeenCalledOnce();
+    expect(loadModelCatalog).toHaveBeenCalledWith({
+      config: cfg,
+      intent: "cacheOnly",
+      source: "auto-reply.default-thinking",
+    });
   });
 
   it("prefers per-agent thinkingDefault over model and global defaults", async () => {
@@ -203,7 +209,11 @@ describe("createModelSelectionState catalog loading", () => {
       hasModelDirective: true,
     });
 
-    expect(loadModelCatalog).toHaveBeenCalledOnce();
+    expect(loadModelCatalog).toHaveBeenCalledWith({
+      config: cfg,
+      intent: "runtimeDiscovery",
+      source: "auto-reply.model-directive",
+    });
   });
 });
 

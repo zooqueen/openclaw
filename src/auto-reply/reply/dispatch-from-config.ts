@@ -438,7 +438,11 @@ export async function dispatchReplyFromConfig(
   const sessionTtsAuto = normalizeTtsAutoMode(sessionStoreEntry.entry?.ttsAuto);
   const workspaceDir = resolveAgentWorkspaceDir(cfg, sessionAgentId);
   const { ensureRuntimePluginsLoaded } = await loadRuntimePlugins();
-  ensureRuntimePluginsLoaded({ config: cfg, workspaceDir });
+  ensureRuntimePluginsLoaded({
+    config: cfg,
+    workspaceDir,
+    source: "auto-reply.dispatch",
+  });
   const hookRunner = getGlobalHookRunner();
 
   // Extract message context for hooks (plugin and internal)
