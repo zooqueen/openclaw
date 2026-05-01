@@ -1,4 +1,4 @@
-import { resolveThinkingDefaultForModel } from "../auto-reply/thinking.js";
+import { resolveThinkingDefaultForModelDecision } from "../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   normalizeLowercaseStringOrEmpty,
@@ -75,27 +75,26 @@ export function resolveThinkingDefaultDecision(params: {
       dependsOnCatalog: false,
     };
   }
+  const modelDecision = resolveThinkingDefaultForModelDecision({
+    provider: params.provider,
+    model: params.model,
+    catalog: params.catalog,
+  });
   if (
     normalizedProvider === "anthropic" &&
     explicitModelConfigured &&
     typeof catalogCandidate?.name === "string" &&
     /4\.6\b/.test(catalogCandidate.name) &&
     (normalizedModel.startsWith("claude-opus-4-6") ||
-      normalizedModel.startsWith("claude-sonnet-4-6"))
+      normalizedModel.startsWith("claude-sonnet-4-6")) &&
+    modelDecision.level !== "adaptive"
   ) {
     return {
       level: "adaptive",
       dependsOnCatalog: true,
     };
   }
-  return {
-    level: resolveThinkingDefaultForModel({
-      provider: params.provider,
-      model: params.model,
-      catalog: params.catalog,
-    }),
-    dependsOnCatalog: true,
-  };
+  return modelDecision;
 }
 
 export function resolveThinkingDefault(params: {

@@ -47,6 +47,11 @@ export type ThinkingLevelOption = {
   label: string;
 };
 
+export type ThinkingDefaultForModelDecision = {
+  level: ThinkLevel;
+  dependsOnCatalog: boolean;
+};
+
 type RankedThinkingLevelOption = ThinkingLevelOption & {
   rank: number;
 };
@@ -264,19 +269,53 @@ export function resolveThinkingDefaultForModel(params: {
   model: string;
   catalog?: ThinkingCatalogEntry[];
 }): ThinkLevel {
+  return resolveThinkingDefaultForModelDecision(params).level;
+}
+
+export function resolveThinkingDefaultForModelDecision(params: {
+  provider: string;
+  model: string;
+  catalog?: ThinkingCatalogEntry[];
+}): ThinkingDefaultForModelDecision {
   const profile = resolveThinkingProfile({
     provider: params.provider,
     model: params.model,
     catalog: params.catalog,
   });
   if (profile.defaultLevel) {
-    return profile.defaultLevel;
+    const defaultWithoutCatalog = resolveThinkingProfile({
+      provider: params.provider,
+      model: params.model,
+    }).defaultLevel;
+    const defaultWithReasoningFalse = resolveThinkingProfile({
+      provider: params.provider,
+      model: params.model,
+      catalog: [{ provider: params.provider, id: params.model, reasoning: false }],
+    }).defaultLevel;
+    const defaultWithReasoningTrue = resolveThinkingProfile({
+      provider: params.provider,
+      model: params.model,
+      catalog: [{ provider: params.provider, id: params.model, reasoning: true }],
+    }).defaultLevel;
+    return {
+      level: profile.defaultLevel,
+      dependsOnCatalog:
+        defaultWithoutCatalog !== profile.defaultLevel ||
+        defaultWithReasoningFalse !== profile.defaultLevel ||
+        defaultWithReasoningTrue !== profile.defaultLevel,
+    };
   }
   const fallback = resolveThinkingDefaultForModelFallback(params);
   if (fallback === "off") {
-    return "off";
+    return {
+      level: "off",
+      dependsOnCatalog: true,
+    };
   }
-  return resolveSupportedThinkingLevelFromProfile(profile, "medium");
+  return {
+    level: resolveSupportedThinkingLevelFromProfile(profile, "medium"),
+    dependsOnCatalog: true,
+  };
 }
 
 export function resolveLargestSupportedThinkingLevel(

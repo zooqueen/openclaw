@@ -465,6 +465,72 @@ describe("runCronIsolatedAgentTurn — cron model override forwarding (#58065)",
     );
   });
 
+  it("keeps non-catalog-dependent defaults on the cache-only path without runtime discovery", async () => {
+    resolveAllowedModelRefMock.mockImplementation(() => ({
+      ref: {
+        provider: "amazon-bedrock",
+        model: "us.anthropic.claude-sonnet-4-6-v1:0",
+      },
+    }));
+    loadModelCatalogMock
+      .mockResolvedValueOnce([
+        {
+          provider: "amazon-bedrock",
+          id: "us.anthropic.claude-sonnet-4-6-v1:0",
+          name: "Claude Sonnet 4.6",
+          reasoning: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          provider: "amazon-bedrock",
+          id: "us.anthropic.claude-sonnet-4-6-v1:0",
+          name: "Claude Sonnet 4.6",
+          reasoning: true,
+        },
+      ]);
+    resolveThinkingDefaultDecisionMock.mockReturnValue({
+      level: "adaptive",
+      dependsOnCatalog: false,
+    });
+    isThinkingLevelSupportedMock.mockImplementation(
+      ({ level }: { level?: string }) => level === "adaptive",
+    );
+    runWithModelFallbackMock.mockImplementation(async ({ provider, model, run }) => {
+      const result = await run(provider, model);
+      return { result, provider, model, attempts: [] };
+    });
+
+    await runCronIsolatedAgentTurn(
+      makeParams({
+        job: makeJob({
+          payload: {
+            kind: "agentTurn",
+            message: "summarize",
+            model: "amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1:0",
+          },
+        }),
+      }),
+    );
+
+    expect(loadModelCatalogMock).toHaveBeenCalledTimes(2);
+    expect(loadModelCatalogMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ intent: "cacheOnly", source: "cron.model-selection" }),
+    );
+    expect(loadModelCatalogMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ intent: "cacheOnly", source: "cron.thinking" }),
+    );
+    expect(runEmbeddedPiAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "amazon-bedrock",
+        model: "us.anthropic.claude-sonnet-4-6-v1:0",
+        thinkLevel: "adaptive",
+      }),
+    );
+  });
+
   it("does not add agent primary model as fallback when cron payload model is set", async () => {
     // No per-agent fallbacks configured — resolveAgentModelFallbacksOverride
     // returns undefined in that case. Before the fix, this caused
