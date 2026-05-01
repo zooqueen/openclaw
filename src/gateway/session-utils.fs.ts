@@ -272,19 +272,39 @@ function transcriptHasTreeEntries(filePath: string): boolean {
   return hasTreeEntries;
 }
 
-function parseSessionTreeEntry(line: string): ParsedSessionTreeEntry | null {
+function parseSessionTreeEntryRecord(
+  parsed: unknown,
+  opts: { includeLegacyRootEntries: boolean },
+): ParsedSessionTreeEntry | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const entry = parsed as Record<string, unknown>;
+  if (entry.type === "session" || typeof entry.id !== "string") {
+    return null;
+  }
+  const hasParentId = Object.prototype.hasOwnProperty.call(entry, "parentId");
+  if (!hasParentId && !opts.includeLegacyRootEntries) {
+    return null;
+  }
+  if (hasParentId && entry.parentId !== null && typeof entry.parentId !== "string") {
+    return null;
+  }
+  return {
+    ...entry,
+    parentId: hasParentId ? entry.parentId : null,
+  } as ParsedSessionTreeEntry;
+}
+
+function parseSessionTreeEntry(
+  line: string,
+  opts: { includeLegacyRootEntries: boolean },
+): ParsedSessionTreeEntry | null {
   if (!line.trim()) {
     return null;
   }
   try {
-    const parsed = JSON.parse(line) as { type?: unknown; id?: unknown; parentId?: unknown };
-    if (parsed.type === "session" || typeof parsed.id !== "string" || !("parentId" in parsed)) {
-      return null;
-    }
-    if (parsed.parentId !== null && typeof parsed.parentId !== "string") {
-      return null;
-    }
-    return parsed as ParsedSessionTreeEntry;
+    return parseSessionTreeEntryRecord(JSON.parse(line), opts);
   } catch {
     return null;
   }
@@ -292,13 +312,25 @@ function parseSessionTreeEntry(line: string): ParsedSessionTreeEntry | null {
 
 function parseSessionTreeEntriesFromLines(lines: string[]): ParsedSessionTreeEntry[] {
   const entries: ParsedSessionTreeEntry[] = [];
+  let hasParentLinkedEntry = false;
   for (const line of lines) {
-    const entry = parseSessionTreeEntry(line);
+    if (!line.trim()) {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const entry = parseSessionTreeEntryRecord(parsed, { includeLegacyRootEntries: true });
     if (entry) {
       entries.push(entry);
+      hasParentLinkedEntry ||=
+        parseSessionTreeEntryRecord(parsed, { includeLegacyRootEntries: false }) !== null;
     }
   }
-  return entries;
+  return hasParentLinkedEntry ? entries : [];
 }
 
 function buildActiveTreeBranchFromEntries(
@@ -333,7 +365,7 @@ function readActiveTreeBranchEntries(filePath: string): ParsedSessionTreeEntry[]
   let leaf: ParsedSessionTreeEntry | undefined;
   try {
     visitTranscriptLines(filePath, (line) => {
-      const entry = parseSessionTreeEntry(line);
+      const entry = parseSessionTreeEntry(line, { includeLegacyRootEntries: true });
       if (!entry) {
         return;
       }
@@ -473,7 +505,7 @@ export function readRecentSessionTranscriptLines(params: {
 }
 
 function hasSessionTreeEntry(line: string): boolean {
-  return parseSessionTreeEntry(line) !== null;
+  return parseSessionTreeEntry(line, { includeLegacyRootEntries: false }) !== null;
 }
 
 function parsedSessionEntryToMessage(parsed: unknown, seq: number): unknown {

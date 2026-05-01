@@ -18,6 +18,7 @@ import {
   readSessionTitleFieldsFromTranscript,
   readSessionPreviewItemsFromTranscript,
   resolveSessionTranscriptCandidates,
+  visitSessionMessages,
 } from "./session-utils.fs.js";
 
 function registerTempSessionStore(
@@ -679,6 +680,128 @@ describe("readSessionMessages", () => {
         expect.objectContaining({
           content: [{ type: "text", text: "latest answer" }],
           __openclaw: expect.objectContaining({ seq: 3 }),
+        }),
+      ]);
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test("resolves injected tree entries through id-bearing legacy parents", () => {
+    const sessionId = "test-session-mixed-legacy-parent";
+    writeTranscript(tmpDir, sessionId, [
+      {
+        type: "session",
+        version: 3,
+        id: sessionId,
+        cwd: tmpDir,
+        timestamp: "2026-04-27T00:00:00.000Z",
+      },
+      {
+        type: "message",
+        id: "legacy-large-message",
+        timestamp: "2026-04-27T00:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "legacy parent" }],
+        },
+      },
+      {
+        type: "message",
+        id: "injected-message",
+        parentId: "legacy-large-message",
+        timestamp: "2026-04-27T00:00:02.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "injected child" }],
+        },
+      },
+    ]);
+    const openSpy = vi.spyOn(SessionManager, "open");
+
+    try {
+      const visited: unknown[] = [];
+      const count = visitSessionMessages(sessionId, storePath, undefined, (message) => {
+        visited.push(message);
+      });
+
+      expect(count).toBe(2);
+      expect(visited).toEqual([
+        expect.objectContaining({
+          content: [{ type: "text", text: "legacy parent" }],
+          __openclaw: expect.objectContaining({ id: "legacy-large-message", seq: 1 }),
+        }),
+        expect.objectContaining({
+          content: [{ type: "text", text: "injected child" }],
+          __openclaw: expect.objectContaining({ id: "injected-message", seq: 2 }),
+        }),
+      ]);
+      expect(readSessionMessageCount(sessionId, storePath)).toBe(2);
+
+      const withStats = readRecentSessionMessagesWithStats(sessionId, storePath, undefined, {
+        maxMessages: 2,
+        maxBytes: 4096,
+      });
+      expect(withStats.totalMessages).toBe(2);
+      expect(withStats.messages).toEqual([
+        expect.objectContaining({
+          content: [{ type: "text", text: "legacy parent" }],
+          __openclaw: expect.objectContaining({ id: "legacy-large-message", seq: 1 }),
+        }),
+        expect.objectContaining({
+          content: [{ type: "text", text: "injected child" }],
+          __openclaw: expect.objectContaining({ id: "injected-message", seq: 2 }),
+        }),
+      ]);
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test("keeps id-bearing append-only transcripts on append-only reads", () => {
+    const sessionId = "test-session-id-append-only";
+    writeTranscript(tmpDir, sessionId, [
+      { type: "session", version: 3, id: sessionId, cwd: tmpDir },
+      {
+        type: "message",
+        id: "legacy-one",
+        message: { role: "user", content: "first legacy message" },
+      },
+      {
+        type: "message",
+        id: "legacy-two",
+        message: { role: "assistant", content: "second legacy message" },
+      },
+    ]);
+    const openSpy = vi.spyOn(SessionManager, "open");
+
+    try {
+      expect(readSessionMessages(sessionId, storePath)).toEqual([
+        expect.objectContaining({
+          content: "first legacy message",
+          __openclaw: expect.objectContaining({ id: "legacy-one", seq: 1 }),
+        }),
+        expect.objectContaining({
+          content: "second legacy message",
+          __openclaw: expect.objectContaining({ id: "legacy-two", seq: 2 }),
+        }),
+      ]);
+      expect(readSessionMessageCount(sessionId, storePath)).toBe(2);
+      expect(
+        readRecentSessionMessages(sessionId, storePath, undefined, {
+          maxMessages: 2,
+          maxBytes: 4096,
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          content: "first legacy message",
+          __openclaw: expect.objectContaining({ id: "legacy-one", seq: 1 }),
+        }),
+        expect.objectContaining({
+          content: "second legacy message",
+          __openclaw: expect.objectContaining({ id: "legacy-two", seq: 2 }),
         }),
       ]);
       expect(openSpy).not.toHaveBeenCalled();
