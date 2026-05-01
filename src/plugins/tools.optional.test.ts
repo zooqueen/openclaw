@@ -7,6 +7,7 @@ type MockRegistryToolEntry = {
   names?: string[];
   optional: boolean;
   source: string;
+  names?: string[];
   factory: (ctx: unknown) => unknown;
 };
 
@@ -88,6 +89,7 @@ function setMultiToolRegistry() {
       pluginId: "multi",
       optional: false,
       source: "/tmp/multi.js",
+      names: ["message", "other_tool"],
       factory: () => [makeTool("message"), makeTool("other_tool")],
     },
   ]);
@@ -99,6 +101,7 @@ function createOptionalDemoEntry(): MockRegistryToolEntry {
     names: ["optional_tool"],
     optional: true,
     source: "/tmp/optional-demo.js",
+    names: ["optional_tool"],
     factory: () => makeTool("optional_tool"),
   };
 }
@@ -340,6 +343,37 @@ describe("resolvePluginTools optional tools", () => {
     resolvePluginTools(createResolveToolsParams(params));
 
     expectLoaderCall(expectedLoaderCall);
+  });
+
+  it("skips unrelated required plugin factories when an explicit allowlist is present", () => {
+    const skippedFactory = vi.fn(() => makeTool("other_tool"));
+    const selectedFactory = vi.fn(() => makeTool("optional_tool"));
+    setRegistry([
+      {
+        pluginId: "required-demo",
+        optional: false,
+        source: "/tmp/required-demo.js",
+        names: ["other_tool"],
+        factory: skippedFactory,
+      },
+      {
+        pluginId: "optional-demo",
+        optional: false,
+        source: "/tmp/optional-demo.js",
+        names: ["optional_tool"],
+        factory: selectedFactory,
+      },
+    ]);
+
+    const tools = resolvePluginTools(
+      createResolveToolsParams({
+        toolAllowlist: ["optional_tool"],
+      }),
+    );
+
+    expectResolvedToolNames(tools, ["optional_tool"]);
+    expect(skippedFactory).not.toHaveBeenCalled();
+    expect(selectedFactory).toHaveBeenCalledTimes(1);
   });
 
   it("skips malformed plugin tools while keeping valid sibling tools", () => {

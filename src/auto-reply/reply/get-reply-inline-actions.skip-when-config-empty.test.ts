@@ -627,6 +627,8 @@ describe("handleInlineActions", () => {
     expect(createOpenClawToolsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         requesterAgentIdOverride: "named-worker",
+        toolAllowlist: ["sessions_spawn"],
+        pluginToolAllowlist: ["sessions_spawn"],
       }),
     );
     expect(toolExecute).toHaveBeenCalled();
@@ -685,6 +687,8 @@ describe("handleInlineActions", () => {
     expect(createOpenClawToolsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         senderIsOwner: true,
+        toolAllowlist: ["message"],
+        pluginToolAllowlist: ["message"],
       }),
     );
     expect(toolExecute).toHaveBeenCalled();

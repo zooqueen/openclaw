@@ -37,6 +37,10 @@ import {
 } from "../plugins/provider-hook-runtime.js";
 import { resolveOwningPluginIdsForProvider } from "../plugins/providers.js";
 import { buildAgentMainSessionKey } from "../routing/session-key.js";
+import { getActiveRuntimeWebToolsMetadata } from "../secrets/runtime.js";
+import { extractReadableContent } from "../web-fetch/content-extractors.runtime.js";
+import { resolveWebFetchDefinition } from "../web-fetch/runtime.js";
+import { resolveWebSearchDefinition } from "../web-search/runtime.js";
 import {
   markReplyRuntimePluginRegistryPrepared,
   markReplyRuntimeProviderAuthPrepared,
@@ -295,6 +299,26 @@ function resolvePiReplyRuntimeProfileCandidates(params: {
   return orderedProfiles;
 }
 
+async function warmPreparedReplyRuntimeWebSurfaces(config: OpenClawConfig): Promise<void> {
+  const runtimeWebTools = getActiveRuntimeWebToolsMetadata();
+  resolveWebSearchDefinition({
+    config,
+    runtimeWebSearch: runtimeWebTools?.search,
+    preferRuntimeProviders: true,
+  });
+  resolveWebFetchDefinition({
+    config,
+    runtimeWebFetch: runtimeWebTools?.fetch,
+    preferRuntimeProviders: true,
+  });
+  await extractReadableContent({
+    html: "<!doctype html><html><body><article>reply runtime readiness</article></body></html>",
+    url: "https://example.com/reply-runtime-readiness",
+    extractMode: "markdown",
+    config,
+  });
+}
+
 export async function prepareReplyRuntimeForChannels(params: {
   cfg: OpenClawConfig;
   workspaceDir?: string;
@@ -539,6 +563,7 @@ export async function prepareReplyRuntimeForChannels(params: {
             requesterAgentIdOverride: agentId,
           });
         }
+        await warmPreparedReplyRuntimeWebSurfaces(params.cfg);
       },
     ))
   ) {

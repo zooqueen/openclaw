@@ -14,13 +14,13 @@ import {
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
+import { normalizeToolName } from "./tool-policy.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createEmbeddedCallGateway } from "./tools/embedded-gateway-stub.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
-import { createHeartbeatResponseTool } from "./tools/heartbeat-response-tool.js";
 import { createImageGenerateTool } from "./tools/image-generate-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
@@ -50,6 +50,154 @@ const defaultOpenClawToolsDeps: OpenClawToolsDeps = {
 };
 
 let openClawToolsDeps: OpenClawToolsDeps = defaultOpenClawToolsDeps;
+
+function normalizeToolAllowlist(toolAllowlist?: string[]): Set<string> | null {
+  if (!toolAllowlist || toolAllowlist.length === 0) {
+    return null;
+  }
+  const normalized = new Set(
+    toolAllowlist.map((entry) => normalizeToolName(entry)).filter((entry) => entry.length > 0),
+  );
+  return normalized.size > 0 ? normalized : null;
+}
+
+function isRequestedTool(toolAllowlist: Set<string> | null, toolName: string): boolean {
+  return toolAllowlist ? toolAllowlist.has(normalizeToolName(toolName)) : true;
+}
+
+type PreparedReusableToolSurface = {
+  webSearchTool: AnyAgentTool | null;
+  webFetchTool: AnyAgentTool | null;
+  imageTool: AnyAgentTool | null;
+  pdfTool: AnyAgentTool | null;
+};
+
+let preparedReusableToolSurfacesByConfig = new WeakMap<
+  OpenClawConfig,
+  Map<string, PreparedReusableToolSurface>
+>();
+const preparedReusableToolSurfacesWithoutConfig = new Map<string, PreparedReusableToolSurface>();
+const reusableToolSurfaceObjectIdentityCache = new WeakMap<object, number>();
+let nextReusableToolSurfaceObjectIdentity = 1;
+
+function getReusableToolSurfaceObjectIdentity(value: object | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  let cached = reusableToolSurfaceObjectIdentityCache.get(value);
+  if (cached) {
+    return cached;
+  }
+  cached = nextReusableToolSurfaceObjectIdentity++;
+  reusableToolSurfaceObjectIdentityCache.set(value, cached);
+  return cached;
+}
+
+function buildPreparedReusableToolSurfaceKey(params: {
+  agentDir?: string;
+  workspaceDir?: string;
+  fsPolicy?: ToolFsPolicy;
+  sandboxed?: boolean;
+  sandboxRoot?: string;
+  sandboxFsBridge?: SandboxFsBridge;
+  modelHasVision?: boolean;
+  runtimeWebTools: ReturnType<typeof getActiveRuntimeWebToolsMetadata>;
+}): string {
+  return JSON.stringify([
+    params.agentDir ?? "",
+    params.workspaceDir ?? "",
+    params.fsPolicy?.workspaceOnly === true,
+    params.sandboxed === true,
+    params.sandboxRoot ?? "",
+    getReusableToolSurfaceObjectIdentity(params.sandboxFsBridge),
+    params.modelHasVision === true,
+    params.runtimeWebTools?.search?.providerConfigured ?? "",
+    params.runtimeWebTools?.search?.selectedProvider ?? "",
+    params.runtimeWebTools?.fetch?.providerConfigured ?? "",
+    params.runtimeWebTools?.fetch?.selectedProvider ?? "",
+  ]);
+}
+
+function getPreparedReusableToolSurfaceCache(
+  config?: OpenClawConfig,
+): Map<string, PreparedReusableToolSurface> {
+  if (!config) {
+    return preparedReusableToolSurfacesWithoutConfig;
+  }
+  let cached = preparedReusableToolSurfacesByConfig.get(config);
+  if (!cached) {
+    cached = new Map<string, PreparedReusableToolSurface>();
+    preparedReusableToolSurfacesByConfig.set(config, cached);
+  }
+  return cached;
+}
+
+function getOrCreatePreparedReusableToolSurface(params: {
+  config?: OpenClawConfig;
+  agentDir?: string;
+  workspaceDir?: string;
+  fsPolicy?: ToolFsPolicy;
+  sandboxed?: boolean;
+  sandboxRoot?: string;
+  sandboxFsBridge?: SandboxFsBridge;
+  modelHasVision?: boolean;
+  runtimeWebTools: ReturnType<typeof getActiveRuntimeWebToolsMetadata>;
+}): PreparedReusableToolSurface {
+  // Full OpenClaw tool objects are not safe to cache across replies because some
+  // constructors capture per-message routing or requester context. Reuse only the
+  // stable heavy subset that depends on warmed agent/session config.
+  const cache = getPreparedReusableToolSurfaceCache(params.config);
+  const cacheKey = buildPreparedReusableToolSurfaceKey(params);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const created = {
+    webSearchTool: createWebSearchTool({
+      config: params.config,
+      sandboxed: params.sandboxed,
+      runtimeWebSearch: params.runtimeWebTools?.search,
+    }),
+    webFetchTool: createWebFetchTool({
+      config: params.config,
+      sandboxed: params.sandboxed,
+      runtimeWebFetch: params.runtimeWebTools?.fetch,
+    }),
+    imageTool: params.agentDir?.trim()
+      ? createImageTool({
+          config: params.config,
+          agentDir: params.agentDir,
+          workspaceDir: params.workspaceDir,
+          sandbox:
+            params.sandboxRoot && params.sandboxFsBridge
+              ? {
+                  root: params.sandboxRoot,
+                  bridge: params.sandboxFsBridge,
+                }
+              : undefined,
+          fsPolicy: params.fsPolicy,
+          modelHasVision: params.modelHasVision,
+        })
+      : null,
+    pdfTool: params.agentDir?.trim()
+      ? createPdfTool({
+          config: params.config,
+          agentDir: params.agentDir,
+          workspaceDir: params.workspaceDir,
+          sandbox:
+            params.sandboxRoot && params.sandboxFsBridge
+              ? {
+                  root: params.sandboxRoot,
+                  bridge: params.sandboxFsBridge,
+                }
+              : undefined,
+          fsPolicy: params.fsPolicy,
+        })
+      : null,
+  } satisfies PreparedReusableToolSurface;
+  cache.set(cacheKey, created);
+  return created;
+}
 
 export function createOpenClawTools(
   options?: {
@@ -96,10 +244,10 @@ export function createOpenClawTools(
     requireExplicitMessageTarget?: boolean;
     /** If true, omit the message tool from the tool list. */
     disableMessageTool?: boolean;
-    /** If true, include the heartbeat response tool for structured heartbeat outcomes. */
-    enableHeartbeatTool?: boolean;
     /** If true, skip plugin tool resolution and return only shipped core tools. */
     disablePluginTools?: boolean;
+    /** Materialize only the named tools when the caller already has an explicit allowlist. */
+    toolAllowlist?: string[];
     /** Trusted sender id from inbound context (not tool args). */
     requesterSenderId?: string | null;
     /** Whether the requesting sender is an owner. */
@@ -141,101 +289,136 @@ export function createOpenClawTools(
     accountId: options?.agentAccountId,
     threadId: options?.agentThreadId,
   });
+  const requestedToolNames = normalizeToolAllowlist(options?.toolAllowlist);
   const runtimeWebTools = getActiveRuntimeWebToolsMetadata();
   const sandbox =
     options?.sandboxRoot && options?.sandboxFsBridge
       ? { root: options.sandboxRoot, bridge: options.sandboxFsBridge }
       : undefined;
-  const imageTool = options?.agentDir?.trim()
-    ? createImageTool({
-        config: options?.config,
-        agentDir: options.agentDir,
-        workspaceDir,
-        sandbox,
-        fsPolicy: options?.fsPolicy,
-        modelHasVision: options?.modelHasVision,
-      })
-    : null;
-  const imageGenerateTool = createImageGenerateTool({
+  const preparedReusableToolSurface = getOrCreatePreparedReusableToolSurface({
     config: options?.config,
     agentDir: options?.agentDir,
     workspaceDir,
-    sandbox,
     fsPolicy: options?.fsPolicy,
-  });
-  const videoGenerateTool = createVideoGenerateTool({
-    config: options?.config,
-    agentDir: options?.agentDir,
-    agentSessionKey: options?.agentSessionKey,
-    requesterOrigin: deliveryContext ?? undefined,
-    workspaceDir,
-    sandbox,
-    fsPolicy: options?.fsPolicy,
-  });
-  const musicGenerateTool = createMusicGenerateTool({
-    config: options?.config,
-    agentDir: options?.agentDir,
-    agentSessionKey: options?.agentSessionKey,
-    requesterOrigin: deliveryContext ?? undefined,
-    workspaceDir,
-    sandbox,
-    fsPolicy: options?.fsPolicy,
-  });
-  const pdfTool = options?.agentDir?.trim()
-    ? createPdfTool({
-        config: options?.config,
-        agentDir: options.agentDir,
-        workspaceDir,
-        sandbox,
-        fsPolicy: options?.fsPolicy,
-      })
-    : null;
-  const webSearchTool = createWebSearchTool({
-    config: options?.config,
     sandboxed: options?.sandboxed,
-    runtimeWebSearch: runtimeWebTools?.search,
-  });
-  const webFetchTool = createWebFetchTool({
-    config: options?.config,
-    sandboxed: options?.sandboxed,
-    runtimeWebFetch: runtimeWebTools?.fetch,
-  });
-  const messageTool = options?.disableMessageTool
-    ? null
-    : createMessageTool({
-        agentAccountId: options?.agentAccountId,
-        agentSessionKey: options?.agentSessionKey,
-        sessionId: options?.sessionId,
-        config: options?.config,
-        currentChannelId: options?.currentChannelId,
-        currentChannelProvider: options?.agentChannel,
-        currentThreadTs: options?.currentThreadTs,
-        currentMessageId: options?.currentMessageId,
-        replyToMode: options?.replyToMode,
-        hasRepliedRef: options?.hasRepliedRef,
-        sandboxRoot: options?.sandboxRoot,
-        requireExplicitTarget: options?.requireExplicitMessageTarget,
-        requesterSenderId: options?.requesterSenderId ?? undefined,
-        senderIsOwner: options?.senderIsOwner,
-      });
-  const heartbeatTool = options?.enableHeartbeatTool ? createHeartbeatResponseTool() : null;
-  const nodesToolBase = createNodesTool({
-    agentSessionKey: options?.agentSessionKey,
-    agentChannel: options?.agentChannel,
-    agentAccountId: options?.agentAccountId,
-    currentChannelId: options?.currentChannelId,
-    currentThreadTs: options?.currentThreadTs,
-    config: options?.config,
-    modelHasVision: options?.modelHasVision,
-    allowMediaInvokeCommands: options?.allowMediaInvokeCommands,
-  });
-  const nodesTool = applyNodesToolWorkspaceGuard(nodesToolBase, {
-    fsPolicy: options?.fsPolicy,
-    sandboxContainerWorkdir: options?.sandboxContainerWorkdir,
     sandboxRoot: options?.sandboxRoot,
-    workspaceDir,
+    sandboxFsBridge: options?.sandboxFsBridge,
+    modelHasVision: options?.modelHasVision,
+    runtimeWebTools,
   });
+  const imageTool = isRequestedTool(requestedToolNames, "image")
+    ? (preparedReusableToolSurface?.imageTool ??
+      (options?.agentDir?.trim()
+        ? createImageTool({
+            config: options?.config,
+            agentDir: options.agentDir,
+            workspaceDir,
+            sandbox,
+            fsPolicy: options?.fsPolicy,
+            modelHasVision: options?.modelHasVision,
+          })
+        : null))
+    : null;
+  const imageGenerateTool = isRequestedTool(requestedToolNames, "image_generate")
+    ? createImageGenerateTool({
+        config: options?.config,
+        agentDir: options?.agentDir,
+        workspaceDir,
+        sandbox,
+        fsPolicy: options?.fsPolicy,
+      })
+    : null;
+  const videoGenerateTool = isRequestedTool(requestedToolNames, "video_generate")
+    ? createVideoGenerateTool({
+        config: options?.config,
+        agentDir: options?.agentDir,
+        agentSessionKey: options?.agentSessionKey,
+        requesterOrigin: deliveryContext ?? undefined,
+        workspaceDir,
+        sandbox,
+        fsPolicy: options?.fsPolicy,
+      })
+    : null;
+  const musicGenerateTool = isRequestedTool(requestedToolNames, "music_generate")
+    ? createMusicGenerateTool({
+        config: options?.config,
+        agentDir: options?.agentDir,
+        agentSessionKey: options?.agentSessionKey,
+        requesterOrigin: deliveryContext ?? undefined,
+        workspaceDir,
+        sandbox,
+        fsPolicy: options?.fsPolicy,
+      })
+    : null;
+  const pdfTool = isRequestedTool(requestedToolNames, "pdf")
+    ? (preparedReusableToolSurface?.pdfTool ??
+      (options?.agentDir?.trim()
+        ? createPdfTool({
+            config: options?.config,
+            agentDir: options.agentDir,
+            workspaceDir,
+            sandbox,
+            fsPolicy: options?.fsPolicy,
+          })
+        : null))
+    : null;
+  const webSearchTool = isRequestedTool(requestedToolNames, "web_search")
+    ? (preparedReusableToolSurface?.webSearchTool ??
+      createWebSearchTool({
+        config: options?.config,
+        sandboxed: options?.sandboxed,
+        runtimeWebSearch: runtimeWebTools?.search,
+      }))
+    : null;
+  const webFetchTool = isRequestedTool(requestedToolNames, "web_fetch")
+    ? (preparedReusableToolSurface?.webFetchTool ??
+      createWebFetchTool({
+        config: options?.config,
+        sandboxed: options?.sandboxed,
+        runtimeWebFetch: runtimeWebTools?.fetch,
+      }))
+    : null;
+  const messageTool =
+    options?.disableMessageTool || !isRequestedTool(requestedToolNames, "message")
+      ? null
+      : createMessageTool({
+          agentAccountId: options?.agentAccountId,
+          agentSessionKey: options?.agentSessionKey,
+          sessionId: options?.sessionId,
+          config: options?.config,
+          currentChannelId: options?.currentChannelId,
+          currentChannelProvider: options?.agentChannel,
+          currentThreadTs: options?.currentThreadTs,
+          currentMessageId: options?.currentMessageId,
+          replyToMode: options?.replyToMode,
+          hasRepliedRef: options?.hasRepliedRef,
+          sandboxRoot: options?.sandboxRoot,
+          requireExplicitTarget: options?.requireExplicitMessageTarget,
+          requesterSenderId: options?.requesterSenderId ?? undefined,
+          senderIsOwner: options?.senderIsOwner,
+        });
   const embedded = isEmbeddedMode();
+  const nodesTool =
+    !embedded && isRequestedTool(requestedToolNames, "nodes")
+      ? applyNodesToolWorkspaceGuard(
+          createNodesTool({
+            agentSessionKey: options?.agentSessionKey,
+            agentChannel: options?.agentChannel,
+            agentAccountId: options?.agentAccountId,
+            currentChannelId: options?.currentChannelId,
+            currentThreadTs: options?.currentThreadTs,
+            config: options?.config,
+            modelHasVision: options?.modelHasVision,
+            allowMediaInvokeCommands: options?.allowMediaInvokeCommands,
+          }),
+          {
+            fsPolicy: options?.fsPolicy,
+            sandboxContainerWorkdir: options?.sandboxContainerWorkdir,
+            sandboxRoot: options?.sandboxRoot,
+            workspaceDir,
+          },
+        )
+      : null;
   const effectiveCallGateway = embedded
     ? createEmbeddedCallGateway()
     : openClawToolsDeps.callGateway;
@@ -243,42 +426,57 @@ export function createOpenClawTools(
     ...(embedded
       ? []
       : [
-          createCanvasTool({ config: options?.config }),
-          nodesTool,
-          createCronTool({
-            agentSessionKey: options?.agentSessionKey,
-            currentDeliveryContext: {
-              channel: options?.agentChannel,
-              to: options?.currentChannelId ?? options?.agentTo,
-              accountId: options?.agentAccountId,
-              threadId: options?.currentThreadTs ?? options?.agentThreadId,
-            },
-            ...(options?.cronSelfRemoveOnlyJobId
-              ? { selfRemoveOnlyJobId: options.cronSelfRemoveOnlyJobId }
-              : {}),
-          }),
+          ...(isRequestedTool(requestedToolNames, "canvas")
+            ? [createCanvasTool({ config: options?.config })]
+            : []),
+          ...collectPresentOpenClawTools([nodesTool]),
+          ...(isRequestedTool(requestedToolNames, "cron")
+            ? [
+                createCronTool({
+                  agentSessionKey: options?.agentSessionKey,
+                  currentDeliveryContext: {
+                    channel: options?.agentChannel,
+                    to: options?.currentChannelId ?? options?.agentTo,
+                    accountId: options?.agentAccountId,
+                    threadId: options?.currentThreadTs ?? options?.agentThreadId,
+                  },
+                  ...(options?.cronSelfRemoveOnlyJobId
+                    ? { selfRemoveOnlyJobId: options.cronSelfRemoveOnlyJobId }
+                    : {}),
+                }),
+              ]
+            : []),
         ]),
     ...(!embedded && messageTool ? [messageTool] : []),
-    ...collectPresentOpenClawTools([heartbeatTool]),
-    createTtsTool({
-      agentChannel: options?.agentChannel,
-      config: resolvedConfig,
-      agentId: sessionAgentId,
-      agentAccountId: options?.agentAccountId,
-    }),
+    ...(isRequestedTool(requestedToolNames, "tts")
+      ? [
+          createTtsTool({
+            agentChannel: options?.agentChannel,
+            config: resolvedConfig,
+            agentId: sessionAgentId,
+            agentAccountId: options?.agentAccountId,
+          }),
+        ]
+      : []),
     ...collectPresentOpenClawTools([imageGenerateTool, musicGenerateTool, videoGenerateTool]),
     ...(embedded
       ? []
-      : [
-          createGatewayTool({
+      : isRequestedTool(requestedToolNames, "gateway")
+        ? [
+            createGatewayTool({
+              agentSessionKey: options?.agentSessionKey,
+              config: options?.config,
+            }),
+          ]
+        : []),
+    ...(isRequestedTool(requestedToolNames, "agents_list")
+      ? [
+          createAgentsListTool({
             agentSessionKey: options?.agentSessionKey,
-            config: options?.config,
+            requesterAgentIdOverride: options?.requesterAgentIdOverride,
           }),
-        ]),
-    createAgentsListTool({
-      agentSessionKey: options?.agentSessionKey,
-      requesterAgentIdOverride: options?.requesterAgentIdOverride,
-    }),
+        ]
+      : []),
     ...(isUpdatePlanToolEnabledForOpenClawTools({
       config: resolvedConfig,
       agentSessionKey: options?.agentSessionKey,
@@ -286,58 +484,88 @@ export function createOpenClawTools(
       modelProvider: options?.modelProvider,
       modelId: options?.modelId,
     })
-      ? [createUpdatePlanTool()]
+      ? isRequestedTool(requestedToolNames, "update_plan")
+        ? [createUpdatePlanTool()]
+        : []
       : []),
-    createSessionsListTool({
-      agentSessionKey: options?.agentSessionKey,
-      sandboxed: options?.sandboxed,
-      config: resolvedConfig,
-      callGateway: effectiveCallGateway,
-    }),
-    createSessionsHistoryTool({
-      agentSessionKey: options?.agentSessionKey,
-      sandboxed: options?.sandboxed,
-      config: resolvedConfig,
-      callGateway: effectiveCallGateway,
-    }),
+    ...(isRequestedTool(requestedToolNames, "sessions_list")
+      ? [
+          createSessionsListTool({
+            agentSessionKey: options?.agentSessionKey,
+            sandboxed: options?.sandboxed,
+            config: resolvedConfig,
+            callGateway: effectiveCallGateway,
+          }),
+        ]
+      : []),
+    ...(isRequestedTool(requestedToolNames, "sessions_history")
+      ? [
+          createSessionsHistoryTool({
+            agentSessionKey: options?.agentSessionKey,
+            sandboxed: options?.sandboxed,
+            config: resolvedConfig,
+            callGateway: effectiveCallGateway,
+          }),
+        ]
+      : []),
     ...(embedded
       ? []
       : [
-          createSessionsSendTool({
-            agentSessionKey: options?.agentSessionKey,
-            agentChannel: options?.agentChannel,
-            sandboxed: options?.sandboxed,
-            config: resolvedConfig,
-            callGateway: openClawToolsDeps.callGateway,
-          }),
-          createSessionsSpawnTool({
-            agentSessionKey: options?.agentSessionKey,
-            agentChannel: options?.agentChannel,
-            agentAccountId: options?.agentAccountId,
-            agentTo: options?.agentTo,
-            agentThreadId: options?.agentThreadId,
-            agentGroupId: options?.agentGroupId,
-            agentGroupChannel: options?.agentGroupChannel,
-            agentGroupSpace: options?.agentGroupSpace,
-            agentMemberRoleIds: options?.agentMemberRoleIds,
-            sandboxed: options?.sandboxed,
-            config: resolvedConfig,
-            requesterAgentIdOverride: options?.requesterAgentIdOverride,
-            workspaceDir: spawnWorkspaceDir,
-          }),
+          ...(isRequestedTool(requestedToolNames, "sessions_send")
+            ? [
+                createSessionsSendTool({
+                  agentSessionKey: options?.agentSessionKey,
+                  agentChannel: options?.agentChannel,
+                  sandboxed: options?.sandboxed,
+                  config: resolvedConfig,
+                  callGateway: openClawToolsDeps.callGateway,
+                }),
+              ]
+            : []),
+          ...(isRequestedTool(requestedToolNames, "sessions_spawn")
+            ? [
+                createSessionsSpawnTool({
+                  agentSessionKey: options?.agentSessionKey,
+                  agentChannel: options?.agentChannel,
+                  agentAccountId: options?.agentAccountId,
+                  agentTo: options?.agentTo,
+                  agentThreadId: options?.agentThreadId,
+                  agentGroupId: options?.agentGroupId,
+                  agentGroupChannel: options?.agentGroupChannel,
+                  agentGroupSpace: options?.agentGroupSpace,
+                  agentMemberRoleIds: options?.agentMemberRoleIds,
+                  sandboxed: options?.sandboxed,
+                  config: resolvedConfig,
+                  requesterAgentIdOverride: options?.requesterAgentIdOverride,
+                  workspaceDir: spawnWorkspaceDir,
+                }),
+              ]
+            : []),
         ]),
-    createSessionsYieldTool({
-      sessionId: options?.sessionId,
-      onYield: options?.onYield,
-    }),
-    createSubagentsTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createSessionStatusTool({
-      agentSessionKey: options?.agentSessionKey,
-      config: resolvedConfig,
-      sandboxed: options?.sandboxed,
-    }),
+    ...(isRequestedTool(requestedToolNames, "sessions_yield")
+      ? [
+          createSessionsYieldTool({
+            sessionId: options?.sessionId,
+            onYield: options?.onYield,
+          }),
+        ]
+      : []),
+    ...(isRequestedTool(requestedToolNames, "subagents")
+      ? [
+          createSubagentsTool({
+            agentSessionKey: options?.agentSessionKey,
+          }),
+        ]
+      : []),
+    ...(isRequestedTool(requestedToolNames, "session_status")
+      ? [
+          createSessionStatusTool({
+            agentSessionKey: options?.agentSessionKey,
+            config: resolvedConfig,
+            sandboxed: options?.sandboxed,
+          }),
+        ]
+      : []),
     ...collectPresentOpenClawTools([webSearchTool, webFetchTool, imageTool, pdfTool]),
   ];
 
@@ -362,5 +590,12 @@ export const __testing = {
           ...overrides,
         }
       : defaultOpenClawToolsDeps;
+  },
+  resetPreparedReusableToolSurfaceCacheForTest() {
+    preparedReusableToolSurfacesByConfig = new WeakMap<
+      OpenClawConfig,
+      Map<string, PreparedReusableToolSurface>
+    >();
+    preparedReusableToolSurfacesWithoutConfig.clear();
   },
 };

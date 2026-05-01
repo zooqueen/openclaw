@@ -53,6 +53,9 @@ const hoisted = vi.hoisted(() => ({
   resolveAgentDir: vi.fn((_: OpenClawConfig, agentId?: string) =>
     agentId === "worker" ? "/tmp/openclaw-agent-worker" : "/tmp/openclaw-agent",
   ),
+  resolveWebSearchDefinition: vi.fn(() => null),
+  resolveWebFetchDefinition: vi.fn(() => null),
+  extractReadableContent: vi.fn(async () => null),
 }));
 
 vi.mock("../agents/runtime-plugins.js", () => ({
@@ -105,6 +108,18 @@ vi.mock("../config/sessions/paths.js", () => ({
 
 vi.mock("../config/sessions/store.js", () => ({
   loadSessionStore: hoisted.loadSessionStore,
+}));
+
+vi.mock("../web-search/runtime.js", () => ({
+  resolveWebSearchDefinition: hoisted.resolveWebSearchDefinition,
+}));
+
+vi.mock("../web-fetch/runtime.js", () => ({
+  resolveWebFetchDefinition: hoisted.resolveWebFetchDefinition,
+}));
+
+vi.mock("../web-fetch/content-extractors.runtime.js", () => ({
+  extractReadableContent: hoisted.extractReadableContent,
 }));
 
 vi.mock("../agents/agent-scope.js", async (importOriginal) => {
@@ -277,6 +292,9 @@ describe("reply-runtime readiness", () => {
     hoisted.resolveOwningPluginIdsForProvider.mockClear();
     hoisted.resolveStorePath.mockClear();
     hoisted.loadSessionStore.mockClear();
+    hoisted.resolveWebSearchDefinition.mockClear();
+    hoisted.resolveWebFetchDefinition.mockClear();
+    hoisted.extractReadableContent.mockClear();
     hoisted.listAgentIds.mockReset().mockReturnValue(["default"]);
     hoisted.resolveAgentWorkspaceDir
       .mockReset()
@@ -608,5 +626,40 @@ describe("reply-runtime readiness", () => {
       workspaceDir: "/tmp/openclaw-workspace",
     });
     expect(createToolSurface(pdfConfig)).toEqual(noPdfBefore);
+  });
+
+  it("primes warmed web provider and extractor surfaces during tool-contract preparation", async () => {
+    const config = {
+      agents: {
+        defaults: {
+          model: { primary: "openai/gpt-5.4" },
+        },
+      },
+    } as OpenClawConfig;
+
+    const result = await prepareReplyRuntimeForChannels({
+      cfg: config,
+      workspaceDir: "/tmp/openclaw-workspace",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(hoisted.resolveWebSearchDefinition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config,
+        preferRuntimeProviders: true,
+      }),
+    );
+    expect(hoisted.resolveWebFetchDefinition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config,
+        preferRuntimeProviders: true,
+      }),
+    );
+    expect(hoisted.extractReadableContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config,
+        extractMode: "markdown",
+      }),
+    );
   });
 });

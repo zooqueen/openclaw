@@ -278,6 +278,8 @@ export async function handleInlineActions(params: {
         agentDir,
         workspaceDir,
         config: cfg,
+        toolAllowlist: [dispatch.toolName],
+        pluginToolAllowlist: [dispatch.toolName],
         allowGatewaySubagentBinding: true,
         senderIsOwner: command.senderIsOwner,
       });

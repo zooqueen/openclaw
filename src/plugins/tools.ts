@@ -35,6 +35,19 @@ const PLUGIN_TOOL_FACTORY_WARN_FACTORY_MS = 1_000;
 const PLUGIN_TOOL_FACTORY_SUMMARY_LIMIT = 20;
 
 const pluginToolMeta = new WeakMap<AnyAgentTool, PluginToolMeta>();
+const allowlistedRegistryEntriesCache = new WeakMap<
+  object,
+  Map<
+    string,
+    Array<{
+      pluginId: string;
+      source: string;
+      optional: boolean;
+      names?: string[];
+      factory: (ctx: OpenClawPluginToolContext) => AnyAgentTool | AnyAgentTool[] | null | undefined;
+    }>
+  >
+>();
 
 export function setPluginToolMeta(tool: AnyAgentTool, meta: PluginToolMeta): void {
   pluginToolMeta.set(tool, meta);
@@ -79,6 +92,69 @@ function isOptionalToolAllowed(params: {
     return true;
   }
   return params.allowlist.has("group:plugins");
+}
+
+function isRegistryEntryAllowlisted(params: {
+  names: readonly string[] | undefined;
+  pluginId: string;
+  allowlist: Set<string>;
+}): boolean {
+  if (params.allowlist.size === 0) {
+    return true;
+  }
+  if (
+    params.allowlist.has(normalizeToolName(params.pluginId)) ||
+    params.allowlist.has("group:plugins")
+  ) {
+    return true;
+  }
+  const names = params.names?.map((name) => normalizeToolName(name)).filter(Boolean) ?? [];
+  if (names.length === 0) {
+    return true;
+  }
+  return names.some((name) => params.allowlist.has(name));
+}
+
+function buildAllowlistCacheKey(allowlist: Set<string>): string {
+  return allowlist.size === 0
+    ? "*"
+    : [...allowlist].toSorted((left, right) => left.localeCompare(right)).join(",");
+}
+
+function resolveAllowlistedRegistryEntries(params: {
+  registry: {
+    tools: Array<{
+      pluginId: string;
+      source: string;
+      optional: boolean;
+      names?: string[];
+      factory: (ctx: OpenClawPluginToolContext) => AnyAgentTool | AnyAgentTool[] | null | undefined;
+    }>;
+  };
+  allowlist: Set<string>;
+}) {
+  if (params.allowlist.size === 0) {
+    return params.registry.tools;
+  }
+  let cache = allowlistedRegistryEntriesCache.get(params.registry);
+  if (!cache) {
+    cache = new Map();
+    allowlistedRegistryEntriesCache.set(params.registry, cache);
+  }
+  const cacheKey = buildAllowlistCacheKey(params.allowlist);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const filtered = params.registry.tools.filter((entry) =>
+    isRegistryEntryAllowlisted({
+      names: entry.names,
+      pluginId: entry.pluginId,
+      allowlist: params.allowlist,
+    }),
+  );
+  cache.set(cacheKey, filtered);
+  return filtered;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -250,7 +326,7 @@ export function resolvePluginTools(params: {
   const factoryTimingStartedAt = Date.now();
   const factoryTimings: PluginToolFactoryTiming[] = [];
 
-  for (const entry of registry.tools) {
+  for (const entry of resolveAllowlistedRegistryEntries({ registry, allowlist })) {
     if (blockedPlugins.has(entry.pluginId)) {
       continue;
     }

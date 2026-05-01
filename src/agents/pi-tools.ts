@@ -584,6 +584,18 @@ export function createOpenClawCodingTools(options?: {
               : undefined,
           workspaceOnly: applyPatchWorkspaceOnly,
         });
+  const explicitToolAllowlist = collectExplicitAllowlist([
+    profilePolicy,
+    providerProfilePolicy,
+    globalPolicy,
+    globalProviderPolicy,
+    agentPolicy,
+    agentProviderPolicy,
+    groupPolicy,
+    sandboxToolPolicy,
+    subagentPolicy,
+    options?.runtimeToolAllowlist ? { allow: options.runtimeToolAllowlist } : undefined,
+  ]);
   const tools: AnyAgentTool[] = [
     ...base,
     ...(sandboxRoot
@@ -638,18 +650,8 @@ export function createOpenClawCodingTools(options?: {
         : undefined,
       sandboxed: !!sandbox,
       config: options?.config,
-      pluginToolAllowlist: collectExplicitAllowlist([
-        profilePolicy,
-        providerProfilePolicy,
-        globalPolicy,
-        globalProviderPolicy,
-        agentPolicy,
-        agentProviderPolicy,
-        groupPolicy,
-        sandboxToolPolicy,
-        subagentPolicy,
-        options?.runtimeToolAllowlist ? { allow: options.runtimeToolAllowlist } : undefined,
-      ]),
+      toolAllowlist: explicitToolAllowlist,
+      pluginToolAllowlist: explicitToolAllowlist,
       currentChannelId: options?.currentChannelId,
       currentThreadTs: options?.currentThreadTs,
       currentMessageId: options?.currentMessageId,

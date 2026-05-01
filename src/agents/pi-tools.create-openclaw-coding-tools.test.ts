@@ -175,6 +175,7 @@ describe("createOpenClawCodingTools", () => {
 
     expect(createOpenClawToolsMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        toolAllowlist: expect.arrayContaining(["memory_search", "memory_get"]),
         pluginToolAllowlist: expect.arrayContaining(["memory_search", "memory_get"]),
       }),
     );

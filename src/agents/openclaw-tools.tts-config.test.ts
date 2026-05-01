@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => {
   return {
     stubTool,
     createCronToolOptions: vi.fn(),
+    createWebFetchTool: vi.fn(() => stubTool("web_fetch")),
+    createWebSearchTool: vi.fn(() => stubTool("web_search")),
     textToSpeech: vi.fn(async () => ({
       success: true,
       audioPath: "/tmp/openclaw/tts-config-test.opus",
@@ -113,8 +115,10 @@ vi.mock("./tools/video-generate-tool.js", () => ({
 }));
 
 vi.mock("./tools/web-tools.js", () => ({
-  createWebFetchTool: () => mocks.stubTool("web_fetch"),
-  createWebSearchTool: () => mocks.stubTool("web_search"),
+  createWebFetchTool: (...args: Parameters<typeof mocks.createWebFetchTool>) =>
+    mocks.createWebFetchTool(...args),
+  createWebSearchTool: (...args: Parameters<typeof mocks.createWebSearchTool>) =>
+    mocks.createWebSearchTool(...args),
 }));
 
 vi.mock("../tts/tts.js", () => ({
@@ -124,6 +128,8 @@ vi.mock("../tts/tts.js", () => ({
 describe("createOpenClawTools TTS config wiring", () => {
   beforeEach(() => {
     mocks.createCronToolOptions.mockClear();
+    mocks.createWebFetchTool.mockClear();
+    mocks.createWebSearchTool.mockClear();
     mocks.textToSpeech.mockClear();
   });
 
@@ -245,6 +251,30 @@ describe("createOpenClawTools TTS config wiring", () => {
     } finally {
       __testing.setDepsForTest();
     }
+  });
+
+  it("reuses prepared stable web tools for repeated warmed target construction", async () => {
+    const { createOpenClawTools } = await import("./openclaw-tools.js");
+
+    const first = createOpenClawTools({
+      agentDir: "/tmp/openclaw-agent",
+      workspaceDir: "/tmp/openclaw-workspace",
+      toolAllowlist: ["web_search", "web_fetch"],
+      disableMessageTool: true,
+      disablePluginTools: true,
+    });
+    const second = createOpenClawTools({
+      agentDir: "/tmp/openclaw-agent",
+      workspaceDir: "/tmp/openclaw-workspace",
+      toolAllowlist: ["web_search", "web_fetch"],
+      disableMessageTool: true,
+      disablePluginTools: true,
+    });
+
+    expect(first.map((tool) => tool.name)).toEqual(["web_search", "web_fetch"]);
+    expect(second.map((tool) => tool.name)).toEqual(["web_search", "web_fetch"]);
+    expect(mocks.createWebSearchTool).toHaveBeenCalledTimes(1);
+    expect(mocks.createWebFetchTool).toHaveBeenCalledTimes(1);
   });
 });
 
