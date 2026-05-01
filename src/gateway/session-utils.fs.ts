@@ -76,6 +76,11 @@ type ParsedSessionTreeEntry = SessionEntry & {
   parentId: string | null;
 };
 
+type ActiveTreeBranchResult = {
+  branch: ParsedSessionTreeEntry[];
+  reachesRoot: boolean;
+};
+
 export function attachOpenClawTranscriptMeta(
   message: unknown,
   meta: Record<string, unknown>,
@@ -207,9 +212,15 @@ export function readRecentSessionMessages(
 
       const tailTreeEntries = parseSessionTreeEntriesFromLines(lines);
       if (tailTreeEntries.length > 0) {
-        return branchEntriesToMessages(buildActiveTreeBranchFromEntries(tailTreeEntries)).slice(
-          -maxMessages,
-        );
+        const result = buildActiveTreeBranchFromEntries(tailTreeEntries);
+        const messages = branchEntriesToMessages(result.branch);
+        if (!result.reachesRoot && messages.length < maxMessages) {
+          const fullBranch = readActiveTreeBranchEntries(filePath);
+          if (fullBranch) {
+            return branchEntriesToMessages(fullBranch).slice(-maxMessages);
+          }
+        }
+        return messages.slice(-maxMessages);
       }
 
       const messages: unknown[] = [];
@@ -335,7 +346,7 @@ function parseSessionTreeEntriesFromLines(lines: string[]): ParsedSessionTreeEnt
 
 function buildActiveTreeBranchFromEntries(
   entries: ParsedSessionTreeEntry[],
-): ParsedSessionTreeEntry[] {
+): ActiveTreeBranchResult {
   const byId = new Map<string, ParsedSessionTreeEntry>();
   let leaf: ParsedSessionTreeEntry | undefined;
   for (const entry of entries) {
@@ -348,16 +359,19 @@ function buildActiveTreeBranchFromEntries(
 function buildActiveTreeBranch(
   byId: Map<string, ParsedSessionTreeEntry>,
   leaf: ParsedSessionTreeEntry | undefined,
-): ParsedSessionTreeEntry[] {
+): ActiveTreeBranchResult {
   const branch: ParsedSessionTreeEntry[] = [];
   const seen = new Set<string>();
   let current = leaf;
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
     branch.unshift(current);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
+    if (!current.parentId) {
+      return { branch, reachesRoot: true };
+    }
+    current = byId.get(current.parentId);
   }
-  return branch;
+  return { branch, reachesRoot: leaf === undefined };
 }
 
 function readActiveTreeBranchEntries(filePath: string): ParsedSessionTreeEntry[] | null {
@@ -375,7 +389,7 @@ function readActiveTreeBranchEntries(filePath: string): ParsedSessionTreeEntry[]
   } catch {
     return null;
   }
-  return buildActiveTreeBranch(byId, leaf);
+  return buildActiveTreeBranch(byId, leaf).branch;
 }
 
 function branchEntriesToMessages(entries: SessionEntry[]): unknown[] {

@@ -688,6 +688,65 @@ describe("readSessionMessages", () => {
     }
   });
 
+  test("falls back to active tree walk when metadata-only tail hides visible messages", () => {
+    const sessionId = "test-session-recent-tree-metadata-tail";
+    writeTranscript(tmpDir, sessionId, [
+      {
+        type: "session",
+        version: 3,
+        id: sessionId,
+        cwd: tmpDir,
+        timestamp: "2026-04-27T00:00:00.000Z",
+      },
+      {
+        type: "message",
+        id: "root-message",
+        parentId: null,
+        timestamp: "2026-04-27T00:00:01.000Z",
+        message: { role: "user", content: "visible root prompt" },
+      },
+      ...Array.from({ length: 50 }, (_, index) => ({
+        type: "session_info",
+        id: `session-info-${index}`,
+        parentId: index === 0 ? "root-message" : `session-info-${index - 1}`,
+        timestamp: `2026-04-27T00:00:${String(index + 2).padStart(2, "0")}.000Z`,
+        name: `Session info ${index}`,
+      })),
+    ]);
+    const openSpy = vi.spyOn(SessionManager, "open");
+
+    try {
+      const recent = readRecentSessionMessages(sessionId, storePath, undefined, {
+        maxMessages: 1,
+        maxBytes: 16 * 1024,
+        maxLines: 40,
+      });
+      expect(recent).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "visible root prompt",
+          __openclaw: expect.objectContaining({ id: "root-message", seq: 1 }),
+        }),
+      ]);
+
+      const withStats = readRecentSessionMessagesWithStats(sessionId, storePath, undefined, {
+        maxMessages: 1,
+        maxBytes: 16 * 1024,
+        maxLines: 40,
+      });
+      expect(withStats.totalMessages).toBe(1);
+      expect(withStats.messages).toEqual([
+        expect.objectContaining({
+          content: "visible root prompt",
+          __openclaw: expect.objectContaining({ id: "root-message", seq: 1 }),
+        }),
+      ]);
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
   test("resolves injected tree entries through id-bearing legacy parents", () => {
     const sessionId = "test-session-mixed-legacy-parent";
     writeTranscript(tmpDir, sessionId, [
