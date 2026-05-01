@@ -60,6 +60,15 @@ describe("docker build helper", () => {
     expect(helper).toContain("frontend grpc server closed unexpectedly");
   });
 
+  it("promotes local buildx cache after successful builds", () => {
+    const helper = readFileSync(HELPER_PATH, "utf8");
+
+    expect(helper).toContain("docker_build_promote_local_cache()");
+    expect(helper).toContain("OPENCLAW_DOCKER_BUILD_CACHE_FROM");
+    expect(helper).toContain("OPENCLAW_DOCKER_BUILD_CACHE_TO");
+    expect(helper).toContain('mv "$dest" "$src"');
+  });
+
   it("keeps shell-script Docker builds behind the helper", () => {
     for (const path of CENTRALIZED_BUILD_SCRIPTS) {
       const script = readFileSync(path, "utf8");

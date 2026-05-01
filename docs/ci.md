@@ -430,6 +430,8 @@ pnpm crabbox:stop -- <cbx_id>
 
 `.crabbox.yaml` owns provider, sync, and GitHub Actions hydration defaults. It excludes local `.git` so the hydrated Actions checkout keeps its own remote Git metadata instead of syncing maintainer-local remotes and object stores, and it excludes local runtime/build artifacts that should never be transferred. `.github/workflows/crabbox-hydrate.yml` owns checkout, Node/pnpm setup, `origin/main` fetch, and the non-secret environment handoff that later `crabbox run --id <cbx_id>` commands source.
 
+OpenClaw opts into Crabbox Docker prep through `actions.fields` in `.crabbox.yaml`. Use `aws.ami` or local `CRABBOX_AWS_AMI` for a pre-baked AWS image with Docker/buildx/Node/pnpm and heavyweight base layers already present. The hydrate workflow still verifies Docker on the runner, falls back to installing `docker.io` when the AMI is incomplete, prepares a local buildx cache under `/var/cache/crabbox`, builds the shared Docker E2E images once, and exports the matching `OPENCLAW_DOCKER_BUILD_*` / `OPENCLAW_DOCKER_E2E_*` variables to later `crabbox run` commands. Override with `pnpm crabbox:hydrate -- --id <cbx_id> -f crabbox_docker_prepare_images=false` when the run does not need Docker image warmup.
+
 ## Related
 
 - [Install overview](/install)

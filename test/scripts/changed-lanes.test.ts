@@ -320,6 +320,20 @@ describe("scripts/changed-lanes", () => {
     expect(plan.commands.map((command) => command.args[0])).not.toContain("test");
   });
 
+  it("routes Crabbox config changes to tooling instead of all lanes", () => {
+    const result = detectChangedLanes([".crabbox.yaml", "docs/ci.md"]);
+    const plan = createChangedCheckPlan(result);
+
+    expect(result.lanes).toMatchObject({
+      docs: true,
+      tooling: true,
+      all: false,
+    });
+    expect(plan.commands.map((command) => command.args[0])).toContain("lint:scripts");
+    expect(plan.commands.map((command) => command.args[0])).not.toContain("tsgo:all");
+    expect(plan.commands.map((command) => command.args[0])).not.toContain("test");
+  });
+
   it("routes live Docker ACP tooling changes through a focused gate", () => {
     const result = detectChangedLanes([
       "scripts/lib/live-docker-auth.sh",

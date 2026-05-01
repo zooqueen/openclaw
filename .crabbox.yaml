@@ -16,8 +16,14 @@ actions:
     - openclaw
   runnerVersion: latest
   ephemeral: true
+  fields:
+    - crabbox_docker_cache=true
+    - crabbox_docker_prepare_images=true
 aws:
   region: eu-west-1
+  # Set ami or CRABBOX_AWS_AMI to use a pre-baked AWS runner image with Docker,
+  # buildx, Node, pnpm, and any heavyweight base layers already present.
+  # ami: ami-...
   rootGB: 400
 sync:
   delete: true

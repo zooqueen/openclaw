@@ -25,12 +25,26 @@ on:
         required: false
         default: "90"
         type: string
+      crabbox_docker_cache:
+        description: "Prepare OpenClaw Docker/buildx cache for Crabbox runs"
+        required: false
+        default: "false"
+        type: string
+      crabbox_docker_prepare_images:
+        description: "Build shared OpenClaw Docker E2E images during hydration"
+        required: false
+        default: "false"
+        type: string
 
 permissions:
   contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  OPENCLAW_CRABBOX_DOCKER_CACHE: /var/cache/crabbox/openclaw-docker-buildx
+  OPENCLAW_CRABBOX_DOCKER_CACHE_NEXT: /var/cache/crabbox/openclaw-docker-buildx-next
+  OPENCLAW_CRABBOX_DOCKER_E2E_BARE_IMAGE: openclaw-docker-e2e-bare:crabbox
+  OPENCLAW_CRABBOX_DOCKER_E2E_FUNCTIONAL_IMAGE: openclaw-docker-e2e-functional:crabbox
 
 jobs:
   hydrate:
@@ -61,6 +75,60 @@ jobs:
           sudo ln -sf "$node_bin/npx" /usr/local/bin/npx
           sudo ln -sf "$node_bin/corepack" /usr/local/bin/corepack
           sudo ln -sf "$pnpm_bin" /usr/local/bin/pnpm
+
+      - name: Prepare Docker cache
+        if: inputs.crabbox_docker_cache == 'true' || inputs.crabbox_docker_prepare_images == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          retry() {
+            n=1
+            until "$@"; do
+              if [ "$n" -ge 5 ]; then
+                return 1
+              fi
+              sleep $((n * 5))
+              n=$((n + 1))
+            done
+          }
+
+          sudo mkdir -p "$OPENCLAW_CRABBOX_DOCKER_CACHE"
+          sudo chown -R "$(id -un):$(id -gn)" /var/cache/crabbox
+
+          if ! command -v docker >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            retry sudo apt-get update
+            retry sudo apt-get install -y --no-install-recommends docker.io
+          fi
+          sudo systemctl enable --now docker
+          if ! docker info >/dev/null 2>&1; then
+            sudo usermod -aG docker "$(id -un)" || true
+            sudo chmod 666 /var/run/docker.sock || true
+          fi
+          docker info >/dev/null
+
+          if ! docker buildx version >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            retry sudo apt-get update
+            retry sudo apt-get install -y --no-install-recommends docker-buildx || true
+          fi
+          if docker buildx version >/dev/null 2>&1; then
+            docker buildx create --name openclaw-crabbox --driver docker-container --use >/dev/null 2>&1 || docker buildx use openclaw-crabbox
+            docker buildx inspect --bootstrap >/dev/null
+          fi
+
+      - name: Build shared Docker E2E images
+        if: inputs.crabbox_docker_prepare_images == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx version >/dev/null 2>&1; then
+            export OPENCLAW_DOCKER_BUILD_USE_BUILDX=1
+            export OPENCLAW_DOCKER_BUILD_CACHE_FROM="type=local,src=${OPENCLAW_CRABBOX_DOCKER_CACHE}"
+            export OPENCLAW_DOCKER_BUILD_CACHE_TO="type=local,dest=${OPENCLAW_CRABBOX_DOCKER_CACHE_NEXT},mode=max"
+          fi
+          OPENCLAW_DOCKER_E2E_IMAGE="$OPENCLAW_CRABBOX_DOCKER_E2E_BARE_IMAGE" OPENCLAW_DOCKER_E2E_TARGET=bare pnpm test:docker:e2e-build
+          OPENCLAW_DOCKER_E2E_IMAGE="$OPENCLAW_CRABBOX_DOCKER_E2E_FUNCTIONAL_IMAGE" OPENCLAW_DOCKER_E2E_TARGET=functional pnpm test:docker:e2e-build
 
       - name: Hydrate provider env helper
         shell: bash
@@ -106,7 +174,19 @@ jobs:
             fi
           }
           {
-            for key in CI GITHUB_ACTIONS GITHUB_WORKSPACE GITHUB_REPOSITORY GITHUB_RUN_ID GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT GITHUB_REF GITHUB_REF_NAME GITHUB_SHA GITHUB_EVENT_NAME GITHUB_ACTOR RUNNER_OS RUNNER_ARCH RUNNER_TEMP RUNNER_TOOL_CACHE; do
+            if [ "${{ inputs.crabbox_docker_cache }}" = "true" ] || [ "${{ inputs.crabbox_docker_prepare_images }}" = "true" ]; then
+              export OPENCLAW_DOCKER_BUILD_ON_MISSING=1
+              if docker buildx version >/dev/null 2>&1; then
+                export OPENCLAW_DOCKER_BUILD_USE_BUILDX=1
+                export OPENCLAW_DOCKER_BUILD_CACHE_FROM="type=local,src=${OPENCLAW_CRABBOX_DOCKER_CACHE}"
+                export OPENCLAW_DOCKER_BUILD_CACHE_TO="type=local,dest=${OPENCLAW_CRABBOX_DOCKER_CACHE_NEXT},mode=max"
+              fi
+            fi
+            if [ "${{ inputs.crabbox_docker_prepare_images }}" = "true" ]; then
+              export OPENCLAW_DOCKER_E2E_BARE_IMAGE="$OPENCLAW_CRABBOX_DOCKER_E2E_BARE_IMAGE"
+              export OPENCLAW_DOCKER_E2E_FUNCTIONAL_IMAGE="$OPENCLAW_CRABBOX_DOCKER_E2E_FUNCTIONAL_IMAGE"
+            fi
+            for key in CI GITHUB_ACTIONS GITHUB_WORKSPACE GITHUB_REPOSITORY GITHUB_RUN_ID GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT GITHUB_REF GITHUB_REF_NAME GITHUB_SHA GITHUB_EVENT_NAME GITHUB_ACTOR RUNNER_OS RUNNER_ARCH RUNNER_TEMP RUNNER_TOOL_CACHE OPENCLAW_DOCKER_BUILD_ON_MISSING OPENCLAW_DOCKER_BUILD_USE_BUILDX OPENCLAW_DOCKER_BUILD_CACHE_FROM OPENCLAW_DOCKER_BUILD_CACHE_TO OPENCLAW_DOCKER_E2E_BARE_IMAGE OPENCLAW_DOCKER_E2E_FUNCTIONAL_IMAGE; do
               write_export "$key"
             done
           } > "${env_file}.tmp"
@@ -143,3 +223,9 @@ jobs:
             fi
             sleep 15
           done
+
+      - name: Summarize Docker cache
+        if: always() && (inputs.crabbox_docker_cache == 'true' || inputs.crabbox_docker_prepare_images == 'true')
+        shell: bash
+        run: |
+          docker system df || true

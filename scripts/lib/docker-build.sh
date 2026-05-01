@@ -50,6 +50,39 @@ docker_build_retry_count() {
   echo 2
 }
 
+docker_build_cache_attr() {
+  local spec="$1"
+  local key="$2"
+  local part
+  IFS=',' read -r -a parts <<<"$spec"
+  for part in "${parts[@]}"; do
+    if [[ "$part" == "$key="* ]]; then
+      printf '%s\n' "${part#*=}"
+      return 0
+    fi
+  done
+}
+
+docker_build_promote_local_cache() {
+  local cache_from="${OPENCLAW_DOCKER_BUILD_CACHE_FROM:-}"
+  local cache_to="${OPENCLAW_DOCKER_BUILD_CACHE_TO:-}"
+  if [[ "$cache_from" != type=local,* ]] || [[ "$cache_to" != type=local,* ]]; then
+    return 0
+  fi
+
+  local src
+  local dest
+  src="$(docker_build_cache_attr "$cache_from" src)"
+  dest="$(docker_build_cache_attr "$cache_to" dest)"
+  if [ -z "$src" ] || [ -z "$dest" ] || [ "$src" = "$dest" ] || [ ! -d "$dest" ]; then
+    return 0
+  fi
+
+  rm -rf "$src"
+  mkdir -p "$(dirname "$src")"
+  mv "$dest" "$src"
+}
+
 docker_build_with_retries() {
   local label="$1"
   shift
@@ -66,6 +99,7 @@ docker_build_with_retries() {
   while true; do
     log_file="$(docker_e2e_run_log "$label")"
     if "${command[@]}" >"$log_file" 2>&1; then
+      docker_build_promote_local_cache
       rm -f "$log_file"
       return 0
     fi
