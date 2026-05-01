@@ -404,28 +404,30 @@ export async function startGatewaySidecars(params: {
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_PROVIDERS);
   await measureStartup(params.startupTrace, "sidecars.channels", async () => {
     if (!skipChannels) {
-      const readiness = await measureStartup(
-        params.startupTrace,
-        "sidecars.reply-runtime-readiness",
-        () =>
-          (params.prepareReplyRuntimeForChannels ?? prepareReplyRuntimeForChannels)({
-            cfg: params.cfg,
-            workspaceDir: params.defaultWorkspaceDir,
-            startupTrace: params.startupTrace,
-          }),
-      );
-      if (readiness.status !== "ready") {
-        params.logChannels.error(
-          `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}: ${readiness.reasons.join("; ")}`,
+      try {
+        const readiness = await measureStartup(
+          params.startupTrace,
+          "sidecars.reply-runtime-readiness",
+          () =>
+            (params.prepareReplyRuntimeForChannels ?? prepareReplyRuntimeForChannels)({
+              cfg: params.cfg,
+              workspaceDir: params.defaultWorkspaceDir,
+              startupTrace: params.startupTrace,
+            }),
         );
-        throw new Error(
-          `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}`,
-        );
+        if (readiness.status !== "ready") {
+          params.logChannels.error(
+            `reply-runtime readiness degraded for ${readiness.provider}/${readiness.model}: ${readiness.reasons.join("; ")}`,
+          );
+          return;
+        }
+        await measureStartup(params.startupTrace, "sidecars.channel-start", async () => {
+          await params.startChannels();
+          markReplyCapableChannelsLive();
+        });
+      } catch (err) {
+        params.logChannels.error(`channel startup failed: ${String(err)}`);
       }
-      await measureStartup(params.startupTrace, "sidecars.channel-start", async () => {
-        await params.startChannels();
-        markReplyCapableChannelsLive();
-      });
     } else {
       params.logChannels.info(
         "skipping channel start (OPENCLAW_SKIP_CHANNELS=1 or OPENCLAW_SKIP_PROVIDERS=1)",

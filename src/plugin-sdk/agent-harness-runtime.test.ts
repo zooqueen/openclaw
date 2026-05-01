@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   classifyAgentHarnessTerminalOutcome,
+  type AgentHarnessReplyRuntimeReadinessParams,
   type AgentHarnessTerminalOutcomeClassification,
 } from "./agent-harness-runtime.js";
 
 describe("classifyAgentHarnessTerminalOutcome", () => {
+  it("exports reply-runtime readiness params for harness warmup hooks", () => {
+    expectTypeOf<AgentHarnessReplyRuntimeReadinessParams>().toMatchTypeOf<{
+      config: object;
+      agentDir: string;
+      workspaceDir: string;
+      provider: string;
+      modelId: string;
+      authProfileId?: string;
+    }>();
+  });
+
   it("does not classify an in-flight turn", () => {
     expect(
       classifyAgentHarnessTerminalOutcome({

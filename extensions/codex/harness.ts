@@ -42,13 +42,14 @@ export function createCodexAppServerAgentHarness(options?: {
           import("./src/app-server/config.js"),
           import("./src/app-server/shared-client.js"),
         ]);
-      const { requestTimeoutMs } = resolveCodexAppServerRuntimeOptions({
+      const appServer = resolveCodexAppServerRuntimeOptions({
         pluginConfig: options?.pluginConfig,
       });
       await getSharedCodexAppServerClient({
+        startOptions: appServer.start,
         agentDir: params.agentDir,
         authProfileId: params.authProfileId,
-        timeoutMs: requestTimeoutMs,
+        timeoutMs: appServer.requestTimeoutMs,
       });
     },
     runAttempt: async (params) => {

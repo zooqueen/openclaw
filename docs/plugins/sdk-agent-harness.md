@@ -63,6 +63,26 @@ Harnesses may use the plan for decisions that need to match PI behavior, but
 should still treat it as host-owned attempt state. Do not mutate it or use it to
 switch providers/models inside a turn.
 
+## Optional runtime warmup
+
+Harnesses may implement `prepareReplyRuntime(params)` when they need to warm a
+native runtime before channels start accepting reply traffic. OpenClaw calls
+this hook during gateway reply-runtime readiness checks, after provider/model
+selection and auth-profile resolution but before the first channel-triggered
+reply.
+
+Use it for additive startup work such as initializing a shared daemon client,
+probing a native app-server handshake, or validating harness-owned auth state.
+Do not use it to mutate transcripts, switch models, or start a user-visible
+turn. The hook receives:
+
+- `config`: the resolved OpenClaw config
+- `agentDir`: the default agent directory for the reply runtime
+- `workspaceDir`: the resolved workspace for runtime/plugin loading
+- `provider` and `modelId`: the selected reply model ref components
+- `authProfileId`: the resolved harness auth profile when the selected harness
+  owns auth forwarding
+
 ## Register a harness
 
 **Import:** `openclaw/plugin-sdk/agent-harness`

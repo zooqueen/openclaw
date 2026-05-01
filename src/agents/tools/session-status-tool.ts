@@ -35,6 +35,7 @@ import {
   resolveModelRefFromString,
   resolveThinkingDefault,
 } from "../model-selection.js";
+import { resolveThinkingDefaultDecision } from "../model-thinking-default.js";
 import {
   describeSessionStatusTool,
   SESSION_STATUS_TOOL_DISPLAY_SUMMARY,
@@ -578,27 +579,56 @@ export function createSessionStatusTool(opts?: {
         resolvedElevatedLevel: statusSessionEntry.elevatedLevel as ElevatedLevel | undefined,
         resolveDefaultThinkingLevel: async () => {
           const configuredCatalog = buildConfiguredModelCatalog({ cfg });
-          const configuredSelectedEntry = configuredCatalog.find(
-            (entry) => entry.provider === providerForCard && entry.id === defaultModelForCard,
-          );
-          const shouldHydrateRuntimeCatalog =
-            configuredCatalog.length === 0 ||
-            !configuredSelectedEntry ||
-            configuredSelectedEntry.reasoning === undefined;
-          const runtimeCatalog = shouldHydrateRuntimeCatalog
-            ? await loadModelCatalog({
-                config: cfg,
-                intent: "cacheOnly",
-                source: "session-status.display",
-              })
-            : undefined;
-          const runtimeSelectedEntry = runtimeCatalog?.find(
-            (entry) => entry.provider === providerForCard && entry.id === defaultModelForCard,
-          );
-          const catalog =
-            runtimeSelectedEntry || configuredCatalog.length === 0
-              ? (runtimeCatalog ?? configuredCatalog)
-              : configuredCatalog;
+          const findSelectedEntry = (catalog?: ReturnType<typeof buildConfiguredModelCatalog>) =>
+            catalog?.find(
+              (entry) => entry.provider === providerForCard && entry.id === defaultModelForCard,
+            );
+          const configuredSelectedEntry = findSelectedEntry(configuredCatalog);
+          let catalog =
+            configuredSelectedEntry?.reasoning !== undefined && configuredCatalog.length > 0
+              ? configuredCatalog
+              : undefined;
+          if (!catalog) {
+            const cachedCatalog = await loadModelCatalog({
+              config: cfg,
+              intent: "cacheOnly",
+              source: "session-status.display",
+            });
+            const cachedSelectedEntry = findSelectedEntry(cachedCatalog);
+            if (cachedSelectedEntry?.reasoning !== undefined) {
+              catalog = cachedCatalog;
+            } else {
+              const decisionCatalog = cachedCatalog.length > 0 ? cachedCatalog : configuredCatalog;
+              const decision = resolveThinkingDefaultDecision({
+                cfg,
+                provider: providerForCard,
+                model: defaultModelForCard,
+                catalog: decisionCatalog.length > 0 ? decisionCatalog : undefined,
+              });
+              if (decision.dependsOnCatalog) {
+                const runtimeCatalog = await loadModelCatalog({
+                  config: cfg,
+                  intent: "runtimeDiscovery",
+                  source: "session-status.display",
+                });
+                catalog =
+                  findSelectedEntry(runtimeCatalog) && runtimeCatalog.length > 0
+                    ? runtimeCatalog
+                    : cachedCatalog.length > 0
+                      ? cachedCatalog
+                      : configuredCatalog.length > 0
+                        ? configuredCatalog
+                        : undefined;
+              } else {
+                catalog =
+                  decisionCatalog.length > 0
+                    ? decisionCatalog
+                    : configuredCatalog.length > 0
+                      ? configuredCatalog
+                      : undefined;
+              }
+            }
+          }
           return resolveThinkingDefault({
             cfg,
             provider: providerForCard,

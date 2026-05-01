@@ -116,6 +116,12 @@ describe("codex plugin", () => {
     const harness = createCodexAppServerAgentHarness({
       pluginConfig: {
         appServer: {
+          transport: "websocket",
+          url: "wss://codex.example.test/app-server",
+          authToken: "test-auth-token",
+          headers: {
+            "x-openclaw-test": "codex-readiness",
+          },
           requestTimeoutMs: 4321,
         },
       },
@@ -131,6 +137,17 @@ describe("codex plugin", () => {
     });
 
     expect(mocks.getSharedCodexAppServerClient).toHaveBeenCalledWith({
+      startOptions: {
+        transport: "websocket",
+        command: "codex",
+        commandSource: "managed",
+        args: ["app-server", "--listen", "stdio://"],
+        url: "wss://codex.example.test/app-server",
+        authToken: "test-auth-token",
+        headers: {
+          "x-openclaw-test": "codex-readiness",
+        },
+      },
       agentDir: "/tmp/openclaw-agent-codex",
       authProfileId: "openai-codex:work",
       timeoutMs: 4321,

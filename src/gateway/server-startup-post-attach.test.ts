@@ -197,7 +197,7 @@ const { startGatewayPostAttachRuntime, startGatewaySidecars, __testing } =
   await import("./server-startup-post-attach.js");
 const { STARTUP_UNAVAILABLE_GATEWAY_METHODS } =
   await import("./server-startup-unavailable-methods.js");
-const { resetReplyRuntimeReadinessMonitorForTest } =
+const { isReplyCapableChannelsLive, resetReplyRuntimeReadinessMonitorForTest } =
   await import("./reply-runtime-readiness-monitor.js");
 
 type PostAttachParams = Parameters<typeof startGatewayPostAttachRuntime>[0];
@@ -563,6 +563,57 @@ describe("startGatewayPostAttachRuntime", () => {
           error: vi.fn(),
         };
 
+        await startGatewaySidecars({
+          cfg: {
+            hooks: { internal: { enabled: false } },
+            agents: { defaults: { model: "openai/gpt-5.4" } },
+          } as never,
+          pluginRegistry: createPostAttachParams().pluginRegistry,
+          defaultWorkspaceDir: "/tmp/openclaw-workspace",
+          deps: {} as never,
+          startChannels,
+          prepareReplyRuntimeForChannels: vi.fn(async () => ({
+            status: "degraded",
+            provider: "openai",
+            model: "gpt-5.4",
+            phases: [
+              {
+                phase: "selected-provider-auth",
+                status: "degraded",
+                durationMs: 1,
+                detail: "selected-provider-auth: missing credential",
+              },
+            ],
+            reasons: ["selected-provider-auth: missing credential"],
+          })) as never,
+          log: { warn: vi.fn() },
+          logHooks: {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+          },
+          logChannels,
+        });
+
+        expect(startChannels).not.toHaveBeenCalled();
+        expect(logChannels.error).toHaveBeenCalledWith(
+          expect.stringContaining("reply-runtime readiness degraded for openai/gpt-5.4"),
+        );
+        expect(isReplyCapableChannelsLive()).toBe(false);
+        await Promise.resolve();
+      },
+    );
+  });
+
+  it("preserves origin/main channel-start failure semantics after reply-runtime readiness passes", async () => {
+    await withEnvAsync(
+      { OPENCLAW_SKIP_CHANNELS: undefined, OPENCLAW_SKIP_PROVIDERS: undefined },
+      async () => {
+        const logChannels = {
+          info: vi.fn(),
+          error: vi.fn(),
+        };
+
         await expect(
           startGatewaySidecars({
             cfg: {
@@ -572,21 +623,9 @@ describe("startGatewayPostAttachRuntime", () => {
             pluginRegistry: createPostAttachParams().pluginRegistry,
             defaultWorkspaceDir: "/tmp/openclaw-workspace",
             deps: {} as never,
-            startChannels,
-            prepareReplyRuntimeForChannels: vi.fn(async () => ({
-              status: "degraded",
-              provider: "openai",
-              model: "gpt-5.4",
-              phases: [
-                {
-                  phase: "selected-provider-auth",
-                  status: "degraded",
-                  durationMs: 1,
-                  detail: "selected-provider-auth: missing credential",
-                },
-              ],
-              reasons: ["selected-provider-auth: missing credential"],
-            })) as never,
+            startChannels: vi.fn(async () => {
+              throw new Error("boom");
+            }),
             log: { warn: vi.fn() },
             logHooks: {
               info: vi.fn(),
@@ -595,13 +634,10 @@ describe("startGatewayPostAttachRuntime", () => {
             },
             logChannels,
           }),
-        ).rejects.toThrow(/reply-runtime readiness degraded/);
+        ).resolves.toEqual({ pluginServices: null });
 
-        expect(startChannels).not.toHaveBeenCalled();
-        expect(logChannels.error).toHaveBeenCalledWith(
-          expect.stringContaining("reply-runtime readiness degraded for openai/gpt-5.4"),
-        );
-        await Promise.resolve();
+        expect(logChannels.error).toHaveBeenCalledWith("channel startup failed: Error: boom");
+        expect(isReplyCapableChannelsLive()).toBe(false);
       },
     );
   });

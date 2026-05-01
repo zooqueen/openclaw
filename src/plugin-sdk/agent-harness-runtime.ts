@@ -17,6 +17,7 @@ export type {
   AgentHarnessCompactParams,
   AgentHarnessCompactResult,
   AgentHarnessDeliveryDefaults,
+  AgentHarnessReplyRuntimeReadinessParams,
   AgentHarnessResultClassification,
   AgentHarnessResetParams,
   AgentHarnessSupport,
