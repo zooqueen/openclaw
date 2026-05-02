@@ -127,8 +127,6 @@ describe("probeGatewayStatus", () => {
       timeoutMs: 1000,
       mode: "backend",
       clientName: "gateway-client",
-      deviceIdentity: null,
-      allowUnauthenticatedLoopbackUrlOverride: true,
       configPath: "/tmp/openclaw-daemon/openclaw.json",
     });
   });
@@ -174,8 +172,50 @@ describe("probeGatewayStatus", () => {
       timeoutMs: 1000,
       mode: "backend",
       clientName: "gateway-client",
-      deviceIdentity: null,
-      allowUnauthenticatedLoopbackUrlOverride: true,
+    });
+  });
+
+  it("uses paired-device auth for authenticated local loopback status RPC fallback", async () => {
+    callGatewayMock.mockReset();
+    probeGatewayMock.mockReset();
+    probeGatewayMock.mockResolvedValueOnce({
+      ok: false,
+      error: "timeout",
+      close: null,
+      auth: {
+        role: "operator",
+        scopes: ["operator.read"],
+        capability: "read_only",
+      },
+    });
+    callGatewayMock.mockResolvedValueOnce({ status: "ok" });
+
+    const result = await probeGatewayStatus({
+      url: "ws://127.0.0.1:19191",
+      timeoutMs: 5_000,
+      json: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      kind: "connect",
+      capability: "read_only",
+      auth: {
+        role: "operator",
+        scopes: ["operator.read"],
+        capability: "read_only",
+      },
+    });
+    expect(callGatewayMock).toHaveBeenCalledWith({
+      url: "ws://127.0.0.1:19191",
+      token: undefined,
+      password: undefined,
+      tlsFingerprint: undefined,
+      method: "status",
+      timeoutMs: 1000,
+      mode: "backend",
+      clientName: "gateway-client",
+      allowDeviceIdentityLoopbackUrlOverride: true,
     });
   });
 

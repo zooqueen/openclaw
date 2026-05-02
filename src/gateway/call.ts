@@ -71,6 +71,12 @@ type CallGatewayBaseOptions = {
    */
   allowUnauthenticatedLoopbackUrlOverride?: boolean;
   /**
+   * Internal status/probe escape hatch for local loopback URLs only.
+   * Requires no resolved shared credentials and leaves device identity enabled,
+   * so URL overrides cannot inherit token/password auth.
+   */
+  allowDeviceIdentityLoopbackUrlOverride?: boolean;
+  /**
    * Overrides the config path shown in connection error details.
    * Does not affect config loading; callers still control auth via opts.token/password/env/config.
    */
@@ -317,6 +323,7 @@ export function ensureExplicitGatewayAuth(params: {
   explicitAuth?: ExplicitGatewayAuth;
   resolvedAuth?: ExplicitGatewayAuth;
   allowUnauthenticatedLoopbackUrlOverride?: boolean;
+  allowDeviceIdentityLoopbackUrlOverride?: boolean;
   errorHint: string;
   configPath?: string;
 }): void {
@@ -336,7 +343,8 @@ export function ensureExplicitGatewayAuth(params: {
     explicitToken ||
     explicitPassword;
   if (
-    params.allowUnauthenticatedLoopbackUrlOverride === true &&
+    (params.allowUnauthenticatedLoopbackUrlOverride === true ||
+      params.allowDeviceIdentityLoopbackUrlOverride === true) &&
     params.urlOverrideSource === "cli" &&
     !hasResolvedAuth &&
     isLoopbackGatewayUrl(params.urlOverride)
@@ -757,6 +765,8 @@ async function callGatewayWithScopes<T = Record<string, unknown>>(
     resolvedAuth: resolvedCredentials,
     allowUnauthenticatedLoopbackUrlOverride:
       opts.allowUnauthenticatedLoopbackUrlOverride === true && opts.deviceIdentity === null,
+    allowDeviceIdentityLoopbackUrlOverride:
+      opts.allowDeviceIdentityLoopbackUrlOverride === true && opts.deviceIdentity === undefined,
     errorHint: "Fix: pass --token or --password (or gatewayToken in tools).",
     configPath: context.configPath,
   });

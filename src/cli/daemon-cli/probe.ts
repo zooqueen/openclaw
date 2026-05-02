@@ -1,4 +1,7 @@
-import { applyLocalStatusRpcFallback } from "../../commands/gateway-status/local-status-rpc-fallback.js";
+import {
+  applyLocalStatusRpcFallback,
+  shouldUseDeviceIdentityForLocalStatusRpcFallback,
+} from "../../commands/gateway-status/local-status-rpc-fallback.js";
 import type { OpenClawConfig } from "../../config/types.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
@@ -76,10 +79,15 @@ export async function probeGatewayStatus(opts: {
           return { ok: true as const, authProbe };
         }
         const initialProbe = await probeGateway(probeOpts);
+        const hasSharedCredentials = Boolean(opts.token || opts.password);
+        const useDeviceIdentityFallback =
+          !hasSharedCredentials && shouldUseDeviceIdentityForLocalStatusRpcFallback(initialProbe);
         const fallbackProbe = await applyLocalStatusRpcFallback({
           gatewayMode: "local",
           gatewayUrl: opts.url,
           gatewayProbe: initialProbe,
+          hasSharedCredentials,
+          allowSharedCredentials: hasSharedCredentials,
           callStatus: async () => {
             const { callGateway } = await import("../../gateway/call.js");
             return await callGateway({
@@ -91,8 +99,14 @@ export async function probeGatewayStatus(opts: {
               timeoutMs: Math.min(1000, opts.timeoutMs),
               mode: "backend",
               clientName: "gateway-client",
-              deviceIdentity: null,
-              allowUnauthenticatedLoopbackUrlOverride: true,
+              ...(useDeviceIdentityFallback
+                ? { allowDeviceIdentityLoopbackUrlOverride: true }
+                : hasSharedCredentials
+                  ? {}
+                  : {
+                      deviceIdentity: null,
+                      allowUnauthenticatedLoopbackUrlOverride: true,
+                    }),
               ...(opts.configPath ? { configPath: opts.configPath } : {}),
             });
           },

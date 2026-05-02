@@ -1294,6 +1294,32 @@ describe("callGateway url override auth requirements", () => {
     expect(lastClientOptions?.password).toBeUndefined();
   });
 
+  it("allows an internal device-auth loopback override without shared credentials", async () => {
+    getRuntimeConfig.mockReturnValue({
+      gateway: {
+        mode: "local",
+        auth: { mode: "token", token: "local-token" },
+      },
+    });
+
+    await callGateway({
+      method: "status",
+      url: "ws://127.0.0.1:18789",
+      mode: "backend",
+      clientName: "gateway-client",
+      allowDeviceIdentityLoopbackUrlOverride: true,
+    });
+
+    expect(lastClientOptions).toMatchObject({
+      url: "ws://127.0.0.1:18789",
+      mode: "backend",
+      clientName: "gateway-client",
+      deviceIdentity: deviceIdentityState.value,
+    });
+    expect(lastClientOptions?.token).toBeUndefined();
+    expect(lastClientOptions?.password).toBeUndefined();
+  });
+
   it("rejects the internal loopback override when device identity is not disabled", async () => {
     getRuntimeConfig.mockReturnValue({ gateway: { mode: "local" } });
 

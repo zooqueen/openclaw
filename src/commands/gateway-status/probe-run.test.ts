@@ -131,8 +131,6 @@ describe("runGatewayStatusProbePass", () => {
         method: "status",
         mode: "backend",
         clientName: "gateway-client",
-        deviceIdentity: null,
-        allowUnauthenticatedLoopbackUrlOverride: true,
       }),
     );
     expect(result.probed[0]?.probe).toMatchObject({
@@ -196,6 +194,120 @@ describe("runGatewayStatusProbePass", () => {
       error: "timeout",
       status: { sessions: 1 },
       auth: { capability: "read_only" },
+    });
+  });
+
+  it("uses paired-device auth for authenticated explicit loopback status RPC fallback", async () => {
+    mocks.probeGateway.mockResolvedValueOnce({
+      ok: false,
+      url: "ws://127.0.0.1:18789",
+      connectLatencyMs: null,
+      error: "timeout",
+      close: null,
+      auth: {
+        role: "operator",
+        scopes: ["operator.read"],
+        capability: "read_only",
+      },
+      health: null,
+      status: null,
+      presence: null,
+      configSnapshot: null,
+    });
+    mocks.callGateway.mockResolvedValueOnce({ sessions: 1 });
+
+    const result = await runGatewayStatusProbePass({
+      cfg: {},
+      opts: {},
+      overallTimeoutMs: 8_000,
+      discoveryTimeoutMs: 10,
+      baseTargets: [
+        {
+          id: "explicit",
+          kind: "explicit",
+          url: "ws://127.0.0.1:18789",
+          active: true,
+        },
+      ],
+      remotePort: 18789,
+      sshTarget: null,
+      sshIdentity: null,
+      loadSshTunnelModule: vi.fn(),
+    });
+
+    expect(mocks.callGateway).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws://127.0.0.1:18789",
+        token: undefined,
+        password: undefined,
+        method: "status",
+        mode: "backend",
+        clientName: "gateway-client",
+        allowDeviceIdentityLoopbackUrlOverride: true,
+      }),
+    );
+    expect(mocks.callGateway.mock.calls[0]?.[0]).not.toHaveProperty("deviceIdentity");
+    expect(mocks.callGateway.mock.calls[0]?.[0]).not.toHaveProperty(
+      "allowUnauthenticatedLoopbackUrlOverride",
+    );
+    expect(result.probed[0]?.probe).toMatchObject({
+      ok: true,
+      error: "timeout",
+      status: { sessions: 1 },
+      auth: { capability: "read_only" },
+    });
+  });
+
+  it("does not send configured credentials to explicit loopback status RPC fallback", async () => {
+    mocks.probeGateway.mockResolvedValueOnce({
+      ok: false,
+      url: "ws://127.0.0.1:18789",
+      connectLatencyMs: null,
+      error: "timeout",
+      close: null,
+      auth: {
+        role: null,
+        scopes: [],
+        capability: "unknown",
+      },
+      health: null,
+      status: null,
+      presence: null,
+      configSnapshot: null,
+    });
+
+    const result = await runGatewayStatusProbePass({
+      cfg: { gateway: { mode: "local", auth: { mode: "token", token: "cfg-token" } } },
+      opts: {},
+      overallTimeoutMs: 8_000,
+      discoveryTimeoutMs: 10,
+      baseTargets: [
+        {
+          id: "explicit",
+          kind: "explicit",
+          url: "ws://127.0.0.1:18789",
+          active: true,
+        },
+      ],
+      remotePort: 18789,
+      sshTarget: null,
+      sshIdentity: null,
+      loadSshTunnelModule: vi.fn(),
+    });
+
+    expect(mocks.probeGateway).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: {
+          token: "cfg-token",
+          password: undefined,
+        },
+      }),
+    );
+    expect(mocks.callGateway).not.toHaveBeenCalled();
+    expect(result.probed[0]?.probe).toMatchObject({
+      ok: false,
+      error: "timeout",
+      auth: { capability: "unknown" },
     });
   });
 

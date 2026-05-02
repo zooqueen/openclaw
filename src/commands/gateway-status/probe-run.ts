@@ -16,7 +16,11 @@ import {
   type GatewayConfigSummary,
   type GatewayStatusTarget,
 } from "./helpers.js";
-import { applyLocalStatusRpcFallback, isLoopbackGatewayUrl } from "./local-status-rpc-fallback.js";
+import {
+  applyLocalStatusRpcFallback,
+  isLoopbackGatewayUrl,
+  shouldUseDeviceIdentityForLocalStatusRpcFallback,
+} from "./local-status-rpc-fallback.js";
 
 export type GatewayStatusProbedTarget = {
   target: GatewayStatusTarget;
@@ -128,12 +132,18 @@ export async function runGatewayStatusProbePass(params: {
   try {
     const probed = await Promise.all(
       targets.map(async (target) => {
+        const tokenOverride = readStringValue(params.opts.token);
+        const passwordOverride = readStringValue(params.opts.password);
         const authResolution = await resolveAuthForTarget(params.cfg, target, {
-          token: readStringValue(params.opts.token),
-          password: readStringValue(params.opts.password),
+          token: tokenOverride,
+          password: passwordOverride,
         });
         const probeBudgetMs = resolveProbeBudgetMs(params.overallTimeoutMs, target);
         const fallbackGatewayMode = supportsLocalStatusRpcFallback(target) ? "local" : "remote";
+        const hasSharedCredentials = Boolean(authResolution.token || authResolution.password);
+        const sharedCredentialsAreExplicit = Boolean(tokenOverride || passwordOverride);
+        const allowSharedCredentials =
+          target.kind === "localLoopback" || sharedCredentialsAreExplicit;
         const initialProbe = await probeGateway({
           url: target.url,
           auth: {
@@ -151,6 +161,8 @@ export async function runGatewayStatusProbePass(params: {
           gatewayMode: fallbackGatewayMode,
           gatewayUrl: target.url,
           gatewayProbe: initialProbe,
+          hasSharedCredentials,
+          allowSharedCredentials,
           callStatus: async () =>
             await callGateway({
               config: params.cfg,
@@ -165,8 +177,15 @@ export async function runGatewayStatusProbePass(params: {
               timeoutMs: Math.min(1000, probeBudgetMs),
               mode: "backend",
               clientName: "gateway-client",
-              deviceIdentity: null,
-              allowUnauthenticatedLoopbackUrlOverride: true,
+              ...(!hasSharedCredentials &&
+              shouldUseDeviceIdentityForLocalStatusRpcFallback(initialProbe)
+                ? { allowDeviceIdentityLoopbackUrlOverride: true }
+                : hasSharedCredentials
+                  ? {}
+                  : {
+                      deviceIdentity: null,
+                      allowUnauthenticatedLoopbackUrlOverride: true,
+                    }),
             }),
         });
         const probe = fallbackProbe ?? initialProbe;
