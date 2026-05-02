@@ -23,6 +23,11 @@ const isSourceCheckoutRoot = vi.hoisted(() => vi.fn((_packageRoot: string) => fa
 const pruneUnknownBundledRuntimeDepsRoots = vi.hoisted(() =>
   vi.fn((_params: unknown) => ({ scanned: 0, removed: 0, skippedLocked: 0 })),
 );
+const resolveBundledRuntimeDependencyPackageRoot = vi.hoisted(() =>
+  vi.fn((pluginRoot: string) =>
+    pluginRoot.includes("/dist-runtime/extensions/") ? "/app" : "/package",
+  ),
+);
 const repairBundledRuntimeDepsPackagePlanAsync = vi.hoisted(() =>
   vi.fn(async (_params: unknown) => ({ repairedSpecs: ["grammy@1.37.0"] })),
 );
@@ -142,6 +147,8 @@ vi.mock("../plugins/bundled-runtime-deps-roots.js", () => ({
   isSourceCheckoutRoot: (packageRoot: string) => isSourceCheckoutRoot(packageRoot),
   pruneUnknownBundledRuntimeDepsRoots: (params: unknown) =>
     pruneUnknownBundledRuntimeDepsRoots(params),
+  resolveBundledRuntimeDependencyPackageRoot: (pluginRoot: string) =>
+    resolveBundledRuntimeDependencyPackageRoot(pluginRoot),
 }));
 
 vi.mock("../plugins/bundled-runtime-deps-jiti-aliases.js", () => ({
@@ -200,6 +207,11 @@ describe("prepareGatewayPluginBootstrap runtime-deps staging", () => {
     prepareBundledPluginRuntimeLoadRoot.mockReset().mockImplementation((params: unknown) => params);
     registerBundledRuntimeDependencyJitiAliases.mockClear();
     isSourceCheckoutRoot.mockClear().mockReturnValue(false);
+    resolveBundledRuntimeDependencyPackageRoot
+      .mockClear()
+      .mockImplementation((pluginRoot: string) =>
+        pluginRoot.includes("/dist-runtime/extensions/") ? "/app" : "/package",
+      );
     pruneUnknownBundledRuntimeDepsRoots.mockClear().mockReturnValue({
       scanned: 0,
       removed: 0,
@@ -310,6 +322,51 @@ describe("prepareGatewayPluginBootstrap runtime-deps staging", () => {
     );
   });
 
+  it("pre-stages deps against the runtime plugin package root when it differs from the source tree", async () => {
+    const runtimeRegistry: PluginManifestRegistry = {
+      ...pluginManifestRegistry,
+      plugins: [
+        {
+          ...pluginManifestRegistry.plugins[0]!,
+          rootDir: "/app/dist-runtime/extensions/telegram",
+          source: "/app/dist-runtime/extensions/telegram/index.js",
+          manifestPath: "/app/dist-runtime/extensions/telegram/package.json",
+        },
+      ],
+    };
+    loadPluginLookUpTable.mockReturnValueOnce({
+      manifestRegistry: runtimeRegistry,
+      startup: {
+        configuredDeferredChannelPluginIds: [],
+        pluginIds: ["telegram"],
+      },
+      metrics: pluginLookUpTableMetrics,
+    });
+    resolveOpenClawPackageRootSync.mockReturnValueOnce("/tmp/live-stage");
+    const log = createLog();
+    const { prepareGatewayPluginBootstrap } = await import("./server-startup-plugins.js");
+
+    await prepareGatewayPluginBootstrap({
+      cfgAtStart: {},
+      startupRuntimeConfig: {},
+      minimalTestGateway: false,
+      log,
+    });
+
+    expect(repairBundledRuntimeDepsPackagePlanAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packageRoot: "/app",
+        exactPluginIds: ["telegram"],
+      }),
+    );
+    expect(prepareBundledPluginRuntimeLoadRoot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginRoot: "/app/dist-runtime/extensions/telegram",
+        installMissingDeps: false,
+      }),
+    );
+  });
+
   it("allows the loader to verify already staged deps during warm gateway starts", async () => {
     repairBundledRuntimeDepsPackagePlanAsync.mockResolvedValueOnce({
       repairedSpecs: [],
@@ -339,7 +396,7 @@ describe("prepareGatewayPluginBootstrap runtime-deps staging", () => {
     repairBundledRuntimeDepsPackagePlanAsync.mockResolvedValueOnce({
       repairedSpecs: [],
     });
-    isSourceCheckoutRoot.mockReturnValueOnce(true);
+    isSourceCheckoutRoot.mockReturnValue(true);
     const log = createLog();
     const { prepareGatewayPluginBootstrap } = await import("./server-startup-plugins.js");
 

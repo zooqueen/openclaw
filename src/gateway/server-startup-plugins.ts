@@ -9,6 +9,7 @@ import { registerBundledRuntimeDependencyJitiAliases } from "../plugins/bundled-
 import {
   isSourceCheckoutRoot,
   pruneUnknownBundledRuntimeDepsRoots,
+  resolveBundledRuntimeDependencyPackageRoot,
 } from "../plugins/bundled-runtime-deps-roots.js";
 import { repairBundledRuntimeDepsPackagePlanAsync } from "../plugins/bundled-runtime-deps.js";
 import { prepareBundledPluginRuntimeLoadRoot } from "../plugins/bundled-runtime-root.js";
@@ -32,6 +33,24 @@ type GatewayPluginBootstrapLog = {
 type GatewayBundledRuntimeDepsPrestageResult = {
   repairError?: unknown;
 };
+
+function resolveGatewayBundledRuntimeDepsPackageRoot(params: {
+  fallbackPackageRoot: string;
+  manifestRegistry: PluginManifestRegistry;
+  pluginIds: readonly string[];
+}): string {
+  const pluginIdSet = new Set(params.pluginIds);
+  for (const record of params.manifestRegistry.plugins) {
+    if (record.origin !== "bundled" || !pluginIdSet.has(record.id)) {
+      continue;
+    }
+    const pluginPackageRoot = resolveBundledRuntimeDependencyPackageRoot(record.rootDir);
+    if (pluginPackageRoot && !isSourceCheckoutRoot(pluginPackageRoot)) {
+      return pluginPackageRoot;
+    }
+  }
+  return params.fallbackPackageRoot;
+}
 
 export function resolveGatewayStartupMaintenanceConfig(params: {
   cfgAtStart: OpenClawConfig;
@@ -80,15 +99,21 @@ async function prestageGatewayBundledRuntimeDepsImpl(params: {
     argv1: process.argv[1],
     cwd: process.cwd(),
   });
+  let runtimeDepsPackageRoot = packageRoot ?? undefined;
   if (packageRoot) {
     try {
+      runtimeDepsPackageRoot = resolveGatewayBundledRuntimeDepsPackageRoot({
+        fallbackPackageRoot: packageRoot,
+        manifestRegistry: params.manifestRegistry,
+        pluginIds: params.pluginIds,
+      });
       pruneUnknownBundledRuntimeDepsRoots({
         env: process.env,
         warn: (message) => params.log.warn(message),
       });
       const startedAt = Date.now();
       const result = await repairBundledRuntimeDepsPackagePlanAsync({
-        packageRoot,
+        packageRoot: runtimeDepsPackageRoot,
         config: params.cfg,
         exactPluginIds: params.pluginIds,
         env: process.env,
@@ -113,7 +138,7 @@ async function prestageGatewayBundledRuntimeDepsImpl(params: {
   }
   prestageGatewayBundledRuntimeMirrors({
     ...params,
-    ...(packageRoot ? { packageRoot } : {}),
+    ...(runtimeDepsPackageRoot ? { packageRoot: runtimeDepsPackageRoot } : {}),
     previousRepairError: repairError,
   });
   return repairError === undefined ? {} : { repairError };
