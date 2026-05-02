@@ -2033,6 +2033,7 @@ describe("createBundledRuntimeDepsPackagePlan config policy", () => {
     expect(result.repairedSpecs).toEqual(["alpha-runtime@1.0.0"]);
     expect(calls).toHaveLength(1);
     expect(fs.lstatSync(path.join(installRoot, "node_modules")).isSymbolicLink()).toBe(false);
+    expect(fs.existsSync(previousRoot)).toBe(false);
   });
 
   it("reads each bundled plugin manifest once per runtime-deps scan", () => {

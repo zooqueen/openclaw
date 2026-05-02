@@ -330,8 +330,8 @@ export function pruneSiblingExternalBundledRuntimeDepsRoots(params: {
   warn?: (message: string) => void;
 }): { scanned: number; removed: number; skippedLocked: number } {
   const installRoot = path.resolve(params.installRoot);
-  const installRootHash = readPackageKeyPathHash(path.basename(installRoot));
-  if (!installRootHash) {
+  const installRootName = path.basename(installRoot);
+  if (!readPackageKeyPathHash(installRootName)) {
     return { scanned: 0, removed: 0, skippedLocked: 0 };
   }
   const parentDir = path.dirname(installRoot);
@@ -350,12 +350,12 @@ export function pruneSiblingExternalBundledRuntimeDepsRoots(params: {
     if (
       !entry.isDirectory() ||
       !entry.name.startsWith("openclaw-") ||
-      readPackageKeyPathHash(entry.name) !== installRootHash
+      !isHashedBundledRuntimeDepsRootName(entry.name)
     ) {
       continue;
     }
     const root = path.join(parentDir, entry.name);
-    if (path.resolve(root) === installRoot) {
+    if (entry.name === installRootName || path.resolve(root) === installRoot) {
       continue;
     }
     scanned += 1;
@@ -377,6 +377,10 @@ export function pruneSiblingExternalBundledRuntimeDepsRoots(params: {
 
 function readPackageKeyPathHash(packageKey: string): string | null {
   return PACKAGE_KEY_PATH_HASH_RE.exec(packageKey)?.[1] ?? null;
+}
+
+function isHashedBundledRuntimeDepsRootName(name: string): boolean {
+  return readPackageKeyPathHash(name) !== null;
 }
 
 function resolveExternalBundledRuntimeDepsInstallRoots(params: {
