@@ -14,6 +14,7 @@ import { maybeRepairExecSafeBinProfiles } from "./shared/exec-safe-bins.js";
 import { maybeRepairInvalidPluginConfig } from "./shared/invalid-plugin-config.js";
 import { maybeRepairLegacyToolsBySenderKeys } from "./shared/legacy-tools-by-sender.js";
 import { maybeRepairOpenPolicyAllowFrom } from "./shared/open-policy-allowfrom.js";
+import { cleanupLegacyPluginDependencyState } from "./shared/plugin-dependency-cleanup.js";
 import { maybeRepairStalePluginConfig } from "./shared/stale-plugin-config.js";
 
 export async function runDoctorRepairSequence(params: {
@@ -72,6 +73,13 @@ export async function runDoctorRepairSequence(params: {
 
   applyMutation(maybeRepairLegacyToolsBySenderKeys(state.candidate));
   applyMutation(maybeRepairExecSafeBinProfiles(state.candidate));
+  const pluginDependencyCleanup = await cleanupLegacyPluginDependencyState({ env });
+  if (pluginDependencyCleanup.changes.length > 0) {
+    changeNotes.push(sanitizeLines(pluginDependencyCleanup.changes));
+  }
+  if (pluginDependencyCleanup.warnings.length > 0) {
+    warningNotes.push(sanitizeLines(pluginDependencyCleanup.warnings));
+  }
 
   return { state, changeNotes, warningNotes };
 }

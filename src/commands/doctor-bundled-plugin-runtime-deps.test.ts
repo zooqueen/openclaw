@@ -518,6 +518,30 @@ describe("doctor bundled plugin runtime deps", () => {
     expect(installed).toEqual([]);
   });
 
+  it("prunes stale runtime deps roots during doctor repair even when deps are complete", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-bundled-"));
+    const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-runtime-deps-"));
+    writeJson(path.join(root, "package.json"), { name: "openclaw", version: "2026.4.30" });
+    const legacyDirect = path.join(stageDir, "discord");
+    const legacyVersioned = path.join(stageDir, "openclaw-2026.4.25-discord");
+    const currentRoot = path.join(stageDir, "openclaw-2026.4.30-abcdef123456");
+    writeJson(path.join(legacyDirect, ".openclaw-runtime-deps-stamp.json"), { stale: true });
+    writeJson(path.join(legacyVersioned, ".openclaw-runtime-deps-stamp.json"), { stale: true });
+    writeJson(path.join(currentRoot, ".openclaw-runtime-deps-stamp.json"), { current: true });
+
+    await maybeRepairBundledPluginRuntimeDeps({
+      runtime: createRuntime(),
+      prompter: createNonInteractiveRepairPrompter(),
+      packageRoot: root,
+      env: { OPENCLAW_PLUGIN_STAGE_DIR: stageDir },
+      config: { plugins: { enabled: true } },
+    });
+
+    expect(fs.existsSync(legacyDirect)).toBe(false);
+    expect(fs.existsSync(legacyVersioned)).toBe(false);
+    expect(fs.existsSync(currentRoot)).toBe(true);
+  });
+
   it("does not repair missing runtime deps during plain non-interactive doctor", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-bundled-"));
     writeJson(path.join(root, "package.json"), { name: "openclaw" });

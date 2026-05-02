@@ -2,6 +2,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
 import type { BundledRuntimeDepsInstallParams } from "../plugins/bundled-runtime-deps-install.js";
+import { pruneUnknownBundledRuntimeDepsRoots } from "../plugins/bundled-runtime-deps-roots.js";
 import {
   createBundledRuntimeDepsPackagePlan,
   repairBundledRuntimeDepsPackagePlanAsync,
@@ -50,6 +51,12 @@ export async function maybeRepairBundledPluginRuntimeDeps(params: {
   }
 
   const env = params.env ?? process.env;
+  if (params.prompter.shouldRepair) {
+    pruneUnknownBundledRuntimeDepsRoots({
+      env,
+      warn: (message) => logRuntimeDepsInstallProgress(params.runtime, message),
+    });
+  }
   const plan = createBundledRuntimeDepsPackagePlan({
     packageRoot,
     config: params.config,

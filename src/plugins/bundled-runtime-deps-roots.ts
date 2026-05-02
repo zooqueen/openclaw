@@ -216,8 +216,17 @@ export function pruneUnknownBundledRuntimeDepsRoots(
       )
       .map((entry) => path.join(baseDir, entry.name))
       .toSorted((left, right) => left.localeCompare(right));
+    const legacyDirectRoots = entries
+      .filter(
+        (entry) =>
+          (entry.isDirectory() || entry.isSymbolicLink()) &&
+          isLegacyDirectBundledRuntimeDepsRoot(path.join(baseDir, entry.name), entry.name),
+      )
+      .map((entry) => path.join(baseDir, entry.name))
+      .toSorted((left, right) => left.localeCompare(right));
     scanned += unknownRoots.length;
     scanned += legacyVersionedRoots.length;
+    scanned += legacyDirectRoots.length;
 
     for (const [index, entry] of unknownRoots.entries()) {
       const ageMs = nowMs - entry.mtimeMs;
@@ -230,6 +239,10 @@ export function pruneUnknownBundledRuntimeDepsRoots(
     for (const root of legacyVersionedRoots) {
       removeRoot(root);
     }
+
+    for (const root of legacyDirectRoots) {
+      removeRoot(root);
+    }
   }
 
   return { scanned, removed, skippedLocked };
@@ -240,6 +253,16 @@ function isLegacyVersionedBundledRuntimeDepsRootName(name: string): boolean {
     name.startsWith("openclaw-") &&
     readPackageKeyPathHash(name) === null &&
     LEGACY_VERSIONED_RUNTIME_DEPS_ROOT_RE.test(name)
+  );
+}
+
+function isLegacyDirectBundledRuntimeDepsRoot(root: string, name: string): boolean {
+  return (
+    !name.startsWith(".") &&
+    !name.startsWith("openclaw-") &&
+    (fs.existsSync(path.join(root, ".openclaw-runtime-deps.json")) ||
+      fs.existsSync(path.join(root, ".openclaw-runtime-deps-stamp.json")) ||
+      fs.existsSync(path.join(root, "node_modules")))
   );
 }
 

@@ -3594,6 +3594,9 @@ describe("ensureBundledPluginRuntimeDeps", () => {
     const locked = makeRoot("openclaw-unknown-locked", 120_000, true);
     const legacyVersioned = makeRoot("openclaw-2026.4.25-discord", 1_000);
     const lockedLegacyVersioned = makeRoot("openclaw-2026.4.25-telegram", 1_000, true);
+    const legacyDirect = makeRoot("discord", 1_000);
+    fs.mkdirSync(path.join(legacyDirect, "node_modules", "discord-runtime"), { recursive: true });
+    const unrelated = makeRoot("scratch", 120_000);
     const modernVersioned = makeRoot("openclaw-2026.4.25-abcdef123456", 120_000);
 
     const result = pruneUnknownBundledRuntimeDepsRoots({
@@ -3603,12 +3606,14 @@ describe("ensureBundledPluginRuntimeDeps", () => {
       minAgeMs: 60_000,
     });
 
-    expect(result).toEqual({ scanned: 5, removed: 2, skippedLocked: 2 });
+    expect(result).toEqual({ scanned: 6, removed: 3, skippedLocked: 2 });
     expect(fs.existsSync(newest)).toBe(true);
     expect(fs.existsSync(stale)).toBe(false);
     expect(fs.existsSync(locked)).toBe(true);
     expect(fs.existsSync(legacyVersioned)).toBe(false);
     expect(fs.existsSync(lockedLegacyVersioned)).toBe(true);
+    expect(fs.existsSync(legacyDirect)).toBe(false);
+    expect(fs.existsSync(unrelated)).toBe(true);
     expect(fs.existsSync(modernVersioned)).toBe(true);
   });
 

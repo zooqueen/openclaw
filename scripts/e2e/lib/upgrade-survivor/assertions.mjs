@@ -6,6 +6,7 @@ const SCENARIOS = new Set([
   "base",
   "feishu-channel",
   "bootstrap-persona",
+  "plugin-deps-cleanup",
   "tilde-log-path",
   "versioned-runtime-deps",
 ]);
@@ -285,10 +286,22 @@ function assertStateSurvived() {
     fs.existsSync(path.join(stateDir, "agents", "main", "sessions", "legacy-session.json")),
     "legacy session file missing",
   );
-  assert(
-    fs.existsSync(path.join(stateDir, "plugin-runtime-deps", "discord")),
-    "plugin runtime deps root missing",
-  );
+  const stage = process.env.OPENCLAW_UPGRADE_SURVIVOR_ASSERT_STAGE || "survival";
+  const runtimeRoot = path.join(stateDir, "plugin-runtime-deps");
+  if (stage === "baseline") {
+    assert(
+      fs.existsSync(path.join(runtimeRoot, "discord")),
+      "legacy plugin runtime deps root missing before doctor cleanup",
+    );
+  } else {
+    const legacyDirectRoots = fs.existsSync(runtimeRoot)
+      ? fs.readdirSync(runtimeRoot).filter((entry) => !entry.startsWith("openclaw-"))
+      : [];
+    assert(
+      legacyDirectRoots.length === 0,
+      `legacy plugin runtime deps root survived update/doctor: ${legacyDirectRoots.join(", ")}`,
+    );
+  }
   if (scenario === "bootstrap-persona") {
     for (const [fileName, contents] of PERSONA_FILES) {
       const actual = fs.readFileSync(path.join(workspace, fileName), "utf8");
@@ -296,12 +309,10 @@ function assertStateSurvived() {
     }
   }
   if (scenario === "versioned-runtime-deps") {
-    const stage = process.env.OPENCLAW_UPGRADE_SURVIVOR_ASSERT_STAGE || "survival";
     if (stage === "baseline") {
       return;
     }
     const version = process.env.OPENCLAW_UPGRADE_SURVIVOR_BASELINE_VERSION || "2026.4.24";
-    const runtimeRoot = path.join(stateDir, "plugin-runtime-deps");
     const staleVersionedRoots = fs.existsSync(runtimeRoot)
       ? fs.readdirSync(runtimeRoot).filter((entry) => entry.startsWith(`openclaw-${version}-`))
       : [];

@@ -127,6 +127,10 @@ vi.mock("./shared/exec-safe-bins.js", () => ({
   }),
 }));
 
+vi.mock("./shared/plugin-dependency-cleanup.js", () => ({
+  cleanupLegacyPluginDependencyState: async () => ({ changes: [], warnings: [] }),
+}));
+
 describe("doctor repair sequencing", () => {
   it("applies ordered repairs and sanitizes empty-allowlist warnings", async () => {
     const result = await runDoctorRepairSequence({
