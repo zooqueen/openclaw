@@ -369,6 +369,27 @@ describe("provider-runtime", () => {
     });
   });
 
+  it("uses cached runtime-scoped provider hook loads by default", () => {
+    resolvePluginProvidersMock.mockReturnValue([
+      {
+        id: DEMO_PROVIDER_ID,
+        label: "Demo",
+        auth: [],
+      },
+    ]);
+
+    resolveProviderRuntimePlugin({ provider: DEMO_PROVIDER_ID });
+
+    expect(resolvePluginProvidersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerRefs: [DEMO_PROVIDER_ID],
+        cache: true,
+        mode: "runtime",
+        activate: false,
+      }),
+    );
+  });
+
   it("uses current provider-ref owner plugin config for provider hooks", () => {
     const provider: ProviderPlugin = {
       id: DEMO_PROVIDER_ID,

@@ -285,6 +285,29 @@ function collectReplyRuntimeWarmTargets(params: {
   return [...targets.values()];
 }
 
+function collectUniqueProviderWarmTargets(
+  warmTargets: ReadonlyArray<
+    {
+      workspaceDir: string;
+      provider: string;
+    } & Record<string, string>
+  >,
+): Array<
+  {
+    workspaceDir: string;
+    provider: string;
+  } & Record<string, string>
+> {
+  const uniqueTargets = new Map<string, (typeof warmTargets)[number]>();
+  for (const target of warmTargets) {
+    const key = `${target.workspaceDir}::${target.provider}`;
+    if (!uniqueTargets.has(key)) {
+      uniqueTargets.set(key, target);
+    }
+  }
+  return [...uniqueTargets.values()];
+}
+
 function resolvePiReplyRuntimeProfileCandidates(params: {
   cfg: OpenClawConfig;
   agentDir: string;
@@ -394,6 +417,7 @@ export async function prepareReplyRuntimeForChannels(params: {
     defaultAgentId,
     defaultWorkspaceDir: params.workspaceDir,
   });
+  const uniqueProviderWarmTargets = collectUniqueProviderWarmTargets(warmTargets);
   const warmAgents = new Map<
     string,
     { agentDir: string; workspaceDir: string; sessionKey: string }
@@ -479,9 +503,9 @@ export async function prepareReplyRuntimeForChannels(params: {
   if (
     !(await runPhase(
       "selected-provider-runtime",
-      `activated provider runtimes for ${new Set(warmTargets.map((target) => `${target.workspaceDir}::${target.provider}`)).size} workspace/provider target(s) across ${warmAgents.size} agent(s)`,
+      `activated provider runtimes for ${uniqueProviderWarmTargets.length} workspace/provider target(s) across ${warmAgents.size} agent(s)`,
       async () => {
-        for (const target of warmTargets) {
+        for (const target of uniqueProviderWarmTargets) {
           const ownerPluginIds =
             resolveOwningPluginIdsForProvider({
               provider: target.provider,
@@ -501,15 +525,6 @@ export async function prepareReplyRuntimeForChannels(params: {
           if (!plugin) {
             throw new Error(`No provider runtime resolved for ${target.provider}.`);
           }
-          resolveProviderRuntimePlugin({
-            provider: target.provider,
-            config: params.cfg,
-            workspaceDir: target.workspaceDir,
-            env: process.env,
-            applyAutoEnable: false,
-            bundledProviderAllowlistCompat: false,
-            bundledProviderVitestCompat: false,
-          });
           markReplyRuntimeProviderPrepared(target.provider);
         }
       },

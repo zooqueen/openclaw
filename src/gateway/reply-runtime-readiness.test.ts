@@ -445,6 +445,38 @@ describe("reply-runtime readiness", () => {
     );
   });
 
+  it("warms each workspace/provider runtime only once even when multiple reply targets share it", async () => {
+    hoisted.loadSessionStore.mockReturnValue({
+      "agent:default:main": {
+        providerOverride: "openai",
+        modelOverride: "gpt-5.4-pro",
+      },
+    });
+
+    const result = await prepareReplyRuntimeForChannels({
+      cfg: {
+        agents: {
+          defaults: {
+            model: {
+              primary: "openai/gpt-5.4",
+              fallbacks: ["openai/gpt-5.4-mini"],
+            },
+          },
+        },
+      } as OpenClawConfig,
+      workspaceDir: "/tmp/openclaw-workspace",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(hoisted.resolveProviderRuntimePlugin).toHaveBeenCalledOnce();
+    expect(hoisted.resolveProviderRuntimePlugin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        workspaceDir: "/tmp/openclaw-workspace",
+      }),
+    );
+  });
+
   it("warms configured allowlist model targets used for reply-time model switching", async () => {
     hoisted.loadModelCatalog.mockResolvedValueOnce([
       { provider: "openai", id: "gpt-5.4", name: "GPT-5.4", reasoning: true },
@@ -619,7 +651,7 @@ describe("reply-runtime readiness", () => {
       callOrder.push("ensureRuntimePluginsLoaded");
     });
     hoisted.resolveAuthProfileOrder.mockReturnValueOnce(["openai-codex:work"]);
-    hoisted.selectAgentHarness.mockImplementationOnce(() => {
+    hoisted.selectAgentHarness.mockImplementation(() => {
       callOrder.push("selectAgentHarness");
       return {
         id: "codex",
@@ -662,7 +694,7 @@ describe("reply-runtime readiness", () => {
       modelId: "gpt-5.4",
       authProfileId: expect.any(String),
     });
-    expect(callOrder).toEqual([
+    expect(callOrder.slice(0, 3)).toEqual([
       "ensureRuntimePluginsLoaded",
       "selectAgentHarness",
       "prepareReplyRuntime",

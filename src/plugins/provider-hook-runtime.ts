@@ -97,16 +97,21 @@ export function resolveProviderPluginsForHooks(params: {
   applyAutoEnable?: boolean;
   bundledProviderAllowlistCompat?: boolean;
   bundledProviderVitestCompat?: boolean;
+  cache?: boolean;
+  mode?: "runtime" | "setup";
 }): ProviderPlugin[] {
   const env = params.env ?? process.env;
   const workspaceDir = params.workspaceDir ?? getActivePluginRegistryWorkspaceDirFromState();
+  const cache = params.cache ?? true;
+  const mode = params.mode ?? "runtime";
   if (
     isPluginProvidersLoadInFlight({
       ...params,
       workspaceDir,
       env,
       activate: false,
-      cache: false,
+      cache,
+      mode,
       applyAutoEnable: params.applyAutoEnable,
       bundledProviderAllowlistCompat: params.bundledProviderAllowlistCompat ?? true,
       bundledProviderVitestCompat: params.bundledProviderVitestCompat ?? true,
@@ -119,7 +124,8 @@ export function resolveProviderPluginsForHooks(params: {
     workspaceDir,
     env,
     activate: false,
-    cache: false,
+    cache,
+    mode,
     applyAutoEnable: params.applyAutoEnable,
     bundledProviderAllowlistCompat: params.bundledProviderAllowlistCompat ?? true,
     bundledProviderVitestCompat: params.bundledProviderVitestCompat ?? true,
@@ -215,7 +221,9 @@ export function resolveProviderExtraParamsForTransport(params: {
   env?: NodeJS.ProcessEnv;
   context: ProviderExtraParamsForTransportContext;
 }) {
-  return resolveProviderHookPlugin(params)?.extraParamsForTransport?.(params.context) ?? undefined;
+  return (
+    resolveProviderRuntimePlugin(params)?.extraParamsForTransport?.(params.context) ?? undefined
+  );
 }
 
 export function resolveProviderAuthProfileId(params: {
