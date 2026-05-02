@@ -170,7 +170,6 @@ export function prepareBundledPluginRuntimeLoadRoot(params: {
   const cacheKey = createPreparedRuntimeLoadRootKey({ ...params, env });
   const cached = params.memoizePreparedRoot ? preparedRuntimeLoadRoots.get(cacheKey) : undefined;
   if (cached) {
-    ensureBundledRuntimeLoadRootDeps({ ...params, env });
     registerBundledRuntimeLoadRootAliases({
       pluginRoot: params.pluginRoot,
       installRoot,

@@ -602,7 +602,7 @@ describe("prepareBundledPluginRuntimeRoot", () => {
     expect(fs.readFileSync(mirrorEntry, "utf8")).toContain("v1");
   });
 
-  it("verifies runtime deps before returning a memoized prepared root", () => {
+  it("does not re-verify runtime deps before returning a memoized prepared root", () => {
     const packageRoot = makeTempRoot();
     const stageDir = makeTempRoot();
     const pluginRoot = path.join(packageRoot, "dist", "extensions", "whatsapp");
@@ -664,7 +664,7 @@ describe("prepareBundledPluginRuntimeRoot", () => {
     });
 
     expect(preparedAgain).toEqual(prepared);
-    expect(installDeps).toHaveBeenCalledTimes(2);
+    expect(installDeps).toHaveBeenCalledTimes(1);
   });
 
   it("includes earlier staging failures when verify-only runtime deps still fail", () => {
