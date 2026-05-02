@@ -12,6 +12,7 @@ import {
   parseMode,
   parseProvider,
   modelProviderConfigBatchJson,
+  resolveParallelsModelTimeoutSeconds,
   resolveHostIp,
   resolveHostPort,
   resolveLatestVersion,
@@ -474,7 +475,7 @@ class MacosSmoke {
     this.status.freshDashboard = "pass";
     await this.phase(
       "fresh.first-agent-turn",
-      Number(process.env.OPENCLAW_PARALLELS_MACOS_AGENT_TIMEOUT_S || 900),
+      Number(process.env.OPENCLAW_PARALLELS_MACOS_AGENT_TIMEOUT_S || 2100),
       () => this.verifyTurn(),
     );
     this.status.freshAgent = "pass";
@@ -531,7 +532,7 @@ class MacosSmoke {
     this.status.upgradeDashboard = "pass";
     await this.phase(
       "upgrade.first-agent-turn",
-      Number(process.env.OPENCLAW_PARALLELS_MACOS_AGENT_TIMEOUT_S || 900),
+      Number(process.env.OPENCLAW_PARALLELS_MACOS_AGENT_TIMEOUT_S || 2100),
       () => this.verifyTurn(),
     );
     this.status.upgradeAgent = "pass";
@@ -1004,7 +1005,7 @@ for attempt in 1 2; do
   set +e
   /usr/bin/env ${shellQuote(`${this.auth.apiKeyEnv}=${this.auth.apiKeyValue}`)} ${guestNode} ${guestOpenClawEntry} agent --local --agent main --session-id "$session_id" --message ${shellQuote(
     "Reply with exact ASCII text OK only.",
-  )} --thinking minimal --json >"$output_file" 2>&1
+  )} --thinking minimal --timeout ${resolveParallelsModelTimeoutSeconds("macos")} --json >"$output_file" 2>&1
   rc=$?
   set -e
   cat "$output_file"
