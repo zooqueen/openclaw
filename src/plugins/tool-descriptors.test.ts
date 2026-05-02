@@ -29,6 +29,12 @@ function pluginRecord(
           annotations: {
             readOnlyHint: true,
           },
+          availability: {
+            anyOf: [
+              { kind: "env", name: "EXAMPLE_API_KEY" },
+              { kind: "context", key: "agent.example.enabled", equals: true },
+            ],
+          },
           sortKey: "search.example",
         },
       },
@@ -55,15 +61,24 @@ describe("plugin manifest tool descriptors", () => {
         },
         owner: { kind: "plugin", pluginId: "example" },
         executor: { kind: "plugin", pluginId: "example", toolName: "example_search" },
+        availability: {
+          anyOf: [
+            { kind: "env", name: "EXAMPLE_API_KEY" },
+            { kind: "context", key: "agent.example.enabled", equals: true },
+          ],
+        },
         annotations: {
           readOnlyHint: true,
         },
         sortKey: "search.example",
       },
     ]);
-    expect(buildToolPlan({ descriptors }).visible.map((entry) => entry.descriptor.name)).toEqual([
-      "example_search",
-    ]);
+    expect(
+      buildToolPlan({
+        descriptors,
+        availability: { env: { EXAMPLE_API_KEY: "test-key" } },
+      }).visible.map((entry) => entry.descriptor.name),
+    ).toEqual(["example_search"]);
   });
 
   it("reports declared plugin tools without complete static descriptors", () => {

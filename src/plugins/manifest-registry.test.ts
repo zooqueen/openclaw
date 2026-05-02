@@ -1485,6 +1485,40 @@ describe("loadPluginManifestRegistry", () => {
     });
   });
 
+  it("fails closed for malformed static tool descriptor availability", () => {
+    const dir = makeTempDir();
+    writeManifest(dir, {
+      id: "tool-owner",
+      contracts: {
+        tools: ["tool_run"],
+      },
+      toolMetadata: {
+        tool_run: {
+          descriptor: {
+            description: "Run the tool.",
+            inputSchema: {
+              type: "object",
+            },
+            availability: {
+              allOf: [{ kind: "context", key: "" }],
+            },
+          },
+        },
+      },
+      configSchema: { type: "object" },
+    });
+
+    const registry = loadSingleCandidateRegistry({
+      idHint: "tool-owner",
+      rootDir: dir,
+      origin: "bundled",
+    });
+
+    expect(registry.plugins[0]?.toolMetadata?.tool_run?.descriptor?.availability).toEqual({
+      allOf: [],
+    });
+  });
+
   it("preserves external auth provider contracts from plugin manifests", () => {
     const dir = makeTempDir();
     writeManifest(dir, {

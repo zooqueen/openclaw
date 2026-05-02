@@ -30,6 +30,9 @@ export function listPluginManifestToolDescriptors(
         : {}),
       owner: { kind: "plugin", pluginId: plugin.id },
       executor: { kind: "plugin", pluginId: plugin.id, toolName },
+      ...(metadata.descriptor.availability
+        ? { availability: metadata.descriptor.availability }
+        : {}),
       ...(metadata.descriptor.annotations
         ? { annotations: asToolJsonObject(metadata.descriptor.annotations) }
         : {}),

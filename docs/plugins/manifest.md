@@ -312,6 +312,19 @@ tool from this static metadata without importing the plugin runtime.
             }
           },
           "required": ["query"]
+        },
+        "availability": {
+          "anyOf": [
+            {
+              "kind": "env",
+              "name": "EXAMPLE_API_KEY"
+            },
+            {
+              "kind": "context",
+              "key": "agent.example.enabled",
+              "equals": true
+            }
+          ]
         }
       },
       "authSignals": [
@@ -333,14 +346,15 @@ tool from this static metadata without importing the plugin runtime.
 
 Each `descriptor` supports:
 
-| Field          | Required | Type     | What it means                                                                                |
-| -------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
-| `description`  | Yes      | `string` | Static model-facing tool description.                                                        |
-| `inputSchema`  | Yes      | `object` | Static JSON Schema for tool input. Keep provider-sensitive schema normalization in adapters. |
-| `title`        | No       | `string` | Short human-facing tool title.                                                               |
-| `outputSchema` | No       | `object` | Static JSON Schema for structured tool output when available.                                |
-| `annotations`  | No       | `object` | Static protocol/display hints such as read-only or destructive-behavior annotations.         |
-| `sortKey`      | No       | `string` | Stable ordering key when the default tool-name ordering is not the desired descriptor order. |
+| Field          | Required | Type     | What it means                                                                                                                                                                                 |
+| -------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`  | Yes      | `string` | Static model-facing tool description.                                                                                                                                                         |
+| `inputSchema`  | Yes      | `object` | Static JSON Schema for tool input. Keep provider-sensitive schema normalization in adapters.                                                                                                  |
+| `title`        | No       | `string` | Short human-facing tool title.                                                                                                                                                                |
+| `outputSchema` | No       | `object` | Static JSON Schema for structured tool output when available.                                                                                                                                 |
+| `annotations`  | No       | `object` | Static protocol/display hints such as read-only or destructive-behavior annotations.                                                                                                          |
+| `availability` | No       | `object` | Static visibility expression evaluated from request facts, env, auth evidence, plugin enablement, and config. Omit it for always-visible tools that pass `toolMetadata` auth/config evidence. |
+| `sortKey`      | No       | `string` | Stable ordering key when the default tool-name ordering is not the desired descriptor order.                                                                                                  |
 
 Runtime `api.registerTool(...)` binds executable behavior for declared tools.
 It should not be the source of static descriptions, schemas, or ownership.

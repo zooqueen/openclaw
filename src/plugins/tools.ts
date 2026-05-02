@@ -2,7 +2,7 @@ import { normalizeToolName } from "../agents/tool-policy.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { buildToolPlan } from "../tools/planner.js";
-import type { ToolDescriptor } from "../tools/types.js";
+import type { ToolAvailabilityExpression, ToolDescriptor } from "../tools/types.js";
 import { applyTestPluginDefaults, normalizePluginsConfig } from "./config-state.js";
 import { resolveRuntimePluginRegistry, type PluginLoadOptions } from "./loader.js";
 import {
@@ -22,6 +22,7 @@ import {
   buildPluginRuntimeLoadOptions,
   resolvePluginRuntimeLoadContext,
 } from "./runtime/load-context.js";
+import { buildPluginToolAvailabilityContext } from "./tool-availability-context.js";
 import { findUndeclaredPluginToolNames } from "./tool-contracts.js";
 import {
   buildPluginToolFactoryCacheKey,
@@ -540,6 +541,48 @@ function listAvailableManifestToolNames(params: {
   );
 }
 
+function collectAuthProviderIdsFromAvailability(
+  expression: ToolAvailabilityExpression | undefined,
+  into: Set<string>,
+): void {
+  if (!expression) {
+    return;
+  }
+  if ("kind" in expression) {
+    if (expression.kind === "auth") {
+      into.add(expression.providerId);
+    }
+    return;
+  }
+  for (const entry of "allOf" in expression ? expression.allOf : expression.anyOf) {
+    collectAuthProviderIdsFromAvailability(entry, into);
+  }
+}
+
+function listAvailableDescriptorAuthProviderIds(params: {
+  snapshotPlugins: readonly PluginManifestRecord[];
+  hasAuthForProvider?: (providerId: string) => boolean;
+  descriptorsByPlugin: Map<string, Map<string, ToolDescriptor>>;
+}): Set<string> {
+  const providerIds = new Set<string>();
+  for (const plugin of params.snapshotPlugins) {
+    const descriptors = listPluginManifestToolDescriptors(plugin);
+    params.descriptorsByPlugin.set(
+      plugin.id,
+      new Map(descriptors.map((descriptor) => [descriptor.name, descriptor])),
+    );
+    for (const descriptor of descriptors) {
+      collectAuthProviderIdsFromAvailability(descriptor.availability, providerIds);
+    }
+  }
+  if (!params.hasAuthForProvider) {
+    return new Set();
+  }
+  return new Set(
+    Array.from(providerIds).filter((providerId) => params.hasAuthForProvider?.(providerId)),
+  );
+}
+
 function buildDescriptorBackedPluginTools(params: {
   snapshotPlugins: readonly PluginManifestRecord[];
   config: PluginLoadOptions["config"];
@@ -551,9 +594,28 @@ function buildDescriptorBackedPluginTools(params: {
   existingNormalized: Set<string>;
   hasAuthForProvider?: (providerId: string) => boolean;
   allowGatewaySubagentBinding?: boolean;
-}): { tools: AnyAgentTool[]; fullyHandledPluginIds: Set<string> } {
+}): {
+  tools: AnyAgentTool[];
+  fullyHandledPluginIds: Set<string>;
+  descriptorManagedToolNames: Map<string, Set<string>>;
+} {
   const tools: AnyAgentTool[] = [];
   const fullyHandledPluginIds = new Set<string>();
+  const descriptorManagedToolNames = new Map<string, Set<string>>();
+  const descriptorsByPlugin = new Map<string, Map<string, ToolDescriptor>>();
+  const descriptorAuthProviderIds = listAvailableDescriptorAuthProviderIds({
+    snapshotPlugins: params.snapshotPlugins,
+    hasAuthForProvider: params.hasAuthForProvider,
+    descriptorsByPlugin,
+  });
+  const availability = buildPluginToolAvailabilityContext({
+    config: params.availabilityConfig ?? {},
+    env: params.env,
+    enabledPluginIds: params.snapshotPlugins.map((plugin) => plugin.id),
+    authProviderIds: descriptorAuthProviderIds,
+    agentId: params.context.agentId,
+    sessionKey: params.context.sessionKey,
+  });
   for (const plugin of params.snapshotPlugins) {
     if (params.existingNormalized.has(normalizeToolName(plugin.id))) {
       continue;
@@ -568,9 +630,7 @@ function buildDescriptorBackedPluginTools(params: {
     if (availableToolNames.length === 0) {
       continue;
     }
-    const descriptorsByName = new Map(
-      listPluginManifestToolDescriptors(plugin).map((descriptor) => [descriptor.name, descriptor]),
-    );
+    const descriptorsByName = descriptorsByPlugin.get(plugin.id) ?? new Map();
     const descriptorToolNames = new Set<string>();
     const descriptorPlan = buildToolPlan({
       descriptors: availableToolNames.flatMap((toolName) => {
@@ -581,8 +641,14 @@ function buildDescriptorBackedPluginTools(params: {
         descriptorToolNames.add(toolName);
         return [descriptor];
       }),
+      availability,
     });
-    let handledCount = 0;
+    if (descriptorToolNames.size > 0) {
+      descriptorManagedToolNames.set(
+        plugin.id,
+        new Set(Array.from(descriptorToolNames, (toolName) => normalizeToolName(toolName))),
+      );
+    }
     for (const { descriptor } of descriptorPlan.visible) {
       const toolName = descriptor.name;
       if (params.existingNormalized.has(normalizeToolName(toolName))) {
@@ -601,13 +667,12 @@ function buildDescriptorBackedPluginTools(params: {
       params.existing.add(tool.name);
       params.existingNormalized.add(normalizeToolName(tool.name));
       tools.push(tool);
-      handledCount += 1;
     }
-    if (handledCount === availableToolNames.length && descriptorToolNames.size === handledCount) {
+    if (descriptorToolNames.size === availableToolNames.length) {
       fullyHandledPluginIds.add(plugin.id);
     }
   }
-  return { tools, fullyHandledPluginIds };
+  return { tools, fullyHandledPluginIds, descriptorManagedToolNames };
 }
 
 export function resolvePluginTools(params: {
@@ -788,6 +853,13 @@ export function resolvePluginTools(params: {
         continue;
       }
       const tool = toolRaw as AnyAgentTool;
+      if (
+        descriptorPlan.descriptorManagedToolNames
+          .get(entry.pluginId)
+          ?.has(normalizeToolName(tool.name))
+      ) {
+        continue;
+      }
       const undeclared = entry.declaredNames
         ? findUndeclaredPluginToolNames({
             declaredNames: entry.declaredNames,

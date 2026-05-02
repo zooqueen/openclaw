@@ -70,7 +70,7 @@ function hasConfiguredSecretRefInConfigPath(params: {
   return !allowlist || allowlist.includes(params.ref.id);
 }
 
-function hasConfiguredValue(params: {
+export function hasManifestConfiguredValue(params: {
   config?: OpenClawConfig;
   env: NodeJS.ProcessEnv;
   value: unknown;
@@ -127,7 +127,7 @@ export function manifestConfigSignalPasses(params: {
   }
   for (const requiredPath of params.signal.required ?? []) {
     if (
-      !hasConfiguredValue({
+      !hasManifestConfiguredValue({
         config: params.config,
         env: params.env,
         value: readPath(effectiveConfig, requiredPath),
@@ -140,7 +140,7 @@ export function manifestConfigSignalPasses(params: {
   if (
     requiredAny.length > 0 &&
     !requiredAny.some((path) =>
-      hasConfiguredValue({
+      hasManifestConfiguredValue({
         config: params.config,
         env: params.env,
         value: readPath(effectiveConfig, path),

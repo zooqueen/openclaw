@@ -297,7 +297,9 @@ function installToolManifestSnapshots(params: {
   );
 }
 
-function createXaiToolManifest(params: { descriptor?: boolean } = {}) {
+function createXaiToolManifest(
+  params: { descriptor?: boolean; includeCodeExecution?: boolean } = {},
+) {
   return {
     id: "xai",
     origin: "bundled",
@@ -308,9 +310,46 @@ function createXaiToolManifest(params: { descriptor?: boolean } = {}) {
       xai: ["XAI_API_KEY"],
     },
     contracts: {
-      tools: ["x_search"],
+      tools: params.includeCodeExecution ? ["code_execution", "x_search"] : ["x_search"],
     },
     toolMetadata: {
+      ...(params.includeCodeExecution
+        ? {
+            code_execution: {
+              ...(params.descriptor
+                ? {
+                    descriptor: {
+                      title: "Code Execution",
+                      description: "Run code with xAI.",
+                      inputSchema: {
+                        type: "object",
+                        properties: {
+                          task: {
+                            type: "string",
+                          },
+                        },
+                        required: ["task"],
+                      },
+                      availability: {
+                        kind: "config",
+                        path: ["plugins", "entries", "xai", "config", "codeExecution", "enabled"],
+                        default: true,
+                        notEquals: false,
+                      },
+                    },
+                  }
+                : {}),
+              authSignals: [{ provider: "xai" }],
+              configSignals: [
+                {
+                  rootPath: "plugins.entries.xai.config",
+                  overlayPath: "webSearch",
+                  required: ["apiKey"],
+                },
+              ],
+            },
+          }
+        : {}),
       x_search: {
         ...(params.descriptor
           ? {
@@ -325,6 +364,15 @@ function createXaiToolManifest(params: { descriptor?: boolean } = {}) {
                     },
                   },
                   required: ["query"],
+                },
+                availability: {
+                  kind: "config",
+                  paths: [
+                    ["plugins", "entries", "xai", "config", "xSearch", "enabled"],
+                    ["tools", "web", "x_search", "enabled"],
+                  ],
+                  default: true,
+                  notEquals: false,
                 },
               },
             }
@@ -366,6 +414,58 @@ function createDescriptorOnlyToolManifest() {
             },
             required: ["query"],
           },
+        },
+      },
+    },
+  };
+}
+
+function createMemoryCoreToolManifest() {
+  const availability = {
+    allOf: [
+      { kind: "plugin-enabled", pluginId: "memory-core" },
+      { kind: "context", key: "agent.memorySearch.enabled", equals: true },
+    ],
+  };
+  return {
+    id: "memory-core",
+    origin: "bundled",
+    enabledByDefault: true,
+    kind: "memory",
+    channels: [],
+    providers: [],
+    contracts: {
+      tools: ["memory_search", "memory_get"],
+    },
+    toolMetadata: {
+      memory_search: {
+        descriptor: {
+          title: "Memory Search",
+          description: "Search memory.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+            },
+            required: ["query"],
+          },
+          availability,
+          sortKey: "memory:01:search",
+        },
+      },
+      memory_get: {
+        descriptor: {
+          title: "Memory Get",
+          description: "Read memory.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+            },
+            required: ["path"],
+          },
+          availability,
+          sortKey: "memory:02:get",
         },
       },
     },
@@ -573,6 +673,94 @@ describe("resolvePluginTools optional tools", () => {
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
+  it("does not expose descriptor-backed xAI tools when their config disables them", () => {
+    const context = createContext();
+    const config = {
+      ...context.config,
+      plugins: {
+        entries: {
+          xai: {
+            config: {
+              webSearch: { apiKey: "test-key" },
+              codeExecution: { enabled: false },
+              xSearch: { enabled: false },
+            },
+          },
+        },
+      },
+    };
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createXaiToolManifest({ descriptor: true, includeCodeExecution: true }),
+    });
+    const factory = vi.fn(() => [makeTool("code_execution"), makeTool("x_search")]);
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "xai",
+          optional: false,
+          source: "/tmp/xai.js",
+          names: ["code_execution", "x_search"],
+          factory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...context,
+        config,
+      } as never,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, []);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  it("uses plugin-owned xAI search enablement before legacy config", () => {
+    const context = createContext();
+    const config = {
+      ...context.config,
+      plugins: {
+        entries: {
+          xai: {
+            config: {
+              webSearch: { apiKey: "test-key" },
+              xSearch: { enabled: true },
+            },
+          },
+        },
+      },
+      tools: {
+        web: {
+          x_search: {
+            enabled: false,
+          },
+        },
+      },
+    };
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createXaiToolManifest({ descriptor: true }),
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...context,
+        config,
+      } as never,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, ["x_search"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+  });
+
   it("plans descriptor-only plugin tools without runtime loading", async () => {
     const config = createContext().config;
     installToolManifestSnapshot({
@@ -623,6 +811,287 @@ describe("resolvePluginTools optional tools", () => {
       }),
     );
     expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("evaluates descriptor auth and available config signals during plugin planning", () => {
+    const context = createContext();
+    const config = {
+      ...context.config,
+      plugins: {
+        entries: {
+          "descriptor-only": {
+            config: {
+              apiKey: { source: "env", provider: "default", id: "DESCRIPTOR_API_KEY" },
+            },
+          },
+        },
+      },
+    };
+    installToolManifestSnapshot({
+      config,
+      env: { DESCRIPTOR_API_KEY: "test-key" },
+      plugin: {
+        ...createDescriptorOnlyToolManifest(),
+        toolMetadata: {
+          descriptor_tool: {
+            descriptor: {
+              title: "Descriptor Tool",
+              description: "Run a descriptor-backed tool.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                  },
+                },
+                required: ["query"],
+              },
+              availability: {
+                allOf: [
+                  { kind: "auth", providerId: "descriptor" },
+                  {
+                    kind: "config",
+                    path: ["plugins", "entries", "descriptor-only", "config", "apiKey"],
+                    check: "available",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...context,
+        config,
+      } as never,
+      env: { DESCRIPTOR_API_KEY: "test-key" },
+      hasAuthForProvider: (providerId) => providerId === "descriptor",
+    });
+
+    expectResolvedToolNames(tools, ["descriptor_tool"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+  });
+
+  it("plans memory tools from request facts without runtime loading", async () => {
+    const config = createContext().config;
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createMemoryCoreToolManifest(),
+    });
+    const factory = vi.fn(() => [
+      {
+        ...makeTool("memory_search"),
+        async execute() {
+          return { content: [{ type: "text", text: "memory-search-ok" }] };
+        },
+      },
+      makeTool("memory_get"),
+    ]);
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "memory-core",
+          optional: false,
+          source: "/tmp/memory-core.js",
+          names: ["memory_search", "memory_get"],
+          factory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...createContext(),
+        config,
+        agentId: "main",
+      } as never,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, ["memory_search", "memory_get"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+
+    const result = await tools[0]?.execute("tool-call", { query: "openclaw" });
+
+    expect(result?.content).toEqual([{ type: "text", text: "memory-search-ok" }]);
+    expect(loadOpenClawPluginsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onlyPluginIds: ["memory-core"],
+      }),
+    );
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not leak descriptor-backed memory tools when the active agent disables memory", () => {
+    const base = createContext();
+    const config = {
+      ...base.config,
+      agents: {
+        defaults: {
+          memorySearch: {
+            enabled: true,
+          },
+        },
+        list: [
+          {
+            id: "main",
+            memorySearch: {
+              enabled: false,
+            },
+          },
+        ],
+      },
+    } as const;
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createMemoryCoreToolManifest(),
+    });
+    const factory = vi.fn(() => [makeTool("memory_search"), makeTool("memory_get")]);
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "memory-core",
+          optional: false,
+          source: "/tmp/memory-core.js",
+          names: ["memory_search", "memory_get"],
+          factory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...base,
+        config,
+        agentId: "main",
+      } as never,
+      env: {},
+    });
+
+    expect(tools).toEqual([]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  it("does not expose descriptor-hidden tools through a partial runtime fallback", () => {
+    const config = createContext().config;
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: {
+        id: "partial-owner",
+        origin: "bundled",
+        enabledByDefault: true,
+        channels: [],
+        providers: [],
+        contracts: {
+          tools: ["hidden_descriptor_tool", "runtime_tool"],
+        },
+        toolMetadata: {
+          hidden_descriptor_tool: {
+            descriptor: {
+              description: "Hidden by request facts.",
+              inputSchema: {
+                type: "object",
+                properties: {},
+              },
+              availability: {
+                allOf: [
+                  {
+                    kind: "context",
+                    key: "agent.partial.enabled",
+                    equals: true,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    const factory = vi.fn(() => [makeTool("hidden_descriptor_tool"), makeTool("runtime_tool")]);
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "partial-owner",
+          optional: false,
+          source: "/tmp/partial-owner.js",
+          names: ["hidden_descriptor_tool", "runtime_tool"],
+          factory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...createContext(),
+        config,
+      } as never,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, ["runtime_tool"]);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors agent memory overrides when planning descriptor-backed memory tools", () => {
+    const base = createContext();
+    const config = {
+      ...base.config,
+      agents: {
+        defaults: {
+          memorySearch: {
+            enabled: false,
+          },
+        },
+        list: [
+          {
+            id: "research",
+            memorySearch: {
+              enabled: true,
+            },
+          },
+        ],
+      },
+    } as const;
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createMemoryCoreToolManifest(),
+    });
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "memory-core",
+          optional: false,
+          source: "/tmp/memory-core.js",
+          names: ["memory_search", "memory_get"],
+          factory: () => [makeTool("memory_search"), makeTool("memory_get")],
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...base,
+        config,
+        agentId: "research",
+      } as never,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, ["memory_search", "memory_get"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
   });
 
   it("loads plugin-owned tools when manifest tool metadata has env auth evidence", () => {
