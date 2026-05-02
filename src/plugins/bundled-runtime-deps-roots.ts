@@ -27,11 +27,11 @@ function hasDeclaredMirroredPackageRuntimeDeps(packageRoot: string): boolean {
   const openclaw = packageJson?.openclaw;
   const bundle =
     openclaw && typeof openclaw === "object" && !Array.isArray(openclaw)
-      ? openclaw.bundle
+      ? (openclaw as Record<string, unknown>).bundle
       : undefined;
   const mirrored =
     bundle && typeof bundle === "object" && !Array.isArray(bundle)
-      ? bundle.mirroredRootRuntimeDependencies
+      ? (bundle as Record<string, unknown>).mirroredRootRuntimeDependencies
       : undefined;
   return Array.isArray(mirrored) && mirrored.length > 0;
 }
