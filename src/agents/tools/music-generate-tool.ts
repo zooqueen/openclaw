@@ -141,7 +141,7 @@ function resolveMusicGenerationModelConfigForTool(params: {
     agentDir: params.agentDir,
     authStore: params.authStore,
     modelConfig: params.cfg?.agents?.defaults?.musicGenerationModel,
-    providers: listRuntimeMusicGenerationProviders({ config: params.cfg }),
+    providers: () => listRuntimeMusicGenerationProviders({ config: params.cfg }),
   });
 }
 
@@ -624,11 +624,17 @@ export function createMusicGenerateTool(options?: {
       const timeout = normalizeMusicGenerationTimeoutMs(requestedTimeoutMs);
       const timeoutMs = timeout.timeoutMs;
       const imageInputs = normalizeReferenceImageInputs(args);
-      const selectedProvider = resolveSelectedMusicGenerationProvider({
-        config: effectiveCfg,
-        musicGenerationModelConfig,
-        modelOverride: model,
-      });
+      const selectedModelRef =
+        parseMusicGenerationModelRef(model) ??
+        parseMusicGenerationModelRef(musicGenerationModelConfig.primary);
+      const selectedProvider =
+        imageInputs.length > 0
+          ? resolveSelectedMusicGenerationProvider({
+              config: effectiveCfg,
+              musicGenerationModelConfig,
+              modelOverride: model,
+            })
+          : undefined;
       const remoteMediaSsrfPolicy = resolveRemoteMediaSsrfPolicy(effectiveCfg);
       const loadedReferenceImages = await loadReferenceImages({
         inputs: imageInputs,
@@ -639,8 +645,7 @@ export function createMusicGenerateTool(options?: {
       });
       validateMusicGenerationCapabilities({
         provider: selectedProvider,
-        model:
-          parseMusicGenerationModelRef(model)?.model ?? model ?? selectedProvider?.defaultModel,
+        model: selectedModelRef?.model ?? model ?? selectedProvider?.defaultModel,
         inputImageCount: loadedReferenceImages.length,
         lyrics,
         instrumental,
@@ -651,7 +656,7 @@ export function createMusicGenerateTool(options?: {
         sessionKey: options?.agentSessionKey,
         requesterOrigin: options?.requesterOrigin,
         prompt,
-        providerId: selectedProvider?.id,
+        providerId: selectedProvider?.id ?? selectedModelRef?.provider,
       });
       const shouldDetach = Boolean(taskHandle && options?.agentSessionKey?.trim());
 
