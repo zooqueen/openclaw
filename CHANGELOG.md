@@ -9,8 +9,7 @@ Docs: https://docs.openclaw.ai
 - Agents/runtime: memoize transcript replay-policy resolution for stable config and process-env runs while preserving custom-env provider hook behavior. Thanks @DmitryPogodaev.
 - Infra/path-guards: add a fast path for canonical absolute POSIX containment checks, avoiding repeated `path.resolve` and `path.relative` work in hot filesystem walkers. Refs #75895, #75575, and #68782. Thanks @Enderfga.
 - Tools: add a platform-level tool descriptor planner for descriptor-first visibility, generic availability checks, and executor references. Thanks @shakkernerd.
-- Plugins/tools: plan migrated plugin tools from static descriptors and load the owning plugin runtime only when a descriptor-backed tool executes. Thanks @shakkernerd.
-- Plugins/tools: evaluate descriptor-backed tool visibility with request facts and migrate memory tools to static descriptors so disabled agent memory no longer falls through to runtime discovery. Thanks @shakkernerd.
+- Plugins/tools: cache plugin tool descriptors captured from `api.registerTool(...)` so repeated prompt-time planning can skip plugin runtime loading while execution still loads the live plugin tool. Thanks @shakkernerd.
 - Docs/Codex: clarify that ChatGPT/Codex subscription setups should use `openai/gpt-*` with `agentRuntime.id: "codex"` for native Codex runtime, while `openai-codex/*` remains the PI OAuth route. Thanks @pashpashpash.
 - Plugins/source checkout: load bundled plugins from the `extensions/*` pnpm workspace tree in source checkouts, so plugin-local dependencies and edits are used directly while packaged installs keep using the built runtime tree. Thanks @vincentkoc.
 - Plugins/beta: externalize ACPX behind the official `@openclaw/acpx` package so packaged installs keep ACP harness adapter binaries out of core until the ACP backend is installed. Thanks @vincentkoc.
@@ -142,6 +141,7 @@ Docs: https://docs.openclaw.ai
 - Web search/MiniMax: include MiniMax Search in the web-search setup flow and let `MINIMAX_API_KEY` participate in MiniMax Search auto-detection. Supersedes #65828. Thanks @Jah-yee.
 - Plugins/ClawHub: preserve official source-linked trust through archive installs, so OpenClaw can install trusted ClawHub plugin packages that trigger the built-in dangerous-pattern scanner. Thanks @vincentkoc.
 - Plugins/ClawHub: install package runtime dependencies for archive-backed plugin installs, so ClawHub packages such as WhatsApp load declared dependencies after download. Thanks @vincentkoc.
+- Plugins/tools: cache repeated plugin tool factory results only for matching request context, reducing per-turn tool prep without leaking sandbox, session, browser, delivery, or runtime config state. Fixes #75956. Thanks @Linux2010.
 - Providers/LM Studio: allow `models.providers.lmstudio.params.preload: false` to skip OpenClaw's native model-load call so LM Studio JIT loading, idle TTL, and auto-evict can own model lifecycle. Fixes #75921. Thanks @garyd9.
 - Agents/transcripts: keep chat history, restart recovery, fork token checks, and stale-token compaction checks on bounded async transcript reads or cached async indexes instead of reparsing large session files. Thanks @mariozechner.
 - Telegram: inherit the process DNS result order for Bot API transport and downgrade recovered sticky IPv4 fallback promotions to debug logs, while keeping pinned-IP escalation warnings visible. Fixes #75904. Thanks @highfly-hi and @neeravmakwana.
@@ -235,7 +235,6 @@ Docs: https://docs.openclaw.ai
 - Agents/tools: scope reply plugin-tool discovery to manifest-declared tool owners and already-active matching tool entries, avoiding broad plugin runtime loading for narrow or core-only tool allowlists. Thanks @shakkernerd.
 - Agents/replies: defer implicit image model discovery and keep OAuth auth-store adoption on persisted profiles during reply startup, cutting OCM MarCodex warm prep to sub-second in live checks. Thanks @shakkernerd.
 - Plugins/tools: enforce `contracts.tools` as the manifest ownership contract for plugin tool registration, rejecting undeclared runtime tool names and adding bundled plugin drift coverage. Thanks @shakkernerd.
-- Plugins/tools: add static manifest tool descriptors for plugin-owned tool descriptions and schemas, starting with xAI tool metadata. Thanks @shakkernerd.
 - Agents/Codex: stop prompting message-tool-only source turns to finish with `NO_REPLY`, so quiet turns are represented by not calling the visible message tool instead of conflicting final-text instructions. Thanks @pashpashpash.
 - Gateway/config: report failed backup restores as failed in logs and config observe audit records instead of marking them valid. (#70515) Thanks @davidangularme.
 - Compaction: use the active session model fallback chain for implicit summarization failures without persisting fallback model selection, so Azure content-filter 400s can recover. Fixes #64960. (#74470) Thanks @jalehman and @OpenCodeEngineer.

@@ -70,7 +70,7 @@ function hasConfiguredSecretRefInConfigPath(params: {
   return !allowlist || allowlist.includes(params.ref.id);
 }
 
-export function hasManifestConfiguredValue(params: {
+function hasConfiguredValue(params: {
   config?: OpenClawConfig;
   env: NodeJS.ProcessEnv;
   value: unknown;
@@ -127,7 +127,7 @@ export function manifestConfigSignalPasses(params: {
   }
   for (const requiredPath of params.signal.required ?? []) {
     if (
-      !hasManifestConfiguredValue({
+      !hasConfiguredValue({
         config: params.config,
         env: params.env,
         value: readPath(effectiveConfig, requiredPath),
@@ -140,7 +140,7 @@ export function manifestConfigSignalPasses(params: {
   if (
     requiredAny.length > 0 &&
     !requiredAny.some((path) =>
-      hasManifestConfiguredValue({
+      hasConfiguredValue({
         config: params.config,
         env: params.env,
         value: readPath(effectiveConfig, path),
@@ -208,15 +208,6 @@ function listToolAuthSignals(metadata: ToolMetadata): ManifestAuthAvailabilitySi
   }));
 }
 
-function hasToolAvailabilitySignals(metadata: ToolMetadata): boolean {
-  return Boolean(
-    metadata.configSignals?.length ||
-    metadata.authSignals?.length ||
-    metadata.authProviders?.length ||
-    metadata.aliases?.length,
-  );
-}
-
 function toolMetadataPasses(params: {
   plugin: PluginManifestRecord;
   metadata: ToolMetadata;
@@ -224,9 +215,6 @@ function toolMetadataPasses(params: {
   env: NodeJS.ProcessEnv;
   hasAuthForProvider?: (providerId: string) => boolean;
 }): boolean {
-  if (!hasToolAvailabilitySignals(params.metadata)) {
-    return true;
-  }
   if (
     params.metadata.configSignals?.some((signal) =>
       manifestConfigSignalPasses({

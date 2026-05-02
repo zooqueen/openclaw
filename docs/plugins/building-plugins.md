@@ -81,24 +81,6 @@ and provider plugins have dedicated guides linked above.
       "contracts": {
         "tools": ["my_tool"]
       },
-      "toolMetadata": {
-        "my_tool": {
-          "descriptor": {
-            "title": "My Tool",
-            "description": "Do a thing",
-            "inputSchema": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "input": {
-                  "type": "string"
-                }
-              },
-              "required": ["input"]
-            }
-          }
-        }
-      },
       "activation": {
         "onStartup": true
       },
@@ -111,12 +93,9 @@ and provider plugins have dedicated guides linked above.
     </CodeGroup>
 
     Every plugin needs a manifest, even with no config. Runtime-registered tools
-    must be listed in `contracts.tools` and must have static `toolMetadata`
-    descriptors so OpenClaw can plan tool visibility without loading every
-    plugin runtime. `api.registerTool(...)` binds execution when the tool is
-    called; it should not be the only place the tool shape exists. Plugins
-    should also declare `activation.onStartup` intentionally. This example sets
-    it to `true`. See
+    must be listed in `contracts.tools` so OpenClaw can discover the owning
+    plugin without loading every plugin runtime. Plugins should also declare
+    `activation.onStartup` intentionally. This example sets it to `true`. See
     [Manifest](/plugins/manifest) for the full schema. The canonical ClawHub
     publish snippets live in `docs/snippets/plugin-publish/`.
 
@@ -274,39 +253,14 @@ plugin manifest:
 {
   "contracts": {
     "tools": ["my_tool", "workflow_tool"]
-  },
-  "toolMetadata": {
-    "my_tool": {
-      "descriptor": {
-        "description": "Do a thing",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "input": {
-              "type": "string"
-            }
-          },
-          "required": ["input"]
-        }
-      }
-    },
-    "workflow_tool": {
-      "descriptor": {
-        "description": "Run a workflow",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "pipeline": {
-              "type": "string"
-            }
-          },
-          "required": ["pipeline"]
-        }
-      }
-    }
   }
 }
 ```
+
+OpenClaw captures and caches the validated descriptor from the registered tool,
+so plugins do not duplicate `description` or schema data in the manifest. The
+manifest contract only declares ownership and discovery; execution still calls
+the live registered tool implementation.
 
 Users enable optional tools in config:
 
@@ -318,7 +272,6 @@ Users enable optional tools in config:
 
 - Tool names must not clash with core tools (conflicts are skipped)
 - Tools with malformed registration objects, including missing `parameters`, are skipped and reported in plugin diagnostics instead of breaking agent runs
-- Keep manifest descriptors and runtime registrations in sync; OpenClaw uses descriptors for visibility and loads the owning runtime only when execution is needed
 - Use `optional: true` for tools with side effects or extra binary requirements
 - Users can enable all tools from a plugin by adding the plugin id to `tools.allow`
 
