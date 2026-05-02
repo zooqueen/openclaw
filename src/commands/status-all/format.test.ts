@@ -79,11 +79,11 @@ describe("status-all format", () => {
       }),
     ).toEqual({
       channelInfo: {
-        channel: "stable",
-        source: "config",
-        label: "stable (config)",
+        channel: "beta",
+        source: "installed-version",
+        label: "beta (installed version)",
       },
-      channelLabel: "stable (config)",
+      channelLabel: "beta (installed version)",
       gitLabel: "main · tag v1.2.3",
       updateLine: `git main · ↔ origin/main · behind 2 · npm update ${newerRegistryVersion}`,
       updateAvailable: true,
@@ -374,7 +374,7 @@ describe("status-all format", () => {
       { Item: "Version", Value: "1.0.0" },
       { Item: "Dashboard", Value: "http://127.0.0.1:18789/" },
       { Item: "Tailscale exposure", Value: "serve · box.tail.ts.net · https://box.tail.ts.net" },
-      { Item: "Channel", Value: "stable (config)" },
+      { Item: "Channel", Value: "beta (installed version)" },
       { Item: "Git", Value: "main · tag v1.2.3" },
       { Item: "Update", Value: "available · custom update" },
       {

@@ -1121,7 +1121,7 @@ describe("update-cli", () => {
         expect(last).toBeDefined();
         const parsed = last as Record<string, unknown>;
         const channel = parsed.channel as { value?: unknown };
-        expect(channel.value).toBe("stable");
+        expect(channel.value).toBe("beta");
       },
     },
   ] as const)("updateStatusCommand rendering: $name", runUpdateCliScenario);
