@@ -79,7 +79,7 @@ config.models = {
 };
 config.plugins = {
   ...config.plugins,
-  enabled: true,
+  enabled: mode !== "baseline",
 };
 config.channels = {
   ...config.channels,
