@@ -23,9 +23,12 @@ export type BundledRuntimeDepsInstallRootPlan = {
 };
 
 export function isSourceCheckoutRoot(packageRoot: string): boolean {
+  const hasPostinstallInventory = fs.existsSync(
+    path.join(packageRoot, "dist", "postinstall-inventory.json"),
+  );
   return (
     (fs.existsSync(path.join(packageRoot, ".git")) ||
-      fs.existsSync(path.join(packageRoot, "pnpm-workspace.yaml"))) &&
+      (fs.existsSync(path.join(packageRoot, "pnpm-workspace.yaml")) && !hasPostinstallInventory)) &&
     fs.existsSync(path.join(packageRoot, "src")) &&
     fs.existsSync(path.join(packageRoot, "extensions"))
   );

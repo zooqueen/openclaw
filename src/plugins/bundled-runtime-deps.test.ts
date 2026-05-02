@@ -2275,6 +2275,58 @@ describe("createBundledRuntimeDepsPackagePlan config policy", () => {
     ]);
   });
 
+  it("treats published package layouts with source files as packaged runtime roots", () => {
+    const packageRoot = makeTempDir();
+    const stageDir = makeTempDir();
+    fs.mkdirSync(path.join(packageRoot, "src"), { recursive: true });
+    fs.mkdirSync(path.join(packageRoot, "extensions"), { recursive: true });
+    fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, "pnpm-workspace.yaml"), "packages:\n  - .\n");
+    fs.writeFileSync(path.join(packageRoot, "dist", "postinstall-inventory.json"), "[]\n");
+    fs.writeFileSync(
+      path.join(packageRoot, "package.json"),
+      JSON.stringify({
+        name: "openclaw",
+        version: "2026.4.30-beta.1",
+        dependencies: { json5: "^2.2.3" },
+        openclaw: {
+          bundle: {
+            mirroredRootRuntimeDependencies: ["json5"],
+          },
+        },
+      }),
+    );
+    const pluginRoot = writeBundledPluginPackage({
+      packageRoot,
+      pluginId: "codex",
+      deps: { "@openai/codex": "0.128.0" },
+      providers: ["codex"],
+    });
+    const calls: BundledRuntimeDepsInstallParams[] = [];
+
+    const result = ensureBundledPluginRuntimeDeps({
+      env: { OPENCLAW_PLUGIN_STAGE_DIR: stageDir },
+      installDeps: (params) => {
+        calls.push(params);
+      },
+      pluginId: "codex",
+      pluginRoot,
+    });
+
+    expect(result).toEqual({
+      installedSpecs: ["@openai/codex@0.128.0", "json5@^2.2.3"],
+    });
+    expect(calls).toEqual([
+      expect.objectContaining({
+        installRoot: expect.stringContaining(path.join(stageDir, "openclaw-2026.4.30-beta.1-")),
+        missingSpecs: ["@openai/codex@0.128.0", "json5@^2.2.3"],
+        installSpecs: ["@openai/codex@0.128.0", "json5@^2.2.3"],
+      }),
+    ]);
+    expect(calls[0]?.installRoot).not.toBe(pluginRoot);
+    expect(calls[0]?.installExecutionRoot).toBeUndefined();
+  });
+
   it("reports declared package mirror deps for startup plugins without own deps", () => {
     const packageRoot = makeTempDir();
     const stageDir = makeTempDir();
