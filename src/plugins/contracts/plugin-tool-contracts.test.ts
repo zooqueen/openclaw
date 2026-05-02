@@ -7,7 +7,10 @@ type PluginManifestFile = {
   contracts?: {
     tools?: unknown;
   };
+  toolMetadata?: unknown;
 };
+
+const STATIC_DESCRIPTOR_REQUIRED_PLUGIN_IDS = new Set(["xai"]);
 
 function walkFiles(dir: string): string[] {
   const files: string[] = [];
@@ -195,6 +198,23 @@ function normalizeManifestTools(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.trim() !== "");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasCompleteToolDescriptor(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const descriptor = value.descriptor;
+  return (
+    isRecord(descriptor) &&
+    typeof descriptor.description === "string" &&
+    descriptor.description.trim() !== "" &&
+    isRecord(descriptor.inputSchema)
+  );
+}
+
 describe("bundled plugin tool manifest contracts", () => {
   it("declares every production registerTool owner in contracts.tools", () => {
     const extensionsDir = path.join(process.cwd(), "extensions");
@@ -237,6 +257,31 @@ describe("bundled plugin tool manifest contracts", () => {
       const missing = [...registeredNames].filter((name) => !declaredTools.has(name)).toSorted();
       if (missing.length > 0) {
         failures.push(`${pluginId}: missing contracts.tools for ${missing.join(", ")}`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
+  it("keeps migrated plugin tool owners on static descriptors", () => {
+    const extensionsDir = path.join(process.cwd(), "extensions");
+    const failures: string[] = [];
+
+    for (const pluginId of STATIC_DESCRIPTOR_REQUIRED_PLUGIN_IDS) {
+      const manifestPath = path.join(extensionsDir, pluginId, "openclaw.plugin.json");
+      const manifest = readManifest(manifestPath);
+      const declaredTools = normalizeManifestTools(manifest.contracts?.tools);
+      const toolMetadata = isRecord(manifest.toolMetadata) ? manifest.toolMetadata : {};
+
+      if (declaredTools.length === 0) {
+        failures.push(`${pluginId}: has no contracts.tools`);
+        continue;
+      }
+
+      for (const toolName of declaredTools) {
+        if (!hasCompleteToolDescriptor(toolMetadata[toolName])) {
+          failures.push(`${pluginId}: missing static descriptor for ${toolName}`);
+        }
       }
     }
 

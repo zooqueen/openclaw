@@ -137,6 +137,26 @@
   },
   "toolMetadata": {
     "code_execution": {
+      "descriptor": {
+        "title": "Code Execution",
+        "description": "Run sandboxed Python analysis with xAI. Use for calculations, tabulation, summaries, and chart-style analysis without local machine access.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string",
+              "description": "The full analysis task for xAI's remote Python sandbox. Include any data to analyze directly in the task."
+            }
+          },
+          "required": ["task"]
+        },
+        "availability": {
+          "kind": "config",
+          "path": ["plugins", "entries", "xai", "config", "codeExecution", "enabled"],
+          "default": true,
+          "notEquals": false
+        }
+      },
       "authSignals": [
         {
           "provider": "xai"
@@ -155,6 +175,61 @@
       ]
     },
     "x_search": {
+      "descriptor": {
+        "title": "X Search",
+        "description": "Search X (formerly Twitter) using xAI, including targeted post or thread lookups. For per-post stats like reposts, replies, bookmarks, or views, prefer the exact post URL or status ID.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "X search query string."
+            },
+            "allowed_x_handles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Only include posts from these X handles."
+            },
+            "excluded_x_handles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Exclude posts from these X handles."
+            },
+            "from_date": {
+              "type": "string",
+              "description": "Only include posts on or after this date (YYYY-MM-DD)."
+            },
+            "to_date": {
+              "type": "string",
+              "description": "Only include posts on or before this date (YYYY-MM-DD)."
+            },
+            "enable_image_understanding": {
+              "type": "boolean",
+              "description": "Allow xAI to inspect images attached to matching posts."
+            },
+            "enable_video_understanding": {
+              "type": "boolean",
+              "description": "Allow xAI to inspect videos attached to matching posts."
+            }
+          },
+          "required": ["query"]
+        },
+        "availability": {
+          "kind": "config",
+          "paths": [
+            ["plugins", "entries", "xai", "config", "xSearch", "enabled"],
+            ["tools", "web", "x_search", "enabled"]
+          ],
+          "default": true,
+          "notEquals": false
+        }
+      },
       "authSignals": [
         {
           "provider": "xai"
