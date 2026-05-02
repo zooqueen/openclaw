@@ -45,12 +45,30 @@ export { packageNameFromSpecifier } from "./lib/plugin-package-dependencies.mjs"
 type PackFile = { path: string };
 type PackResult = { files?: PackFile[]; filename?: string; unpackedSize?: number };
 
+function collectRootPackageExcludedDistExtensionPrefixes(): string[] {
+  const parsed = JSON.parse(readFileSync("package.json", "utf8")) as { files?: unknown };
+  const files = Array.isArray(parsed.files) ? parsed.files : [];
+  return files.flatMap((entry) => {
+    if (typeof entry !== "string") {
+      return [];
+    }
+    const match = /^!dist\/extensions\/([a-z0-9._-]+)\/\*\*$/u.exec(entry);
+    return match?.[1] ? [`dist/extensions/${match[1]}/`] : [];
+  });
+}
+
+const rootPackageExcludedDistExtensionPrefixes = collectRootPackageExcludedDistExtensionPrefixes();
+
+function isRequiredBundledPluginPackArtifact(artifact: string): boolean {
+  return !rootPackageExcludedDistExtensionPrefixes.some((prefix) => artifact.startsWith(prefix));
+}
+
 const requiredPathGroups = [
   PACKAGE_DIST_INVENTORY_RELATIVE_PATH,
   ["dist/index.js", "dist/index.mjs"],
   ["dist/entry.js", "dist/entry.mjs"],
   ...listPluginSdkDistArtifacts(),
-  ...listBundledPluginPackArtifacts(),
+  ...listBundledPluginPackArtifacts().filter(isRequiredBundledPluginPackArtifact),
   ...listStaticExtensionAssetOutputs(),
   ...WORKSPACE_TEMPLATE_PACK_PATHS,
   "scripts/npm-runner.mjs",
