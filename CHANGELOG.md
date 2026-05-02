@@ -24,7 +24,6 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - CLI/directory: report unsupported directory operations for installed channel plugins instead of prompting to reinstall the plugin when it lacks a directory adapter. Fixes #75770. Thanks @lawong888.
-- Agents/tools: derive embedded-run explicit core allowlist detection from the canonical tool catalog, so allowlists such as `process`, `heartbeat_respond`, and core groups still construct core tools while plugin-only allowlists keep the fast path. Fixes #75907; follows #75922. Thanks @obviyus and @dlrik.
 - Agents/tools: derive embedded-run explicit core allowlist detection from the canonical tool catalog, so allowlists such as `process`, `heartbeat_respond`, and core groups still construct core tools while plugin-only allowlists keep the fast path and core-name collision checks. Fixes #75907; follows #75922. Thanks @obviyus and @dlrik.
 - Feishu: preserve Feishu/Lark HTTP error bodies for message sends, media sends, and chat member lookups, so HTTP 400 failures include vendor code, message, log id, and troubleshooter details. Fixes #73860. Thanks @desksk.
 - Agents/transcripts: avoid reopening large Pi transcript files through the synchronous session manager for maintenance rewrites, persisted tool-result truncation, manual compaction boundary hardening, and queued compaction rotation. Thanks @mariozechner.
