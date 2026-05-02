@@ -14,6 +14,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Control UI/Gateway: avoid full session-list reloads for locally applied message-phase session updates, carry known session keys through transcript-file update events, and defer media provider listing when explicit generation model config is present. Refs #76236, #76203, #76188, #76107, and #76166.
+- Gateway: keep directly requested plugin tools invokable under restrictive tool profiles while preserving explicit deny lists and the HTTP safety deny list, preventing catalog/invoke mismatches that surface as "Tool not available". Thanks @BunsDev.
 - Channels: keep Matrix and Mattermost bundled in the core package instead of advertising external npm installs before those channels are cut over. Thanks @vincentkoc.
 - Bonjour: disable LAN mDNS advertising after a repeated stuck-announcing recovery instead of repeatedly restarting ciao and saturating the Gateway event loop.
 - CLI/plugins: stop treating the non-plugin `auth` command root as a bundled plugin id, so restrictive `plugins.allow` configs no longer tell users to add stale `auth` plugin entries.
@@ -37,6 +38,7 @@ Docs: https://docs.openclaw.ai
 - Plugins/update: detect tracked plugin install records whose package directories disappeared during `openclaw update`, reinstall them before normal plugin updates, and fail the update if any install record still points at missing disk payloads.
 - Plugins/registry: hash manifest and package metadata when validating persisted plugin registries so fast same-size rewrites cannot leave stale plugin metadata trusted.
 - Plugins/registry: canonicalize install-record provenance paths before trust diagnostics, so npm plugins installed under symlinked temp/state roots no longer warn as untracked local code.
+- Plugins/install: let official external Discord reinstall requests pass the invalid-config guard and run stale-channel repair, so upgrades can recover missing external plugin state directly.
 - CLI/infer: reject local `codex/*` one-shot model probes before simple-completion dispatch and point operators at the Codex app-server runtime path instead of ending with an empty-output error.
 - Agents/sessions: preserve terminal lifecycle state when final run metadata persists from a stale in-memory snapshot, preventing `main` sessions from staying stuck as running after completed or timed-out turns.
 - Gateway/CLI: make `openclaw gateway start` repair stale managed service definitions that point at old OpenClaw versions, missing binaries, or temporary installer paths before starting.
