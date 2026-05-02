@@ -6,7 +6,6 @@ Docs: https://docs.openclaw.ai
 
 ### Highlights
 
-- Alpha prerelease support adds the `vYYYY.M.D-alpha.N` tag shape, npm `alpha` dist-tag, release workflow inputs, package acceptance, Telegram package checks, and upgrade-survivor validation paths.
 - ClawHub-first plugin installation now covers diagnostics, onboarding, doctor repair, channel setup, install/update records, and artifact metadata while keeping npm fallback for cutovers. Thanks @vincentkoc.
 - Gateway startup, session listing, task maintenance, prompt prep, plugin loading, and filesystem hot paths get targeted cache and fanout reductions for large or plugin-heavy installs.
 - Control UI and WebChat reliability improves across Sessions, Cron, long-running Gateway WebSockets, grouped-message width, slash-command feedback, iOS PWA bounds, selection contrast, and Talk diagnostics.
@@ -14,7 +13,6 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
-- Release: add first-class alpha prerelease support across version parsing, release workflows, package specs, published-package validation, plugin publish planning, and release docs.
 - Gateway/startup: skip plugin-backed auth-profile overlays during startup secrets preflight, reducing gateway readiness latency while keeping reload and OAuth recovery paths overlay-capable. (#68327) Thanks @JIRBOY.
 - Plugins/ClawHub: make diagnostics, onboarding, doctor repair, and channel setup prefer ClawHub installs while carrying ClawPack metadata through install records and npm fallback paths. Thanks @vincentkoc.
 - Plugins/runtime: scope broad runtime preloads to the effective plugin ids derived from config, startup planning, configured channels, slots, and auto-enable rules instead of importing every discoverable plugin.
