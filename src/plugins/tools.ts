@@ -395,12 +395,18 @@ function readPluginCacheSource(plugin: PluginManifestRecord): string {
   return plugin.id;
 }
 
-function buildPluginDescriptorCacheKey(plugin: PluginManifestRecord): string {
+function buildPluginDescriptorCacheKey(params: {
+  plugin: PluginManifestRecord;
+  ctx: OpenClawPluginToolContext;
+  currentRuntimeConfig?: PluginLoadOptions["config"] | null;
+}): string {
   return buildPluginToolDescriptorCacheKey({
-    pluginId: plugin.id,
-    source: readPluginCacheSource(plugin),
-    rootDir: plugin.rootDir,
-    contractToolNames: plugin.contracts?.tools ?? [],
+    pluginId: params.plugin.id,
+    source: readPluginCacheSource(params.plugin),
+    rootDir: params.plugin.rootDir,
+    contractToolNames: params.plugin.contracts?.tools ?? [],
+    ctx: params.ctx,
+    currentRuntimeConfig: params.currentRuntimeConfig,
   });
 }
 
@@ -442,7 +448,9 @@ function createCachedDescriptorPluginTool(params: {
       const entry = registry?.tools.find(
         (candidate) =>
           candidate.pluginId === pluginId &&
-          candidate.names.some((name) => normalizeToolName(name) === normalizeToolName(toolName)),
+          (candidate.names.length > 0 ? candidate.names : (candidate.declaredNames ?? [])).some(
+            (name) => normalizeToolName(name) === normalizeToolName(toolName),
+          ),
       );
       if (!entry) {
         throw new Error(`plugin tool runtime unavailable (${pluginId}): ${toolName}`);
@@ -488,6 +496,7 @@ function resolveCachedPluginTools(params: {
   ctx: OpenClawPluginToolContext;
   loadContext: ReturnType<typeof resolvePluginRuntimeLoadContext>;
   runtimeOptions: PluginLoadOptions["runtimeOptions"];
+  currentRuntimeConfig?: PluginLoadOptions["config"] | null;
 }): { tools: AnyAgentTool[]; handledPluginIds: Set<string> } {
   const tools: AnyAgentTool[] = [];
   const handledPluginIds = new Set<string>();
@@ -525,7 +534,13 @@ function resolveCachedPluginTools(params: {
     if (params.existingNormalized.has(normalizeToolName(plugin.id))) {
       continue;
     }
-    const cached = readCachedPluginToolDescriptors(buildPluginDescriptorCacheKey(plugin));
+    const cached = readCachedPluginToolDescriptors(
+      buildPluginDescriptorCacheKey({
+        plugin,
+        ctx: params.ctx,
+        currentRuntimeConfig: params.currentRuntimeConfig,
+      }),
+    );
     if (
       !cached ||
       !cachedDescriptorsCoverToolNames({
@@ -665,6 +680,15 @@ export function resolvePluginTools(params: {
   const existing = params.existingToolNames ?? new Set<string>();
   const existingNormalized = new Set(Array.from(existing, (tool) => normalizeToolName(tool)));
   const allowlist = normalizeAllowlist(params.toolAllowlist);
+  let currentRuntimeConfigForDescriptorCache: PluginLoadOptions["config"] | null | undefined =
+    params.context.runtimeConfig;
+  if (currentRuntimeConfigForDescriptorCache === undefined && params.context.getRuntimeConfig) {
+    try {
+      currentRuntimeConfigForDescriptorCache = params.context.getRuntimeConfig();
+    } catch {
+      currentRuntimeConfigForDescriptorCache = null;
+    }
+  }
   const cached = resolveCachedPluginTools({
     snapshot,
     config: context.config,
@@ -678,6 +702,7 @@ export function resolvePluginTools(params: {
     ctx: params.context,
     loadContext: context,
     runtimeOptions,
+    currentRuntimeConfig: currentRuntimeConfigForDescriptorCache,
   });
   tools.push(...cached.tools);
   const runtimePluginIds = onlyPluginIds.filter(
@@ -859,7 +884,11 @@ export function resolvePluginTools(params: {
       })
     ) {
       writeCachedPluginToolDescriptors({
-        cacheKey: buildPluginDescriptorCacheKey(manifestPlugin),
+        cacheKey: buildPluginDescriptorCacheKey({
+          plugin: manifestPlugin,
+          ctx: params.context,
+          currentRuntimeConfig: currentRuntimeConfigForDescriptorCache,
+        }),
         descriptors,
       });
     }

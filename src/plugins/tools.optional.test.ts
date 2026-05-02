@@ -847,12 +847,12 @@ describe("resolvePluginTools optional tools", () => {
 
     const first = resolvePluginTools(
       createResolveToolsParams({
-        context: { ...createContext(), sessionId: "first" },
+        context: { ...createContext(), sessionId: "same" },
       }),
     );
     const second = resolvePluginTools(
       createResolveToolsParams({
-        context: { ...createContext(), sessionId: "second" },
+        context: { ...createContext(), sessionId: "same" },
       }),
     );
 
@@ -863,7 +863,69 @@ describe("resolvePluginTools optional tools", () => {
     expect(loadOpenClawPluginsMock).toHaveBeenCalledTimes(1);
 
     await expect(second[0]?.execute("call", {}, undefined)).resolves.toEqual({
-      content: [{ type: "text", text: "second" }],
+      content: [{ type: "text", text: "same" }],
+    });
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse cached plugin tool descriptors across sandbox context changes", () => {
+    const factory = vi.fn((rawCtx: unknown) => {
+      const ctx = rawCtx as { sandboxed?: boolean };
+      return ctx.sandboxed ? null : makeTool("sandbox_sensitive_tool");
+    });
+    setRegistry([
+      {
+        pluginId: "sandbox-sensitive",
+        optional: false,
+        source: "/tmp/sandbox-sensitive.js",
+        names: ["sandbox_sensitive_tool"],
+        factory,
+      },
+    ]);
+
+    const hostTools = resolvePluginTools(
+      createResolveToolsParams({
+        context: { ...createContext(), sandboxed: false },
+      }),
+    );
+    const sandboxedTools = resolvePluginTools(
+      createResolveToolsParams({
+        context: { ...createContext(), sandboxed: true },
+      }),
+    );
+
+    expectResolvedToolNames(hostTools, ["sandbox_sensitive_tool"]);
+    expect(sandboxedTools).toEqual([]);
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it("executes cached plugin tools registered with implicit names", async () => {
+    const factory = vi.fn(() => ({
+      ...makeTool("implicit_tool"),
+      async execute() {
+        return { content: [{ type: "text", text: "implicit-ok" }] };
+      },
+    }));
+    setRegistry([
+      {
+        pluginId: "implicit-owner",
+        optional: false,
+        source: "/tmp/implicit-owner.js",
+        names: [],
+        declaredNames: ["implicit_tool"],
+        factory,
+      },
+    ]);
+
+    const first = resolvePluginTools(createResolveToolsParams());
+    const second = resolvePluginTools(createResolveToolsParams());
+
+    expectResolvedToolNames(first, ["implicit_tool"]);
+    expectResolvedToolNames(second, ["implicit_tool"]);
+    expect(factory).toHaveBeenCalledTimes(1);
+
+    await expect(second[0]?.execute("call", {}, undefined)).resolves.toEqual({
+      content: [{ type: "text", text: "implicit-ok" }],
     });
     expect(factory).toHaveBeenCalledTimes(2);
   });

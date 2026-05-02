@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import type { AnyAgentTool } from "../agents/tools/common.js";
+import { resolveRuntimeConfigCacheKey } from "../config/runtime-snapshot.js";
 import type { JsonObject, ToolDescriptor } from "../tools/types.js";
+import type { PluginLoadOptions } from "./loader.js";
+import type { OpenClawPluginToolContext } from "./types.js";
 
 const PLUGIN_TOOL_DESCRIPTOR_CACHE_VERSION = 1;
 
@@ -12,9 +15,13 @@ export type CachedPluginToolDescriptor = {
 };
 
 const descriptorCache = new Map<string, CachedPluginToolDescriptor[]>();
+let descriptorCacheObjectIds = new WeakMap<object, number>();
+let nextDescriptorCacheObjectId = 1;
 
 export function resetPluginToolDescriptorCache(): void {
   descriptorCache.clear();
+  descriptorCacheObjectIds = new WeakMap();
+  nextDescriptorCacheObjectId = 1;
 }
 
 function sourceFingerprint(source: string): string {
@@ -26,11 +33,64 @@ function sourceFingerprint(source: string): string {
   }
 }
 
+function getDescriptorCacheObjectId(value: object | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const existing = descriptorCacheObjectIds.get(value);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const next = nextDescriptorCacheObjectId++;
+  descriptorCacheObjectIds.set(value, next);
+  return next;
+}
+
+function getDescriptorConfigCacheKey(
+  value: PluginLoadOptions["config"] | null | undefined,
+): string | number | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    return resolveRuntimeConfigCacheKey(value);
+  } catch {
+    return getDescriptorCacheObjectId(value);
+  }
+}
+
+function buildDescriptorContextCacheKey(params: {
+  ctx: OpenClawPluginToolContext;
+  currentRuntimeConfig?: PluginLoadOptions["config"] | null;
+}): string {
+  const { ctx } = params;
+  return JSON.stringify({
+    config: getDescriptorConfigCacheKey(ctx.config),
+    runtimeConfig: getDescriptorConfigCacheKey(ctx.runtimeConfig),
+    currentRuntimeConfig: getDescriptorConfigCacheKey(params.currentRuntimeConfig),
+    fsPolicy: ctx.fsPolicy ?? null,
+    workspaceDir: ctx.workspaceDir ?? null,
+    agentDir: ctx.agentDir ?? null,
+    agentId: ctx.agentId ?? null,
+    sessionKey: ctx.sessionKey ?? null,
+    sessionId: ctx.sessionId ?? null,
+    browser: ctx.browser ?? null,
+    messageChannel: ctx.messageChannel ?? null,
+    agentAccountId: ctx.agentAccountId ?? null,
+    deliveryContext: ctx.deliveryContext ?? null,
+    requesterSenderId: ctx.requesterSenderId ?? null,
+    senderIsOwner: ctx.senderIsOwner ?? null,
+    sandboxed: ctx.sandboxed ?? null,
+  });
+}
+
 export function buildPluginToolDescriptorCacheKey(params: {
   pluginId: string;
   source: string;
   rootDir?: string;
   contractToolNames: readonly string[];
+  ctx: OpenClawPluginToolContext;
+  currentRuntimeConfig?: PluginLoadOptions["config"] | null;
 }): string {
   return JSON.stringify({
     version: PLUGIN_TOOL_DESCRIPTOR_CACHE_VERSION,
@@ -39,6 +99,10 @@ export function buildPluginToolDescriptorCacheKey(params: {
     rootDir: params.rootDir ?? null,
     sourceFingerprint: sourceFingerprint(params.source),
     contractToolNames: [...params.contractToolNames].toSorted(),
+    context: buildDescriptorContextCacheKey({
+      ctx: params.ctx,
+      currentRuntimeConfig: params.currentRuntimeConfig,
+    }),
   });
 }
 
