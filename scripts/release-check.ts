@@ -69,7 +69,7 @@ const requiredPathGroups = [
   ["dist/entry.js", "dist/entry.mjs"],
   ...listPluginSdkDistArtifacts(),
   ...listBundledPluginPackArtifacts().filter(isRequiredBundledPluginPackArtifact),
-  ...listStaticExtensionAssetOutputs(),
+  ...listStaticExtensionAssetOutputs().filter(isRequiredBundledPluginPackArtifact),
   ...WORKSPACE_TEMPLATE_PACK_PATHS,
   "scripts/npm-runner.mjs",
   "scripts/preinstall-package-manager-warning.mjs",
