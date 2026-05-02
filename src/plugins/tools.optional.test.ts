@@ -342,6 +342,36 @@ function createXaiToolManifest(params: { descriptor?: boolean } = {}) {
   };
 }
 
+function createDescriptorOnlyToolManifest() {
+  return {
+    id: "descriptor-only",
+    origin: "bundled",
+    enabledByDefault: true,
+    channels: [],
+    providers: [],
+    contracts: {
+      tools: ["descriptor_tool"],
+    },
+    toolMetadata: {
+      descriptor_tool: {
+        descriptor: {
+          title: "Descriptor Tool",
+          description: "Run a descriptor-backed tool.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+              },
+            },
+            required: ["query"],
+          },
+        },
+      },
+    },
+  };
+}
+
 function expectResolvedToolNames(
   tools: ReturnType<typeof resolvePluginTools>,
   expectedToolNames: readonly string[],
@@ -538,6 +568,58 @@ describe("resolvePluginTools optional tools", () => {
     expect(loadOpenClawPluginsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         onlyPluginIds: ["xai"],
+      }),
+    );
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("plans descriptor-only plugin tools without runtime loading", async () => {
+    const config = createContext().config;
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createDescriptorOnlyToolManifest(),
+    });
+    const factory = vi.fn(() => ({
+      ...makeTool("descriptor_tool"),
+      async execute() {
+        return { content: [{ type: "text", text: "descriptor-runtime-ok" }] };
+      },
+    }));
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "descriptor-only",
+          optional: false,
+          source: "/tmp/descriptor-only.js",
+          names: ["descriptor_tool"],
+          factory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...createContext(),
+        config,
+      } as never,
+      toolAllowlist: ["descriptor_tool"],
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, ["descriptor_tool"]);
+    expect(tools[0]?.description).toBe("Run a descriptor-backed tool.");
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+
+    const result = await tools[0]?.execute("tool-call", { query: "openclaw" });
+
+    expect(result?.content).toEqual([{ type: "text", text: "descriptor-runtime-ok" }]);
+    expect(loadOpenClawPluginsMock).toHaveBeenCalledTimes(1);
+    expect(loadOpenClawPluginsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onlyPluginIds: ["descriptor-only"],
       }),
     );
     expect(factory).toHaveBeenCalledTimes(1);

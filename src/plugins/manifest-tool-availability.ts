@@ -208,6 +208,15 @@ function listToolAuthSignals(metadata: ToolMetadata): ManifestAuthAvailabilitySi
   }));
 }
 
+function hasToolAvailabilitySignals(metadata: ToolMetadata): boolean {
+  return Boolean(
+    metadata.configSignals?.length ||
+    metadata.authSignals?.length ||
+    metadata.authProviders?.length ||
+    metadata.aliases?.length,
+  );
+}
+
 function toolMetadataPasses(params: {
   plugin: PluginManifestRecord;
   metadata: ToolMetadata;
@@ -215,6 +224,9 @@ function toolMetadataPasses(params: {
   env: NodeJS.ProcessEnv;
   hasAuthForProvider?: (providerId: string) => boolean;
 }): boolean {
+  if (!hasToolAvailabilitySignals(params.metadata)) {
+    return true;
+  }
   if (
     params.metadata.configSignals?.some((signal) =>
       manifestConfigSignalPasses({
