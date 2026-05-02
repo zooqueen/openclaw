@@ -163,6 +163,33 @@ export type DiagnosticSessionStuckEvent = DiagnosticSessionAttentionBaseEvent & 
   classification: "stale_session_state";
 };
 
+export type DiagnosticSessionRecoveryStatus = "recovered" | "deferred" | "failed";
+
+export type DiagnosticSessionRecoveryAction =
+  | "aborted_run"
+  | "active_work_kept"
+  | "cleared_stale_state"
+  | "missing_session_ref"
+  | "recovery_in_flight"
+  | "released_lane"
+  | "released_unregistered_lane";
+
+export type DiagnosticSessionRecoveryEvent = DiagnosticBaseEvent & {
+  type: "session.recovery";
+  sessionKey?: string;
+  sessionId?: string;
+  state: DiagnosticSessionState;
+  ageMs: number;
+  queueDepth?: number;
+  status: DiagnosticSessionRecoveryStatus;
+  action: DiagnosticSessionRecoveryAction;
+  aborted?: boolean;
+  drained?: boolean;
+  forceCleared?: boolean;
+  released?: number;
+  experimental: boolean;
+};
+
 export type DiagnosticLaneEnqueueEvent = DiagnosticBaseEvent & {
   type: "queue.lane.enqueue";
   lane: string;
@@ -495,6 +522,7 @@ export type DiagnosticEventPayload =
   | DiagnosticSessionLongRunningEvent
   | DiagnosticSessionStalledEvent
   | DiagnosticSessionStuckEvent
+  | DiagnosticSessionRecoveryEvent
   | DiagnosticLaneEnqueueEvent
   | DiagnosticLaneDequeueEvent
   | DiagnosticRunAttemptEvent

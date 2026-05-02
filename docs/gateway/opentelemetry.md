@@ -219,6 +219,12 @@ OpenClaw classifies sessions by the work it can still observe:
 - `session.stuck`: stale session bookkeeping with no active work. This is the
   only liveness classification that releases the affected session lane.
 
+Experimental `diagnostics.stuckSessionAbortMs` can emit `session.recovery` when
+stalled or stuck recovery escalates after a longer no-progress window. Recovery
+events include the recovery status and action, and set `experimental: true` for
+that abort-capable path. `session.long_running` work that is still making
+progress is not aborted.
+
 Only `session.stuck` emits the `openclaw.session.stuck` counter, the
 `openclaw.session.stuck_age_ms` histogram, and the `openclaw.session.stuck`
 span. Repeated `session.stuck` diagnostics back off while the session remains

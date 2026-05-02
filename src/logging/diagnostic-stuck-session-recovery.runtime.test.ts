@@ -94,13 +94,14 @@ describe("stuck session recovery", () => {
   it("does not abort an active embedded run by default", async () => {
     mocks.resolveActiveEmbeddedRunHandleSessionId.mockReturnValue("session-1");
 
-    await recoverStuckDiagnosticSession({
+    const result = await recoverStuckDiagnosticSession({
       sessionId: "session-1",
       sessionKey: "agent:main:main",
       ageMs: 180_000,
       queueDepth: 1,
     });
 
+    expect(result).toMatchObject({ status: "deferred", action: "active_work_kept" });
     expect(mocks.abortEmbeddedPiRun).not.toHaveBeenCalled();
     expect(mocks.waitForEmbeddedPiRunEnd).not.toHaveBeenCalled();
     expect(mocks.forceClearEmbeddedPiRun).not.toHaveBeenCalled();
@@ -116,13 +117,14 @@ describe("stuck session recovery", () => {
     mocks.abortEmbeddedPiRun.mockReturnValue(true);
     mocks.waitForEmbeddedPiRunEnd.mockResolvedValue(true);
 
-    await recoverStuckDiagnosticSession({
+    const result = await recoverStuckDiagnosticSession({
       sessionId: "session-1",
       sessionKey: "agent:main:main",
       ageMs: 180_000,
       allowActiveAbort: true,
     });
 
+    expect(result).toMatchObject({ status: "recovered", action: "aborted_run" });
     expect(mocks.abortEmbeddedPiRun).toHaveBeenCalledWith("session-1");
     expect(mocks.waitForEmbeddedPiRunEnd).toHaveBeenCalledWith("session-1", 15_000);
     expect(mocks.forceClearEmbeddedPiRun).not.toHaveBeenCalled();
@@ -209,6 +211,28 @@ describe("stuck session recovery", () => {
     );
   });
 
+  it("aborts active reply work without an embedded handle when active abort recovery is enabled", async () => {
+    mocks.resolveActiveEmbeddedRunSessionId.mockReturnValue("queued-reply-session");
+    mocks.resolveActiveEmbeddedRunHandleSessionId.mockReturnValue(undefined);
+    mocks.isEmbeddedPiRunActive.mockReturnValue(true);
+    mocks.isEmbeddedPiRunHandleActive.mockReturnValue(false);
+    mocks.abortEmbeddedPiRun.mockReturnValue(true);
+    mocks.waitForEmbeddedPiRunEnd.mockResolvedValue(true);
+
+    const result = await recoverStuckDiagnosticSession({
+      sessionId: "queued-reply-session",
+      sessionKey: "agent:main:main",
+      ageMs: 900_000,
+      queueDepth: 1,
+      allowActiveAbort: true,
+    });
+
+    expect(result).toMatchObject({ status: "recovered", action: "aborted_run" });
+    expect(mocks.abortEmbeddedPiRun).toHaveBeenCalledWith("queued-reply-session");
+    expect(mocks.waitForEmbeddedPiRunEnd).toHaveBeenCalledWith("queued-reply-session", 15_000);
+    expect(mocks.resetCommandLane).not.toHaveBeenCalled();
+  });
+
   it("does not release the session lane while unregistered lane work is active", async () => {
     mocks.resolveActiveEmbeddedRunSessionId.mockReturnValue(undefined);
     mocks.resolveActiveEmbeddedRunHandleSessionId.mockReturnValue(undefined);
@@ -239,18 +263,50 @@ describe("stuck session recovery", () => {
     expect(mocks.diag.warn).toHaveBeenCalledWith(expect.stringContaining("laneActive=1"));
   });
 
+  it("releases active unregistered lane work when active abort recovery is enabled", async () => {
+    mocks.resolveActiveEmbeddedRunSessionId.mockReturnValue(undefined);
+    mocks.resolveActiveEmbeddedRunHandleSessionId.mockReturnValue(undefined);
+    mocks.isEmbeddedPiRunActive.mockReturnValue(false);
+    mocks.isEmbeddedPiRunHandleActive.mockReturnValue(false);
+    mocks.getCommandLaneSnapshot.mockReturnValue({
+      lane: "session:agent:main:main",
+      queuedCount: 1,
+      activeCount: 1,
+      maxConcurrent: 1,
+      draining: false,
+      generation: 0,
+    });
+    mocks.resetCommandLane.mockReturnValue(1);
+
+    const result = await recoverStuckDiagnosticSession({
+      sessionId: "unregistered-work-session",
+      sessionKey: "agent:main:main",
+      ageMs: 900_000,
+      queueDepth: 1,
+      allowActiveAbort: true,
+    });
+
+    expect(result).toMatchObject({
+      status: "recovered",
+      action: "released_unregistered_lane",
+      released: 1,
+    });
+    expect(mocks.resetCommandLane).toHaveBeenCalledWith("session:agent:main:main");
+  });
+
   it("reports when recovery finds no active work to release", async () => {
     mocks.resolveActiveEmbeddedRunHandleSessionId.mockReturnValue(undefined);
     mocks.resolveActiveEmbeddedRunSessionId.mockReturnValue(undefined);
     mocks.isEmbeddedPiRunActive.mockReturnValue(false);
     mocks.resetCommandLane.mockReturnValue(0);
 
-    await recoverStuckDiagnosticSession({
+    const result = await recoverStuckDiagnosticSession({
       sessionId: "stale-session",
       sessionKey: "agent:main:main",
       ageMs: 180_000,
     });
 
+    expect(result).toMatchObject({ status: "recovered", action: "cleared_stale_state" });
     expect(mocks.resetCommandLane).toHaveBeenCalledWith("session:agent:main:main");
     expect(mocks.diag.warn).toHaveBeenCalledWith(expect.stringContaining("reason=no_active_work"));
   });

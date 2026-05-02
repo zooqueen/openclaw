@@ -7,6 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Changes
 
 - Gateway/startup: skip plugin-backed auth-profile overlays during startup secrets preflight, reducing gateway readiness latency while keeping reload and OAuth recovery paths overlay-capable. (#68327) Thanks @JIRBOY.
+- Gateway/diagnostics: add experimental `diagnostics.stuckSessionAbortMs` recovery for stalled/stuck sessions after a longer no-progress window, while preserving observe-only warnings for long-running work that is still making progress. Refs #76038.
 
 ### Fixes
 

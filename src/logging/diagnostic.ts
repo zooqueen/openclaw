@@ -30,6 +30,7 @@ import {
   pruneDiagnosticSessionStates,
   resetDiagnosticSessionStateForTest,
   type SessionRef,
+  type SessionState,
   type SessionStateValue,
 } from "./diagnostic-session-state.js";
 import {
@@ -52,6 +53,7 @@ const webhookStats = {
 };
 
 const DEFAULT_STUCK_SESSION_WARN_MS = 120_000;
+const DEFAULT_EXPERIMENTAL_STUCK_SESSION_ABORT_MS = 15 * 60_000;
 const MIN_STUCK_SESSION_WARN_MS = 1_000;
 const MAX_STUCK_SESSION_WARN_MS = 24 * 60 * 60 * 1000;
 const RECENT_DIAGNOSTIC_ACTIVITY_MS = 120_000;
@@ -77,12 +79,29 @@ type DiagnosticWorkSnapshot = {
   queuedCount: number;
 };
 
+type StuckSessionRecoveryResult = {
+  status: "recovered" | "deferred" | "failed";
+  action:
+    | "aborted_run"
+    | "active_work_kept"
+    | "cleared_stale_state"
+    | "missing_session_ref"
+    | "recovery_in_flight"
+    | "released_lane"
+    | "released_unregistered_lane";
+  aborted?: boolean;
+  drained?: boolean;
+  forceCleared?: boolean;
+  released?: number;
+};
+
 type RecoverStuckSession = (params: {
   sessionId?: string;
   sessionKey?: string;
   ageMs: number;
   queueDepth?: number;
-}) => void | Promise<void>;
+  allowActiveAbort?: boolean;
+}) => StuckSessionRecoveryResult | void | Promise<StuckSessionRecoveryResult | void>;
 
 type DiagnosticLivenessSample = {
   reasons: DiagnosticLivenessWarningReason[];
@@ -120,18 +139,21 @@ function loadCommandPollBackoffRuntime() {
   return commandPollBackoffRuntimePromise;
 }
 
-function recoverStuckSession(params: {
+async function recoverStuckSession(params: {
   sessionId?: string;
   sessionKey?: string;
   ageMs: number;
   queueDepth?: number;
-}) {
+  allowActiveAbort?: boolean;
+}): Promise<StuckSessionRecoveryResult> {
   stuckSessionRecoveryRuntimePromise ??= import("./diagnostic-stuck-session-recovery.runtime.js");
-  void stuckSessionRecoveryRuntimePromise
-    .then(({ recoverStuckDiagnosticSession }) => recoverStuckDiagnosticSession(params))
-    .catch((err) => {
-      diag.warn(`stuck session recovery unavailable: ${String(err)}`);
-    });
+  try {
+    const { recoverStuckDiagnosticSession } = await stuckSessionRecoveryRuntimePromise;
+    return await recoverStuckDiagnosticSession(params);
+  } catch (err) {
+    diag.warn(`stuck session recovery unavailable: ${String(err)}`);
+    return { status: "failed", action: "active_work_kept" };
+  }
 }
 
 function getDiagnosticWorkSnapshot(): DiagnosticWorkSnapshot {
@@ -344,6 +366,143 @@ export function resolveStuckSessionWarnMs(config?: OpenClawConfig): number {
   return rounded;
 }
 
+export function resolveExperimentalStuckSessionAbortMs(
+  config?: OpenClawConfig,
+): number | undefined {
+  const raw = config?.diagnostics?.stuckSessionAbortMs;
+  if (raw === false) {
+    return undefined;
+  }
+  const warnMs = resolveStuckSessionWarnMs(config);
+  const candidate =
+    typeof raw === "number" && Number.isFinite(raw)
+      ? Math.floor(raw)
+      : DEFAULT_EXPERIMENTAL_STUCK_SESSION_ABORT_MS;
+  if (candidate <= warnMs || candidate > MAX_STUCK_SESSION_WARN_MS) {
+    return undefined;
+  }
+  return candidate;
+}
+
+function logSessionRecovery(params: {
+  sessionId?: string;
+  sessionKey?: string;
+  ageMs: number;
+  queueDepth?: number;
+  result: StuckSessionRecoveryResult;
+  experimental?: boolean;
+}) {
+  const message = `${params.experimental ? "experimental " : ""}stuck session recovery: sessionId=${
+    params.sessionId ?? "unknown"
+  } sessionKey=${params.sessionKey ?? "unknown"} age=${Math.round(
+    params.ageMs / 1000,
+  )}s queueDepth=${params.queueDepth ?? 0} status=${params.result.status} action=${
+    params.result.action
+  } aborted=${params.result.aborted ?? false} drained=${
+    params.result.drained ?? false
+  } forceCleared=${params.result.forceCleared ?? false} released=${params.result.released ?? 0}`;
+  const destructiveExperimentalRecovery =
+    params.experimental === true &&
+    params.result.status === "recovered" &&
+    (params.result.action === "aborted_run" ||
+      params.result.action === "released_unregistered_lane");
+  if (destructiveExperimentalRecovery) {
+    diag.error(message);
+  } else {
+    diag.warn(message);
+  }
+  emitDiagnosticEvent({
+    type: "session.recovery",
+    sessionId: params.sessionId,
+    sessionKey: params.sessionKey,
+    state: "processing",
+    ageMs: params.ageMs,
+    queueDepth: params.queueDepth,
+    status: params.result.status,
+    action: params.result.action,
+    aborted: params.result.aborted,
+    drained: params.result.drained,
+    forceCleared: params.result.forceCleared,
+    released: params.result.released,
+    experimental: params.experimental === true,
+  });
+  markActivity();
+}
+
+function normalizeRecoveryResult(
+  result: StuckSessionRecoveryResult | void,
+): StuckSessionRecoveryResult {
+  return result ?? { status: "deferred", action: "active_work_kept" };
+}
+
+function clearRecoveredDiagnosticSessionState(state: SessionState): void {
+  state.state = "idle";
+  state.queueDepth = 0;
+  state.lastActivity = Date.now();
+  state.lastStuckWarnAgeMs = undefined;
+  state.stuckAbortRequestedAt = undefined;
+}
+
+function scheduleDiagnosticSessionRecovery(params: {
+  state: SessionState;
+  ageMs: number;
+  recover: RecoverStuckSession;
+  allowActiveAbort?: boolean;
+  expectedLastActivity: number;
+  abortRequestedAt?: number;
+  experimental?: boolean;
+}): void {
+  const recoveryParams = {
+    sessionId: params.state.sessionId,
+    sessionKey: params.state.sessionKey,
+    ageMs: params.ageMs,
+    queueDepth: params.state.queueDepth,
+    ...(params.allowActiveAbort === true ? { allowActiveAbort: true } : {}),
+  };
+  void Promise.resolve(params.recover(recoveryParams))
+    .then((result) => {
+      const normalized = normalizeRecoveryResult(result);
+      const latest = getDiagnosticSessionState(recoveryParams);
+      if (
+        latest !== params.state ||
+        latest.state !== "processing" ||
+        latest.lastActivity !== params.expectedLastActivity ||
+        (params.abortRequestedAt !== undefined &&
+          latest.stuckAbortRequestedAt !== params.abortRequestedAt)
+      ) {
+        return;
+      }
+      if (params.experimental === true || normalized.status === "recovered") {
+        logSessionRecovery({
+          ...recoveryParams,
+          result: normalized,
+          experimental: params.experimental,
+        });
+      }
+      if (normalized.status === "recovered") {
+        clearRecoveredDiagnosticSessionState(latest);
+      } else if (params.abortRequestedAt !== undefined) {
+        latest.stuckAbortRequestedAt = undefined;
+      }
+    })
+    .catch((err) => {
+      const latest = getDiagnosticSessionState(recoveryParams);
+      if (
+        latest === params.state &&
+        latest.state === "processing" &&
+        params.abortRequestedAt !== undefined &&
+        latest.stuckAbortRequestedAt === params.abortRequestedAt
+      ) {
+        latest.stuckAbortRequestedAt = undefined;
+      }
+      diag.warn(
+        `stuck session recovery failed: sessionId=${recoveryParams.sessionId ?? "unknown"} sessionKey=${
+          recoveryParams.sessionKey ?? "unknown"
+        } err=${String(err)}`,
+      );
+    });
+}
+
 export function logWebhookReceived(params: {
   channel: string;
   updateType?: string;
@@ -437,6 +596,7 @@ export function logMessageQueued(params: {
   state.queueDepth += 1;
   state.lastActivity = Date.now();
   state.lastStuckWarnAgeMs = undefined;
+  state.stuckAbortRequestedAt = undefined;
   if (diag.isEnabled("debug")) {
     diag.debug(
       `message queued: sessionId=${state.sessionId ?? "unknown"} sessionKey=${
@@ -516,6 +676,7 @@ export function logSessionStateChange(
   state.state = params.state;
   state.lastActivity = Date.now();
   state.lastStuckWarnAgeMs = undefined;
+  state.stuckAbortRequestedAt = undefined;
   if (params.state === "idle") {
     state.queueDepth = Math.max(0, state.queueDepth - 1);
   }
@@ -547,6 +708,7 @@ export function markDiagnosticSessionProgress(params: SessionRef) {
   const state = getDiagnosticSessionState(params);
   state.lastActivity = Date.now();
   state.lastStuckWarnAgeMs = undefined;
+  state.stuckAbortRequestedAt = undefined;
   markActivity();
 }
 
@@ -751,6 +913,7 @@ export function startDiagnosticHeartbeat(
       }
     }
     const stuckSessionWarnMs = resolveStuckSessionWarnMs(heartbeatConfig);
+    const stuckSessionAbortMs = resolveExperimentalStuckSessionAbortMs(heartbeatConfig);
     const now = Date.now();
     pruneDiagnosticSessionStates(now, true);
     const work = getDiagnosticWorkSnapshot();
@@ -802,19 +965,45 @@ export function startDiagnosticHeartbeat(
     for (const [, state] of diagnosticSessionStates) {
       const ageMs = now - state.lastActivity;
       if (state.state === "processing" && ageMs > stuckSessionWarnMs) {
-        const classification = logSessionAttention({
+        const activity = getDiagnosticSessionActivitySnapshot(
+          { sessionId: state.sessionId, sessionKey: state.sessionKey },
+          now,
+        );
+        const currentClassification = classifySessionAttention({
+          queueDepth: state.queueDepth,
+          activity,
+          staleMs: stuckSessionWarnMs,
+        });
+        const loggedClassification = logSessionAttention({
           sessionId: state.sessionId,
           sessionKey: state.sessionKey,
           state: state.state,
           ageMs,
           thresholdMs: stuckSessionWarnMs,
         });
-        if (classification?.recoveryEligible) {
-          void (opts?.recoverStuckSession ?? recoverStuckSession)({
-            sessionId: state.sessionId,
-            sessionKey: state.sessionKey,
+        const shouldAbortRecovery =
+          stuckSessionAbortMs !== undefined &&
+          ageMs > stuckSessionAbortMs &&
+          state.stuckAbortRequestedAt === undefined &&
+          currentClassification.eventType !== "session.long_running";
+        if (shouldAbortRecovery) {
+          const abortRequestedAt = now;
+          state.stuckAbortRequestedAt = abortRequestedAt;
+          scheduleDiagnosticSessionRecovery({
+            state,
             ageMs,
-            queueDepth: state.queueDepth,
+            recover: opts?.recoverStuckSession ?? recoverStuckSession,
+            allowActiveAbort: true,
+            expectedLastActivity: state.lastActivity,
+            abortRequestedAt,
+            experimental: true,
+          });
+        } else if (loggedClassification?.recoveryEligible) {
+          scheduleDiagnosticSessionRecovery({
+            state,
+            ageMs,
+            recover: opts?.recoverStuckSession ?? recoverStuckSession,
+            expectedLastActivity: state.lastActivity,
           });
         }
       }

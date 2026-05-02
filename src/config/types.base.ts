@@ -290,6 +290,8 @@ export type DiagnosticsConfig = {
   flags?: string[];
   /** Threshold in ms before a processing session with no observed progress logs diagnostics. */
   stuckSessionWarnMs?: number;
+  /** Experimental: threshold in ms before stalled/stuck session recovery may abort active work. Set false to disable. */
+  stuckSessionAbortMs?: number | false;
   otel?: DiagnosticsOtelConfig;
   cacheTrace?: DiagnosticsCacheTraceConfig;
 };

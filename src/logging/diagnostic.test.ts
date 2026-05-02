@@ -28,6 +28,7 @@ import {
   diagnosticLogger,
   markDiagnosticSessionProgress,
   resetDiagnosticStateForTest,
+  resolveExperimentalStuckSessionAbortMs,
   resolveStuckSessionWarnMs,
   startDiagnosticHeartbeat,
 } from "./diagnostic.js";
@@ -44,6 +45,11 @@ function createEmitMemorySampleMock() {
 
 function flushDiagnosticEvents() {
   return new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe("diagnostic session state pruning", () => {
@@ -618,6 +624,141 @@ describe("stuck session diagnostics threshold", () => {
     expect(resolveStuckSessionWarnMs({ diagnostics: { stuckSessionWarnMs: -1 } })).toBe(120_000);
     expect(resolveStuckSessionWarnMs({ diagnostics: { stuckSessionWarnMs: 0 } })).toBe(120_000);
     expect(resolveStuckSessionWarnMs()).toBe(120_000);
+  });
+
+  it("resolves the experimental stuck session abort threshold", () => {
+    expect(resolveExperimentalStuckSessionAbortMs()).toBe(900_000);
+    expect(
+      resolveExperimentalStuckSessionAbortMs({
+        diagnostics: { stuckSessionWarnMs: 30_000, stuckSessionAbortMs: 90_000 },
+      }),
+    ).toBe(90_000);
+    expect(
+      resolveExperimentalStuckSessionAbortMs({
+        diagnostics: { stuckSessionWarnMs: 30_000, stuckSessionAbortMs: false },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveExperimentalStuckSessionAbortMs({
+        diagnostics: { stuckSessionWarnMs: 30_000, stuckSessionAbortMs: 30_000 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("uses experimental active abort recovery for stalled sessions past the abort threshold", async () => {
+    const events: DiagnosticEventPayload[] = [];
+    const recoverStuckSession = vi.fn(() => ({
+      status: "recovered" as const,
+      action: "aborted_run" as const,
+      aborted: true,
+      drained: true,
+    }));
+    const unsubscribe = onDiagnosticEvent((event) => {
+      events.push(event);
+    });
+    try {
+      startDiagnosticHeartbeat(
+        {
+          diagnostics: {
+            enabled: true,
+            stuckSessionWarnMs: 30_000,
+            stuckSessionAbortMs: 60_000,
+          },
+        },
+        { recoverStuckSession },
+      );
+      logSessionStateChange({ sessionId: "s1", sessionKey: "main", state: "processing" });
+      markDiagnosticEmbeddedRunStarted({ sessionId: "s1", sessionKey: "main" });
+      vi.advanceTimersByTime(91_000);
+      await flushMicrotasks();
+    } finally {
+      unsubscribe();
+    }
+
+    expect(recoverStuckSession).toHaveBeenCalledWith({
+      sessionId: "s1",
+      sessionKey: "main",
+      ageMs: expect.any(Number),
+      queueDepth: 0,
+      allowActiveAbort: true,
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.recovery",
+        status: "recovered",
+        action: "aborted_run",
+        experimental: true,
+      }),
+    );
+    expect(getDiagnosticSessionState({ sessionId: "s1", sessionKey: "main" }).state).toBe("idle");
+  });
+
+  it("clears diagnostic state when stale bookkeeping recovery succeeds", async () => {
+    const events: DiagnosticEventPayload[] = [];
+    const recoverStuckSession = vi.fn(() => ({
+      status: "recovered" as const,
+      action: "cleared_stale_state" as const,
+      released: 0,
+    }));
+    const unsubscribe = onDiagnosticEvent((event) => {
+      events.push(event);
+    });
+    try {
+      startDiagnosticHeartbeat(
+        {
+          diagnostics: {
+            enabled: true,
+            stuckSessionWarnMs: 30_000,
+            stuckSessionAbortMs: false,
+          },
+        },
+        { recoverStuckSession },
+      );
+      logSessionStateChange({ sessionId: "s1", sessionKey: "main", state: "processing" });
+      vi.advanceTimersByTime(61_000);
+      await flushMicrotasks();
+    } finally {
+      unsubscribe();
+    }
+
+    expect(recoverStuckSession).toHaveBeenCalledWith({
+      sessionId: "s1",
+      sessionKey: "main",
+      ageMs: expect.any(Number),
+      queueDepth: 0,
+    });
+    expect(getDiagnosticSessionState({ sessionId: "s1", sessionKey: "main" }).state).toBe("idle");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.recovery",
+        status: "recovered",
+        action: "cleared_stale_state",
+        experimental: false,
+      }),
+    );
+  });
+
+  it("does not use experimental active abort recovery for long-running sessions with progress", async () => {
+    const recoverStuckSession = vi.fn();
+    startDiagnosticHeartbeat(
+      {
+        diagnostics: {
+          enabled: true,
+          stuckSessionWarnMs: 30_000,
+          stuckSessionAbortMs: 60_000,
+        },
+      },
+      { recoverStuckSession },
+    );
+    logSessionStateChange({ sessionId: "s1", sessionKey: "main", state: "processing" });
+    vi.advanceTimersByTime(89_000);
+    markDiagnosticEmbeddedRunStarted({ sessionId: "s1", sessionKey: "main" });
+    vi.advanceTimersByTime(2_000);
+    await flushMicrotasks();
+
+    expect(recoverStuckSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ allowActiveAbort: true }),
+    );
   });
 });
 

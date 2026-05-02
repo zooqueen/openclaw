@@ -900,6 +900,7 @@ Notes:
     enabled: true,
     flags: ["telegram.*"],
     stuckSessionWarnMs: 30000,
+    stuckSessionAbortMs: 900000, // experimental; set false to disable
 
     otel: {
       enabled: false,
@@ -939,6 +940,7 @@ Notes:
 - `enabled`: master toggle for instrumentation output (default: `true`).
 - `flags`: array of flag strings enabling targeted log output (supports wildcards like `"telegram.*"` or `"*"`).
 - `stuckSessionWarnMs`: no-progress age threshold in ms for classifying long-running processing sessions as `session.long_running`, `session.stalled`, or `session.stuck`. Reply, tool, status, block, and ACP progress reset the timer; repeated `session.stuck` diagnostics back off while unchanged.
+- `stuckSessionAbortMs`: experimental no-progress age threshold in ms before stalled or stuck recovery may abort active embedded work or release an active unregistered lane. Defaults to `900000`, must be greater than `stuckSessionWarnMs`, and can be set to `false` to disable. `session.long_running` work that is still making progress is never aborted by this path.
 - `otel.enabled`: enables the OpenTelemetry export pipeline (default: `false`). For the full configuration, signal catalog, and privacy model, see [OpenTelemetry export](/gateway/opentelemetry).
 - `otel.endpoint`: collector URL for OTel export.
 - `otel.tracesEndpoint` / `otel.metricsEndpoint` / `otel.logsEndpoint`: optional signal-specific OTLP endpoints. When set, they override `otel.endpoint` for that signal only.

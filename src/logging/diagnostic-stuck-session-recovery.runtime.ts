@@ -20,6 +20,30 @@ export type StuckSessionRecoveryParams = {
   allowActiveAbort?: boolean;
 };
 
+export type StuckSessionRecoveryResult = {
+  status: "recovered" | "deferred" | "failed";
+  action:
+    | "aborted_run"
+    | "active_work_kept"
+    | "cleared_stale_state"
+    | "missing_session_ref"
+    | "recovery_in_flight"
+    | "released_lane"
+    | "released_unregistered_lane";
+  aborted?: boolean;
+  drained?: boolean;
+  forceCleared?: boolean;
+  released?: number;
+};
+
+function recoveryResult(
+  status: StuckSessionRecoveryResult["status"],
+  action: StuckSessionRecoveryResult["action"],
+  extra?: Omit<StuckSessionRecoveryResult, "status" | "action">,
+): StuckSessionRecoveryResult {
+  return { status, action, ...extra };
+}
+
 function recoveryKey(params: StuckSessionRecoveryParams): string | undefined {
   return params.sessionKey?.trim() || params.sessionId?.trim() || undefined;
 }
@@ -51,10 +75,10 @@ function formatRecoveryContext(
 
 export async function recoverStuckDiagnosticSession(
   params: StuckSessionRecoveryParams,
-): Promise<void> {
+): Promise<StuckSessionRecoveryResult> {
   const key = recoveryKey(params);
   if (!key || recoveriesInFlight.has(key)) {
-    return;
+    return recoveryResult("deferred", key ? "recovery_in_flight" : "missing_session_ref");
   }
 
   recoveriesInFlight.add(key);
@@ -73,6 +97,7 @@ export async function recoverStuckDiagnosticSession(
     const sessionLane = laneKey ? resolveEmbeddedSessionLane(laneKey) : null;
     let aborted = false;
     let drained = true;
+    let forceCleared = false;
 
     if (activeSessionId) {
       if (params.allowActiveAbort !== true) {
@@ -82,7 +107,7 @@ export async function recoverStuckDiagnosticSession(
             { activeSessionId },
           )}`,
         );
-        return;
+        return recoveryResult("deferred", "active_work_kept");
       }
       const result = await abortAndDrainEmbeddedPiRun({
         sessionId: activeSessionId,
@@ -93,21 +118,69 @@ export async function recoverStuckDiagnosticSession(
       });
       aborted = result.aborted;
       drained = result.drained;
+      forceCleared = result.forceCleared;
+      if (result.aborted && result.drained) {
+        return recoveryResult("recovered", "aborted_run", {
+          aborted: result.aborted,
+          drained: result.drained,
+          forceCleared: result.forceCleared,
+        });
+      }
     }
 
     if (!activeSessionId && activeWorkSessionId && isEmbeddedPiRunActive(activeWorkSessionId)) {
-      diag.warn(
-        `stuck session recovery skipped: reason=active_reply_work action=keep_lane ${formatRecoveryContext(
-          params,
-          { activeSessionId: activeWorkSessionId },
-        )}`,
-      );
-      return;
+      if (params.allowActiveAbort === true) {
+        const result = await abortAndDrainEmbeddedPiRun({
+          sessionId: activeWorkSessionId,
+          sessionKey: params.sessionKey,
+          settleMs: STUCK_SESSION_ABORT_SETTLE_MS,
+          forceClear: true,
+          reason: "stuck_recovery",
+        });
+        aborted = result.aborted;
+        drained = result.drained;
+        forceCleared = result.forceCleared;
+        if (result.aborted && result.drained) {
+          return recoveryResult("recovered", "aborted_run", {
+            aborted: result.aborted,
+            drained: result.drained,
+            forceCleared: result.forceCleared,
+          });
+        }
+      } else {
+        diag.warn(
+          `stuck session recovery skipped: reason=active_reply_work action=keep_lane ${formatRecoveryContext(
+            params,
+            { activeSessionId: activeWorkSessionId },
+          )}`,
+        );
+        return recoveryResult("deferred", "active_work_kept");
+      }
     }
 
     if (!activeSessionId && sessionLane) {
       const laneSnapshot = getCommandLaneSnapshot(sessionLane);
       if (laneSnapshot.activeCount > 0) {
+        if (params.allowActiveAbort === true) {
+          const released = resetCommandLane(sessionLane);
+          diag.warn(
+            `stuck session recovery: reason=active_lane_task action=release_lane ${formatRecoveryContext(
+              params,
+              {
+                lane: sessionLane,
+                activeCount: laneSnapshot.activeCount,
+                queuedCount: laneSnapshot.queuedCount,
+              },
+            )} released=${released}`,
+          );
+          return recoveryResult(
+            released > 0 ? "recovered" : "deferred",
+            "released_unregistered_lane",
+            {
+              released,
+            },
+          );
+        }
         diag.warn(
           `stuck session recovery skipped: reason=active_lane_task action=keep_lane ${formatRecoveryContext(
             params,
@@ -118,7 +191,7 @@ export async function recoverStuckDiagnosticSession(
             },
           )}`,
         );
-        return;
+        return recoveryResult("deferred", "active_work_kept");
       }
     }
 
@@ -131,22 +204,29 @@ export async function recoverStuckDiagnosticSession(
           params.sessionKey ?? "unknown"
         } age=${Math.round(params.ageMs / 1000)}s aborted=${aborted} drained=${drained} released=${released}`,
       );
-    } else {
-      diag.warn(
-        `stuck session recovery no-op: reason=no_active_work action=none ${formatRecoveryContext(
-          params,
-          {
-            lane: sessionLane ?? undefined,
-          },
-        )}`,
-      );
+      return recoveryResult("recovered", aborted ? "aborted_run" : "released_lane", {
+        aborted,
+        drained,
+        forceCleared,
+        released,
+      });
     }
+    diag.warn(
+      `stuck session recovery no-op: reason=no_active_work action=none ${formatRecoveryContext(
+        params,
+        {
+          lane: sessionLane ?? undefined,
+        },
+      )}`,
+    );
+    return recoveryResult("recovered", "cleared_stale_state", { released: 0 });
   } catch (err) {
     diag.warn(
       `stuck session recovery failed: sessionId=${params.sessionId ?? "unknown"} sessionKey=${
         params.sessionKey ?? "unknown"
       } err=${String(err)}`,
     );
+    return recoveryResult("failed", "active_work_kept");
   } finally {
     recoveriesInFlight.delete(key);
   }

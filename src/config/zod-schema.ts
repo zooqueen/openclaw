@@ -336,6 +336,7 @@ export const OpenClawSchema = z
         enabled: z.boolean().optional(),
         flags: z.array(z.string()).optional(),
         stuckSessionWarnMs: z.number().int().positive().optional(),
+        stuckSessionAbortMs: z.union([z.number().int().positive(), z.literal(false)]).optional(),
         otel: z
           .object({
             enabled: z.boolean().optional(),

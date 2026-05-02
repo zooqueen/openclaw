@@ -151,6 +151,22 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
             description:
               "No-progress age threshold in milliseconds for classifying long processing sessions as long-running, stalled, or stuck. Reply, tool, status, block, and ACP progress reset the timer; repeated stuck diagnostics back off while unchanged.",
           },
+          stuckSessionAbortMs: {
+            anyOf: [
+              {
+                type: "integer",
+                exclusiveMinimum: 0,
+                maximum: 9007199254740991,
+              },
+              {
+                type: "boolean",
+                const: false,
+              },
+            ],
+            title: "Experimental Session Abort Threshold (ms)",
+            description:
+              "Experimental no-progress age threshold in milliseconds before stalled or stuck session recovery may abort active embedded work or release an active unregistered lane. Defaults to 900000 when omitted, must be greater than diagnostics.stuckSessionWarnMs, and can be set to false to disable.",
+          },
           otel: {
             type: "object",
             properties: {
@@ -24550,6 +24566,11 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
     "diagnostics.stuckSessionWarnMs": {
       label: "Session Liveness Threshold (ms)",
       help: "No-progress age threshold in milliseconds for classifying long processing sessions as long-running, stalled, or stuck. Reply, tool, status, block, and ACP progress reset the timer; repeated stuck diagnostics back off while unchanged.",
+      tags: ["observability", "storage"],
+    },
+    "diagnostics.stuckSessionAbortMs": {
+      label: "Experimental Session Abort Threshold (ms)",
+      help: "Experimental no-progress age threshold in milliseconds before stalled or stuck session recovery may abort active embedded work or release an active unregistered lane. Defaults to 900000 when omitted, must be greater than diagnostics.stuckSessionWarnMs, and can be set to false to disable.",
       tags: ["observability", "storage"],
     },
     "diagnostics.otel.enabled": {
