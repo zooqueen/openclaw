@@ -133,7 +133,7 @@ describe("probeGatewayStatus", () => {
     });
   });
 
-  it("does not send shared credentials on unpinned local status RPC fallback", async () => {
+  it("uses shared credentials for local loopback status RPC fallback", async () => {
     callGatewayMock.mockReset();
     probeGatewayMock.mockReset();
     probeGatewayMock.mockResolvedValueOnce({
@@ -146,6 +146,7 @@ describe("probeGatewayStatus", () => {
         capability: "unknown",
       },
     });
+    callGatewayMock.mockResolvedValueOnce({ status: "ok" });
 
     const result = await probeGatewayStatus({
       url: "ws://127.0.0.1:19191",
@@ -155,17 +156,27 @@ describe("probeGatewayStatus", () => {
     });
 
     expect(result).toEqual({
-      ok: false,
+      ok: true,
       kind: "connect",
-      capability: "unknown",
+      capability: "read_only",
       auth: {
         role: null,
         scopes: [],
-        capability: "unknown",
+        capability: "read_only",
       },
-      error: "timeout",
     });
-    expect(callGatewayMock).not.toHaveBeenCalled();
+    expect(callGatewayMock).toHaveBeenCalledWith({
+      url: "ws://127.0.0.1:19191",
+      token: "temp-token",
+      password: undefined,
+      tlsFingerprint: undefined,
+      method: "status",
+      timeoutMs: 1000,
+      mode: "backend",
+      clientName: "gateway-client",
+      deviceIdentity: null,
+      allowUnauthenticatedLoopbackUrlOverride: true,
+    });
   });
 
   it("uses a real status RPC when requireRpc is enabled", async () => {

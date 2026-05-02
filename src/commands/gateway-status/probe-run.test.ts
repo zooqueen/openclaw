@@ -85,7 +85,7 @@ describe("runGatewayStatusProbePass", () => {
     });
   });
 
-  it("does not use the status RPC fallback with shared credentials on unpinned loopback", async () => {
+  it("uses the status RPC fallback with shared credentials on loopback", async () => {
     mocks.probeGateway.mockResolvedValueOnce({
       ok: false,
       url: "ws://127.0.0.1:18789",
@@ -102,6 +102,7 @@ describe("runGatewayStatusProbePass", () => {
       presence: null,
       configSnapshot: null,
     });
+    mocks.callGateway.mockResolvedValueOnce({ sessions: 1 });
 
     const result = await runGatewayStatusProbePass({
       cfg: {},
@@ -122,11 +123,23 @@ describe("runGatewayStatusProbePass", () => {
       loadSshTunnelModule: vi.fn(),
     });
 
-    expect(mocks.callGateway).not.toHaveBeenCalled();
+    expect(mocks.callGateway).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws://127.0.0.1:18789",
+        token: "tok",
+        password: "pw",
+        method: "status",
+        mode: "backend",
+        clientName: "gateway-client",
+        deviceIdentity: null,
+        allowUnauthenticatedLoopbackUrlOverride: true,
+      }),
+    );
     expect(result.probed[0]?.probe).toMatchObject({
-      ok: false,
+      ok: true,
       error: "timeout",
-      auth: { capability: "unknown" },
+      status: { sessions: 1 },
+      auth: { capability: "read_only" },
     });
   });
 
