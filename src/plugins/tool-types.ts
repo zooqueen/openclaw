@@ -42,6 +42,13 @@ export type OpenClawPluginToolOptions = {
   name?: string;
   names?: string[];
   optional?: boolean;
+  /**
+   * Reuse this factory's returned tool definitions across prompt-prep calls.
+   *
+   * Only use for context-free factories: no sender/session/workspace/config/browser
+   * state may be captured in the returned tool object.
+   */
+  cache?: "static";
 };
 
 export type OpenClawPluginHookOptions = {

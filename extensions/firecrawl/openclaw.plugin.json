@@ -33,6 +33,58 @@
     "webSearchProviders": ["firecrawl"],
     "tools": ["firecrawl_search", "firecrawl_scrape"]
   },
+  "toolMetadata": {
+    "firecrawl_search": {
+      "authSignals": [{ "provider": "firecrawl" }],
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.firecrawl.config",
+          "overlayPath": "webSearch",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "plugins.entries.firecrawl.config",
+          "overlayPath": "webFetch",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "tools.web.search",
+          "overlayPath": "firecrawl",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "tools.web.fetch",
+          "overlayPath": "firecrawl",
+          "required": ["apiKey"]
+        }
+      ]
+    },
+    "firecrawl_scrape": {
+      "authSignals": [{ "provider": "firecrawl" }],
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.firecrawl.config",
+          "overlayPath": "webFetch",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "plugins.entries.firecrawl.config",
+          "overlayPath": "webSearch",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "tools.web.fetch",
+          "overlayPath": "firecrawl",
+          "required": ["apiKey"]
+        },
+        {
+          "rootPath": "tools.web.search",
+          "overlayPath": "firecrawl",
+          "required": ["apiKey"]
+        }
+      ]
+    }
+  },
   "configContracts": {
     "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
   },

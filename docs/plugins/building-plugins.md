@@ -268,6 +268,7 @@ Users enable optional tools in config:
 - Tool names must not clash with core tools (conflicts are skipped)
 - Tools with malformed registration objects, including missing `parameters`, are skipped and reported in plugin diagnostics instead of breaking agent runs
 - Use `optional: true` for tools with side effects or extra binary requirements
+- Direct tool objects are treated as static definitions and reused during prompt prep. If a factory is also context-free, register it with `{ cache: "static" }`; do not use that option when the returned tool captures sender, session, workspace, filesystem policy, browser, or runtime config state.
 - Users can enable all tools from a plugin by adding the plugin id to `tools.allow`
 
 ## Registering CLI commands

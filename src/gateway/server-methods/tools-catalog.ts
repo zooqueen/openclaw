@@ -1,6 +1,5 @@
 import {
   listAgentIds,
-  resolveAgentDir,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
@@ -10,13 +9,15 @@ import {
   resolveCoreToolProfiles,
 } from "../../agents/tool-catalog.js";
 import { summarizeToolDescriptionText } from "../../agents/tool-description-summary.js";
+import { normalizeToolName } from "../../agents/tool-policy.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { getActivePluginRegistry } from "../../plugins/runtime.js";
+import { normalizePluginsConfig } from "../../plugins/config-state.js";
 import {
-  buildPluginToolMetadataKey,
-  getPluginToolMeta,
-  resolvePluginTools,
-} from "../../plugins/tools.js";
+  isManifestPluginAvailableForControlPlane,
+  loadManifestContractSnapshot,
+} from "../../plugins/manifest-contract-eligibility.js";
+import { hasManifestToolAvailability } from "../../plugins/manifest-tool-availability.js";
+import { getActivePluginRegistry } from "../../plugins/runtime.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import {
   ErrorCodes,
@@ -81,39 +82,65 @@ function buildCoreGroups(): ToolCatalogGroup[] {
   }));
 }
 
+function buildPluginToolMetadataKey(pluginId: string, toolName: string): string {
+  return JSON.stringify([pluginId, toolName]);
+}
+
+function buildActivePluginToolCatalogLookups() {
+  const activeRegistry = getActivePluginRegistry();
+  return {
+    metadata: new Map(
+      (activeRegistry?.toolMetadata ?? []).map((entry) => [
+        buildPluginToolMetadataKey(entry.pluginId, entry.metadata.toolName),
+        entry.metadata,
+      ]),
+    ),
+    registrations: new Map(
+      (activeRegistry?.tools ?? []).flatMap((entry) =>
+        entry.names.map((name) => [buildPluginToolMetadataKey(entry.pluginId, name), entry]),
+      ),
+    ),
+  };
+}
+
 function buildPluginGroups(params: {
   cfg: OpenClawConfig;
   agentId: string;
   existingToolNames: Set<string>;
 }): ToolCatalogGroup[] {
+  if (!normalizePluginsConfig(params.cfg.plugins).enabled) {
+    return [];
+  }
   const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
-  const agentDir = resolveAgentDir(params.cfg, params.agentId);
-  const pluginTools = resolvePluginTools({
-    context: {
-      config: params.cfg,
-      workspaceDir,
-      agentDir,
-      agentId: params.agentId,
-    },
-    existingToolNames: params.existingToolNames,
-    toolAllowlist: ["group:plugins"],
-    suppressNameConflicts: true,
-    allowGatewaySubagentBinding: true,
+  const snapshot = loadManifestContractSnapshot({
+    config: params.cfg,
+    workspaceDir,
+    env: process.env,
   });
   const groups = new Map<string, ToolCatalogGroup>();
   // Key metadata by plugin ownership and tool name so we only project metadata that
   // was registered BY the tool's owning plugin. Without this scoping, plugin-X
   // could override the catalog label/description/risk/tags for another plugin's
   // tool by registering metadata with the same toolName.
-  const pluginToolMetadata = new Map(
-    (getActivePluginRegistry()?.toolMetadata ?? []).map((entry) => [
-      buildPluginToolMetadataKey(entry.pluginId, entry.metadata.toolName),
-      entry.metadata,
-    ]),
+  const activeRegistryLookups = buildActivePluginToolCatalogLookups();
+  const existingNormalized = new Set(
+    Array.from(params.existingToolNames, (tool) => normalizeToolName(tool)),
   );
-  for (const tool of pluginTools) {
-    const meta = getPluginToolMeta(tool);
-    const pluginId = meta?.pluginId ?? "plugin";
+  for (const plugin of snapshot.plugins) {
+    if (
+      !isManifestPluginAvailableForControlPlane({
+        snapshot,
+        plugin,
+        config: params.cfg,
+      })
+    ) {
+      continue;
+    }
+    const toolNames = plugin.contracts?.tools ?? [];
+    if (toolNames.length === 0) {
+      continue;
+    }
+    const pluginId = plugin.id;
     const groupId = `plugin:${pluginId}`;
     const existing =
       groups.get(groupId) ??
@@ -124,29 +151,41 @@ function buildPluginGroups(params: {
         pluginId,
         tools: [],
       } as ToolCatalogGroup);
-    const ownedMetadata = meta?.pluginId
-      ? pluginToolMetadata.get(buildPluginToolMetadataKey(meta.pluginId, tool.name))
-      : undefined;
-    existing.tools.push({
-      id: tool.name,
-      label:
-        normalizeOptionalString(ownedMetadata?.displayName) ??
-        normalizeOptionalString(tool.label) ??
-        tool.name,
-      description: summarizeToolDescriptionText({
-        rawDescription:
-          ownedMetadata?.description ??
-          (typeof tool.description === "string" ? tool.description : undefined),
-        displaySummary: tool.displaySummary,
-      }),
-      source: "plugin",
-      pluginId,
-      optional: meta?.optional,
-      risk: ownedMetadata?.risk,
-      tags: ownedMetadata?.tags,
-      defaultProfiles: [],
-    });
-    groups.set(groupId, existing);
+    for (const toolName of toolNames) {
+      if (existingNormalized.has(normalizeToolName(toolName))) {
+        continue;
+      }
+      if (
+        !hasManifestToolAvailability({
+          plugin,
+          toolNames: [toolName],
+          config: params.cfg,
+          env: process.env,
+        })
+      ) {
+        continue;
+      }
+      const ownedMetadata = activeRegistryLookups.metadata.get(
+        buildPluginToolMetadataKey(plugin.id, toolName),
+      );
+      const runtimeRegistration = activeRegistryLookups.registrations.get(
+        buildPluginToolMetadataKey(plugin.id, toolName),
+      );
+      existing.tools.push({
+        id: toolName,
+        label: normalizeOptionalString(ownedMetadata?.displayName) ?? toolName,
+        description: summarizeToolDescriptionText({
+          rawDescription: ownedMetadata?.description ?? `Plugin tool provided by ${plugin.id}.`,
+        }),
+        source: "plugin",
+        pluginId,
+        optional: runtimeRegistration?.optional,
+        risk: ownedMetadata?.risk,
+        tags: ownedMetadata?.tags,
+        defaultProfiles: [],
+      });
+      groups.set(groupId, existing);
+    }
   }
   return [...groups.values()]
     .map((group) =>

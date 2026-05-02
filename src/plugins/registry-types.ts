@@ -70,6 +70,7 @@ export type PluginToolRegistration = {
   names: string[];
   declaredNames?: string[];
   optional: boolean;
+  cache?: "static";
   source: string;
   rootDir?: string;
 };

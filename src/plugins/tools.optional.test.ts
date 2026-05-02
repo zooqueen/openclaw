@@ -10,6 +10,7 @@ type MockRegistryToolEntry = {
   names: string[];
   declaredNames?: string[];
   factory: (ctx: unknown) => unknown;
+  cache?: "static";
 };
 
 const loadOpenClawPluginsMock = vi.fn();
@@ -322,6 +323,54 @@ function createXaiToolManifest() {
   };
 }
 
+function createFirecrawlToolManifest() {
+  const apiKeyConfigSignals = [
+    {
+      rootPath: "plugins.entries.firecrawl.config",
+      overlayPath: "webSearch",
+      required: ["apiKey"],
+    },
+    {
+      rootPath: "plugins.entries.firecrawl.config",
+      overlayPath: "webFetch",
+      required: ["apiKey"],
+    },
+    {
+      rootPath: "tools.web.search",
+      overlayPath: "firecrawl",
+      required: ["apiKey"],
+    },
+    {
+      rootPath: "tools.web.fetch",
+      overlayPath: "firecrawl",
+      required: ["apiKey"],
+    },
+  ];
+  return {
+    id: "firecrawl",
+    origin: "bundled",
+    enabledByDefault: true,
+    channels: [],
+    providers: ["firecrawl"],
+    providerAuthEnvVars: {
+      firecrawl: ["FIRECRAWL_API_KEY"],
+    },
+    contracts: {
+      tools: ["firecrawl_search", "firecrawl_scrape"],
+    },
+    toolMetadata: {
+      firecrawl_search: {
+        authSignals: [{ provider: "firecrawl" }],
+        configSignals: apiKeyConfigSignals,
+      },
+      firecrawl_scrape: {
+        authSignals: [{ provider: "firecrawl" }],
+        configSignals: apiKeyConfigSignals,
+      },
+    },
+  };
+}
+
 function expectResolvedToolNames(
   tools: ReturnType<typeof resolvePluginTools>,
   expectedToolNames: readonly string[],
@@ -581,6 +630,101 @@ describe("resolvePluginTools optional tools", () => {
     );
   });
 
+  it.each([
+    {
+      name: "scrape tool can use webSearch apiKey",
+      config: {
+        plugins: {
+          enabled: true,
+          entries: {
+            firecrawl: {
+              config: {
+                webSearch: {
+                  apiKey: "firecrawl-key",
+                },
+              },
+            },
+          },
+        },
+      },
+      toolAllowlist: ["firecrawl_scrape"],
+      expectedTool: "firecrawl_scrape",
+    },
+    {
+      name: "search tool can use webFetch apiKey",
+      config: {
+        plugins: {
+          enabled: true,
+          entries: {
+            firecrawl: {
+              config: {
+                webFetch: {
+                  apiKey: "firecrawl-key",
+                },
+              },
+            },
+          },
+        },
+      },
+      toolAllowlist: ["firecrawl_search"],
+      expectedTool: "firecrawl_search",
+    },
+  ])("keeps Firecrawl metadata aligned with runtime key resolution: $name", (params) => {
+    const base = createContext();
+    const config = {
+      ...base.config,
+      plugins: {
+        ...base.config.plugins,
+        ...params.config.plugins,
+        entries: params.config.plugins.entries,
+      },
+    };
+    installToolManifestSnapshot({
+      config,
+      env: {},
+      plugin: createFirecrawlToolManifest(),
+    });
+    const searchFactory = vi.fn(() => makeTool("firecrawl_search"));
+    const scrapeFactory = vi.fn(() => makeTool("firecrawl_scrape"));
+    loadOpenClawPluginsMock.mockReturnValue({
+      tools: [
+        {
+          pluginId: "firecrawl",
+          optional: false,
+          source: "/tmp/firecrawl.js",
+          names: ["firecrawl_search"],
+          declaredNames: ["firecrawl_search", "firecrawl_scrape"],
+          factory: searchFactory,
+        },
+        {
+          pluginId: "firecrawl",
+          optional: false,
+          source: "/tmp/firecrawl.js",
+          names: ["firecrawl_scrape"],
+          declaredNames: ["firecrawl_search", "firecrawl_scrape"],
+          factory: scrapeFactory,
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const tools = resolvePluginTools({
+      context: {
+        ...base,
+        config,
+      } as never,
+      toolAllowlist: params.toolAllowlist,
+      env: {},
+    });
+
+    expectResolvedToolNames(tools, [params.expectedTool]);
+    expect(loadOpenClawPluginsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onlyPluginIds: ["firecrawl"],
+      }),
+    );
+  });
+
   it("skips optional tools without explicit allowlist", () => {
     setOptionalDemoRegistry();
     const tools = resolveOptionalDemoTools();
@@ -730,6 +874,45 @@ describe("resolvePluginTools optional tools", () => {
       registry.diagnostics,
       "plugin tool is malformed (schema-bug): broken_tool missing parameters object",
     );
+  });
+
+  it("reuses static plugin tool factories across prompt-prep calls", () => {
+    const factory = vi.fn(() => makeTool("optional_tool"));
+    setRegistry([
+      {
+        pluginId: "optional-demo",
+        optional: true,
+        source: "/tmp/optional-demo.js",
+        names: ["optional_tool"],
+        factory,
+        cache: "static",
+      },
+    ]);
+
+    const first = resolveOptionalDemoTools(["optional_tool"]);
+    const second = resolveOptionalDemoTools(["optional_tool"]);
+
+    expectResolvedToolNames(first, ["optional_tool"]);
+    expectResolvedToolNames(second, ["optional_tool"]);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps non-static plugin tool factories per-call", () => {
+    const factory = vi.fn(() => makeTool("optional_tool"));
+    setRegistry([
+      {
+        pluginId: "optional-demo",
+        optional: true,
+        source: "/tmp/optional-demo.js",
+        names: ["optional_tool"],
+        factory,
+      },
+    ]);
+
+    resolveOptionalDemoTools(["optional_tool"]);
+    resolveOptionalDemoTools(["optional_tool"]);
+
+    expect(factory).toHaveBeenCalledTimes(2);
   });
 
   it("warns with plugin factory timing details when a factory is slow", () => {
@@ -978,6 +1161,7 @@ describe("resolvePluginTools optional tools", () => {
       } as never,
       toolAllowlist: ["optional_tool", "tavily"],
       allowGatewaySubagentBinding: true,
+      env: { TAVILY_API_KEY: "test-tavily-key" },
     });
 
     expect(resolveRuntimePluginRegistryMock).toHaveBeenCalledWith(

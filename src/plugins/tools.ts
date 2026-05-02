@@ -8,6 +8,7 @@ import {
   loadManifestContractSnapshot,
 } from "./manifest-contract-eligibility.js";
 import { hasManifestToolAvailability } from "./manifest-tool-availability.js";
+import type { PluginToolRegistration } from "./registry-types.js";
 import {
   getActivePluginChannelRegistry,
   getActivePluginRegistry,
@@ -36,6 +37,7 @@ type PluginToolFactoryTiming = {
   result: PluginToolFactoryTimingResult;
   resultCount: number;
   optional: boolean;
+  cache: "hit" | "miss" | "none";
 };
 
 const log = createSubsystemLogger("plugins/tools");
@@ -44,6 +46,10 @@ const PLUGIN_TOOL_FACTORY_WARN_FACTORY_MS = 1_000;
 const PLUGIN_TOOL_FACTORY_SUMMARY_LIMIT = 20;
 
 const pluginToolMeta = new WeakMap<AnyAgentTool, PluginToolMeta>();
+const staticPluginToolFactoryCache = new WeakMap<
+  PluginToolRegistration,
+  AnyAgentTool | AnyAgentTool[] | null | undefined
+>();
 
 export function setPluginToolMeta(tool: AnyAgentTool, meta: PluginToolMeta): void {
   pluginToolMeta.set(tool, meta);
@@ -148,11 +154,15 @@ function formatPluginToolFactoryTiming(timing: PluginToolFactoryTiming): string 
     `result=${timing.result}`,
     `count=${timing.resultCount}`,
     `optional=${String(timing.optional)}`,
+    `cache=${timing.cache}`,
   ].join(" ");
 }
 
 function formatPluginToolFactoryTimingSummary(params: {
   totalMs: number;
+  manifestMs: number;
+  registryMs: number;
+  factoryMs: number;
   timings: PluginToolFactoryTiming[];
 }): string {
   const ranked = params.timings
@@ -169,6 +179,9 @@ function formatPluginToolFactoryTimingSummary(params: {
   return [
     "[trace:plugin-tools] factory timings",
     `totalMs=${params.totalMs}`,
+    `manifestMs=${params.manifestMs}`,
+    `registryMs=${params.registryMs}`,
+    `factoryMs=${params.factoryMs}`,
     `factoryCount=${params.timings.length}`,
     `shown=${ranked.length}`,
     `omitted=${omitted}`,
@@ -338,6 +351,27 @@ function resolvePluginToolRegistry(params: {
   return resolveRuntimePluginRegistry(params.loadOptions);
 }
 
+function resolvePluginToolFactory(params: {
+  entry: PluginToolRegistration;
+  context: OpenClawPluginToolContext;
+}): {
+  resolved: AnyAgentTool | AnyAgentTool[] | null | undefined;
+  cache: PluginToolFactoryTiming["cache"];
+} {
+  if (params.entry.cache === "static") {
+    if (staticPluginToolFactoryCache.has(params.entry)) {
+      return {
+        resolved: staticPluginToolFactoryCache.get(params.entry),
+        cache: "hit",
+      };
+    }
+    const resolved = params.entry.factory(params.context);
+    staticPluginToolFactoryCache.set(params.entry, resolved);
+    return { resolved, cache: "miss" };
+  }
+  return { resolved: params.entry.factory(params.context), cache: "none" };
+}
+
 export function resolvePluginTools(params: {
   context: OpenClawPluginToolContext;
   existingToolNames?: Set<string>;
@@ -349,6 +383,7 @@ export function resolvePluginTools(params: {
 }): AnyAgentTool[] {
   // Fast path: when plugins are effectively disabled, avoid discovery/jiti entirely.
   // This matters a lot for unit tests and for tool construction hot paths.
+  const resolutionStartedAt = Date.now();
   const env = params.env ?? process.env;
   const baseConfig = applyTestPluginDefaults(params.context.config ?? {}, env);
   const context = resolvePluginRuntimeLoadContext({
@@ -364,6 +399,7 @@ export function resolvePluginTools(params: {
   const runtimeOptions = params.allowGatewaySubagentBinding
     ? { allowGatewaySubagentBinding: true as const }
     : undefined;
+  const manifestStartedAt = Date.now();
   const onlyPluginIds = resolvePluginToolRuntimePluginIds({
     config: context.config,
     availabilityConfig: params.context.runtimeConfig ?? context.config,
@@ -372,16 +408,19 @@ export function resolvePluginTools(params: {
     toolAllowlist: params.toolAllowlist,
     hasAuthForProvider: params.hasAuthForProvider,
   });
+  const manifestMs = toElapsedMs(Date.now() - manifestStartedAt);
   const loadOptions = buildPluginRuntimeLoadOptions(context, {
     activate: false,
     toolDiscovery: true,
     ...(onlyPluginIds !== undefined ? { onlyPluginIds } : {}),
     runtimeOptions,
   });
+  const registryStartedAt = Date.now();
   const registry = resolvePluginToolRegistry({
     loadOptions,
     onlyPluginIds,
   });
+  const registryMs = toElapsedMs(Date.now() - registryStartedAt);
   if (!registry) {
     return [];
   }
@@ -430,9 +469,15 @@ export function resolvePluginTools(params: {
     }
     let resolved: AnyAgentTool | AnyAgentTool[] | null | undefined = null;
     let factoryFailed = false;
+    let factoryCache: PluginToolFactoryTiming["cache"] = "none";
     const factoryStartedAt = Date.now();
     try {
-      resolved = entry.factory(params.context);
+      const result = resolvePluginToolFactory({
+        entry,
+        context: params.context,
+      });
+      resolved = result.resolved;
+      factoryCache = result.cache;
     } catch (err) {
       factoryFailed = true;
       context.logger.error(`plugin tool failed (${entry.pluginId}): ${String(err)}`);
@@ -447,6 +492,7 @@ export function resolvePluginTools(params: {
         result: result.result,
         resultCount: result.resultCount,
         optional: entry.optional,
+        cache: factoryCache,
       });
     }
     if (factoryFailed) {
@@ -531,9 +577,9 @@ export function resolvePluginTools(params: {
   }
 
   if (factoryTimings.length > 0) {
-    const totalMs =
-      factoryTimings.at(-1)?.elapsedMs ?? toElapsedMs(Date.now() - factoryTimingStartedAt);
-    const timingSummary = { totalMs, timings: factoryTimings };
+    const factoryMs = toElapsedMs(Date.now() - factoryTimingStartedAt);
+    const totalMs = toElapsedMs(Date.now() - resolutionStartedAt);
+    const timingSummary = { totalMs, manifestMs, registryMs, factoryMs, timings: factoryTimings };
     if (shouldWarnPluginToolFactoryTimings(timingSummary)) {
       log.warn(formatPluginToolFactoryTimingSummary(timingSummary));
     } else if (log.isEnabled("trace")) {

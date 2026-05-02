@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolvePluginTools } from "../../plugins/tools.js";
 import { ErrorCodes } from "../protocol/index.js";
 import { toolsCatalogHandlers } from "./tools-catalog.js";
 
@@ -11,29 +10,77 @@ vi.mock("../../agents/agent-scope.js", () => ({
   listAgentIds: vi.fn(() => ["main"]),
   resolveDefaultAgentId: vi.fn(() => "main"),
   resolveAgentWorkspaceDir: vi.fn(() => "/tmp/workspace-main"),
-  resolveAgentDir: vi.fn(() => "/tmp/agents/main/agent"),
 }));
 
-const pluginToolMetaState = new Map<string, { pluginId: string; optional: boolean }>();
-
-vi.mock("../../plugins/tools.js", () => ({
-  buildPluginToolMetadataKey: (pluginId: string, toolName: string) =>
-    JSON.stringify([pluginId, toolName]),
-  resolvePluginTools: vi.fn(() => [
-    { name: "voice_call", label: "voice_call", description: "Plugin calling tool" },
+const loadManifestContractSnapshotMock = vi.fn((_params: unknown) => ({
+  index: {},
+  plugins: [
     {
-      name: "matrix_room",
-      label: "matrix_room",
-      displaySummary: "Summarized Matrix room helper.",
-      description: "Matrix room helper\n\nACTIONS:\n- join\n- leave",
+      id: "voice-call",
+      origin: "bundled",
+      enabledByDefault: true,
+      contracts: { tools: ["voice_call"] },
     },
-  ]),
-  getPluginToolMeta: vi.fn((tool: { name: string }) => pluginToolMetaState.get(tool.name)),
+    {
+      id: "matrix",
+      origin: "bundled",
+      enabledByDefault: true,
+      contracts: { tools: ["matrix_room"] },
+    },
+  ],
+}));
+const isManifestPluginAvailableForControlPlaneMock = vi.fn((_params: unknown) => true);
+const hasManifestToolAvailabilityMock = vi.fn((_params: unknown) => true);
+
+vi.mock("../../plugins/manifest-contract-eligibility.js", () => ({
+  loadManifestContractSnapshot: (params: unknown) => loadManifestContractSnapshotMock(params),
+  isManifestPluginAvailableForControlPlane: (params: unknown) =>
+    isManifestPluginAvailableForControlPlaneMock(params),
+}));
+
+vi.mock("../../plugins/manifest-tool-availability.js", () => ({
+  hasManifestToolAvailability: (params: unknown) => hasManifestToolAvailabilityMock(params),
+}));
+
+vi.mock("../../plugins/runtime.js", () => ({
+  getActivePluginRegistry: vi.fn(() => ({
+    tools: [
+      {
+        pluginId: "voice-call",
+        names: ["voice_call"],
+        optional: true,
+      },
+      {
+        pluginId: "matrix",
+        names: ["matrix_room"],
+        optional: false,
+      },
+    ],
+    toolMetadata: [
+      {
+        pluginId: "voice-call",
+        metadata: {
+          toolName: "voice_call",
+          displayName: "Voice call",
+          description: "Plugin calling tool",
+          risk: "medium",
+          tags: ["voice"],
+        },
+      },
+      {
+        pluginId: "matrix",
+        metadata: {
+          toolName: "matrix_room",
+          description: "Summarized Matrix room helper.",
+        },
+      },
+    ],
+  })),
 }));
 
 type RespondCall = [boolean, unknown?, { code: number; message: string }?];
 
-function createInvokeParams(params: Record<string, unknown>) {
+function createInvokeParams(params: Record<string, unknown>, cfg: Record<string, unknown> = {}) {
   const respond = vi.fn();
   return {
     respond,
@@ -41,7 +88,7 @@ function createInvokeParams(params: Record<string, unknown>) {
       await toolsCatalogHandlers["tools.catalog"]({
         params,
         respond: respond as never,
-        context: { getRuntimeConfig: () => ({}) } as never,
+        context: { getRuntimeConfig: () => cfg } as never,
         client: null,
         req: { type: "req", id: "req-1", method: "tools.catalog" },
         isWebchatConnect: () => false,
@@ -51,9 +98,9 @@ function createInvokeParams(params: Record<string, unknown>) {
 
 describe("tools.catalog handler", () => {
   beforeEach(() => {
-    pluginToolMetaState.clear();
-    pluginToolMetaState.set("voice_call", { pluginId: "voice-call", optional: true });
-    pluginToolMetaState.set("matrix_room", { pluginId: "matrix", optional: false });
+    loadManifestContractSnapshotMock.mockClear();
+    isManifestPluginAvailableForControlPlaneMock.mockClear();
+    hasManifestToolAvailabilityMock.mockClear();
   });
 
   it("rejects invalid params", async () => {
@@ -95,7 +142,32 @@ describe("tools.catalog handler", () => {
     expect(media?.tools.some((tool) => tool.id === "tts" && tool.source === "core")).toBe(true);
   });
 
-  it("includes plugin groups with plugin metadata", async () => {
+  it("excludes manifest plugin tools when plugins are globally disabled", async () => {
+    const { respond, invoke } = createInvokeParams(
+      {},
+      {
+        plugins: {
+          enabled: false,
+        },
+      },
+    );
+
+    await invoke();
+
+    const call = respond.mock.calls[0] as RespondCall | undefined;
+    expect(call?.[0]).toBe(true);
+    const payload = call?.[1] as
+      | {
+          groups: Array<{
+            source: "core" | "plugin";
+          }>;
+        }
+      | undefined;
+    expect(payload?.groups.some((group) => group.source === "plugin")).toBe(false);
+    expect(loadManifestContractSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("includes manifest plugin groups with plugin metadata", async () => {
     const { respond, invoke } = createInvokeParams({});
     await invoke();
     const call = respond.mock.calls[0] as RespondCall | undefined;
@@ -109,7 +181,10 @@ describe("tools.catalog handler", () => {
               id: string;
               source: "core" | "plugin";
               pluginId?: string;
+              label?: string;
               optional?: boolean;
+              risk?: string;
+              tags?: string[];
             }>;
           }>;
         }
@@ -122,7 +197,10 @@ describe("tools.catalog handler", () => {
     expect(voiceCall).toMatchObject({
       source: "plugin",
       pluginId: "voice-call",
+      label: "Voice call",
       optional: true,
+      risk: "medium",
+      tags: ["voice"],
     });
   });
 
@@ -149,14 +227,20 @@ describe("tools.catalog handler", () => {
     expect(matrixRoom?.description).toBe("Summarized Matrix room helper.");
   });
 
-  it("opts plugin tool catalog loads into gateway subagent binding", async () => {
+  it("builds the plugin catalog from manifests instead of materializing tools", async () => {
     const { invoke } = createInvokeParams({});
 
     await invoke();
 
-    expect(vi.mocked(resolvePluginTools)).toHaveBeenCalledWith(
+    expect(loadManifestContractSnapshotMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        allowGatewaySubagentBinding: true,
+        config: {},
+        workspaceDir: "/tmp/workspace-main",
+      }),
+    );
+    expect(hasManifestToolAvailabilityMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolNames: ["voice_call"],
       }),
     );
   });

@@ -23,6 +23,28 @@
     "webSearchProviders": ["tavily"],
     "tools": ["tavily_search", "tavily_extract"]
   },
+  "toolMetadata": {
+    "tavily_search": {
+      "authSignals": [{ "provider": "tavily" }],
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.tavily.config",
+          "overlayPath": "webSearch",
+          "required": ["apiKey"]
+        }
+      ]
+    },
+    "tavily_extract": {
+      "authSignals": [{ "provider": "tavily" }],
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.tavily.config",
+          "overlayPath": "webSearch",
+          "required": ["apiKey"]
+        }
+      ]
+    }
+  },
   "configContracts": {
     "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
   },
