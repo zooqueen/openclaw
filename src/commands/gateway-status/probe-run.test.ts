@@ -143,6 +143,62 @@ describe("runGatewayStatusProbePass", () => {
     });
   });
 
+  it("uses the status RPC fallback for explicit loopback targets", async () => {
+    mocks.probeGateway.mockResolvedValueOnce({
+      ok: false,
+      url: "ws://127.0.0.1:18789",
+      connectLatencyMs: null,
+      error: "timeout",
+      close: null,
+      auth: {
+        role: null,
+        scopes: [],
+        capability: "unknown",
+      },
+      health: null,
+      status: null,
+      presence: null,
+      configSnapshot: null,
+    });
+    mocks.callGateway.mockResolvedValueOnce({ sessions: 1 });
+
+    const result = await runGatewayStatusProbePass({
+      cfg: {},
+      opts: {},
+      overallTimeoutMs: 8_000,
+      discoveryTimeoutMs: 10,
+      baseTargets: [
+        {
+          id: "explicit",
+          kind: "explicit",
+          url: "ws://127.0.0.1:18789",
+          active: true,
+        },
+      ],
+      remotePort: 18789,
+      sshTarget: null,
+      sshIdentity: null,
+      loadSshTunnelModule: vi.fn(),
+    });
+
+    expect(mocks.callGateway).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws://127.0.0.1:18789",
+        method: "status",
+        mode: "backend",
+        clientName: "gateway-client",
+        deviceIdentity: null,
+        allowUnauthenticatedLoopbackUrlOverride: true,
+      }),
+    );
+    expect(result.probed[0]?.probe).toMatchObject({
+      ok: true,
+      error: "timeout",
+      status: { sessions: 1 },
+      auth: { capability: "read_only" },
+    });
+  });
+
   it("does not use the status RPC fallback for remote probe failures", async () => {
     mocks.probeGateway.mockResolvedValueOnce({
       ok: false,
@@ -174,6 +230,62 @@ describe("runGatewayStatusProbePass", () => {
           active: true,
         },
       ],
+      remotePort: 18789,
+      sshTarget: null,
+      sshIdentity: null,
+      loadSshTunnelModule: vi.fn(),
+    });
+
+    expect(mocks.callGateway).not.toHaveBeenCalled();
+    expect(result.probed[0]?.probe).toMatchObject({
+      ok: false,
+      error: "timeout",
+    });
+  });
+
+  it.each([
+    {
+      name: "non-loopback explicit",
+      target: {
+        id: "explicit",
+        kind: "explicit" as const,
+        url: "wss://gateway.example/ws",
+        active: true,
+      },
+    },
+    {
+      name: "ssh tunnel",
+      target: {
+        id: "sshTunnel",
+        kind: "sshTunnel" as const,
+        url: "ws://127.0.0.1:18789",
+        active: true,
+      },
+    },
+  ])("does not use the status RPC fallback for $name targets", async ({ target }) => {
+    mocks.probeGateway.mockResolvedValueOnce({
+      ok: false,
+      url: target.url,
+      connectLatencyMs: null,
+      error: "timeout",
+      close: null,
+      auth: {
+        role: null,
+        scopes: [],
+        capability: "unknown",
+      },
+      health: null,
+      status: null,
+      presence: null,
+      configSnapshot: null,
+    });
+
+    const result = await runGatewayStatusProbePass({
+      cfg: {},
+      opts: {},
+      overallTimeoutMs: 8_000,
+      discoveryTimeoutMs: 10,
+      baseTargets: [target],
       remotePort: 18789,
       sshTarget: null,
       sshIdentity: null,

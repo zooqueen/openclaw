@@ -16,7 +16,7 @@ import {
   type GatewayConfigSummary,
   type GatewayStatusTarget,
 } from "./helpers.js";
-import { applyLocalStatusRpcFallback } from "./local-status-rpc-fallback.js";
+import { applyLocalStatusRpcFallback, isLoopbackGatewayUrl } from "./local-status-rpc-fallback.js";
 
 export type GatewayStatusProbedTarget = {
   target: GatewayStatusTarget;
@@ -25,6 +25,15 @@ export type GatewayStatusProbedTarget = {
   self: ReturnType<typeof pickGatewaySelfPresence>;
   authDiagnostics: string[];
 };
+
+function supportsLocalStatusRpcFallback(
+  target: Pick<GatewayStatusTarget, "kind" | "url">,
+): boolean {
+  return (
+    target.kind === "localLoopback" ||
+    (target.kind === "explicit" && isLoopbackGatewayUrl(target.url))
+  );
+}
 
 export async function runGatewayStatusProbePass(params: {
   cfg: OpenClawConfig;
@@ -124,6 +133,7 @@ export async function runGatewayStatusProbePass(params: {
           password: readStringValue(params.opts.password),
         });
         const probeBudgetMs = resolveProbeBudgetMs(params.overallTimeoutMs, target);
+        const fallbackGatewayMode = supportsLocalStatusRpcFallback(target) ? "local" : "remote";
         const initialProbe = await probeGateway({
           url: target.url,
           auth: {
@@ -138,7 +148,7 @@ export async function runGatewayStatusProbePass(params: {
           timeoutMs: probeBudgetMs,
         });
         const fallbackProbe = await applyLocalStatusRpcFallback({
-          gatewayMode: target.kind === "localLoopback" ? "local" : "remote",
+          gatewayMode: fallbackGatewayMode,
           gatewayUrl: target.url,
           gatewayProbe: initialProbe,
           callStatus: async () =>
