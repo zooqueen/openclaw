@@ -558,10 +558,31 @@ function hasVisibleGatewayAgentPayload(response: unknown): boolean {
     response && typeof response === "object" && "result" in response
       ? (response as { result?: unknown }).result
       : undefined;
-  const payloads =
-    result && typeof result === "object" && "payloads" in result
-      ? (result as { payloads?: unknown }).payloads
-      : undefined;
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+  const resultRecord = result as {
+    didSendViaMessagingTool?: unknown;
+    messagingToolSentTexts?: unknown;
+    messagingToolSentMediaUrls?: unknown;
+    payloads?: unknown;
+  };
+  if (resultRecord.didSendViaMessagingTool === true) {
+    return true;
+  }
+  if (
+    Array.isArray(resultRecord.messagingToolSentTexts) &&
+    resultRecord.messagingToolSentTexts.some((item) => typeof item === "string" && item.trim())
+  ) {
+    return true;
+  }
+  if (
+    Array.isArray(resultRecord.messagingToolSentMediaUrls) &&
+    resultRecord.messagingToolSentMediaUrls.some((item) => typeof item === "string" && item.trim())
+  ) {
+    return true;
+  }
+  const payloads = "payloads" in resultRecord ? resultRecord.payloads : undefined;
   if (!Array.isArray(payloads)) {
     return false;
   }
