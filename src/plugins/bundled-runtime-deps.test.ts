@@ -3492,6 +3492,33 @@ describe("ensureBundledPluginRuntimeDeps", () => {
     },
   );
 
+  it("keys packaged external runtime deps by generated dist inventory", () => {
+    const packageRoot = makeTempDir();
+    const stageDir = makeTempDir();
+    fs.mkdirSync(path.join(packageRoot, "dist", "extensions", "discord"), { recursive: true });
+    fs.writeFileSync(
+      path.join(packageRoot, "package.json"),
+      JSON.stringify({ name: "openclaw", version: "2026.4.30-beta.1" }),
+    );
+    fs.writeFileSync(
+      path.join(packageRoot, "dist", "extensions", "discord", "package.json"),
+      JSON.stringify({ dependencies: {} }),
+    );
+    const pluginRoot = path.join(packageRoot, "dist", "extensions", "discord");
+    const env = { OPENCLAW_PLUGIN_STAGE_DIR: stageDir };
+
+    const firstRoot = resolveBundledRuntimeDependencyInstallRoot(pluginRoot, { env });
+    fs.writeFileSync(
+      path.join(packageRoot, "dist", "postinstall-inventory.json"),
+      JSON.stringify(["dist/runtime-a.js"]),
+    );
+    const secondRoot = resolveBundledRuntimeDependencyInstallRoot(pluginRoot, { env });
+
+    expect(path.basename(firstRoot)).toMatch(/^openclaw-2026\.4\.30-beta\.1-[0-9a-f]{12}$/);
+    expect(path.basename(secondRoot)).toMatch(/^openclaw-2026\.4\.30-beta\.1-[0-9a-f]{12}$/);
+    expect(secondRoot).not.toBe(firstRoot);
+  });
+
   it("prunes stale unknown and legacy versioned external runtime roots", () => {
     const stageDir = makeTempDir();
     const nowMs = Date.parse("2026-04-29T08:00:00.000Z");

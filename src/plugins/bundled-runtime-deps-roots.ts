@@ -58,6 +58,24 @@ function createPathHash(value: string): string {
   return createHash("sha256").update(realpathOrResolve(value)).digest("hex").slice(0, 12);
 }
 
+function createPackageRuntimeDepsRootHash(packageRoot: string): string {
+  const hash = createHash("sha256");
+  hash.update(realpathOrResolve(packageRoot));
+  for (const relativePath of ["package.json", "dist/postinstall-inventory.json"]) {
+    const filePath = path.join(packageRoot, relativePath);
+    try {
+      hash.update("\0");
+      hash.update(relativePath);
+      hash.update("\0");
+      hash.update(fs.readFileSync(filePath));
+    } catch {
+      // Older package layouts and test fixtures may not have a generated
+      // inventory yet; the realpath hash still gives them a stable key.
+    }
+  }
+  return hash.digest("hex").slice(0, 12);
+}
+
 function sanitizePathSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
 }
@@ -337,7 +355,7 @@ function resolveExternalBundledRuntimeDepsInstallRoots(params: {
     return existingExternalRoots;
   }
   const version = sanitizePathSegment(readPackageVersion(packageRoot));
-  const packageKey = `openclaw-${version}-${createPathHash(packageRoot)}`;
+  const packageKey = `openclaw-${version}-${createPackageRuntimeDepsRootHash(packageRoot)}`;
   return resolveBundledRuntimeDepsExternalBaseDirs(params.env).map((baseDir) =>
     path.join(baseDir, packageKey),
   );
