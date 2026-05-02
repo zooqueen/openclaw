@@ -234,6 +234,7 @@ Docs: https://docs.openclaw.ai
 - Agents/tools: scope reply plugin-tool discovery to manifest-declared tool owners and already-active matching tool entries, avoiding broad plugin runtime loading for narrow or core-only tool allowlists. Thanks @shakkernerd.
 - Agents/replies: defer implicit image model discovery and keep OAuth auth-store adoption on persisted profiles during reply startup, cutting OCM MarCodex warm prep to sub-second in live checks. Thanks @shakkernerd.
 - Plugins/tools: enforce `contracts.tools` as the manifest ownership contract for plugin tool registration, rejecting undeclared runtime tool names and adding bundled plugin drift coverage. Thanks @shakkernerd.
+- Plugins/tools: add static manifest tool descriptors for plugin-owned tool descriptions and schemas, starting with xAI tool metadata. Thanks @shakkernerd.
 - Agents/Codex: stop prompting message-tool-only source turns to finish with `NO_REPLY`, so quiet turns are represented by not calling the visible message tool instead of conflicting final-text instructions. Thanks @pashpashpash.
 - Gateway/config: report failed backup restores as failed in logs and config observe audit records instead of marking them valid. (#70515) Thanks @davidangularme.
 - Compaction: use the active session model fallback chain for implicit summarization failures without persisting fallback model selection, so Azure content-filter 400s can recover. Fixes #64960. (#74470) Thanks @jalehman and @OpenCodeEngineer.

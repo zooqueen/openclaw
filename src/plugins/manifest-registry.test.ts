@@ -1244,6 +1244,17 @@ describe("loadPluginManifestRegistry", () => {
       },
       toolMetadata: {
         image_generate: {
+          descriptor: {
+            title: "Image Generate",
+            description: "Generate an image.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                prompt: { type: "string" },
+              },
+              required: ["prompt"],
+            },
+          },
           authSignals: [
             {
               provider: "openai-codex",
@@ -1312,6 +1323,17 @@ describe("loadPluginManifestRegistry", () => {
     });
     expect(registry.plugins[0]?.toolMetadata).toEqual({
       image_generate: {
+        descriptor: {
+          title: "Image Generate",
+          description: "Generate an image.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              prompt: { type: "string" },
+            },
+            required: ["prompt"],
+          },
+        },
         authSignals: [
           {
             provider: "openai-codex",
@@ -1325,6 +1347,141 @@ describe("loadPluginManifestRegistry", () => {
           },
         ],
       },
+    });
+  });
+
+  it("normalizes tool descriptors without leaking tool-only fields into provider metadata", () => {
+    const dir = makeTempDir();
+    writeManifest(dir, {
+      id: "tool-owner",
+      providers: ["tool-owner"],
+      contracts: {
+        imageGenerationProviders: ["tool-owner"],
+        tools: ["tool_run", "tool_hidden"],
+      },
+      imageGenerationProviderMetadata: {
+        "tool-owner": {
+          descriptor: {
+            description: "Provider descriptor should not be retained.",
+            inputSchema: { type: "object" },
+          },
+          authSignals: [{ provider: "tool-owner" }],
+        },
+      },
+      toolMetadata: {
+        tool_run: {
+          descriptor: {
+            title: "Tool Run",
+            description: "Run the tool.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: { type: "string" },
+              },
+              required: ["query"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                result: { type: "string" },
+              },
+            },
+            annotations: {
+              readOnlyHint: true,
+            },
+            availability: {
+              allOf: [
+                {
+                  kind: "plugin-enabled",
+                  pluginId: "tool-owner",
+                },
+                {
+                  kind: "context",
+                  key: "agent.toolRun.enabled",
+                  equals: true,
+                },
+                {
+                  kind: "config",
+                  paths: [
+                    ["plugins", "entries", "tool-owner", "config", "toolRun", "enabled"],
+                    ["tools", "tool_run", "enabled"],
+                  ],
+                  default: true,
+                  notEquals: false,
+                },
+              ],
+            },
+            sortKey: "search.tool_run",
+          },
+        },
+        tool_hidden: {
+          descriptor: {
+            inputSchema: { type: "object" },
+          },
+          authSignals: [{ provider: "tool-owner" }],
+        },
+      },
+      configSchema: { type: "object" },
+    });
+
+    const registry = loadSingleCandidateRegistry({
+      idHint: "tool-owner",
+      rootDir: dir,
+      origin: "bundled",
+    });
+
+    expect(registry.plugins[0]?.imageGenerationProviderMetadata).toEqual({
+      "tool-owner": {
+        authSignals: [{ provider: "tool-owner" }],
+      },
+    });
+    expect(registry.plugins[0]?.toolMetadata?.tool_run).toEqual({
+      descriptor: {
+        title: "Tool Run",
+        description: "Run the tool.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            result: { type: "string" },
+          },
+        },
+        annotations: {
+          readOnlyHint: true,
+        },
+        availability: {
+          allOf: [
+            {
+              kind: "plugin-enabled",
+              pluginId: "tool-owner",
+            },
+            {
+              kind: "context",
+              key: "agent.toolRun.enabled",
+              equals: true,
+            },
+            {
+              kind: "config",
+              paths: [
+                ["plugins", "entries", "tool-owner", "config", "toolRun", "enabled"],
+                ["tools", "tool_run", "enabled"],
+              ],
+              default: true,
+              notEquals: false,
+            },
+          ],
+        },
+        sortKey: "search.tool_run",
+      },
+    });
+    expect(registry.plugins[0]?.toolMetadata?.tool_hidden).toEqual({
+      authSignals: [{ provider: "tool-owner" }],
     });
   });
 

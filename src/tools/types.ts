@@ -24,8 +24,12 @@ export type ToolAvailabilitySignal =
   | { readonly kind: "auth"; readonly providerId: string }
   | {
       readonly kind: "config";
-      readonly path: readonly string[];
+      readonly path?: readonly string[];
+      readonly paths?: readonly (readonly string[])[];
       readonly check?: "exists" | "non-empty" | "available";
+      readonly default?: JsonPrimitive;
+      readonly equals?: JsonPrimitive;
+      readonly notEquals?: JsonPrimitive;
     }
   | { readonly kind: "env"; readonly name: string }
   | { readonly kind: "plugin-enabled"; readonly pluginId: string }
@@ -54,7 +58,8 @@ export type ToolAvailabilityContext = {
   readonly config?: JsonObject;
   readonly isConfigValueAvailable?: (params: {
     readonly value: JsonValue;
-    readonly path: readonly string[];
+    readonly path?: readonly string[];
+    readonly matchedPath?: readonly string[];
     readonly signal: Extract<ToolAvailabilitySignal, { readonly kind: "config" }>;
   }) => boolean;
   readonly env?: Readonly<Record<string, string | undefined>>;

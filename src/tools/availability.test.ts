@@ -195,6 +195,74 @@ describe("evaluateToolAvailability", () => {
     ).toEqual([]);
   });
 
+  it("supports primitive config comparisons with explicit defaults", () => {
+    const descriptor: ToolDescriptor = {
+      ...baseDescriptor,
+      availability: {
+        kind: "config",
+        path: ["plugins", "entries", "demo", "config", "feature", "enabled"],
+        default: true,
+        notEquals: false,
+      },
+    };
+
+    expect(
+      evaluateToolAvailability({
+        descriptor,
+        context: { config: { plugins: { entries: { demo: { config: {} } } } } },
+      }),
+    ).toEqual([]);
+
+    expect(
+      evaluateToolAvailability({
+        descriptor,
+        context: {
+          config: {
+            plugins: { entries: { demo: { config: { feature: { enabled: false } } } } },
+          },
+        },
+      }).map((entry) => entry.reason),
+    ).toEqual(["config-missing"]);
+  });
+
+  it("uses the first defined config path for comparisons", () => {
+    const descriptor: ToolDescriptor = {
+      ...baseDescriptor,
+      availability: {
+        kind: "config",
+        paths: [
+          ["plugins", "entries", "demo", "config", "search", "enabled"],
+          ["tools", "web", "demo_search", "enabled"],
+        ],
+        default: true,
+        notEquals: false,
+      },
+    };
+
+    expect(
+      evaluateToolAvailability({
+        descriptor,
+        context: {
+          config: {
+            plugins: { entries: { demo: { config: { search: { enabled: true } } } } },
+            tools: { web: { demo_search: { enabled: false } } },
+          },
+        },
+      }),
+    ).toEqual([]);
+
+    expect(
+      evaluateToolAvailability({
+        descriptor,
+        context: {
+          config: {
+            tools: { web: { demo_search: { enabled: false } } },
+          },
+        },
+      }).map((entry) => entry.reason),
+    ).toEqual(["config-missing"]);
+  });
+
   it("supports anyOf availability expressions", () => {
     const descriptor: ToolDescriptor = {
       ...baseDescriptor,

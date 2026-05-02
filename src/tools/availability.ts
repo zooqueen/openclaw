@@ -27,12 +27,58 @@ function resolveConfigPath(
   return current;
 }
 
+function resolveConfigSignalValue(params: {
+  config: JsonObject | undefined;
+  signal: Extract<ToolAvailabilitySignal, { readonly kind: "config" }>;
+}): { value: JsonValue | undefined; matchedPath?: readonly string[] } {
+  const paths = params.signal.paths?.length ? params.signal.paths : undefined;
+  if (paths) {
+    for (const path of paths) {
+      const value = resolveConfigPath(params.config, path);
+      if (value !== undefined) {
+        return { value, matchedPath: path };
+      }
+    }
+    return { value: undefined };
+  }
+  if (!params.signal.path) {
+    return { value: undefined };
+  }
+  return {
+    value: resolveConfigPath(params.config, params.signal.path),
+    matchedPath: params.signal.path,
+  };
+}
+
+function isJsonPrimitive(value: JsonValue | undefined): value is JsonPrimitive {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
 function hasConfiguredValue(params: {
   value: JsonValue | undefined;
+  matchedPath?: readonly string[];
   signal: Extract<ToolAvailabilitySignal, { readonly kind: "config" }>;
   context: ToolAvailabilityContext;
 }): boolean {
-  const { value, signal } = params;
+  const { signal } = params;
+  const value = params.value === undefined ? signal.default : params.value;
+  if ("equals" in signal || "notEquals" in signal) {
+    if (!isJsonPrimitive(value)) {
+      return false;
+    }
+    if ("equals" in signal && value !== signal.equals) {
+      return false;
+    }
+    if ("notEquals" in signal && value === signal.notEquals) {
+      return false;
+    }
+    return true;
+  }
   if (value === undefined || value === null) {
     return false;
   }
@@ -41,6 +87,7 @@ function hasConfiguredValue(params: {
       params.context.isConfigValueAvailable?.({
         value,
         path: signal.path,
+        matchedPath: params.matchedPath,
         signal,
       }) === true
     );
@@ -84,10 +131,14 @@ function evaluateSignal(
         ? null
         : diagnostic("auth-missing", signal, `Missing auth provider: ${signal.providerId}`);
     case "config": {
-      const value = resolveConfigPath(context.config, signal.path);
-      return hasConfiguredValue({ value, signal, context })
+      const { value, matchedPath } = resolveConfigSignalValue({
+        config: context.config,
+        signal,
+      });
+      const label = matchedPath ?? signal.path ?? signal.paths?.[0] ?? [];
+      return hasConfiguredValue({ value, matchedPath, signal, context })
         ? null
-        : diagnostic("config-missing", signal, `Missing config path: ${signal.path.join(".")}`);
+        : diagnostic("config-missing", signal, `Missing config path: ${label.join(".")}`);
     }
     case "env":
       return context.env?.[signal.name]?.trim()

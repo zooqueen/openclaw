@@ -178,7 +178,7 @@ or npm install metadata. Those belong in your plugin code and `package.json`.
 | `imageGenerationProviderMetadata`    | No       | `Record<string, object>`         | Cheap image-generation auth metadata for provider ids declared in `contracts.imageGenerationProviders`, including provider-owned auth aliases and base-url guards.                                                                  |
 | `videoGenerationProviderMetadata`    | No       | `Record<string, object>`         | Cheap video-generation auth metadata for provider ids declared in `contracts.videoGenerationProviders`, including provider-owned auth aliases and base-url guards.                                                                  |
 | `musicGenerationProviderMetadata`    | No       | `Record<string, object>`         | Cheap music-generation auth metadata for provider ids declared in `contracts.musicGenerationProviders`, including provider-owned auth aliases and base-url guards.                                                                  |
-| `toolMetadata`                       | No       | `Record<string, object>`         | Cheap availability metadata for plugin-owned tools declared in `contracts.tools`. Use it when a tool should not load runtime unless config, env, or auth evidence exists.                                                           |
+| `toolMetadata`                       | No       | `Record<string, object>`         | Static descriptor and availability metadata for plugin-owned tools declared in `contracts.tools`. Use it so OpenClaw can plan tools without importing plugin runtime.                                                               |
 | `channelConfigs`                     | No       | `Record<string, object>`         | Manifest-owned channel config metadata merged into discovery and validation surfaces before runtime loads.                                                                                                                          |
 | `skills`                             | No       | `string[]`                       | Skill directories to load, relative to the plugin root.                                                                                                                                                                             |
 | `name`                               | No       | `string`                         | Human-readable plugin name.                                                                                                                                                                                                         |
@@ -283,10 +283,11 @@ Each `providerBaseUrl` guard supports:
 
 ## Tool metadata reference
 
-`toolMetadata` uses the same `configSignals` and `authSignals` shapes as
-generation provider metadata, keyed by tool name. `contracts.tools` declares
-ownership. `toolMetadata` declares cheap availability evidence so OpenClaw can
-avoid importing a plugin runtime just to have its tool factory return `null`.
+`toolMetadata` is keyed by tool name. `contracts.tools` declares ownership.
+`toolMetadata.descriptor` declares the static tool shape, while `configSignals`
+and `authSignals` declare availability evidence using the same shapes as
+generation provider metadata. OpenClaw should be able to plan a plugin-owned
+tool from this static metadata without importing the plugin runtime.
 
 ```json
 {
@@ -298,6 +299,21 @@ avoid importing a plugin runtime just to have its tool factory return `null`.
   },
   "toolMetadata": {
     "example_search": {
+      "descriptor": {
+        "title": "Example Search",
+        "description": "Search Example data.",
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query."
+            }
+          },
+          "required": ["query"]
+        }
+      },
       "authSignals": [
         {
           "provider": "example"
@@ -315,10 +331,31 @@ avoid importing a plugin runtime just to have its tool factory return `null`.
 }
 ```
 
-If a tool has no `toolMetadata`, OpenClaw preserves the existing behavior and
-loads the owning plugin when the tool contract matches policy. For hot-path
-tools whose factory depends on auth/config, plugin authors should declare
-`toolMetadata` instead of making core import runtime to ask.
+Each `descriptor` supports:
+
+| Field          | Required | Type     | What it means                                                                                |
+| -------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
+| `description`  | Yes      | `string` | Static model-facing tool description.                                                        |
+| `inputSchema`  | Yes      | `object` | Static JSON Schema for tool input. Keep provider-sensitive schema normalization in adapters. |
+| `title`        | No       | `string` | Short human-facing tool title.                                                               |
+| `outputSchema` | No       | `object` | Static JSON Schema for structured tool output when available.                                |
+| `annotations`  | No       | `object` | Static protocol/display hints such as read-only or destructive-behavior annotations.         |
+| `sortKey`      | No       | `string` | Stable ordering key when the default tool-name ordering is not the desired descriptor order. |
+
+Runtime `api.registerTool(...)` binds executable behavior for declared tools.
+It should not be the source of static descriptions, schemas, or ownership.
+
+`availability` supports signal objects and recursive `allOf` / `anyOf` groups.
+Use `{ "kind": "always" }` for intentionally unconditional visibility. Empty
+groups are invalid and fail closed.
+
+| Signal           | Required fields                    | What it means                                                                                                                                                                         |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`           | `providerId`                       | Visible when the request has auth evidence for the provider id.                                                                                                                       |
+| `config`         | `path` or `paths`, optional checks | Visible when the config path exists, is non-empty, is credential-available, or matches primitive `equals` / `notEquals` comparisons. `paths` uses the first configured path in order. |
+| `context`        | `key`, optional `equals`           | Visible when a request fact exists, or equals the supplied primitive value.                                                                                                           |
+| `env`            | `name`                             | Visible when the environment variable has a non-empty value.                                                                                                                          |
+| `plugin-enabled` | `pluginId`                         | Visible when the owning plugin is enabled for the current config.                                                                                                                     |
 
 ## providerAuthChoices reference
 

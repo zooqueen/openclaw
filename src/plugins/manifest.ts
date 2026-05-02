@@ -455,7 +455,18 @@ export type PluginManifestCapabilityProviderMetadata = {
   configSignals?: PluginManifestCapabilityProviderConfigSignal[];
 };
 
-export type PluginManifestToolMetadata = PluginManifestCapabilityProviderMetadata;
+export type PluginManifestToolDescriptorMetadata = {
+  title?: string;
+  description: string;
+  inputSchema: JsonSchemaObject;
+  outputSchema?: JsonSchemaObject;
+  annotations?: Record<string, unknown>;
+  sortKey?: string;
+};
+
+export type PluginManifestToolMetadata = PluginManifestCapabilityProviderMetadata & {
+  descriptor?: PluginManifestToolDescriptorMetadata;
+};
 
 export type PluginManifestProviderAuthChoice = {
   /** Provider id owned by this manifest entry. */
@@ -736,6 +747,205 @@ function normalizeCapabilityProviderMetadata(
     } satisfies PluginManifestCapabilityProviderMetadata;
     if (Object.keys(metadata).length > 0) {
       normalized[providerId] = metadata;
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+const TOOL_CONFIG_CHECKS = new Set(["available", "exists", "non-empty"]);
+
+function normalizeJsonPrimitive(value: unknown): JsonPrimitive | undefined {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeToolConfigPaths(value: unknown): readonly string[][] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const paths: string[][] = [];
+  for (const entry of value) {
+    const path = normalizeTrimmedStringList(entry);
+    if (path.length === 0) {
+      return undefined;
+    }
+    paths.push(path);
+  }
+  return paths.length > 0 ? paths : undefined;
+}
+
+function normalizeToolAvailabilitySignal(value: unknown): ToolAvailabilitySignal | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  switch (value.kind) {
+    case "always":
+      return { kind: "always" };
+    case "auth": {
+      const providerId = normalizeOptionalString(value.providerId);
+      return providerId ? { kind: "auth", providerId } : undefined;
+    }
+    case "config": {
+      const path = normalizeTrimmedStringList(value.path);
+      const paths = normalizeToolConfigPaths(value.paths);
+      if (path.length === 0 && !paths) {
+        return undefined;
+      }
+      const check = normalizeOptionalString(value.check);
+      const defaultValue = Object.hasOwn(value, "default")
+        ? normalizeJsonPrimitive(value.default)
+        : undefined;
+      const equals = Object.hasOwn(value, "equals")
+        ? normalizeJsonPrimitive(value.equals)
+        : undefined;
+      const notEquals = Object.hasOwn(value, "notEquals")
+        ? normalizeJsonPrimitive(value.notEquals)
+        : undefined;
+      if (
+        (Object.hasOwn(value, "default") && defaultValue === undefined) ||
+        (Object.hasOwn(value, "equals") && equals === undefined) ||
+        (Object.hasOwn(value, "notEquals") && notEquals === undefined)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: "config",
+        ...(path.length > 0 ? { path } : {}),
+        ...(paths ? { paths } : {}),
+        ...(check && TOOL_CONFIG_CHECKS.has(check)
+          ? { check: check as Extract<ToolAvailabilitySignal, { kind: "config" }>["check"] }
+          : {}),
+        ...(Object.hasOwn(value, "default") ? { default: defaultValue } : {}),
+        ...(Object.hasOwn(value, "equals") ? { equals } : {}),
+        ...(Object.hasOwn(value, "notEquals") ? { notEquals } : {}),
+      };
+    }
+    case "context": {
+      const key = normalizeOptionalString(value.key);
+      if (!key) {
+        return undefined;
+      }
+      const equals = Object.hasOwn(value, "equals")
+        ? normalizeJsonPrimitive(value.equals)
+        : undefined;
+      if (Object.hasOwn(value, "equals") && equals === undefined) {
+        return undefined;
+      }
+      return { kind: "context", key, ...(Object.hasOwn(value, "equals") ? { equals } : {}) };
+    }
+    case "env": {
+      const name = normalizeOptionalString(value.name);
+      return name ? { kind: "env", name } : undefined;
+    }
+    case "plugin-enabled": {
+      const pluginId = normalizeOptionalString(value.pluginId);
+      return pluginId ? { kind: "plugin-enabled", pluginId } : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function normalizeToolAvailabilityExpression(
+  value: unknown,
+  depth = 0,
+): ToolAvailabilityExpression | undefined {
+  if (!isRecord(value) || depth > 16) {
+    return undefined;
+  }
+  if (Object.hasOwn(value, "kind")) {
+    return normalizeToolAvailabilitySignal(value);
+  }
+  if (Object.hasOwn(value, "allOf")) {
+    if (!Array.isArray(value.allOf)) {
+      return undefined;
+    }
+    const allOf: ToolAvailabilityExpression[] = [];
+    for (const entry of value.allOf) {
+      const normalized = normalizeToolAvailabilityExpression(entry, depth + 1);
+      if (!normalized) {
+        return { allOf: [] };
+      }
+      allOf.push(normalized);
+    }
+    return { allOf };
+  }
+  if (Object.hasOwn(value, "anyOf")) {
+    if (!Array.isArray(value.anyOf)) {
+      return undefined;
+    }
+    const anyOf: ToolAvailabilityExpression[] = [];
+    for (const entry of value.anyOf) {
+      const normalized = normalizeToolAvailabilityExpression(entry, depth + 1);
+      if (!normalized) {
+        return { anyOf: [] };
+      }
+      anyOf.push(normalized);
+    }
+    return { anyOf };
+  }
+  return undefined;
+}
+
+function normalizeToolDescriptorMetadata(
+  value: unknown,
+): PluginManifestToolDescriptorMetadata | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const description = normalizeOptionalString(value.description);
+  if (!description || !isRecord(value.inputSchema)) {
+    return undefined;
+  }
+  const title = normalizeOptionalString(value.title);
+  const outputSchema = isRecord(value.outputSchema) ? value.outputSchema : undefined;
+  const annotations = isRecord(value.annotations) ? value.annotations : undefined;
+  const availability = Object.hasOwn(value, "availability")
+    ? (normalizeToolAvailabilityExpression(value.availability) ?? ({ allOf: [] } as const))
+    : undefined;
+  const sortKey = normalizeOptionalString(value.sortKey);
+  return {
+    ...(title ? { title } : {}),
+    description,
+    inputSchema: value.inputSchema,
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(annotations ? { annotations } : {}),
+    ...(availability ? { availability } : {}),
+    ...(sortKey ? { sortKey } : {}),
+  };
+}
+
+function normalizeToolMetadata(
+  value: unknown,
+): Record<string, PluginManifestToolMetadata> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const normalized: Record<string, PluginManifestToolMetadata> = Object.create(null);
+  for (const [rawToolName, rawMetadata] of Object.entries(value)) {
+    const toolName = normalizeOptionalString(rawToolName) ?? "";
+    if (!toolName || isBlockedObjectKey(toolName) || !isRecord(rawMetadata)) {
+      continue;
+    }
+    const aliases = normalizeTrimmedStringList(rawMetadata.aliases);
+    const authProviders = normalizeTrimmedStringList(rawMetadata.authProviders);
+    const authSignals = normalizeCapabilityProviderAuthSignals(rawMetadata.authSignals);
+    const configSignals = normalizeCapabilityProviderConfigSignals(rawMetadata.configSignals);
+    const descriptor = normalizeToolDescriptorMetadata(rawMetadata.descriptor);
+    const metadata = {
+      ...(aliases.length > 0 ? { aliases } : {}),
+      ...(authProviders.length > 0 ? { authProviders } : {}),
+      ...(authSignals ? { authSignals } : {}),
+      ...(configSignals ? { configSignals } : {}),
+      ...(descriptor ? { descriptor } : {}),
+    } satisfies PluginManifestToolMetadata;
+    if (Object.keys(metadata).length > 0) {
+      normalized[toolName] = metadata;
     }
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
@@ -1569,7 +1779,7 @@ export function loadPluginManifest(
   const musicGenerationProviderMetadata = normalizeCapabilityProviderMetadata(
     raw.musicGenerationProviderMetadata,
   );
-  const toolMetadata = normalizeCapabilityProviderMetadata(raw.toolMetadata);
+  const toolMetadata = normalizeToolMetadata(raw.toolMetadata);
   const configContracts = normalizeManifestConfigContracts(raw.configContracts);
   const channelConfigs = normalizeChannelConfigs(raw.channelConfigs);
 
