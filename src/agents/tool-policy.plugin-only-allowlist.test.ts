@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isKnownCoreToolId, listKnownCoreToolIds } from "./tool-catalog.js";
+import {
+  isAlwaysCoreToolId,
+  isKnownCoreToolId,
+  listAlwaysCoreToolIds,
+  listKnownCoreToolIds,
+} from "./tool-catalog.js";
 import {
   analyzeAllowlistByToolType,
   buildPluginToolGroups,
@@ -18,8 +23,14 @@ describe("analyzeAllowlistByToolType", () => {
     expect(isKnownCoreToolId("process")).toBe(true);
     expect(isKnownCoreToolId("heartbeat_respond")).toBe(true);
     expect(listKnownCoreToolIds()).toEqual(
+      expect.arrayContaining(["process", "heartbeat_respond", "code_execution"]),
+    );
+    expect(listAlwaysCoreToolIds()).toEqual(
       expect.arrayContaining(["process", "heartbeat_respond"]),
     );
+    expect(listAlwaysCoreToolIds()).not.toContain("code_execution");
+    expect(isAlwaysCoreToolId("process")).toBe(true);
+    expect(isAlwaysCoreToolId("code_execution")).toBe(false);
     expect(TOOL_GROUPS["group:runtime"]).toContain("process");
     expect(TOOL_GROUPS["group:openclaw"]).toContain("heartbeat_respond");
   });

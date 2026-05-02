@@ -208,7 +208,7 @@ describe("createOpenClawCodingTools", () => {
       label: "plugin id",
       runtimeToolAllowlist: ["process"],
     },
-  ])("passes canonical core tool names through the plugin-only $label path", (params) => {
+  ])("passes always-core tool names through the plugin-only $label path", (params) => {
     const pluginMeta = new WeakMap<StubTool, { pluginId: string }>();
     resolvePluginToolsMock.mockReset();
     getPluginToolMetaMock.mockReset();
@@ -244,6 +244,57 @@ describe("createOpenClawCodingTools", () => {
         expect.arrayContaining(["process", "heartbeat_respond"]),
       );
       expect(tools.map((tool) => tool.name)).not.toContain("process");
+    } finally {
+      resolvePluginToolsMock.mockReset();
+      getPluginToolMetaMock.mockReset();
+      resolvePluginToolsMock.mockReturnValue([]);
+      getPluginToolMetaMock.mockReturnValue(undefined);
+    }
+  });
+
+  it.each([
+    {
+      label: "plugin id",
+      runtimeToolAllowlist: ["xai"],
+    },
+    {
+      label: "plugin group",
+      runtimeToolAllowlist: ["group:plugins"],
+    },
+  ])("preserves catalog-listed plugin tools through $label allowlists", (params) => {
+    const pluginMeta = new WeakMap<StubTool, { pluginId: string }>();
+    resolvePluginToolsMock.mockReset();
+    getPluginToolMetaMock.mockReset();
+    resolvePluginToolsMock.mockImplementation((resolverParams: unknown) => {
+      const existingToolNames = (resolverParams as { existingToolNames?: Set<string> })
+        .existingToolNames;
+      expect(existingToolNames?.has("process")).toBe(true);
+      expect(existingToolNames?.has("heartbeat_respond")).toBe(true);
+      expect(existingToolNames?.has("code_execution")).toBe(false);
+      expect(existingToolNames?.has("x_search")).toBe(false);
+
+      const tools = [stubTool("code_execution"), stubTool("x_search")];
+      for (const tool of tools) {
+        pluginMeta.set(tool, { pluginId: "xai" });
+      }
+      return tools;
+    });
+    getPluginToolMetaMock.mockImplementation((tool: unknown) => pluginMeta.get(tool as StubTool));
+
+    try {
+      const tools = createOpenClawCodingTools({
+        config: testConfig,
+        includeCoreTools: false,
+        runtimeToolAllowlist: params.runtimeToolAllowlist,
+      });
+
+      expect(resolvePluginToolsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          existingToolNames: expect.any(Set),
+          toolAllowlist: params.runtimeToolAllowlist,
+        }),
+      );
+      expect(tools.map((tool) => tool.name)).toEqual(["code_execution", "x_search"]);
     } finally {
       resolvePluginToolsMock.mockReset();
       getPluginToolMetaMock.mockReset();

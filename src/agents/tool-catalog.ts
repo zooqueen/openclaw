@@ -34,6 +34,7 @@ type CoreToolDefinition = {
   sectionId: string;
   profiles: ToolProfileId[];
   includeInOpenClawGroup?: boolean;
+  runtimeOwner?: "core" | "plugin";
 };
 
 const CORE_TOOL_SECTION_ORDER: Array<{ id: string; label: string }> = [
@@ -100,6 +101,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     sectionId: "runtime",
     profiles: ["coding"],
     includeInOpenClawGroup: true,
+    runtimeOwner: "plugin",
   },
   {
     id: "web_search",
@@ -124,6 +126,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     sectionId: "web",
     profiles: ["coding"],
     includeInOpenClawGroup: true,
+    runtimeOwner: "plugin",
   },
   {
     id: "memory_search",
@@ -132,6 +135,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     sectionId: "memory",
     profiles: ["coding"],
     includeInOpenClawGroup: true,
+    runtimeOwner: "plugin",
   },
   {
     id: "memory_get",
@@ -140,6 +144,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     sectionId: "memory",
     profiles: ["coding"],
     includeInOpenClawGroup: true,
+    runtimeOwner: "plugin",
   },
   {
     id: "sessions_list",
@@ -204,6 +209,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     sectionId: "ui",
     profiles: [],
     includeInOpenClawGroup: true,
+    runtimeOwner: "plugin",
   },
   {
     id: "canvas",
@@ -401,6 +407,16 @@ export function listKnownCoreToolIds(): string[] {
   return CORE_TOOL_DEFINITIONS.map((tool) => tool.id);
 }
 
+export function listAlwaysCoreToolIds(): string[] {
+  return CORE_TOOL_DEFINITIONS.filter((tool) => tool.runtimeOwner !== "plugin").map(
+    (tool) => tool.id,
+  );
+}
+
 export function isKnownCoreToolId(toolId: string): boolean {
   return CORE_TOOL_BY_ID.has(toolId);
+}
+
+export function isAlwaysCoreToolId(toolId: string): boolean {
+  return CORE_TOOL_BY_ID.get(toolId)?.runtimeOwner !== "plugin" && CORE_TOOL_BY_ID.has(toolId);
 }
