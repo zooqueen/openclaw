@@ -100,8 +100,13 @@ function getRuntimeChannelPluginCandidates(channel: string): ChannelPlugin[] {
     candidates.push(active);
   }
   const loaded = getLoadedChannelPlugin(channel);
-  if (loaded && loaded.id !== active?.id) {
-    candidates.push(loaded);
+  if (loaded) {
+    const existingIndex = candidates.findIndex((plugin) => plugin.id === loaded.id);
+    if (existingIndex === -1) {
+      candidates.push(loaded);
+    } else {
+      candidates[existingIndex] = loaded;
+    }
   }
   return candidates;
 }
