@@ -459,6 +459,37 @@ describe("createAcpDispatchDeliveryCoordinator", () => {
     expect(coordinator.hasDeliveredVisibleText()).toBe(false);
   });
 
+  it("routes suppressed ACP final replies through the message tool in message-tool mode", async () => {
+    const dispatcher = createDispatcher();
+    const coordinator = createAcpDispatchDeliveryCoordinator({
+      cfg: createAcpTestConfig(),
+      ctx: buildTestCtx({
+        Provider: "visiblechat",
+        Surface: "visiblechat",
+        SessionKey: "agent:codex-acp:session-1",
+      }),
+      dispatcher,
+      inboundAudio: false,
+      suppressUserDelivery: true,
+      sourceReplyDeliveryMode: "message_tool_only",
+      shouldRouteToOriginating: false,
+      originatingChannel: "visiblechat",
+      originatingTo: "channel:thread-1",
+    });
+
+    const delivered = await coordinator.deliver("final", { text: "done" }, { skipTts: true });
+
+    expect(delivered).toBe(true);
+    expect(dispatcher.sendFinalReply).not.toHaveBeenCalled();
+    expect(deliveryMocks.routeReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ text: "done" }),
+        channel: "visiblechat",
+        to: "channel:thread-1",
+      }),
+    );
+  });
+
   it("routes ACP replies through the configured default account when AccountId is omitted", async () => {
     await expectVisibleChatBlockRoutesToAccount(
       createAcpTestConfig({

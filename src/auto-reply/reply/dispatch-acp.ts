@@ -372,6 +372,7 @@ export async function tryDispatchAcpReply(params: {
     ttsChannel: params.ttsChannel,
     suppressUserDelivery: params.suppressUserDelivery,
     suppressReplyLifecycle: params.suppressReplyLifecycle,
+    sourceReplyDeliveryMode: params.sourceReplyDeliveryMode,
     shouldRouteToOriginating: params.shouldRouteToOriginating,
     originatingChannel: params.originatingChannel,
     originatingTo: params.originatingTo,

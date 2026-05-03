@@ -858,6 +858,98 @@ describe("dispatchReplyFromConfig", () => {
     expect(dispatcher.sendFinalReply).toHaveBeenCalledTimes(1);
   });
 
+  it("routes same-provider WhatsApp group final replies through the message tool in message-tool mode", async () => {
+    setNoAbort();
+    mocks.routeReply.mockClear();
+    const dispatcher = createDispatcher();
+    const replyResolver = vi.fn(async (_ctx: MsgContext, opts?: GetReplyOptions) => {
+      expect(opts?.sourceReplyDeliveryMode).toBe("message_tool_only");
+      return { text: "visible group reply" } satisfies ReplyPayload;
+    });
+
+    const result = await dispatchReplyFromConfig({
+      ctx: buildTestCtx({
+        ChatType: "group",
+        Provider: "whatsapp",
+        Surface: "whatsapp",
+        OriginatingChannel: "whatsapp",
+        OriginatingTo: "120363423802442266@g.us",
+        GroupSubject: "Gutsy and Us",
+        AccountId: "default",
+        SessionKey: "agent:main:whatsapp:group:120363423802442266@g.us",
+      }),
+      cfg: {
+        messages: {
+          groupChat: {
+            visibleReplies: "message_tool",
+          },
+        },
+      } as OpenClawConfig,
+      dispatcher,
+      replyResolver,
+    });
+
+    expect(result.queuedFinal).toBe(true);
+    expect(dispatcher.sendFinalReply).not.toHaveBeenCalled();
+    expect(mocks.routeReply).toHaveBeenCalledTimes(1);
+    expect(mocks.routeReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ text: "visible group reply" }),
+        channel: "whatsapp",
+        to: "120363423802442266@g.us",
+        accountId: "default",
+        isGroup: true,
+        groupId: "120363423802442266@g.us",
+      }),
+    );
+  });
+
+  it("routes same-provider Discord channel final replies through the message tool in message-tool mode", async () => {
+    setNoAbort();
+    mocks.routeReply.mockClear();
+    const dispatcher = createDispatcher();
+    const replyResolver = vi.fn(async (_ctx: MsgContext, opts?: GetReplyOptions) => {
+      expect(opts?.sourceReplyDeliveryMode).toBe("message_tool_only");
+      return { text: "visible channel reply" } satisfies ReplyPayload;
+    });
+
+    await dispatchReplyFromConfig({
+      ctx: buildTestCtx({
+        ChatType: "channel",
+        Provider: "discord",
+        Surface: "discord",
+        OriginatingChannel: "discord",
+        OriginatingTo: "channel:1482447219717308539",
+        GroupChannel: "general",
+        GroupSpace: "1482447218894967037",
+        AccountId: "default",
+        SessionKey: "agent:main:discord:channel:1482447219717308539",
+      }),
+      cfg: {
+        messages: {
+          groupChat: {
+            visibleReplies: "message_tool",
+          },
+        },
+      } as OpenClawConfig,
+      dispatcher,
+      replyResolver,
+    });
+
+    expect(dispatcher.sendFinalReply).not.toHaveBeenCalled();
+    expect(mocks.routeReply).toHaveBeenCalledTimes(1);
+    expect(mocks.routeReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ text: "visible channel reply" }),
+        channel: "discord",
+        to: "channel:1482447219717308539",
+        accountId: "default",
+        isGroup: true,
+        groupId: "channel:1482447219717308539",
+      }),
+    );
+  });
+
   it("routes when OriginatingChannel differs from Provider", async () => {
     setNoAbort();
     mocks.routeReply.mockClear();

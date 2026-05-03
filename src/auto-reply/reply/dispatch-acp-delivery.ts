@@ -11,6 +11,7 @@ import {
 import { createTtsDirectiveTextStreamCleaner } from "../../tts/directives.js";
 import { resolveStatusTtsSnapshot } from "../../tts/status-config.js";
 import { resolveConfiguredTtsMode, shouldCleanTtsDirectiveText } from "../../tts/tts-config.js";
+import type { SourceReplyDeliveryMode } from "../get-reply-options.types.js";
 import type { FinalizedMsgContext } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
 import type { ReplyDispatchKind, ReplyDispatcher } from "./reply-dispatcher.types.js";
@@ -181,6 +182,7 @@ export function createAcpDispatchDeliveryCoordinator(params: {
   ttsChannel?: string;
   suppressUserDelivery?: boolean;
   suppressReplyLifecycle?: boolean;
+  sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   shouldRouteToOriginating: boolean;
   originatingChannel?: string;
   originatingTo?: string;
@@ -197,6 +199,12 @@ export function createAcpDispatchDeliveryCoordinator(params: {
         params.cfg.channels as Record<string, { defaultAccount?: unknown } | undefined> | undefined
       )?.[routedChannel ?? directChannel ?? ""]?.defaultAccount,
     );
+  const shouldRouteSuppressedSourceViaMessageTool = Boolean(
+    params.sourceReplyDeliveryMode === "message_tool_only" &&
+    params.suppressUserDelivery === true &&
+    routedChannel &&
+    params.originatingTo,
+  );
   const state: AcpDispatchDeliveryState = {
     startedReplyLifecycle: false,
     accumulatedBlockText: "",
@@ -337,7 +345,7 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       return false;
     }
 
-    if (params.suppressUserDelivery) {
+    if (params.suppressUserDelivery && !shouldRouteSuppressedSourceViaMessageTool) {
       return false;
     }
 
@@ -353,7 +361,11 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       skipTts: meta?.skipTts,
     });
 
-    if (params.shouldRouteToOriginating && params.originatingChannel && params.originatingTo) {
+    if (
+      (params.shouldRouteToOriginating || shouldRouteSuppressedSourceViaMessageTool) &&
+      params.originatingChannel &&
+      params.originatingTo
+    ) {
       const toolCallId = normalizeOptionalString(meta?.toolCallId);
       if (kind === "tool" && meta?.allowEdit === true && toolCallId) {
         const edited = await tryEditToolMessage(ttsPayload, toolCallId);

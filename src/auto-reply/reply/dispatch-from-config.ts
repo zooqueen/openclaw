@@ -477,14 +477,15 @@ export async function dispatchReplyFromConfig(
     normalizedCurrentSurface === INTERNAL_MESSAGE_CHANNEL &&
     (normalizedSurfaceChannel === INTERNAL_MESSAGE_CHANNEL || !normalizedSurfaceChannel) &&
     ctx.ExplicitDeliverRoute !== true;
-  const hasRouteReplyCandidate = Boolean(
+  const hasRouteReplyTarget = Boolean(
     !suppressAcpChildUserDelivery &&
     !isInternalWebchatTurn &&
     normalizedRouteReplyChannel &&
-    replyRoute.to &&
-    normalizedRouteReplyChannel !== normalizedCurrentSurface,
+    replyRoute.to,
   );
-  const routeReplyRuntime = hasRouteReplyCandidate ? await loadRouteReplyRuntime() : undefined;
+  const hasRouteReplyCandidate =
+    hasRouteReplyTarget && normalizedRouteReplyChannel !== normalizedCurrentSurface;
+  const routeReplyRuntime = hasRouteReplyTarget ? await loadRouteReplyRuntime() : undefined;
   const {
     originatingChannel: routeReplyChannel,
     currentSurface,
@@ -547,6 +548,38 @@ export async function dispatchReplyFromConfig(
       payload,
       channel: routeReplyChannel,
       to: routeReplyTo,
+      sessionKey: ctx.SessionKey,
+      policySessionKey:
+        ctx.CommandSource === "native"
+          ? (ctx.CommandTargetSessionKey ?? ctx.SessionKey)
+          : ctx.SessionKey,
+      policyConversationType: resolveRoutedPolicyConversationType(ctx),
+      accountId: replyRoute.accountId,
+      requesterSenderId: ctx.SenderId,
+      requesterSenderName: ctx.SenderName,
+      requesterSenderUsername: ctx.SenderUsername,
+      requesterSenderE164: ctx.SenderE164,
+      threadId: routeThreadId,
+      cfg,
+      abortSignal: options?.abortSignal,
+      mirror: options?.mirror,
+      isGroup,
+      groupId,
+    });
+  };
+
+  const routeReplyToSourceViaMessageTool = async (
+    payload: ReplyPayload,
+    options?: { abortSignal?: AbortSignal; mirror?: boolean },
+  ) => {
+    if (!routeReplyRuntime || !normalizedRouteReplyChannel || !replyRoute.to) {
+      return null;
+    }
+    markInboundDedupeReplayUnsafe();
+    return await routeReplyRuntime.routeReply({
+      payload,
+      channel: normalizedRouteReplyChannel,
+      to: replyRoute.to,
       sessionKey: ctx.SessionKey,
       policySessionKey:
         ctx.CommandSource === "native"
@@ -754,6 +787,17 @@ export async function dispatchReplyFromConfig(
     suppressHookUserDelivery,
     suppressHookReplyLifecycle,
   } = sourceReplyPolicy;
+  const shouldDeliverSuppressedSourceViaMessageTool = Boolean(
+    sourceReplyDeliveryMode === "message_tool_only" &&
+    !sourceReplyPolicy.sendPolicyDenied &&
+    (chatType === "group" || chatType === "channel") &&
+    routeReplyRuntime &&
+    normalizedRouteReplyChannel &&
+    replyRoute.to &&
+    routeReplyRuntime.isRoutableChannel(normalizedRouteReplyChannel),
+  );
+  const shouldSuppressDispatcherDelivery =
+    suppressDelivery && !shouldDeliverSuppressedSourceViaMessageTool;
 
   let pluginFallbackReason:
     | "plugin-bound-fallback-missing-plugin"
@@ -762,7 +806,7 @@ export async function dispatchReplyFromConfig(
 
   if (pluginOwnedBinding) {
     touchConversationBindingRecord(pluginOwnedBinding.bindingId);
-    if (suppressDelivery) {
+    if (shouldSuppressDispatcherDelivery) {
       // Plugin-bound inbound handlers typically emit outbound replies we
       // cannot rewind. When automatic delivery is suppressed, skip the plugin
       // claim and fall through to normal suppressed agent processing.
@@ -881,11 +925,13 @@ export async function dispatchReplyFromConfig(
     if (fastAbort.handled) {
       let queuedFinal = false;
       let routedFinalCount = 0;
-      if (!suppressDelivery) {
+      if (!shouldSuppressDispatcherDelivery) {
         const payload = {
           text: formatAbortReplyTextResolver(fastAbort.stoppedSubagents),
         } satisfies ReplyPayload;
-        const result = await routeReplyToOriginating(payload);
+        const result = shouldDeliverSuppressedSourceViaMessageTool
+          ? await routeReplyToSourceViaMessageTool(payload)
+          : await routeReplyToOriginating(payload);
         if (result) {
           queuedFinal = result.ok;
           if (result.ok) {
@@ -936,7 +982,9 @@ export async function dispatchReplyFromConfig(
         accountId: replyRoute.accountId,
       });
       const normalizedPayload = await normalizeReplyMediaPayload(ttsPayload);
-      const result = await routeReplyToOriginating(normalizedPayload);
+      const result = shouldDeliverSuppressedSourceViaMessageTool
+        ? await routeReplyToSourceViaMessageTool(normalizedPayload)
+        : await routeReplyToOriginating(normalizedPayload);
       if (result) {
         if (!result.ok) {
           logVerbose(
@@ -979,7 +1027,7 @@ export async function dispatchReplyFromConfig(
         const text = beforeDispatchResult.text;
         let queuedFinal = false;
         let routedFinalCount = 0;
-        if (text && !suppressDelivery) {
+        if (text && !shouldSuppressDispatcherDelivery) {
           const handledReply = await sendFinalPayload({ text });
           queuedFinal = handledReply.queuedFinal;
           routedFinalCount += handledReply.routedFinalCount;
@@ -1033,7 +1081,7 @@ export async function dispatchReplyFromConfig(
     // When automatic source delivery is suppressed, still let the agent process
     // the inbound message (context, memory, tool calls) but suppress automatic
     // outbound source delivery.
-    if (suppressDelivery) {
+    if (shouldSuppressDispatcherDelivery) {
       logVerbose(
         `Delivery suppressed by ${deliverySuppressionReason} for session ${sessionStoreEntry.sessionKey ?? sessionKey ?? "unknown"} — agent will still process the message`,
       );
@@ -1239,7 +1287,7 @@ export async function dispatchReplyFromConfig(
             if (!suppressAutomaticSourceDelivery) {
               await onToolResultFromReplyOptions?.(payload);
             }
-            if (suppressDelivery) {
+            if (shouldSuppressDispatcherDelivery) {
               return;
             }
             const ttsPayload = await maybeApplyTtsToReplyPayload({
@@ -1273,6 +1321,15 @@ export async function dispatchReplyFromConfig(
             }
             if (shouldRouteToOriginating) {
               await sendPayloadAsync(deliveryPayload, undefined, false);
+            } else if (shouldDeliverSuppressedSourceViaMessageTool) {
+              const result = await routeReplyToSourceViaMessageTool(deliveryPayload, {
+                mirror: false,
+              });
+              if (result && !result.ok) {
+                logVerbose(
+                  `dispatch-from-config: route-reply (tool) failed: ${result.error ?? "unknown error"}`,
+                );
+              }
             } else {
               markInboundDedupeReplayUnsafe();
               dispatcher.sendToolResult(deliveryPayload);
@@ -1334,7 +1391,7 @@ export async function dispatchReplyFromConfig(
             ) {
               markInboundDedupeReplayUnsafe();
             }
-            if (suppressDelivery) {
+            if (shouldSuppressDispatcherDelivery) {
               return;
             }
             // Suppress reasoning payloads — channels using this generic dispatch
@@ -1396,6 +1453,16 @@ export async function dispatchReplyFromConfig(
             const normalizedPayload = await normalizeReplyMediaPayload(ttsPayload);
             if (shouldRouteToOriginating) {
               await sendPayloadAsync(normalizedPayload, context?.abortSignal, false);
+            } else if (shouldDeliverSuppressedSourceViaMessageTool) {
+              const result = await routeReplyToSourceViaMessageTool(normalizedPayload, {
+                abortSignal: context?.abortSignal,
+                mirror: false,
+              });
+              if (result && !result.ok) {
+                logVerbose(
+                  `dispatch-from-config: route-reply (block) failed: ${result.error ?? "unknown error"}`,
+                );
+              }
             } else {
               markInboundDedupeReplayUnsafe();
               dispatcher.sendBlockReply(normalizedPayload);
@@ -1453,7 +1520,7 @@ export async function dispatchReplyFromConfig(
 
     let queuedFinal = false;
     let routedFinalCount = 0;
-    if (!suppressDelivery) {
+    if (!shouldSuppressDispatcherDelivery) {
       for (const reply of replies) {
         // Suppress reasoning payloads from channel delivery — channels using this
         // generic dispatch path do not have a dedicated reasoning lane.
@@ -1500,7 +1567,9 @@ export async function dispatchReplyFromConfig(
               spokenText: accumulatedBlockTtsText,
             };
             const normalizedTtsOnlyPayload = await normalizeReplyMediaPayload(ttsOnlyPayload);
-            const result = await routeReplyToOriginating(normalizedTtsOnlyPayload);
+            const result = shouldDeliverSuppressedSourceViaMessageTool
+              ? await routeReplyToSourceViaMessageTool(normalizedTtsOnlyPayload)
+              : await routeReplyToOriginating(normalizedTtsOnlyPayload);
             if (result) {
               queuedFinal = result.ok || queuedFinal;
               if (result.ok) {
