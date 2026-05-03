@@ -159,7 +159,9 @@ the maintainer-only release runbook.
   QA-lab through a local OTLP/HTTP receiver and verifies the exported trace
   span names, bounded attributes, and content/identifier redaction without
   requiring Opik, Langfuse, or another external collector.
-- Run `pnpm release:check` before every tagged release
+- Run `pnpm release:check` before every tagged release; it also builds and
+  verifies package-local plugin runtimes so TypeScript plugin entries cannot
+  ship without matching `dist/*.js` output.
 - Run `OpenClaw Release Publish` for the mutating publish sequence after the
   tag exists. Dispatch it from `release/YYYY.M.D` (or `main` when publishing a
   main-reachable tag), pass the release tag and successful OpenClaw npm

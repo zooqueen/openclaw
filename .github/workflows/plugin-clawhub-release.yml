@@ -32,7 +32,7 @@ env:
   CLAWHUB_REGISTRY: "https://clawhub.ai"
   CLAWHUB_REPOSITORY: "openclaw/clawhub"
   # Pinned to a reviewed ClawHub commit so release behavior stays reproducible.
-  CLAWHUB_REF: "199e6a0cdf32471702e0503e9899e8d24f06a527"
+  CLAWHUB_REF: "3d6f3b49a58cfe08bccc0614ab7eb8e0cde33b74"
 
 jobs:
   preview_plugins_clawhub:
@@ -202,6 +202,9 @@ jobs:
           EOF
           chmod +x "$RUNNER_TEMP/clawhub"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Verify package-local runtime build
+        run: pnpm release:plugins:npm:runtime:check --package "${{ matrix.plugin.packageDir }}"
 
       - name: Preview publish command
         env:
