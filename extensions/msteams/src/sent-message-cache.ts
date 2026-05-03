@@ -2,7 +2,6 @@ import { getOptionalMSTeamsRuntime } from "./runtime.js";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 const PERSISTENT_MAX_ENTRIES = 1000;
-const PERSISTENT_NAMESPACE = "msteams.sent-messages";
 const MSTEAMS_SENT_MESSAGES_KEY = Symbol.for("openclaw.msteamsSentMessages");
 
 type MSTeamsSentMessageRecord = {
@@ -62,7 +61,6 @@ function getPersistentSentMessageStore(): MSTeamsSentMessageStore | undefined {
   }
   try {
     persistentStore = runtime.state.openKeyedStore<MSTeamsSentMessageRecord>({
-      namespace: PERSISTENT_NAMESPACE,
       maxEntries: PERSISTENT_MAX_ENTRIES,
       defaultTtlMs: TTL_MS,
     });

@@ -411,7 +411,6 @@ Provider and channel execution paths must use the active runtime config snapshot
     ```typescript
     const stateDir = api.runtime.state.resolveStateDir(process.env);
     const store = api.runtime.state.openKeyedStore<MyRecord>({
-      namespace: "my-feature",
       maxEntries: 200,
       defaultTtlMs: 15 * 60_000,
     });
@@ -422,11 +421,9 @@ Provider and channel execution paths must use the active runtime config snapshot
     await store.clear();
     ```
 
-    Keyed stores survive restarts and are isolated by the runtime-bound plugin id. Limits: `maxEntries` per namespace, 1,000 live rows per plugin, JSON values under 64KB, and optional TTL expiry.
+    Keyed stores survive restarts and are isolated by the runtime-bound plugin id. The SDK does not accept an owner id or namespace, so one plugin cannot read, write, list, consume, or clear another plugin's state. Limits: default 100 entries, optional `maxEntries` up to 1,000 live rows per plugin, JSON values under 64KB, and optional TTL expiry.
 
-    <Warning>
-    Bundled plugins only in this release.
-    </Warning>
+    Omit `maxEntries` to use the default row budget.
 
   </Accordion>
   <Accordion title="api.runtime.tools">

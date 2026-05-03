@@ -2093,15 +2093,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
           const baseState = Reflect.get(target, prop, receiver);
           return {
             ...baseState,
-            openKeyedStore: <T>(options: OpenKeyedStoreOptions): PluginStateKeyedStore<T> => {
-              const record =
-                pluginRuntimeRecordById.get(pluginId) ??
-                registry.plugins.find((entry) => entry.id === pluginId);
-              if (record?.origin !== "bundled") {
-                throw new Error(
-                  "openKeyedStore is only available for bundled plugins in this release.",
-                );
-              }
+            openKeyedStore: <T>(options?: OpenKeyedStoreOptions): PluginStateKeyedStore<T> => {
               return createPluginStateKeyedStore<T>(pluginId, options);
             },
           } satisfies PluginRuntime["state"];

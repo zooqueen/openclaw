@@ -22,7 +22,6 @@ const MATRIX_APPROVAL_REACTION_ORDER = [
   "deny",
 ] as const satisfies readonly ExecApprovalReplyDecision[];
 
-const PERSISTENT_NAMESPACE = "matrix.approval-reactions";
 const PERSISTENT_MAX_ENTRIES = 1000;
 const DEFAULT_REACTION_TARGET_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -99,7 +98,6 @@ function getPersistentApprovalReactionStore(): MatrixApprovalReactionStore | und
   }
   try {
     persistentStore = runtime.state.openKeyedStore<PersistedMatrixApprovalReactionTarget>({
-      namespace: PERSISTENT_NAMESPACE,
       maxEntries: PERSISTENT_MAX_ENTRIES,
       defaultTtlMs: DEFAULT_REACTION_TARGET_TTL_MS,
     });

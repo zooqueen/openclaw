@@ -62,7 +62,6 @@ describe("plugin runtime state proxy", () => {
 
       expect(api.runtime.state.resolveStateDir()).toBe(state.stateDir);
       const store = api.runtime.state.openKeyedStore<{ plugin: string }>({
-        namespace: "runtime",
         maxEntries: 10,
       });
       await store.register("k", { plugin: "discord" });
@@ -71,7 +70,6 @@ describe("plugin runtime state proxy", () => {
       registry.registry.plugins.push(telegram);
       const telegramApi = registry.createApi(telegram, { config: {} });
       const telegramStore = telegramApi.runtime.state.openKeyedStore<{ plugin: string }>({
-        namespace: "runtime",
         maxEntries: 10,
       });
       await expect(telegramStore.lookup("k")).resolves.toBeUndefined();
@@ -79,14 +77,40 @@ describe("plugin runtime state proxy", () => {
     });
   });
 
-  it("rejects external plugins in this release", () => {
-    const registry = createTestPluginRegistry();
-    const record = createPluginRecord("external-plugin", "workspace");
-    registry.registry.plugins.push(record);
-    const api = registry.createApi(record, { config: {} });
+  it("allows workspace plugins and keeps owner isolation", async () => {
+    await withOpenClawTestState({ label: "plugin-state-runtime-workspace" }, async () => {
+      const registry = createTestPluginRegistry();
+      const external = createPluginRecord("external-state-plugin", "workspace");
+      registry.registry.plugins.push(external);
+      const api = registry.createApi(external, { config: {} });
 
-    expect(() =>
-      api.runtime.state.openKeyedStore({ namespace: "runtime", maxEntries: 10 }),
-    ).toThrow("openKeyedStore is only available for bundled plugins");
+      const store = api.runtime.state.openKeyedStore<{ plugin: string }>({
+        maxEntries: 10,
+      });
+      await store.register("k", { plugin: "external-state-plugin" });
+
+      const sibling = createPluginRecord("sibling-state-plugin", "workspace");
+      registry.registry.plugins.push(sibling);
+      const siblingApi = registry.createApi(sibling, { config: {} });
+      const siblingStore = siblingApi.runtime.state.openKeyedStore<{ plugin: string }>({
+        maxEntries: 10,
+      });
+
+      await expect(siblingStore.lookup("k")).resolves.toBeUndefined();
+      await expect(store.lookup("k")).resolves.toEqual({ plugin: "external-state-plugin" });
+    });
+  });
+
+  it("uses a default row budget when options are omitted", async () => {
+    await withOpenClawTestState({ label: "plugin-state-runtime-defaults" }, async () => {
+      const registry = createTestPluginRegistry();
+      const record = createPluginRecord("external-plugin", "workspace");
+      registry.registry.plugins.push(record);
+      const api = registry.createApi(record, { config: {} });
+
+      const store = api.runtime.state.openKeyedStore<{ ok: boolean }>({});
+      await store.register("k", { ok: true });
+      await expect(store.lookup("k")).resolves.toEqual({ ok: true });
+    });
   });
 });
