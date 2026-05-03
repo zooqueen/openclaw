@@ -94,11 +94,16 @@ function getActiveRegistryChannelPlugin(rawChannel: string): ChannelPlugin | und
 }
 
 function getRuntimeChannelPluginCandidates(channel: string): ChannelPlugin[] {
-  const candidates = [
-    getActiveRegistryChannelPlugin(channel),
-    getLoadedChannelPlugin(channel),
-  ].filter((plugin): plugin is ChannelPlugin => Boolean(plugin));
-  return [...new Map(candidates.map((plugin) => [plugin.id, plugin])).values()];
+  const candidates: ChannelPlugin[] = [];
+  const active = getActiveRegistryChannelPlugin(channel);
+  if (active) {
+    candidates.push(active);
+  }
+  const loaded = getLoadedChannelPlugin(channel);
+  if (loaded && loaded.id !== active?.id) {
+    candidates.push(loaded);
+  }
+  return candidates;
 }
 
 function resolveRuntimeChannelPlugin(channel: string): ChannelPlugin | undefined {

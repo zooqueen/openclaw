@@ -73,15 +73,20 @@ function describeMattermostMessageTool({
 }: Parameters<
   NonNullable<ChannelMessageActionAdapter["describeMessageTool"]>
 >[0]): ChannelMessageToolDiscovery {
-  const enabledAccounts = (
-    accountId
-      ? [resolveMattermostAccount({ cfg, accountId })]
-      : listMattermostAccountIds(cfg).map((listedAccountId) =>
-          resolveMattermostAccount({ cfg, accountId: listedAccountId }),
-        )
-  )
-    .filter((account) => account.enabled)
-    .filter((account) => Boolean(account.botToken?.trim() && account.baseUrl?.trim()));
+  const enabledAccounts: ResolvedMattermostAccount[] = [];
+  if (accountId) {
+    const account = resolveMattermostAccount({ cfg, accountId });
+    if (account.enabled && account.botToken?.trim() && account.baseUrl?.trim()) {
+      enabledAccounts.push(account);
+    }
+  } else {
+    for (const listedAccountId of listMattermostAccountIds(cfg)) {
+      const account = resolveMattermostAccount({ cfg, accountId: listedAccountId });
+      if (account.enabled && account.botToken?.trim() && account.baseUrl?.trim()) {
+        enabledAccounts.push(account);
+      }
+    }
+  }
 
   const actions: ChannelMessageActionName[] = [];
 

@@ -17,6 +17,7 @@ Docs: https://docs.openclaw.ai
 - Core/performance: trim secret/env discovery, tool catalog rendering, QA parser setup, node-host command planning, link/media helper, and browser error traversal allocation chains with single-pass loops and cursor traversal. Thanks @vincentkoc.
 - Core/performance: trim plugin registry, manifest/package entry, provider-owner, browser traversal, QA coverage/provider, schema, and command-preview helper normalization paths with direct loops. Thanks @vincentkoc.
 - Core/performance: trim Slack block rendering, bundled-channel discovery, native command specs, CLI history, model/provider config, sandbox hash, group-policy warning, and agent trace helper allocation chains with direct loops. Thanks @vincentkoc.
+- Core/performance: trim command authorization, channel conversation resolution, provider wizard, effective plugin id, OpenAI schema, media note, and Slack/Mattermost account discovery helper allocation chains with direct loops. Thanks @vincentkoc.
 - QA/RTT: add a Slack live transport harness with Convex credential leasing, mention-gating checks, and per-reply RTT artifacts so Slack can be measured beside Telegram and Discord. Thanks @vincentkoc.
 - QA/RTT: let the Telegram RTT package harness use Convex credential leasing via `--credential-source convex`, so cloud lanes can run live RTT proof without direct Telegram bot env vars. Thanks @vincentkoc.
 - Tools/BTW: add `/side` as a text and native slash-command alias for `/btw` side questions.
