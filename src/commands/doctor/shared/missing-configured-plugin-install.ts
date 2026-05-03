@@ -8,7 +8,7 @@ import { listChannelPluginCatalogEntries } from "../../../channels/plugins/catal
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { PluginInstallRecord } from "../../../config/types.plugins.js";
 import { parseClawHubPluginSpec } from "../../../infra/clawhub-spec.js";
-import { parseRegistryNpmSpec } from "../../../infra/npm-registry-spec.js";
+import { isExactSemverVersion, parseRegistryNpmSpec } from "../../../infra/npm-registry-spec.js";
 import { buildClawHubPluginInstallRecordFields } from "../../../plugins/clawhub-install-records.js";
 import { CLAWHUB_INSTALL_ERROR_CODE, installPluginFromClawHub } from "../../../plugins/clawhub.js";
 import { resolveDefaultPluginExtensionsDir } from "../../../plugins/install-paths.js";
@@ -30,6 +30,7 @@ import { resolveProviderInstallCatalogEntries } from "../../../plugins/provider-
 import { updateNpmInstalledPlugins } from "../../../plugins/update.js";
 import { resolveWebSearchInstallCatalogEntry } from "../../../plugins/web-search-install-catalog.js";
 import { resolveUserPath } from "../../../utils.js";
+import { VERSION } from "../../../version.js";
 import { asObjectRecord } from "./object.js";
 
 type DownloadableInstallCandidate = {
@@ -381,6 +382,27 @@ function recordClawHubPackageName(value: string | undefined): string | undefined
   return parseClawHubPluginSpec(trimmed)?.name ?? trimmed;
 }
 
+function resolveVersionAlignedOfficialNpmSpec(
+  candidate: DownloadableInstallCandidate,
+): string | undefined {
+  const npmSpec = candidate.npmSpec?.trim();
+  if (!npmSpec || !candidate.trustedSourceLinkedOfficialInstall) {
+    return npmSpec;
+  }
+  const parsed = parseRegistryNpmSpec(npmSpec);
+  if (!parsed || !parsed.name.startsWith("@openclaw/")) {
+    return npmSpec;
+  }
+  if (parsed.selectorKind === "exact-version") {
+    return npmSpec;
+  }
+  const hostVersion = VERSION.trim();
+  if (!isExactSemverVersion(hostVersion)) {
+    return npmSpec;
+  }
+  return `${parsed.name}@${hostVersion}`;
+}
+
 async function installCandidate(params: {
   candidate: DownloadableInstallCandidate;
   records: Record<string, PluginInstallRecord>;
@@ -430,7 +452,8 @@ async function installCandidate(params: {
       `ClawHub ${candidate.clawhubSpec} unavailable for "${candidate.pluginId}"; falling back to npm ${candidate.npmSpec}.`,
     );
   }
-  if (!candidate.npmSpec) {
+  const npmSpec = resolveVersionAlignedOfficialNpmSpec(candidate);
+  if (!npmSpec) {
     return {
       records: params.records,
       changes: [],
@@ -440,7 +463,7 @@ async function installCandidate(params: {
     };
   }
   const result = await installPluginFromNpmSpec({
-    spec: candidate.npmSpec,
+    spec: npmSpec,
     extensionsDir,
     expectedPluginId: candidate.pluginId,
     expectedIntegrity: candidate.expectedIntegrity,
@@ -464,17 +487,14 @@ async function installCandidate(params: {
       ...params.records,
       [pluginId]: {
         source: "npm",
-        spec: candidate.npmSpec,
+        spec: npmSpec,
         installPath: result.targetDir,
         version: result.version,
         installedAt: new Date().toISOString(),
         ...buildNpmResolutionInstallFields(result.npmResolution),
       },
     },
-    changes: [
-      ...changes,
-      `Installed missing configured plugin "${pluginId}" from ${candidate.npmSpec}.`,
-    ],
+    changes: [...changes, `Installed missing configured plugin "${pluginId}" from ${npmSpec}.`],
     warnings: [],
   };
 }
@@ -672,4 +692,5 @@ export const __testing = {
   collectConfiguredChannelIds,
   collectConfiguredPluginIds,
   collectDownloadableInstallCandidates,
+  resolveVersionAlignedOfficialNpmSpec,
 };
