@@ -238,10 +238,13 @@ function formatKeyValueTraceBlock(
   title: string,
   fields: Array<[string, string | number | boolean | undefined]>,
 ): string | undefined {
-  const lines = fields.flatMap(([key, rawValue]) => {
+  const lines: string[] = [];
+  for (const [key, rawValue] of fields) {
     const value = formatTraceScalar(rawValue);
-    return value ? [`${key}=${value}`] : [];
-  });
+    if (value) {
+      lines.push(`${key}=${value}`);
+    }
+  }
   if (lines.length === 0) {
     return undefined;
   }
