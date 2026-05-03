@@ -216,7 +216,13 @@ export async function deliverSlackSlashReplies(params: {
       messages.push({ text: text ?? "", blocks: slackBlocks });
       continue;
     }
-    const combined = [text ?? "", ...reply.mediaUrls].filter(Boolean).join("\n");
+    let combined = text ?? "";
+    for (const mediaUrl of reply.mediaUrls) {
+      if (!mediaUrl) {
+        continue;
+      }
+      combined = combined ? `${combined}\n${mediaUrl}` : mediaUrl;
+    }
     if (!combined) {
       continue;
     }

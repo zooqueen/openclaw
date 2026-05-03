@@ -95,15 +95,20 @@ export function buildRunId(params: { now: Date; spec: string; index?: number }) 
 export function extractRtt(summary: TelegramQaSummary) {
   const scenarios = summary.scenarios ?? [];
   const mention = scenarios.find((scenario) => scenario.id === "telegram-mentioned-message-reply");
-  const warmSamples = mention?.samples
-    ?.filter((sample) => sample.status === "pass" && sample.rttMs !== undefined)
-    .toSorted((left, right) => (left.index ?? 0) - (right.index ?? 0))
-    .flatMap((sample) => (sample.rttMs === undefined ? [] : [sample.rttMs]));
+  const sortedSamples = mention?.samples?.toSorted(
+    (left, right) => (left.index ?? 0) - (right.index ?? 0),
+  );
+  const warmSamples: number[] = [];
+  for (const sample of sortedSamples ?? []) {
+    if (sample.status === "pass" && sample.rttMs !== undefined) {
+      warmSamples.push(sample.rttMs);
+    }
+  }
   const rtt: RttResult["rtt"] = {
     canaryMs: scenarios.find((scenario) => scenario.id === "telegram-canary")?.rttMs,
     mentionReplyMs: mention?.stats?.p50Ms ?? mention?.rttMs,
   };
-  if (warmSamples?.length) {
+  if (warmSamples.length) {
     rtt.warmSamples = warmSamples;
   }
   if (mention?.stats) {
