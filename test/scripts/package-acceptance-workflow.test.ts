@@ -537,6 +537,11 @@ describe("package artifact reuse", () => {
     expect(workflow).toContain(
       "live_suite_filter: ${{ needs.resolve_target.outputs.live_suite_filter }}",
     );
+    expect(workflow).toContain("qa_live_slack_enabled=false");
+    expect(workflow).toContain("live_suite_filter=qa-live-slack");
+    expect(workflow).toContain(
+      'contains(fromJSON(\'["all","qa","qa-live"]\'), needs.resolve_target.outputs.rerun_group) && needs.resolve_target.outputs.qa_live_slack_enabled == \'true\'',
+    );
     expect(workflow).toContain(
       "contains(fromJSON('[\"all\",\"cross-os\",\"package\"]'), needs.resolve_target.outputs.rerun_group) || (needs.resolve_target.outputs.rerun_group == 'live-e2e' && needs.resolve_target.outputs.live_suite_filter == '')",
     );
@@ -628,6 +633,7 @@ describe("package artifact reuse", () => {
       "child_rerun_group=all",
       '-f rerun_group="$child_rerun_group"',
       'args+=(-f live_suite_filter="$LIVE_SUITE_FILTER")',
+      "QA live Slack lane: disabled by default because there is no Slack test pool",
       "cancel-in-progress: ${{ inputs.ref == 'main' && inputs.rerun_group == 'all' }}",
       "gh run cancel",
       "NORMAL_CI_RESULT: ${{ needs.normal_ci.result }}",
@@ -699,11 +705,18 @@ describe("package artifact reuse", () => {
     const releaseChecksWorkflow = readFileSync(RELEASE_CHECKS_WORKFLOW, "utf8");
     const qaWorkflow = readFileSync(QA_LIVE_TRANSPORTS_WORKFLOW, "utf8");
 
+    expect(qaWorkflow).toContain("run_slack:");
+    expect(qaWorkflow).toContain("Default CI skips Slack because there is no Slack test pool.");
+    expect(qaWorkflow).toContain(
+      "if: github.event_name == 'workflow_dispatch' && inputs.run_slack",
+    );
+
     for (const jobName of [
       "qa_lab_parity_lane_release_checks",
       "qa_lab_parity_report_release_checks",
       "qa_live_matrix_release_checks",
       "qa_live_telegram_release_checks",
+      "qa_live_slack_release_checks",
     ]) {
       expect(releaseChecksWorkflow).toMatch(
         new RegExp(`${jobName}:[\\s\\S]*?runs-on: blacksmith-8vcpu-ubuntu-2404`, "u"),

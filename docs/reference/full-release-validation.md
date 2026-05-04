@@ -35,15 +35,15 @@ the shipped npm package instead.
 
 ## Top-level stages
 
-| Stage                | Details                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Target resolution    | **Job:** `Resolve target ref`<br />**Child workflow:** none<br />**Proves:** resolves the release branch, tag, or full commit SHA and records selected inputs.<br />**Rerun:** rerun the umbrella if this fails.                                                                                                                                                                              |
-| Vitest and normal CI | **Job:** `Run normal full CI`<br />**Child workflow:** `CI`<br />**Proves:** manual full CI graph against the target ref, including Linux Node lanes, bundled plugin shards, channel contracts, Node 22 compatibility, `check`, `check-additional`, build smoke, docs checks, Python skills, Windows, macOS, Control UI i18n, and Android via the umbrella.<br />**Rerun:** `rerun_group=ci`. |
-| Plugin prerelease    | **Job:** `Run plugin prerelease validation`<br />**Child workflow:** `Plugin Prerelease`<br />**Proves:** release-only plugin static checks, agentic plugin coverage, full extension batch shards, and plugin prerelease Docker lanes.<br />**Rerun:** `rerun_group=plugin-prerelease`.                                                                                                       |
-| Release checks       | **Job:** `Run release/live/Docker/QA validation`<br />**Child workflow:** `OpenClaw Release Checks`<br />**Proves:** install smoke, cross-OS package checks, live/E2E suites, Docker release-path chunks, Package Acceptance, QA Lab parity, live Matrix, and live Telegram.<br />**Rerun:** `rerun_group=release-checks` or a narrower release-checks handle.                                |
-| Package artifact     | **Job:** `Prepare release package artifact`<br />**Child workflow:** none<br />**Proves:** creates the parent `release-package-under-test` tarball early enough for package-facing checks that do not need to wait for `OpenClaw Release Checks`.<br />**Rerun:** rerun the umbrella or provide `npm_telegram_package_spec` for `rerun_group=npm-telegram`.                                   |
-| Package Telegram     | **Job:** `Run package Telegram E2E`<br />**Child workflow:** `NPM Telegram Beta E2E`<br />**Proves:** parent-artifact-backed Telegram package proof for `rerun_group=all` with `release_profile=full`, or published-package Telegram proof when `npm_telegram_package_spec` is set.<br />**Rerun:** `rerun_group=npm-telegram` with `npm_telegram_package_spec`.                              |
-| Umbrella verifier    | **Job:** `Verify full validation`<br />**Child workflow:** none<br />**Proves:** re-checks recorded child run conclusions and appends slowest-job tables from child workflows.<br />**Rerun:** rerun only this job after rerunning a failed child to green.                                                                                                                                   |
+| Stage                | Details                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target resolution    | **Job:** `Resolve target ref`<br />**Child workflow:** none<br />**Proves:** resolves the release branch, tag, or full commit SHA and records selected inputs.<br />**Rerun:** rerun the umbrella if this fails.                                                                                                                                                                                                                    |
+| Vitest and normal CI | **Job:** `Run normal full CI`<br />**Child workflow:** `CI`<br />**Proves:** manual full CI graph against the target ref, including Linux Node lanes, bundled plugin shards, channel contracts, Node 22 compatibility, `check`, `check-additional`, build smoke, docs checks, Python skills, Windows, macOS, Control UI i18n, and Android via the umbrella.<br />**Rerun:** `rerun_group=ci`.                                       |
+| Plugin prerelease    | **Job:** `Run plugin prerelease validation`<br />**Child workflow:** `Plugin Prerelease`<br />**Proves:** release-only plugin static checks, agentic plugin coverage, full extension batch shards, and plugin prerelease Docker lanes.<br />**Rerun:** `rerun_group=plugin-prerelease`.                                                                                                                                             |
+| Release checks       | **Job:** `Run release/live/Docker/QA validation`<br />**Child workflow:** `OpenClaw Release Checks`<br />**Proves:** install smoke, cross-OS package checks, live/E2E suites, Docker release-path chunks, Package Acceptance, QA Lab parity, live Matrix, and live Telegram. Live Slack is disabled by default while there is no Slack test pool.<br />**Rerun:** `rerun_group=release-checks` or a narrower release-checks handle. |
+| Package artifact     | **Job:** `Prepare release package artifact`<br />**Child workflow:** none<br />**Proves:** creates the parent `release-package-under-test` tarball early enough for package-facing checks that do not need to wait for `OpenClaw Release Checks`.<br />**Rerun:** rerun the umbrella or provide `npm_telegram_package_spec` for `rerun_group=npm-telegram`.                                                                         |
+| Package Telegram     | **Job:** `Run package Telegram E2E`<br />**Child workflow:** `NPM Telegram Beta E2E`<br />**Proves:** parent-artifact-backed Telegram package proof for `rerun_group=all` with `release_profile=full`, or published-package Telegram proof when `npm_telegram_package_spec` is set.<br />**Rerun:** `rerun_group=npm-telegram` with `npm_telegram_package_spec`.                                                                    |
+| Umbrella verifier    | **Job:** `Verify full validation`<br />**Child workflow:** none<br />**Proves:** re-checks recorded child run conclusions and appends slowest-job tables from child workflows.<br />**Rerun:** rerun only this job after rerunning a failed child to green.                                                                                                                                                                         |
 
 For `ref=main` and `rerun_group=all`, a newer umbrella supersedes an older one.
 When the parent is cancelled, its monitor cancels any child workflow it already
@@ -68,6 +68,7 @@ or Docker-facing stages need it.
 | QA parity           | **Job:** `Run QA Lab parity lane` and `Run QA Lab parity report`<br />**Backing workflow:** direct jobs<br />**Tests:** candidate and baseline agentic parity packs, then the parity report.<br />**Rerun:** `rerun_group=qa-parity` or `rerun_group=qa`.                                                                                                                                       |
 | QA live Matrix      | **Job:** `Run QA Lab live Matrix lane`<br />**Backing workflow:** direct job<br />**Tests:** fast live Matrix QA profile in the `qa-live-shared` environment.<br />**Rerun:** `rerun_group=qa-live` or `rerun_group=qa`.                                                                                                                                                                        |
 | QA live Telegram    | **Job:** `Run QA Lab live Telegram lane`<br />**Backing workflow:** direct job<br />**Tests:** live Telegram QA with Convex CI credential leases.<br />**Rerun:** `rerun_group=qa-live` or `rerun_group=qa`.                                                                                                                                                                                    |
+| QA live Slack       | **Job:** `Run QA Lab live Slack lane`<br />**Backing workflow:** direct job<br />**Tests:** live Slack QA with Convex credential leases.<br />**Rerun:** manually set `live_suite_filter=qa-live-slack`; default CI and release checks skip Slack until a Slack test pool exists.                                                                                                               |
 | Release verifier    | **Job:** `Verify release checks`<br />**Backing workflow:** none<br />**Tests:** required release-check jobs for the selected rerun group.<br />**Rerun:** rerun after focused child jobs pass.                                                                                                                                                                                                 |
 
 ## Docker release-path chunks
@@ -136,10 +137,15 @@ Use `rerun_group` to avoid repeating unrelated release boxes:
 | `cross-os`          | Cross-OS release checks.                                              |
 | `live-e2e`          | Repo/live E2E and Docker release-path validation.                     |
 | `package`           | Package Acceptance.                                                   |
-| `qa`                | QA parity plus QA live lanes.                                         |
+| `qa`                | QA parity plus default QA live lanes.                                 |
 | `qa-parity`         | QA parity lanes and report only.                                      |
 | `qa-live`           | QA live Matrix and Telegram only.                                     |
 | `npm-telegram`      | Published-package Telegram E2E; requires `npm_telegram_package_spec`. |
+
+Slack live QA is parked out of default release and CI pipes while there is no
+Slack credential test pool. To run it manually, dispatch `OpenClaw Release
+Checks` or `Full Release Validation` with `rerun_group=qa-live` and
+`live_suite_filter=qa-live-slack`.
 
 Use `live_suite_filter` with `rerun_group=live-e2e` when one live suite failed.
 Valid filter ids are defined in the reusable live/E2E workflow, including
@@ -164,7 +170,7 @@ Useful artifacts:
 - Docker release-path artifacts under `.artifacts/docker-tests/`
 - Package Acceptance `package-under-test` and Docker acceptance artifacts
 - Cross-OS release-check artifacts for each OS and suite
-- QA parity, Matrix, and Telegram artifacts
+- QA parity, Matrix, Telegram, and manually dispatched Slack artifacts
 
 ## Workflow files
 

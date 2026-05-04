@@ -22,6 +22,11 @@ on:
         description: Optional comma-separated Slack scenario ids
         required: false
         type: string
+      run_slack:
+        description: Run the Slack live lane manually. Default CI skips Slack because there is no Slack test pool.
+        required: false
+        default: false
+        type: boolean
       matrix_profile:
         description: Matrix QA profile for the live Matrix lane
         required: false
@@ -79,6 +84,21 @@ jobs:
                 `Workflow requires write/maintain/admin access. Actor "${context.actor}" has "${permission}".`,
               );
             }
+
+      - name: Note Slack live lane status
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SLACK: ${{ github.event_name == 'workflow_dispatch' && inputs.run_slack || false }}
+        run: |
+          {
+            echo "## QA live lane selection"
+            echo
+            if [[ "${EVENT_NAME}" == "workflow_dispatch" && "${RUN_SLACK}" == "true" ]]; then
+              echo "- Slack live QA: enabled for this manual run."
+            else
+              echo "- Slack live QA: skipped by default because there is no Slack test pool; manually dispatch with \`run_slack=true\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   validate_selected_ref:
     name: Validate selected ref
@@ -562,6 +582,7 @@ jobs:
   run_live_slack:
     name: Run Slack live QA lane with Convex leases
     needs: [authorize_actor, validate_selected_ref]
+    if: github.event_name == 'workflow_dispatch' && inputs.run_slack
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     environment: qa-live-shared

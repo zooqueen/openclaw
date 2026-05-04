@@ -54,7 +54,7 @@ on:
           - qa-live
           - npm-telegram
       live_suite_filter:
-        description: Optional exact live suite id for focused live/E2E reruns; blank runs all selected live suites
+        description: Optional exact live/E2E suite id, or comma-separated QA live lanes such as qa-live-matrix,qa-live-telegram. Slack is disabled by default while there is no Slack test pool; use qa-live-slack for a manual Slack run.
         required: false
         default: ""
         type: string
@@ -468,6 +468,9 @@ jobs:
             echo "- Rerun group: \`${RERUN_GROUP}\`"
             if [[ -n "${LIVE_SUITE_FILTER// }" ]]; then
               echo "- Live suite filter: \`${LIVE_SUITE_FILTER}\`"
+            fi
+            if [[ "$RERUN_GROUP" == "all" || "$RERUN_GROUP" == "release-checks" || "$RERUN_GROUP" == "qa" || "$RERUN_GROUP" == "qa-live" ]]; then
+              echo "- QA live Slack lane: disabled by default because there is no Slack test pool; manually run with \`live_suite_filter=qa-live-slack\`."
             fi
             if [[ -n "${PACKAGE_ACCEPTANCE_PACKAGE_SPEC// }" ]]; then
               echo "- Package Acceptance package spec: \`${PACKAGE_ACCEPTANCE_PACKAGE_SPEC}\`"
