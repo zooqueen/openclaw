@@ -83,11 +83,43 @@ async function readPackageVersionIfPresent(packageRoot: string | null): Promise<
   }
 }
 
+function isUnambiguousNpmPrefixGlobalRoot(globalRoot: string | null): boolean {
+  const trimmed = globalRoot?.trim();
+  if (!trimmed) {
+    return false;
+  }
+  const normalized = path.resolve(trimmed);
+  if (path.basename(normalized) !== "node_modules") {
+    return false;
+  }
+  const parentDir = path.dirname(normalized);
+  if (path.basename(parentDir) === "lib") {
+    return true;
+  }
+  return process.platform === "win32" && path.basename(parentDir).toLowerCase() === "npm";
+}
+
+function resolveStagedNpmTargetLayout(
+  installTarget: ResolvedGlobalInstallTarget,
+): NpmGlobalPrefixLayout | null {
+  const targetLayout = resolveNpmGlobalPrefixLayoutFromGlobalRoot(installTarget.globalRoot);
+  if (!targetLayout) {
+    return null;
+  }
+  if (
+    installTarget.manager === "npm" ||
+    isUnambiguousNpmPrefixGlobalRoot(installTarget.globalRoot)
+  ) {
+    return targetLayout;
+  }
+  return null;
+}
+
 async function createStagedNpmInstall(
   installTarget: ResolvedGlobalInstallTarget,
   packageName: string,
 ): Promise<StagedNpmInstall | null> {
-  const targetLayout = resolveNpmGlobalPrefixLayoutFromGlobalRoot(installTarget.globalRoot);
+  const targetLayout = resolveStagedNpmTargetLayout(installTarget);
   if (!targetLayout) {
     return null;
   }

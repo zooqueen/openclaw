@@ -175,6 +175,48 @@ describe("runGlobalPackageUpdateSteps", () => {
     });
   });
 
+  it("keeps Windows pnpm global roots on the pnpm update path", async () => {
+    const platformSpy = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    try {
+      await withTempDir({ prefix: "openclaw-package-update-win32-pnpm-" }, async (base) => {
+        const globalRoot = path.join(base, "pnpm", "global", "5", "node_modules");
+        const packageRoot = path.join(globalRoot, "openclaw");
+        await writePackageRoot(packageRoot, "1.0.0");
+
+        const runStep = vi.fn(async ({ name, argv, cwd }): Promise<PackageUpdateStepResult> => {
+          if (name !== "global update") {
+            throw new Error(`unexpected step ${name}`);
+          }
+          expect(argv).toEqual(["pnpm", "add", "-g", "openclaw@2.0.0"]);
+          await writePackageRoot(packageRoot, "2.0.0");
+          return {
+            name,
+            command: argv.join(" "),
+            cwd: cwd ?? process.cwd(),
+            durationMs: 1,
+            exitCode: 0,
+          };
+        });
+
+        const result = await runGlobalPackageUpdateSteps({
+          installTarget: createPnpmTarget(globalRoot),
+          installSpec: "openclaw@2.0.0",
+          packageName: "openclaw",
+          packageRoot,
+          runCommand: createRootRunner(globalRoot),
+          runStep,
+          timeoutMs: 1000,
+        });
+
+        expect(result.failedStep).toBeNull();
+        expect(result.afterVersion).toBe("2.0.0");
+        expect(result.steps.map((step) => step.name)).toEqual(["global update"]);
+      });
+    } finally {
+      platformSpy.mockRestore();
+    }
+  });
+
   it("keeps a successful staged swap when old package cleanup hits a transient Windows native module error", async () => {
     await withTempDir({ prefix: "openclaw-package-update-staged-cleanup-" }, async (base) => {
       const prefix = path.join(base, "prefix");
