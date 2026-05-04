@@ -107,6 +107,10 @@ In source checkouts, OpenClaw treats the repository as a pnpm monorepo. After
 workspace dependencies are available and edits are picked up directly. Source
 checkout development is pnpm-only; plain `npm install` at the repository root is
 not a supported way to prepare bundled plugin dependencies.
+The workspace explicitly disables `blockExoticSubdeps` because the WhatsApp
+plugin's Baileys dependency still resolves libsignal from a git-hosted
+subdependency; packaged/plugin installs use npm and do not depend on that pnpm
+workspace setting.
 
 | Install shape                    | Bundled plugin location               | Dependency owner                                                     |
 | -------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
