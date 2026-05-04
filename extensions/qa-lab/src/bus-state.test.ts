@@ -171,5 +171,10 @@ describe("qa-bus state", () => {
       query: "dashboard",
     });
     expect(byAltText.some((message) => message.id === outbound.id)).toBe(true);
+
+    const byCombinedTextAndAttachment = state.searchMessages({
+      query: "attached qa-screenshot",
+    });
+    expect(byCombinedTextAndAttachment.some((message) => message.id === outbound.id)).toBe(true);
   });
 });

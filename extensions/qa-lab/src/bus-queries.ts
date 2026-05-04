@@ -144,16 +144,10 @@ export function searchQaBusMessages(params: {
     }
     if (query) {
       const messageText = normalizeOptionalLowercaseString(message.text) ?? "";
-      let matched = messageText.includes(query);
-      for (let index = 0; !matched && index < (message.attachments?.length ?? 0); index += 1) {
-        const attachment = message.attachments?.[index];
-        matched =
-          attachmentValueIncludes(attachment?.fileName, query) ||
-          attachmentValueIncludes(attachment?.altText, query) ||
-          attachmentValueIncludes(attachment?.transcript, query) ||
-          attachmentValueIncludes(attachment?.mimeType, query);
-      }
-      if (!matched) {
+      if (
+        !messageText.includes(query) &&
+        !messageSearchHaystack(messageText, message).includes(query)
+      ) {
         continue;
       }
     }
@@ -165,8 +159,19 @@ export function searchQaBusMessages(params: {
   return matches;
 }
 
-function attachmentValueIncludes(value: string | undefined, query: string): boolean {
-  return Boolean(value && value.toLowerCase().includes(query));
+function messageSearchHaystack(messageText: string, message: QaBusMessage): string {
+  let haystack = messageText;
+  for (const attachment of message.attachments ?? []) {
+    haystack = appendSearchValue(haystack, attachment.fileName);
+    haystack = appendSearchValue(haystack, attachment.altText);
+    haystack = appendSearchValue(haystack, attachment.transcript);
+    haystack = appendSearchValue(haystack, attachment.mimeType);
+  }
+  return haystack;
+}
+
+function appendSearchValue(haystack: string, value: string | undefined): string {
+  return value ? `${haystack} ${value.toLowerCase()}` : haystack;
 }
 
 export function pollQaBusEvents(params: {

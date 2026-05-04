@@ -245,7 +245,7 @@ async function runOne(params: {
 
 async function main() {
   const { spec, options } = parseArgs(process.argv.slice(2));
-  assertRequiredCredentialEnv(process.env, options.credentialSource);
+  assertRequiredCredentialEnv(process.env, options.credentialSource, options.credentialRole);
   await assertHarnessRoot(options.harnessRoot, options.credentialSource);
   await assertDockerAvailable();
   if (spec === "openclaw@main" && !options.packageTgz) {

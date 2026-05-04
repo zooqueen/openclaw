@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 
 export type RttProviderMode = "mock-openai" | "live-frontier";
 export type RttCredentialSource = "env" | "convex";
+type RttCredentialRole = "ci" | "maintainer";
 
 type RttResult = {
   package: {
@@ -165,20 +166,39 @@ export function assertRequiredEnv(env: NodeJS.ProcessEnv) {
 export function assertRequiredCredentialEnv(
   env: NodeJS.ProcessEnv,
   credentialSource: RttCredentialSource,
+  credentialRole?: string,
 ) {
   if (credentialSource === "env") {
     assertRequiredEnv(env);
     return;
   }
   const missing = ["OPENCLAW_QA_CONVEX_SITE_URL"].filter((key) => !env[key]?.trim());
-  const hasSecret =
-    env.OPENCLAW_QA_CONVEX_SECRET_CI?.trim() || env.OPENCLAW_QA_CONVEX_SECRET_MAINTAINER?.trim();
-  if (!hasSecret) {
-    missing.push("OPENCLAW_QA_CONVEX_SECRET_CI or OPENCLAW_QA_CONVEX_SECRET_MAINTAINER");
+  const role = normalizeRttCredentialRole(credentialRole, env);
+  const secretKey =
+    role === "ci" ? "OPENCLAW_QA_CONVEX_SECRET_CI" : "OPENCLAW_QA_CONVEX_SECRET_MAINTAINER";
+  if (!env[secretKey]?.trim()) {
+    missing.push(secretKey);
   }
   if (missing.length > 0) {
     throw new Error(`Missing Convex Telegram QA credential env: ${missing.join(", ")}`);
   }
+}
+
+function normalizeRttCredentialRole(
+  value: string | undefined,
+  env: NodeJS.ProcessEnv,
+): RttCredentialRole {
+  const defaultRole = isTruthyOptIn(env.CI) ? "ci" : "maintainer";
+  const normalized = value?.trim().toLowerCase() || defaultRole;
+  if (normalized === "ci" || normalized === "maintainer") {
+    return normalized;
+  }
+  throw new Error(`Credential role must be one of maintainer or ci; got: ${value}`);
+}
+
+function isTruthyOptIn(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
 export function rttHarnessScriptName(credentialSource: RttCredentialSource) {

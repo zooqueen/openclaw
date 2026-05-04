@@ -119,6 +119,7 @@ describe("RTT harness", () => {
     expect(() =>
       assertRequiredCredentialEnv(
         {
+          CI: "1",
           OPENCLAW_QA_CONVEX_SITE_URL: "https://qa-cred.example.convex.site",
           OPENCLAW_QA_CONVEX_SECRET_CI: "secret",
         },
@@ -128,6 +129,36 @@ describe("RTT harness", () => {
     expect(() => assertRequiredCredentialEnv({}, "convex")).toThrow(
       /Missing Convex Telegram QA credential env/,
     );
+    expect(() =>
+      assertRequiredCredentialEnv(
+        {
+          OPENCLAW_QA_CONVEX_SITE_URL: "https://qa-cred.example.convex.site",
+          OPENCLAW_QA_CONVEX_SECRET_CI: "ci-secret",
+        },
+        "convex",
+        "maintainer",
+      ),
+    ).toThrow(/OPENCLAW_QA_CONVEX_SECRET_MAINTAINER/);
+    expect(() =>
+      assertRequiredCredentialEnv(
+        {
+          OPENCLAW_QA_CONVEX_SITE_URL: "https://qa-cred.example.convex.site",
+          OPENCLAW_QA_CONVEX_SECRET_MAINTAINER: "maintainer-secret",
+        },
+        "convex",
+        "ci",
+      ),
+    ).toThrow(/OPENCLAW_QA_CONVEX_SECRET_CI/);
+    expect(() =>
+      assertRequiredCredentialEnv(
+        {
+          OPENCLAW_QA_CONVEX_SITE_URL: "https://qa-cred.example.convex.site",
+          OPENCLAW_QA_CONVEX_SECRET_MAINTAINER: "maintainer-secret",
+        },
+        "convex",
+        "maintainer",
+      ),
+    ).not.toThrow();
   });
 
   it("selects the matching Docker harness script for credential mode", () => {
