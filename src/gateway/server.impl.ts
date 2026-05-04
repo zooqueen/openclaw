@@ -902,9 +902,12 @@ export async function startGatewayServer(
     clearTimeout(postReadyMaintenanceTimer);
     postReadyMaintenanceTimer = null;
   };
-  const runClosePrelude = async () => {
+  const markClosePreludeStarted = () => {
     closePreludeStarted = true;
     clearPostReadyMaintenanceTimer();
+  };
+  const runClosePrelude = async () => {
+    markClosePreludeStarted();
     clearCurrentPluginMetadataSnapshot();
     const { runGatewayClosePrelude } = await loadGatewayCloseModule();
     await runGatewayClosePrelude({
@@ -1538,6 +1541,7 @@ export async function startGatewayServer(
   return {
     close: async (opts) => {
       try {
+        markClosePreludeStarted();
         // Run gateway_stop plugin hook before shutdown
         const { runGlobalGatewayStopSafely } = await import("../plugins/hook-runner-global.js");
         await runGlobalGatewayStopSafely({
