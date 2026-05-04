@@ -21,6 +21,7 @@ type GatewayPostReadyLogger = {
 type GatewayMaintenanceHandles = NonNullable<
   Awaited<ReturnType<typeof startGatewayMaintenanceTimers>>
 >;
+export const GATEWAY_POST_READY_MAINTENANCE_DELAY_MS = 2_000;
 
 export type GatewayChannelManager = Parameters<
   typeof startChannelHealthMonitor
@@ -60,7 +61,7 @@ export function startGatewayCronWithLogging(params: {
   void params.cron.start().catch((err) => params.logCron.error(`failed to start: ${String(err)}`));
 }
 
-export async function runGatewayPostReadyMaintenance(params: {
+type GatewayPostReadyMaintenanceParams = {
   startMaintenance: () => Promise<GatewayMaintenanceHandles | null>;
   applyMaintenance: (maintenance: GatewayMaintenanceHandles) => void;
   shouldStartCron: () => boolean;
@@ -69,7 +70,11 @@ export async function runGatewayPostReadyMaintenance(params: {
   logCron: { error: (message: string) => void };
   log: GatewayPostReadyLogger;
   recordPostReadyMemory: () => void;
-}): Promise<void> {
+};
+
+export async function runGatewayPostReadyMaintenance(
+  params: GatewayPostReadyMaintenanceParams,
+): Promise<void> {
   try {
     const maintenance = await params.startMaintenance();
     if (maintenance) {
@@ -86,6 +91,19 @@ export async function runGatewayPostReadyMaintenance(params: {
     });
   }
   params.recordPostReadyMemory();
+}
+
+export function scheduleGatewayPostReadyMaintenance({
+  delayMs = GATEWAY_POST_READY_MAINTENANCE_DELAY_MS,
+  ...params
+}: GatewayPostReadyMaintenanceParams & {
+  delayMs?: number;
+}): ReturnType<typeof setTimeout> {
+  const handle = setTimeout(() => {
+    void runGatewayPostReadyMaintenance(params);
+  }, delayMs);
+  handle.unref?.();
+  return handle;
 }
 
 function recoverPendingOutboundDeliveries(params: {

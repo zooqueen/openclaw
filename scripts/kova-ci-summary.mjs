@@ -11,6 +11,8 @@ const keyMetricIds = [
   "timeToHealthReadyMs",
   "timeToListeningMs",
   "healthP95Ms",
+  "startupHealthP95Ms",
+  "postReadyHealthP95Ms",
   "peakRssMb",
   "resourcePeakGatewayRssMb",
   "cpuPercentMax",

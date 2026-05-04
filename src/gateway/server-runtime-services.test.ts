@@ -54,7 +54,9 @@ vi.mock("./model-pricing-cache.js", () => ({
 
 const {
   activateGatewayScheduledServices,
+  GATEWAY_POST_READY_MAINTENANCE_DELAY_MS,
   runGatewayPostReadyMaintenance,
+  scheduleGatewayPostReadyMaintenance,
   startGatewayRuntimeServices,
 } = await import("./server-runtime-services.js");
 
@@ -241,6 +243,36 @@ describe("server-runtime-services", () => {
     expect(log.warn).toHaveBeenCalledWith(
       "gateway post-ready maintenance startup failed: Error: timers unavailable",
     );
+    expect(cron.start).toHaveBeenCalledTimes(1);
+    expect(recordPostReadyMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("schedules post-ready maintenance after the settling window", async () => {
+    vi.useFakeTimers();
+    const startMaintenance = vi.fn(async () => null);
+    const cron = { start: vi.fn(async () => undefined) };
+    const markCronStartHandled = vi.fn();
+    const recordPostReadyMemory = vi.fn();
+
+    scheduleGatewayPostReadyMaintenance({
+      startMaintenance,
+      applyMaintenance: vi.fn(),
+      shouldStartCron: () => true,
+      markCronStartHandled,
+      cron,
+      logCron: { error: vi.fn() },
+      log: createLog(),
+      recordPostReadyMemory,
+    });
+
+    await vi.advanceTimersByTimeAsync(GATEWAY_POST_READY_MAINTENANCE_DELAY_MS - 1);
+    expect(startMaintenance).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.dynamicImportSettled();
+
+    expect(startMaintenance).toHaveBeenCalledTimes(1);
+    expect(markCronStartHandled).toHaveBeenCalledTimes(1);
     expect(cron.start).toHaveBeenCalledTimes(1);
     expect(recordPostReadyMemory).toHaveBeenCalledTimes(1);
   });

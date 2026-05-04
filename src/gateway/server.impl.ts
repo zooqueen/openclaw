@@ -97,7 +97,6 @@ export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 ensureOpenClawCliOnPath();
 
 const MAX_MEDIA_TTL_HOURS = 24 * 7;
-const POST_READY_MAINTENANCE_DELAY_MS = 250;
 
 type GatewayStartupChannelPlugin = {
   id: ChannelId;
@@ -1492,28 +1491,25 @@ export async function startGatewayServer(
       log.warn(`gateway: failed to promote config last-known-good backup: ${String(err)}`);
     });
     if (!minimalTestGateway) {
-      const handle = setTimeout(() => {
-        void gatewayRuntimeServices.runGatewayPostReadyMaintenance({
-          startMaintenance: earlyRuntime.startMaintenance,
-          applyMaintenance: (maintenance) => {
-            runtimeState.tickInterval = maintenance.tickInterval;
-            runtimeState.healthInterval = maintenance.healthInterval;
-            runtimeState.dedupeCleanup = maintenance.dedupeCleanup;
-            runtimeState.mediaCleanup = maintenance.mediaCleanup;
-          },
-          shouldStartCron: () => !gatewayCronStartHandled,
-          markCronStartHandled: () => {
-            gatewayCronStartHandled = true;
-          },
-          cron: runtimeState.cronState.cron,
-          logCron,
-          log,
-          recordPostReadyMemory: () => {
-            startupTrace.detail("memory.post-ready", collectProcessMemoryUsageMb());
-          },
-        });
-      }, POST_READY_MAINTENANCE_DELAY_MS);
-      handle.unref?.();
+      gatewayRuntimeServices.scheduleGatewayPostReadyMaintenance({
+        startMaintenance: earlyRuntime.startMaintenance,
+        applyMaintenance: (maintenance) => {
+          runtimeState.tickInterval = maintenance.tickInterval;
+          runtimeState.healthInterval = maintenance.healthInterval;
+          runtimeState.dedupeCleanup = maintenance.dedupeCleanup;
+          runtimeState.mediaCleanup = maintenance.mediaCleanup;
+        },
+        shouldStartCron: () => !gatewayCronStartHandled,
+        markCronStartHandled: () => {
+          gatewayCronStartHandled = true;
+        },
+        cron: runtimeState.cronState.cron,
+        logCron,
+        log,
+        recordPostReadyMemory: () => {
+          startupTrace.detail("memory.post-ready", collectProcessMemoryUsageMb());
+        },
+      });
     } else {
       startupTrace.detail("memory.post-ready", collectProcessMemoryUsageMb());
     }
