@@ -213,7 +213,7 @@ jobs:
           set -euo pipefail
           qa_live_matrix_enabled=true
           qa_live_telegram_enabled=true
-          qa_live_slack_enabled=true
+          qa_live_slack_enabled=false
 
           filter="$(printf '%s' "$RELEASE_LIVE_SUITE_FILTER_INPUT" | tr '[:upper:]' '[:lower:]')"
           if [[ -n "${filter// }" ]]; then
@@ -233,7 +233,6 @@ jobs:
                   qa_filter_seen=true
                   matrix_selected=true
                   telegram_selected=true
-                  slack_selected=true
                   ;;
                 qa-live-non-slack|qa-non-slack|non-slack|no-slack|without-slack)
                   qa_filter_seen=true
@@ -250,7 +249,7 @@ jobs:
                   ;;
                 qa-live-slack|qa-slack|slack)
                   qa_filter_seen=true
-                  slack_selected=true
+                  echo "Slack live QA is disabled; ignoring ${token}." >&2
                   ;;
               esac
             done
@@ -300,7 +299,7 @@ jobs:
             if [[ -n "${RELEASE_LIVE_SUITE_FILTER// }" ]]; then
               echo "- Live suite filter: \`${RELEASE_LIVE_SUITE_FILTER}\`"
             fi
-            echo "- QA live lanes: Matrix \`${{ steps.inputs.outputs.qa_live_matrix_enabled }}\`, Telegram \`${{ steps.inputs.outputs.qa_live_telegram_enabled }}\`, Slack \`${{ steps.inputs.outputs.qa_live_slack_enabled }}\`"
+            echo "- QA live lanes: Matrix \`${{ steps.inputs.outputs.qa_live_matrix_enabled }}\`, Telegram \`${{ steps.inputs.outputs.qa_live_telegram_enabled }}\`, Slack \`${{ steps.inputs.outputs.qa_live_slack_enabled }}\` (disabled)"
             if [[ -n "${PACKAGE_ACCEPTANCE_PACKAGE_SPEC// }" ]]; then
               echo "- Package Acceptance package spec: \`${PACKAGE_ACCEPTANCE_PACKAGE_SPEC}\`"
             else
@@ -883,7 +882,7 @@ jobs:
   qa_live_slack_release_checks:
     name: Run QA Lab live Slack lane
     needs: [resolve_target]
-    if: contains(fromJSON('["all","qa","qa-live"]'), needs.resolve_target.outputs.rerun_group) && needs.resolve_target.outputs.qa_live_slack_enabled == 'true'
+    if: ${{ false }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:

@@ -116,6 +116,7 @@ For transport-real Telegram, Discord, and Slack smoke lanes:
 ```bash
 pnpm openclaw qa telegram
 pnpm openclaw qa discord
+# Slack live QA is currently parked from scheduled/release workflows.
 pnpm openclaw qa slack
 ```
 
