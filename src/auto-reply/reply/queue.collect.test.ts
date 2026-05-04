@@ -6,11 +6,37 @@ import {
   createQueueTestRun as createRun,
   installQueueRuntimeErrorSilencer,
 } from "./queue.test-helpers.js";
-import { resolveFollowupAuthorizationKey } from "./queue/drain.js";
+import { resolveFollowupAuthorizationKey, resolveOriginRoutingMetadata } from "./queue/drain.js";
 
 installQueueRuntimeErrorSilencer();
 
 describe("followup queue collect routing", () => {
+  it("uses the first non-empty origin metadata in collected batches", () => {
+    const metadata = resolveOriginRoutingMetadata([
+      createRun({
+        prompt: "empty route",
+        originatingChannel: "" as FollowupRun["originatingChannel"],
+        originatingTo: "",
+        originatingAccountId: "",
+        originatingThreadId: "",
+      }),
+      createRun({
+        prompt: "real route",
+        originatingChannel: "slack",
+        originatingTo: "channel:C1",
+        originatingAccountId: "work",
+        originatingThreadId: "1739142736.000100",
+      }),
+    ]);
+
+    expect(metadata).toEqual({
+      originatingChannel: "slack",
+      originatingTo: "channel:C1",
+      originatingAccountId: "work",
+      originatingThreadId: "1739142736.000100",
+    });
+  });
+
   it("does not collect when destinations differ", async () => {
     const key = `test-collect-diff-to-${Date.now()}`;
     const calls: FollowupRun[] = [];
