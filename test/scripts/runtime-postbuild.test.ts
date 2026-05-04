@@ -427,7 +427,19 @@ describe("runtime postbuild static assets", () => {
     expect(await fs.readFile(path.join(distDir, "provider-dispatcher-6EQEtc-t.js"), "utf8")).toBe(
       'export * from "./provider-dispatcher.runtime.js";\n',
     );
+    expect(await fs.readFile(path.join(distDir, "install.runtime-D7SL02B2.js"), "utf8")).toBe(
+      'export * from "./install.runtime-NewPluginHash.js";\n',
+    );
+    expect(await fs.readFile(path.join(distDir, "install.runtime-Deq6Beal.js"), "utf8")).toBe(
+      'export * from "./install.runtime-NewPluginHash.js";\n',
+    );
+    expect(await fs.readFile(path.join(distDir, "install.runtime-BRVACueI.js"), "utf8")).toBe(
+      'export * from "./install.runtime-NewPluginHash.js";\n',
+    );
     expect(await fs.readFile(path.join(distDir, "install.runtime-DX8jy7tN.js"), "utf8")).toBe(
+      'export * from "./install.runtime-NewPluginHash.js";\n',
+    );
+    expect(await fs.readFile(path.join(distDir, "install.runtime-D6FSd9v2.js"), "utf8")).toBe(
       'export * from "./install.runtime-NewPluginHash.js";\n',
     );
     expect(await fs.readFile(path.join(distDir, "install.runtime-DQ-ui3nL.js"), "utf8")).toBe(
