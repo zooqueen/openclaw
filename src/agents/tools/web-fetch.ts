@@ -34,6 +34,7 @@ import {
   resolveTimeoutSeconds,
   writeCache,
 } from "./web-shared.js";
+import { resolveWebFetchToolRuntimeContext } from "./web-tool-runtime-context.js";
 
 const EXTRACT_MODES = ["markdown", "text"] as const;
 
