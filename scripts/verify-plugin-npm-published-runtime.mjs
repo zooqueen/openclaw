@@ -124,7 +124,7 @@ function sleep(ms) {
 }
 
 async function packPublishedPackage(spec, destinationDir) {
-  const attempts = Number.parseInt(process.env.OPENCLAW_PLUGIN_NPM_VERIFY_ATTEMPTS ?? "24", 10);
+  const attempts = Number.parseInt(process.env.OPENCLAW_PLUGIN_NPM_VERIFY_ATTEMPTS ?? "90", 10);
   const delayMs = Number.parseInt(process.env.OPENCLAW_PLUGIN_NPM_VERIFY_DELAY_MS ?? "10000", 10);
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -133,6 +133,9 @@ async function packPublishedPackage(spec, destinationDir) {
     } catch (error) {
       lastError = error;
       if (attempt < attempts) {
+        console.error(
+          `npm pack ${spec} not visible yet (attempt ${attempt}/${attempts}); retrying in ${delayMs}ms...`,
+        );
         await sleep(delayMs);
       }
     }
