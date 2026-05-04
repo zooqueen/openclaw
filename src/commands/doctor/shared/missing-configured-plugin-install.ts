@@ -8,7 +8,11 @@ import { listChannelPluginCatalogEntries } from "../../../channels/plugins/catal
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { PluginInstallRecord } from "../../../config/types.plugins.js";
 import { parseClawHubPluginSpec } from "../../../infra/clawhub-spec.js";
-import { isExactSemverVersion, parseRegistryNpmSpec } from "../../../infra/npm-registry-spec.js";
+import {
+  isExactSemverVersion,
+  isPrereleaseSemverVersion,
+  parseRegistryNpmSpec,
+} from "../../../infra/npm-registry-spec.js";
 import { buildClawHubPluginInstallRecordFields } from "../../../plugins/clawhub-install-records.js";
 import { CLAWHUB_INSTALL_ERROR_CODE, installPluginFromClawHub } from "../../../plugins/clawhub.js";
 import { resolveDefaultPluginExtensionsDir } from "../../../plugins/install-paths.js";
@@ -399,6 +403,15 @@ function resolveVersionAlignedOfficialNpmSpec(
   const hostVersion = VERSION.trim();
   if (!isExactSemverVersion(hostVersion)) {
     return npmSpec;
+  }
+  if (isPrereleaseSemverVersion(hostVersion)) {
+    const prerelease = /^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z._-]+)(?:\+.*)?$/u.exec(
+      hostVersion,
+    )?.[1];
+    const prereleaseTag = prerelease?.split(/[.-]/u)[0];
+    return prereleaseTag && /^[A-Za-z][A-Za-z0-9._-]*$/u.test(prereleaseTag)
+      ? `${parsed.name}@${prereleaseTag}`
+      : npmSpec;
   }
   return `${parsed.name}@${hostVersion}`;
 }

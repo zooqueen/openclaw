@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { isPrereleaseSemverVersion } from "../../../infra/npm-registry-spec.js";
 import { VERSION } from "../../../version.js";
 
-const openClawReleaseSpec = (packageName: string) => `${packageName}@${VERSION}`;
+const openClawReleaseSpec = (packageName: string) =>
+  isPrereleaseSemverVersion(VERSION) ? `${packageName}@beta` : `${packageName}@${VERSION}`;
 
 const mocks = vi.hoisted(() => ({
   installPluginFromClawHub: vi.fn(),
