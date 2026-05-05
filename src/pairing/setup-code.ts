@@ -23,6 +23,11 @@ import {
 } from "../shared/string-coerce.js";
 import { resolveTailnetHostWithRunner } from "../shared/tailscale-status.js";
 
+/**
+ * New setup codes should carry exactly one shared gateway credential field:
+ * `token` or `password`. `bootstrapToken` is only kept for legacy payload
+ * compatibility during decode.
+ */
 export type PairingSetupPayload = {
   url: string;
   bootstrapToken?: string;
