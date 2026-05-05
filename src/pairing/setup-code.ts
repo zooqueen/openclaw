@@ -128,11 +128,16 @@ function validateMobilePairingUrl(url: string, source?: string): string | null {
   return describeSecureMobilePairingFix(source);
 }
 
-type ResolveSetupAuthResult = {
-  label?: "token" | "password";
-  value?: string;
-  error?: string;
-};
+type ResolveSetupAuthResult =
+  | {
+      ok: true;
+      label: "token" | "password";
+      value: string;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
 
 const GATEWAY_SCHEME_WITHOUT_AUTHORITY_RE = /^(?:https?|wss?):(?!\/\/)/i;
 const SCHEME_LIKE_PATH_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\//;
@@ -249,23 +254,26 @@ function resolvePairingSetupAuth(
 
   if (mode === "password") {
     if (!password) {
-      return { error: "Gateway auth is set to password, but no password is configured." };
+      return {
+        ok: false,
+        error: "Gateway auth is set to password, but no password is configured.",
+      };
     }
-    return { label: "password", value: password };
+    return { ok: true, label: "password", value: password };
   }
   if (mode === "token") {
     if (!token) {
-      return { error: "Gateway auth is set to token, but no token is configured." };
+      return { ok: false, error: "Gateway auth is set to token, but no token is configured." };
     }
-    return { label: "token", value: token };
+    return { ok: true, label: "token", value: token };
   }
   if (token) {
-    return { label: "token", value: token };
+    return { ok: true, label: "token", value: token };
   }
   if (password) {
-    return { label: "password", value: password };
+    return { ok: true, label: "password", value: password };
   }
-  return { error: "Gateway auth is not configured (no token or password)." };
+  return { ok: false, error: "Gateway auth is not configured (no token or password)." };
 }
 
 async function resolveGatewayUrl(
@@ -351,7 +359,7 @@ export async function resolvePairingSetupFromConfig(
     hasPasswordCandidate: Boolean(normalizeOptionalString(env.OPENCLAW_GATEWAY_PASSWORD)),
   });
   const auth = resolvePairingSetupAuth(cfgForAuth, env);
-  if (auth.error) {
+  if (!auth.ok) {
     return { ok: false, error: auth.error };
   }
   const urlResult = await resolveGatewayUrl(cfgForAuth, {
@@ -371,9 +379,6 @@ export async function resolvePairingSetupFromConfig(
     return { ok: false, error: mobilePairingUrlError };
   }
 
-  if (!auth.label || !auth.value) {
-    return { ok: false, error: "Gateway auth is not configured (no token or password)." };
-  }
   const authField = auth.label === "token" ? { token: auth.value } : { password: auth.value };
 
   return {

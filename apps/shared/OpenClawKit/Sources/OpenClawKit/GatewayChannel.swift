@@ -522,8 +522,8 @@ public actor GatewayChannelActor {
             (includeDeviceIdentity && explicitPassword == nil && explicitBootstrapToken == nil
                 ? storedToken
                 : nil)
-        let shouldFallbackToBootstrapToken = authToken == nil && explicitPassword == nil
-        let authBootstrapToken = shouldFallbackToBootstrapToken ? explicitBootstrapToken : nil
+        let useBootstrapToken = authToken == nil && explicitPassword == nil
+        let authBootstrapToken = useBootstrapToken ? explicitBootstrapToken : nil
         let authDeviceToken = shouldUseDeviceRetryToken ? storedToken : nil
         let authSource: GatewayAuthSource = if authDeviceToken != nil || (explicitToken == nil && authToken != nil) {
             .deviceToken
