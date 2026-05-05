@@ -11,6 +11,7 @@ Docs: https://docs.openclaw.ai
 - Gateway/media: skip media sidecar handling for unrelated HTTP routes so non-media requests do not pay the media route behavior.
 - Discord: show reasoning text in progress drafts so streaming replies expose useful thinking/progress instead of blank draft updates.
 - Auth profiles: avoid putting providers on cooldown for format-level rejections, so fallback profiles can still be tried when a model name is unsupported.
+- Update/plugins: tolerate corrupt managed plugin records during update so core package updates can still complete and report the plugin repair path.
 - Update: stop dev-channel updates cleanly after a fetch failure instead of continuing into later update steps.
 - Agents/generated media: treat attachment-style message tool actions as completed chat sends, preventing duplicate fallback media posts when generated files were already uploaded.
 
