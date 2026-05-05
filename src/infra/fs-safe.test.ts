@@ -465,16 +465,19 @@ describe("fs-safe", () => {
     },
   );
 
-  it("returns missing stat results within root when allowed", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+  it.runIf(process.platform !== "win32")(
+    "returns missing stat results within root when allowed",
+    async () => {
+      const root = await tempDirs.make("openclaw-fs-safe-root-");
 
-    await expect(
-      statPathWithinRoot({ rootDir: root, relativePath: "missing.txt", allowMissing: true }),
-    ).resolves.toMatchObject({ exists: false, kind: "missing" });
-    await expect(
-      statPathWithinRoot({ rootDir: root, relativePath: "missing.txt" }),
-    ).rejects.toMatchObject({ code: "not-found" });
-  });
+      await expect(
+        statPathWithinRoot({ rootDir: root, relativePath: "missing.txt", allowMissing: true }),
+      ).resolves.toMatchObject({ exists: false, kind: "missing" });
+      await expect(
+        statPathWithinRoot({ rootDir: root, relativePath: "missing.txt" }),
+      ).rejects.toMatchObject({ code: "not-found" });
+    },
+  );
 
   it.runIf(process.platform !== "win32")("lists directories within root safely", async () => {
     const root = await tempDirs.make("openclaw-fs-safe-root-");
@@ -712,6 +715,13 @@ describe("fs-safe", () => {
     await withMockedPlatform("win32", async () => {
       await expect(
         statPathWithinRoot({ rootDir: root, relativePath: path.join("nested", "from.txt") }),
+      ).rejects.toMatchObject({ code: "invalid-path" });
+      await expect(
+        statPathWithinRoot({
+          rootDir: root,
+          relativePath: path.join("nested", "missing.txt"),
+          allowMissing: true,
+        }),
       ).rejects.toMatchObject({ code: "invalid-path" });
       await expect(
         readdirWithinRoot({ rootDir: root, relativePath: "nested" }),
