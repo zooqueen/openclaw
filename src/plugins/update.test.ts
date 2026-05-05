@@ -1510,7 +1510,7 @@ describe("updateNpmInstalledPlugins", () => {
     );
   });
 
-  it("skips ClawHub plugin update when bundled version is newer", async () => {
+  it("skips community ClawHub plugin update when bundled version is newer", async () => {
     resolveBundledPluginSourcesMock.mockReturnValue(
       new Map([
         [
@@ -1551,6 +1551,115 @@ describe("updateNpmInstalledPlugins", () => {
       }),
     ]);
     expect(warnMessages).toEqual([expect.stringContaining("bundled version 2026.4.20 is newer")]);
+  });
+
+  it("updates OpenClaw-managed official external ClawHub plugins when a bundled version is newer", async () => {
+    resolveBundledPluginSourcesMock.mockReturnValue(
+      new Map([
+        [
+          "diagnostics-otel",
+          {
+            pluginId: "diagnostics-otel",
+            localPath: appBundledPluginRoot("diagnostics-otel"),
+            version: "2026.5.4",
+          },
+        ],
+      ]),
+    );
+    installPluginFromClawHubMock.mockResolvedValue(
+      createSuccessfulClawHubUpdateResult({
+        pluginId: "diagnostics-otel",
+        targetDir: "/tmp/diagnostics-otel",
+        version: "2026.5.5",
+        clawhubPackage: "@openclaw/diagnostics-otel",
+      }),
+    );
+
+    const config = createClawHubInstallConfig({
+      pluginId: "diagnostics-otel",
+      installPath: "/tmp/diagnostics-otel",
+      clawhubUrl: "https://clawhub.ai",
+      clawhubPackage: "@openclaw/diagnostics-otel",
+      clawhubFamily: "code-plugin",
+      clawhubChannel: "official",
+      spec: "clawhub:@openclaw/diagnostics-otel@2026.5.1",
+    });
+    (config.plugins!.installs!["diagnostics-otel"] as Record<string, unknown>).version = "2026.5.1";
+
+    const warnMessages: string[] = [];
+    const result = await updateNpmInstalledPlugins({
+      config,
+      pluginIds: ["diagnostics-otel"],
+      logger: { warn: (msg) => warnMessages.push(msg) },
+    });
+
+    expect(installPluginFromClawHubMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spec: "clawhub:@openclaw/diagnostics-otel",
+        baseUrl: "https://clawhub.ai",
+        expectedPluginId: "diagnostics-otel",
+        mode: "update",
+      }),
+    );
+    expect(result.changed).toBe(true);
+    expect(result.outcomes[0]).toMatchObject({
+      pluginId: "diagnostics-otel",
+      status: "updated",
+      nextVersion: "2026.5.5",
+    });
+    expect(result.config.plugins?.installs?.["diagnostics-otel"]).toMatchObject({
+      source: "clawhub",
+      spec: "clawhub:@openclaw/diagnostics-otel",
+      version: "2026.5.5",
+      clawhubPackage: "@openclaw/diagnostics-otel",
+      clawhubChannel: "official",
+    });
+    expect(warnMessages).toEqual([]);
+  });
+
+  it("does not treat non-official ClawHub records as official sync targets", async () => {
+    resolveBundledPluginSourcesMock.mockReturnValue(
+      new Map([
+        [
+          "diagnostics-otel",
+          {
+            pluginId: "diagnostics-otel",
+            localPath: appBundledPluginRoot("diagnostics-otel"),
+            version: "2026.5.4",
+          },
+        ],
+      ]),
+    );
+    installPluginFromClawHubMock.mockRejectedValue(new Error("official sync should not run"));
+
+    const config = createClawHubInstallConfig({
+      pluginId: "diagnostics-otel",
+      installPath: "/tmp/diagnostics-otel",
+      clawhubUrl: "https://clawhub.ai",
+      clawhubPackage: "@openclaw/diagnostics-otel",
+      clawhubFamily: "code-plugin",
+      clawhubChannel: "community",
+      spec: "clawhub:@openclaw/diagnostics-otel@2026.5.1",
+    });
+    (config.plugins!.installs!["diagnostics-otel"] as Record<string, unknown>).version = "2026.5.1";
+
+    const warnMessages: string[] = [];
+    const result = await updateNpmInstalledPlugins({
+      config,
+      pluginIds: ["diagnostics-otel"],
+      logger: { warn: (msg) => warnMessages.push(msg) },
+    });
+
+    expect(installPluginFromClawHubMock).not.toHaveBeenCalled();
+    expect(result.changed).toBe(false);
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({
+        pluginId: "diagnostics-otel",
+        status: "skipped",
+        message: expect.stringContaining("bundled version 2026.5.4 is newer"),
+      }),
+    ]);
+    expect(warnMessages).toEqual([expect.stringContaining("bundled version 2026.5.4 is newer")]);
   });
 
   it("proceeds with ClawHub plugin update when bundled version is older", async () => {
