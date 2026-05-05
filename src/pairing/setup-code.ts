@@ -5,12 +5,10 @@ import { normalizeSecretInputString, resolveSecretInputRef } from "../config/typ
 import { materializeGatewayAuthSecretRefs } from "../gateway/auth-config-utils.js";
 import { assertExplicitGatewayAuthModeWhenBothConfigured } from "../gateway/auth-mode-policy.js";
 import { isLoopbackHost, isSecureWebSocketUrl } from "../gateway/net.js";
-import { issueDeviceBootstrapToken } from "../infra/device-bootstrap.js";
 import {
   pickMatchingExternalInterfaceAddress,
   safeNetworkInterfaces,
 } from "../infra/network-interfaces.js";
-import { PAIRING_SETUP_BOOTSTRAP_PROFILE } from "../shared/device-bootstrap-profile.js";
 import { resolveGatewayBindUrl } from "../shared/gateway-bind-url.js";
 import {
   isCarrierGradeNatIpv4Address,
@@ -27,7 +25,9 @@ import { resolveTailnetHostWithRunner } from "../shared/tailscale-status.js";
 
 export type PairingSetupPayload = {
   url: string;
-  bootstrapToken: string;
+  bootstrapToken?: string;
+  token?: string;
+  password?: string;
 };
 
 export type PairingSetupCommandResult = {
@@ -123,8 +123,9 @@ function validateMobilePairingUrl(url: string, source?: string): string | null {
   return describeSecureMobilePairingFix(source);
 }
 
-type ResolveAuthLabelResult = {
+type ResolveSetupAuthResult = {
   label?: "token" | "password";
+  value?: string;
   error?: string;
 };
 
@@ -219,10 +220,10 @@ function pickTailnetIPv4(
   return pickIPv4Matching(networkInterfaces, isTailnetIPv4);
 }
 
-function resolvePairingSetupAuthLabel(
+function resolvePairingSetupAuth(
   cfg: OpenClawConfig,
   env: NodeJS.ProcessEnv,
-): ResolveAuthLabelResult {
+): ResolveSetupAuthResult {
   const mode = cfg.gateway?.auth?.mode;
   const defaults = cfg.secrets?.defaults;
   const tokenRef = resolveSecretInputRef({
@@ -245,19 +246,19 @@ function resolvePairingSetupAuthLabel(
     if (!password) {
       return { error: "Gateway auth is set to password, but no password is configured." };
     }
-    return { label: "password" };
+    return { label: "password", value: password };
   }
   if (mode === "token") {
     if (!token) {
       return { error: "Gateway auth is set to token, but no token is configured." };
     }
-    return { label: "token" };
+    return { label: "token", value: token };
   }
   if (token) {
-    return { label: "token" };
+    return { label: "token", value: token };
   }
   if (password) {
-    return { label: "password" };
+    return { label: "password", value: password };
   }
   return { error: "Gateway auth is not configured (no token or password)." };
 }
@@ -344,9 +345,9 @@ export async function resolvePairingSetupFromConfig(
     hasTokenCandidate: Boolean(normalizeOptionalString(env.OPENCLAW_GATEWAY_TOKEN)),
     hasPasswordCandidate: Boolean(normalizeOptionalString(env.OPENCLAW_GATEWAY_PASSWORD)),
   });
-  const authLabel = resolvePairingSetupAuthLabel(cfgForAuth, env);
-  if (authLabel.error) {
-    return { ok: false, error: authLabel.error };
+  const auth = resolvePairingSetupAuth(cfgForAuth, env);
+  if (auth.error) {
+    return { ok: false, error: auth.error };
   }
   const urlResult = await resolveGatewayUrl(cfgForAuth, {
     env,
@@ -365,7 +366,7 @@ export async function resolvePairingSetupFromConfig(
     return { ok: false, error: mobilePairingUrlError };
   }
 
-  if (!authLabel.label) {
+  if (!auth.label || !auth.value) {
     return { ok: false, error: "Gateway auth is not configured (no token or password)." };
   }
 
@@ -373,14 +374,9 @@ export async function resolvePairingSetupFromConfig(
     ok: true,
     payload: {
       url: urlResult.url,
-      bootstrapToken: (
-        await issueDeviceBootstrapToken({
-          baseDir: options.pairingBaseDir,
-          profile: PAIRING_SETUP_BOOTSTRAP_PROFILE,
-        })
-      ).token,
+      ...(auth.label === "token" ? { token: auth.value } : { password: auth.value }),
     },
-    authLabel: authLabel.label,
+    authLabel: auth.label,
     urlSource: urlResult.source ?? "unknown",
   };
 }
