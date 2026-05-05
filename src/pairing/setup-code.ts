@@ -128,7 +128,7 @@ function validateMobilePairingUrl(url: string, source?: string): string | null {
   return describeSecureMobilePairingFix(source);
 }
 
-type ResolveSetupAuthResult =
+type SetupAuthResolution =
   | {
       ok: true;
       label: "token" | "password";
@@ -230,10 +230,7 @@ function pickTailnetIPv4(
   return pickIPv4Matching(networkInterfaces, isTailnetIPv4);
 }
 
-function resolvePairingSetupAuth(
-  cfg: OpenClawConfig,
-  env: NodeJS.ProcessEnv,
-): ResolveSetupAuthResult {
+function resolvePairingSetupAuth(cfg: OpenClawConfig, env: NodeJS.ProcessEnv): SetupAuthResolution {
   const mode = cfg.gateway?.auth?.mode;
   const defaults = cfg.secrets?.defaults;
   const tokenRef = resolveSecretInputRef({
@@ -379,14 +376,18 @@ export async function resolvePairingSetupFromConfig(
     return { ok: false, error: mobilePairingUrlError };
   }
 
-  const authField = auth.label === "token" ? { token: auth.value } : { password: auth.value };
+  const payload: PairingSetupPayload = {
+    url: urlResult.url,
+  };
+  if (auth.label === "token") {
+    payload.token = auth.value;
+  } else {
+    payload.password = auth.value;
+  }
 
   return {
     ok: true,
-    payload: {
-      url: urlResult.url,
-      ...authField,
-    },
+    payload,
     authLabel: auth.label,
     urlSource: urlResult.source ?? "unknown",
   };
