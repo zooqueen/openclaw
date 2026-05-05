@@ -459,6 +459,8 @@ if (command === "seed") {
 } else if (command === "assert-state") {
   assertStateSurvived();
   assertConfiguredPluginInstalls();
+} else if (command === "assert-configured-plugin-installs") {
+  assertConfiguredPluginInstalls();
 } else if (command === "assert-status-json") {
   assertStatusJson(process.argv.slice(3));
 } else {

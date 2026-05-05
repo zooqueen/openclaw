@@ -489,7 +489,8 @@ default latest published package baseline; `run_release_soak=true` or
 `2026.4.23` through `latest` plus reported-issue fixtures. Use
 Package Acceptance with `source=npm` for an already shipped candidate, or
 `source=ref`/`source=artifact` for a SHA-backed local npm tarball before
-publish. It is the GitHub-native
+publish. Scenario-specific filters keep the configured external plugin install
+migration on `2026.4.x` baselines only. It is the GitHub-native
 replacement for most of the package/update coverage that previously required
 Parallels. Cross-OS release checks still matter for OS-specific onboarding,
 installer, and platform behavior, but package/update product validation should

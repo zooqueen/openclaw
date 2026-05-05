@@ -78,6 +78,11 @@ export type UpdateRunResult = {
           nextVersion?: string;
         }>;
       };
+      configuredInstallRepair?: {
+        changed: boolean;
+        changes: string[];
+        warnings: string[];
+      };
       integrityDrifts: Array<{
         pluginId: string;
         spec: string;

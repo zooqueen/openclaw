@@ -178,6 +178,27 @@ function supportsUpgradeSurvivorPluginDependencyCleanup(baselineSpec) {
   return comparePublishedReleaseVersion(version, { year: 2026, month: 4, day: 23 }) >= 0;
 }
 
+function supportsConfiguredPluginInstallRepair(baselineSpec) {
+  if (!baselineSpec) {
+    return true;
+  }
+  const version = parsePublishedReleaseVersion(baselineSpec);
+  if (!version) {
+    return true;
+  }
+  return version.year === 2026 && version.month === 4;
+}
+
+function supportsUpgradeSurvivorScenarioBaseline(scenario, baselineSpec) {
+  if (scenario === "plugin-deps-cleanup") {
+    return supportsUpgradeSurvivorPluginDependencyCleanup(baselineSpec);
+  }
+  if (scenario === "configured-plugin-installs") {
+    return supportsConfiguredPluginInstallRepair(baselineSpec);
+  }
+  return true;
+}
+
 function expandUpgradeSurvivorBaselineLanes(poolLanes, rawBaselineSpecs, rawScenarios = "") {
   const baselineSpecs = parseUpgradeSurvivorBaselineSpecs(rawBaselineSpecs);
   const scenarios = parseUpgradeSurvivorScenarios(rawScenarios);
@@ -192,11 +213,7 @@ function expandUpgradeSurvivorBaselineLanes(poolLanes, rawBaselineSpecs, rawScen
     const matrixScenarios = scenarios.length > 0 ? scenarios : [undefined];
     return matrixBaselines.flatMap((baselineSpec) =>
       matrixScenarios
-        .filter(
-          (scenario) =>
-            scenario !== "plugin-deps-cleanup" ||
-            supportsUpgradeSurvivorPluginDependencyCleanup(baselineSpec),
-        )
+        .filter((scenario) => supportsUpgradeSurvivorScenarioBaseline(scenario, baselineSpec))
         .map((scenario) => {
           const suffixParts = [
             baselineSpec ? sanitizeLaneNameSuffix(baselineSpec) : "",

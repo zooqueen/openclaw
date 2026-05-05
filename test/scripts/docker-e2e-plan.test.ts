@@ -393,14 +393,28 @@ describe("scripts/lib/docker-e2e-plan", () => {
     ]);
   });
 
-  it("skips plugin dependency cleanup for baselines without packaged plugin dirs", () => {
+  it("narrows release-bound reported issue scenarios to affected baselines", () => {
     const plan = planFor({
       selectedLaneNames: ["published-upgrade-survivor"],
-      upgradeSurvivorBaselines: "2026.4.29 2026.3.13",
+      upgradeSurvivorBaselines: "2026.5.4 2026.5.3 2026.4.29 2026.4.23 2026.4.22 2026.3.13",
       upgradeSurvivorScenarios: "reported-issues",
     });
 
     expect(plan.lanes.map((lane) => lane.name)).toEqual([
+      "published-upgrade-survivor-2026.5.4",
+      "published-upgrade-survivor-2026.5.4-feishu-channel",
+      "published-upgrade-survivor-2026.5.4-bootstrap-persona",
+      "published-upgrade-survivor-2026.5.4-plugin-deps-cleanup",
+      "published-upgrade-survivor-2026.5.4-stale-source-plugin-shadow",
+      "published-upgrade-survivor-2026.5.4-tilde-log-path",
+      "published-upgrade-survivor-2026.5.4-versioned-runtime-deps",
+      "published-upgrade-survivor-2026.5.3",
+      "published-upgrade-survivor-2026.5.3-feishu-channel",
+      "published-upgrade-survivor-2026.5.3-bootstrap-persona",
+      "published-upgrade-survivor-2026.5.3-plugin-deps-cleanup",
+      "published-upgrade-survivor-2026.5.3-stale-source-plugin-shadow",
+      "published-upgrade-survivor-2026.5.3-tilde-log-path",
+      "published-upgrade-survivor-2026.5.3-versioned-runtime-deps",
       "published-upgrade-survivor-2026.4.29",
       "published-upgrade-survivor-2026.4.29-feishu-channel",
       "published-upgrade-survivor-2026.4.29-bootstrap-persona",
@@ -409,10 +423,24 @@ describe("scripts/lib/docker-e2e-plan", () => {
       "published-upgrade-survivor-2026.4.29-stale-source-plugin-shadow",
       "published-upgrade-survivor-2026.4.29-tilde-log-path",
       "published-upgrade-survivor-2026.4.29-versioned-runtime-deps",
+      "published-upgrade-survivor-2026.4.23",
+      "published-upgrade-survivor-2026.4.23-feishu-channel",
+      "published-upgrade-survivor-2026.4.23-bootstrap-persona",
+      "published-upgrade-survivor-2026.4.23-plugin-deps-cleanup",
+      "published-upgrade-survivor-2026.4.23-configured-plugin-installs",
+      "published-upgrade-survivor-2026.4.23-stale-source-plugin-shadow",
+      "published-upgrade-survivor-2026.4.23-tilde-log-path",
+      "published-upgrade-survivor-2026.4.23-versioned-runtime-deps",
+      "published-upgrade-survivor-2026.4.22",
+      "published-upgrade-survivor-2026.4.22-feishu-channel",
+      "published-upgrade-survivor-2026.4.22-bootstrap-persona",
+      "published-upgrade-survivor-2026.4.22-configured-plugin-installs",
+      "published-upgrade-survivor-2026.4.22-stale-source-plugin-shadow",
+      "published-upgrade-survivor-2026.4.22-tilde-log-path",
+      "published-upgrade-survivor-2026.4.22-versioned-runtime-deps",
       "published-upgrade-survivor-2026.3.13",
       "published-upgrade-survivor-2026.3.13-feishu-channel",
       "published-upgrade-survivor-2026.3.13-bootstrap-persona",
-      "published-upgrade-survivor-2026.3.13-configured-plugin-installs",
       "published-upgrade-survivor-2026.3.13-stale-source-plugin-shadow",
       "published-upgrade-survivor-2026.3.13-tilde-log-path",
       "published-upgrade-survivor-2026.3.13-versioned-runtime-deps",

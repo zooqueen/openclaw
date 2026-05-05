@@ -81,6 +81,133 @@ describe("configured plugin install release step", () => {
     ).toBe(true);
   });
 
+  it("runs the update migration only for the 2026.4 to 2026.5 path", async () => {
+    const { shouldRunConfiguredPluginInstallUpdateMigration } =
+      await import("./release-configured-plugin-installs.js");
+
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.4.27",
+        afterVersion: "2026.5.2",
+      }),
+    ).toBe(true);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.4.27-beta.1",
+        afterVersion: "2026.5.2-beta.1",
+      }),
+    ).toBe(true);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.5.2",
+        afterVersion: "2026.5.3-1",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.3.23",
+        afterVersion: "2026.5.2",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.4.27",
+        afterVersion: "2026.4.29",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "2026.5.2",
+        afterVersion: "2026.4.27",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunConfiguredPluginInstallUpdateMigration({
+        beforeVersion: "not-a-version",
+        afterVersion: "2026.5.2",
+      }),
+    ).toBe(false);
+  });
+
+  it("repairs configured plugins during the update migration without flipping disabled state", async () => {
+    const cfg = {
+      plugins: {
+        entries: {
+          brave: {
+            enabled: true,
+            config: {
+              webSearch: {
+                apiKey: { source: "env", id: "BRAVE_API_KEY" },
+              },
+            },
+          },
+          "disabled-entry": {
+            enabled: false,
+            config: { nested: true },
+          },
+        },
+      },
+      channels: {
+        discord: { enabled: false, token: "secret" },
+      },
+    };
+
+    const { maybeRunConfiguredPluginInstallUpdateMigration } =
+      await import("./release-configured-plugin-installs.js");
+    const result = await maybeRunConfiguredPluginInstallUpdateMigration({
+      cfg,
+      beforeVersion: "2026.4.27",
+      afterVersion: "2026.5.2",
+      env: { OPENCLAW_UPDATE_IN_PROGRESS: "1" },
+    });
+
+    expect(result).toEqual({
+      attempted: true,
+      changes: [],
+      warnings: [],
+      completed: true,
+    });
+    expect(mocks.repairMissingPluginInstallsForIds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg,
+        pluginIds: ["brave"],
+        channelIds: [],
+        blockedPluginIds: ["disabled-entry"],
+        env: expect.objectContaining({
+          OPENCLAW_UPDATE_IN_PROGRESS: undefined,
+        }),
+      }),
+    );
+    expect(cfg.plugins.entries.brave.enabled).toBe(true);
+    expect(cfg.plugins.entries["disabled-entry"].enabled).toBe(false);
+    expect(cfg.channels.discord.enabled).toBe(false);
+  });
+
+  it("skips the update migration outside the 2026.4 to 2026.5 path", async () => {
+    const { maybeRunConfiguredPluginInstallUpdateMigration } =
+      await import("./release-configured-plugin-installs.js");
+    const result = await maybeRunConfiguredPluginInstallUpdateMigration({
+      cfg: {
+        plugins: {
+          entries: {
+            brave: { enabled: true },
+          },
+        },
+      },
+      beforeVersion: "2026.5.2",
+      afterVersion: "2026.5.3-1",
+      env: {},
+    });
+
+    expect(result).toEqual({
+      attempted: false,
+      changes: [],
+      warnings: [],
+      completed: false,
+    });
+    expect(mocks.repairMissingPluginInstallsForIds).not.toHaveBeenCalled();
+  });
+
   it("collects used plugin ids without treating allow-only entries as usage", async () => {
     mocks.detectPluginAutoEnableCandidates.mockReturnValue([
       { pluginId: "matrix", kind: "channel-configured", channelId: "matrix" },

@@ -8,6 +8,7 @@ import {
   ensureCompletionCacheExists,
 } from "../../commands/doctor-completion.js";
 import { doctorCommand } from "../../commands/doctor.js";
+import { maybeRunConfiguredPluginInstallUpdateMigration } from "../../commands/doctor/shared/release-configured-plugin-installs.js";
 import {
   ConfigMutationConflictError,
   readConfigFileSnapshot,
@@ -110,6 +111,10 @@ const DEFAULT_UPDATE_STEP_TIMEOUT_MS = 30 * 60_000;
 const POST_CORE_UPDATE_ENV = "OPENCLAW_UPDATE_POST_CORE";
 const POST_CORE_UPDATE_CHANNEL_ENV = "OPENCLAW_UPDATE_POST_CORE_CHANNEL";
 const POST_CORE_UPDATE_REQUESTED_CHANNEL_ENV = "OPENCLAW_UPDATE_POST_CORE_REQUESTED_CHANNEL";
+const POST_CORE_UPDATE_BEFORE_VERSION_ENV = "OPENCLAW_UPDATE_POST_CORE_BEFORE_VERSION";
+const POST_CORE_UPDATE_AFTER_VERSION_ENV = "OPENCLAW_UPDATE_POST_CORE_AFTER_VERSION";
+const POST_CORE_UPDATE_CONFIGURED_INSTALL_MIGRATION_ENV =
+  "OPENCLAW_UPDATE_POST_CORE_CONFIGURED_INSTALL_MIGRATION";
 const POST_CORE_UPDATE_RESULT_PATH_ENV = "OPENCLAW_UPDATE_POST_CORE_RESULT_PATH";
 const POST_CORE_UPDATE_RESULT_POLL_MS = 100;
 const UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE_ENV =
@@ -1029,6 +1034,9 @@ async function updatePluginsAfterCoreUpdate(params: {
   configSnapshot: Awaited<ReturnType<typeof readConfigFileSnapshot>>;
   opts: UpdateCommandOptions;
   timeoutMs: number;
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+  configuredPluginInstallMigration?: boolean;
 }): Promise<PostCorePluginUpdateResult> {
   if (!params.configSnapshot.valid) {
     if (!params.opts.json) {
@@ -1196,11 +1204,39 @@ async function updatePluginsAfterCoreUpdate(params: {
     });
   }
 
+  const configuredInstallRepairResult = params.configuredPluginInstallMigration
+    ? await maybeRunConfiguredPluginInstallUpdateMigration({
+        cfg: withoutPluginInstallRecords(pluginConfig),
+        beforeVersion: params.beforeVersion,
+        afterVersion: params.afterVersion,
+        env: process.env,
+      })
+    : { attempted: false, changes: [], warnings: [], completed: false };
+  const configuredInstallRepair = configuredInstallRepairResult.attempted
+    ? {
+        changed: configuredInstallRepairResult.changes.length > 0,
+        changes: configuredInstallRepairResult.changes,
+        warnings: configuredInstallRepairResult.warnings,
+      }
+    : undefined;
+  if (configuredInstallRepair?.changed) {
+    pluginsChanged = true;
+    const nextInstallRecords = await loadInstalledPluginIndexInstallRecords();
+    await refreshPluginRegistryAfterConfigMutation({
+      config: withoutPluginInstallRecords(pluginConfig),
+      reason: "source-changed",
+      workspaceDir: params.root,
+      installRecords: nextInstallRecords,
+      logger: pluginLogger,
+    });
+  }
+
   if (params.opts.json) {
     return {
       status:
         syncResult.summary.errors.length > 0 ||
-        pluginUpdateOutcomes.some((outcome) => outcome.status === "error")
+        pluginUpdateOutcomes.some((outcome) => outcome.status === "error") ||
+        configuredInstallRepairResult.warnings.length > 0
           ? "error"
           : "ok",
       changed: pluginsChanged,
@@ -1215,6 +1251,7 @@ async function updatePluginsAfterCoreUpdate(params: {
         changed: npmPluginsChanged,
         outcomes: pluginUpdateOutcomes,
       },
+      ...(configuredInstallRepair ? { configuredInstallRepair } : {}),
       integrityDrifts,
     };
   }
@@ -1243,6 +1280,12 @@ async function updatePluginsAfterCoreUpdate(params: {
   }
   for (const error of syncResult.summary.errors) {
     defaultRuntime.log(theme.error(error));
+  }
+  for (const change of configuredInstallRepairResult.changes) {
+    defaultRuntime.log(theme.muted(change));
+  }
+  for (const warning of configuredInstallRepairResult.warnings) {
+    defaultRuntime.log(theme.warn(warning));
   }
 
   const updated = pluginUpdateOutcomes.filter((entry) => entry.status === "updated").length;
@@ -1273,7 +1316,8 @@ async function updatePluginsAfterCoreUpdate(params: {
   return {
     status:
       syncResult.summary.errors.length > 0 ||
-      pluginUpdateOutcomes.some((outcome) => outcome.status === "error")
+      pluginUpdateOutcomes.some((outcome) => outcome.status === "error") ||
+      configuredInstallRepairResult.warnings.length > 0
         ? "error"
         : "ok",
     changed: pluginsChanged,
@@ -1288,6 +1332,7 @@ async function updatePluginsAfterCoreUpdate(params: {
       changed: npmPluginsChanged,
       outcomes: pluginUpdateOutcomes,
     },
+    ...(configuredInstallRepair ? { configuredInstallRepair } : {}),
     integrityDrifts,
   };
 }
@@ -1526,6 +1571,9 @@ async function runPostCorePluginUpdate(params: {
   configSnapshot: Awaited<ReturnType<typeof readConfigFileSnapshot>>;
   opts: UpdateCommandOptions;
   timeoutMs: number;
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+  configuredPluginInstallMigration?: boolean;
 }): Promise<PostCorePluginUpdateResult> {
   return await updatePluginsAfterCoreUpdate({
     root: params.root,
@@ -1533,6 +1581,9 @@ async function runPostCorePluginUpdate(params: {
     configSnapshot: params.configSnapshot,
     opts: params.opts,
     timeoutMs: params.timeoutMs,
+    beforeVersion: params.beforeVersion,
+    afterVersion: params.afterVersion,
+    configuredPluginInstallMigration: params.configuredPluginInstallMigration,
   });
 }
 
@@ -1660,6 +1711,9 @@ async function continuePostCoreUpdateInFreshProcess(params: {
   channel: "stable" | "beta" | "dev";
   requestedChannel: "stable" | "beta" | "dev" | null;
   opts: UpdateCommandOptions;
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+  configuredPluginInstallMigration?: boolean;
 }): Promise<{ resumed: boolean; pluginUpdate?: PostCorePluginUpdateResult }> {
   const entryPath = await resolveGatewayInstallEntrypoint(params.root);
   if (!entryPath) {
@@ -1691,6 +1745,15 @@ async function continuePostCoreUpdateInFreshProcess(params: {
         [POST_CORE_UPDATE_CHANNEL_ENV]: params.channel,
         ...(params.requestedChannel
           ? { [POST_CORE_UPDATE_REQUESTED_CHANNEL_ENV]: params.requestedChannel }
+          : {}),
+        ...(params.beforeVersion
+          ? { [POST_CORE_UPDATE_BEFORE_VERSION_ENV]: params.beforeVersion }
+          : {}),
+        ...(params.afterVersion
+          ? { [POST_CORE_UPDATE_AFTER_VERSION_ENV]: params.afterVersion }
+          : {}),
+        ...(params.configuredPluginInstallMigration
+          ? { [POST_CORE_UPDATE_CONFIGURED_INSTALL_MIGRATION_ENV]: "1" }
           : {}),
         [POST_CORE_UPDATE_RESULT_PATH_ENV]: resultPath,
       },
@@ -1794,6 +1857,10 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
   const postCoreUpdateChannel = process.env[POST_CORE_UPDATE_CHANNEL_ENV]?.trim();
   const postCoreRequestedChannelInput =
     process.env[POST_CORE_UPDATE_REQUESTED_CHANNEL_ENV]?.trim() ?? "";
+  const postCoreBeforeVersion = process.env[POST_CORE_UPDATE_BEFORE_VERSION_ENV]?.trim() || null;
+  const postCoreAfterVersion = process.env[POST_CORE_UPDATE_AFTER_VERSION_ENV]?.trim() || null;
+  const postCoreConfiguredInstallMigration =
+    process.env[POST_CORE_UPDATE_CONFIGURED_INSTALL_MIGRATION_ENV] === "1";
 
   const timeoutMs = parseTimeoutMsOrExit(opts.timeout);
   const shouldRestart = opts.restart !== false;
@@ -1834,6 +1901,9 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
       configSnapshot: postCoreConfigSnapshot,
       opts,
       timeoutMs: updateStepTimeoutMs,
+      beforeVersion: postCoreBeforeVersion,
+      afterVersion: postCoreAfterVersion,
+      configuredPluginInstallMigration: postCoreConfiguredInstallMigration,
     });
     if (process.env[POST_CORE_UPDATE_RESULT_PATH_ENV]) {
       await writePostCorePluginUpdateResultFile(
@@ -1847,6 +1917,7 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
           status: pluginUpdate.status === "error" ? "error" : "ok",
           mode: "unknown",
           root,
+          ...(pluginUpdate.status === "error" ? { reason: "post-update-plugins" } : {}),
           steps: [],
           durationMs: 0,
           postUpdate: { plugins: pluginUpdate },
@@ -2225,6 +2296,9 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
       channel,
       requestedChannel,
       opts,
+      beforeVersion: result.before?.version,
+      afterVersion: result.after?.version,
+      configuredPluginInstallMigration: isPackageManagerUpdateMode(result.mode),
     });
     pluginsUpdatedInFreshProcess = freshProcessResult.resumed;
     postCorePluginUpdate = freshProcessResult.pluginUpdate;
@@ -2243,6 +2317,9 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
       configSnapshot: postUpdateConfigSnapshot,
       opts,
       timeoutMs: updateStepTimeoutMs,
+      beforeVersion: result.before?.version,
+      afterVersion: result.after?.version,
+      configuredPluginInstallMigration: isPackageManagerUpdateMode(result.mode),
     });
   }
 

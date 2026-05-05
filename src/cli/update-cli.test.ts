@@ -37,6 +37,7 @@ const classifyPortListener = vi.fn();
 const formatPortDiagnostics = vi.fn();
 const probeGateway = vi.fn();
 const pathExists = vi.fn();
+const maybeRunConfiguredPluginInstallUpdateMigration = vi.fn();
 const syncPluginsForUpdateChannel = vi.fn();
 const updateNpmInstalledPlugins = vi.fn();
 const loadInstalledPluginIndexInstallRecords = vi.fn(
@@ -232,6 +233,12 @@ vi.mock("./update-cli/restart-helper.js", () => ({
 vi.mock("../commands/doctor.js", () => ({
   doctorCommand: vi.fn(),
 }));
+
+vi.mock("../commands/doctor/shared/release-configured-plugin-installs.js", () => ({
+  maybeRunConfiguredPluginInstallUpdateMigration: (...args: unknown[]) =>
+    maybeRunConfiguredPluginInstallUpdateMigration(...args),
+}));
+
 // Mock the daemon-cli module
 vi.mock("./daemon-cli.js", () => ({
   runDaemonInstall: mockedRunDaemonInstall,
@@ -418,6 +425,8 @@ describe("update-cli", () => {
         status: "ok",
         mode: "npm",
         root,
+        before: { version: "2026.4.27" },
+        after: { version: "2026.5.2" },
         steps: [],
         durationMs: 100,
       });
@@ -548,6 +557,12 @@ describe("update-cli", () => {
       config: baseConfig,
       outcomes: [],
     });
+    maybeRunConfiguredPluginInstallUpdateMigration.mockResolvedValue({
+      attempted: false,
+      changes: [],
+      warnings: [],
+      completed: false,
+    });
     vi.mocked(runDaemonInstall).mockResolvedValue(undefined);
     vi.mocked(runDaemonRestart).mockResolvedValue(true);
     vi.mocked(doctorCommand).mockResolvedValue(undefined);
@@ -615,6 +630,9 @@ describe("update-cli", () => {
           NODE_DISABLE_COMPILE_CACHE: "1",
           OPENCLAW_UPDATE_POST_CORE: "1",
           OPENCLAW_UPDATE_POST_CORE_CHANNEL: "dev",
+          OPENCLAW_UPDATE_POST_CORE_BEFORE_VERSION: "2026.4.27",
+          OPENCLAW_UPDATE_POST_CORE_AFTER_VERSION: "2026.5.2",
+          OPENCLAW_UPDATE_POST_CORE_CONFIGURED_INSTALL_MIGRATION: "1",
         }),
       }),
     );
@@ -766,6 +784,9 @@ describe("update-cli", () => {
       {
         OPENCLAW_UPDATE_POST_CORE: "1",
         OPENCLAW_UPDATE_POST_CORE_CHANNEL: "stable",
+        OPENCLAW_UPDATE_POST_CORE_BEFORE_VERSION: "2026.4.27",
+        OPENCLAW_UPDATE_POST_CORE_AFTER_VERSION: "2026.5.2",
+        OPENCLAW_UPDATE_POST_CORE_CONFIGURED_INSTALL_MIGRATION: "1",
       },
       async () => {
         await updateCommand({ restart: false });
@@ -780,7 +801,63 @@ describe("update-cli", () => {
     expect(defaultRuntime.exit).toHaveBeenCalledWith(0);
     expect(syncPluginsForUpdateChannel).toHaveBeenCalledTimes(1);
     expect(updateNpmInstalledPlugins).toHaveBeenCalledTimes(1);
+    expect(maybeRunConfiguredPluginInstallUpdateMigration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        beforeVersion: "2026.4.27",
+        afterVersion: "2026.5.2",
+      }),
+    );
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not run configured plugin migration repair without the package update flag", async () => {
+    await withEnvAsync(
+      {
+        OPENCLAW_UPDATE_POST_CORE: "1",
+        OPENCLAW_UPDATE_POST_CORE_CHANNEL: "stable",
+        OPENCLAW_UPDATE_POST_CORE_BEFORE_VERSION: "2026.4.27",
+        OPENCLAW_UPDATE_POST_CORE_AFTER_VERSION: "2026.5.2",
+      },
+      async () => {
+        await updateCommand({ restart: false });
+      },
+    );
+
+    expect(maybeRunConfiguredPluginInstallUpdateMigration).not.toHaveBeenCalled();
+    expect(defaultRuntime.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("fails post-core update when configured plugin migration repair fails", async () => {
+    maybeRunConfiguredPluginInstallUpdateMigration.mockResolvedValueOnce({
+      attempted: true,
+      changes: [],
+      warnings: ['Failed to install missing configured plugin "brave": registry timeout'],
+      completed: false,
+    });
+    vi.mocked(defaultRuntime.writeJson).mockClear();
+
+    await withEnvAsync(
+      {
+        OPENCLAW_UPDATE_POST_CORE: "1",
+        OPENCLAW_UPDATE_POST_CORE_CHANNEL: "stable",
+        OPENCLAW_UPDATE_POST_CORE_BEFORE_VERSION: "2026.4.27",
+        OPENCLAW_UPDATE_POST_CORE_AFTER_VERSION: "2026.5.2",
+        OPENCLAW_UPDATE_POST_CORE_CONFIGURED_INSTALL_MIGRATION: "1",
+      },
+      async () => {
+        await updateCommand({ json: true, restart: false });
+      },
+    );
+
+    const jsonOutput = vi.mocked(defaultRuntime.writeJson).mock.calls.at(-1)?.[0] as
+      | UpdateRunResult
+      | undefined;
+    expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
+    expect(jsonOutput?.status).toBe("error");
+    expect(jsonOutput?.reason).toBe("post-update-plugins");
+    expect(jsonOutput?.postUpdate?.plugins?.configuredInstallRepair?.warnings).toEqual([
+      'Failed to install missing configured plugin "brave": registry timeout',
+    ]);
   });
 
   it("post-core resume children exit after writing a plugin update result", async () => {

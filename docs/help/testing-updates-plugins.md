@@ -127,6 +127,9 @@ Available scenarios are `base`, `feishu-channel`, `bootstrap-persona`,
 `stale-source-plugin-shadow`, `tilde-log-path`, and `versioned-runtime-deps`. In aggregate runs,
 `OPENCLAW_UPGRADE_SURVIVOR_SCENARIOS=reported-issues` expands to all reported
 issue-shaped scenarios, including the configured-plugin install migration.
+When the baseline matrix is explicit, `configured-plugin-installs` only runs for
+stable `2026.4.x` baselines because it covers the 4.x to 5.x official external
+plugin migration.
 
 Full update migration is intentionally separate from Full Release CI. Use the
 manual `Update Migration` workflow when the release question is "can every
@@ -186,7 +189,8 @@ QA on the same resolved artifact.
 update migration coverage, use `all-since-2026.4.23` in the separate Update
 Migration workflow instead of Full Release CI. `release-history` remains
 available for manual wider sampling when you also want the legacy pre-date
-anchor.
+anchor. Scenario-specific filters still apply; for example,
+`configured-plugin-installs` is pruned outside the `2026.4.x` baseline window.
 
 Run a package profile manually when validating a candidate before release:
 

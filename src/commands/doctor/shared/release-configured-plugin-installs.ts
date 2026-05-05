@@ -5,7 +5,7 @@ import { isChannelConfigured } from "../../../config/channel-configured.js";
 import { collectConfiguredModelRefs } from "../../../config/model-refs.js";
 import { detectPluginAutoEnableCandidates } from "../../../config/plugin-auto-enable.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
-import { compareOpenClawVersions } from "../../../config/version.js";
+import { compareOpenClawVersions, parseOpenClawVersion } from "../../../config/version.js";
 import { isTruthyEnvValue } from "../../../infra/env.js";
 import { getOfficialExternalPluginCatalogEntry } from "../../../plugins/official-external-plugin-catalog.js";
 import { resolveProviderInstallCatalogEntries } from "../../../plugins/provider-install-catalog.js";
@@ -261,6 +261,25 @@ export function shouldRunConfiguredPluginInstallReleaseStep(params: {
   return touchedComparedToRelease === null || touchedComparedToRelease < 0;
 }
 
+export function shouldRunConfiguredPluginInstallUpdateMigration(params: {
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+}): boolean {
+  const before = parseOpenClawVersion(params.beforeVersion);
+  const after = parseOpenClawVersion(params.afterVersion);
+  if (!before || !after) {
+    return false;
+  }
+  if (before.major !== 2026 || before.minor !== 4) {
+    return false;
+  }
+  if (after.major !== 2026 || after.minor !== 5) {
+    return false;
+  }
+  const compared = compareOpenClawVersions(params.afterVersion, params.beforeVersion);
+  return compared !== null && compared > 0;
+}
+
 export function collectReleaseConfiguredPluginIds(params: {
   cfg: OpenClawConfig;
   env?: NodeJS.ProcessEnv;
@@ -367,5 +386,49 @@ export async function maybeRunConfiguredPluginInstallReleaseStep(params: {
     warnings: repaired.warnings,
     completed,
     touchedConfig: completed,
+  };
+}
+
+export async function maybeRunConfiguredPluginInstallUpdateMigration(params: {
+  cfg: OpenClawConfig;
+  env?: NodeJS.ProcessEnv;
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+}): Promise<{
+  attempted: boolean;
+  changes: string[];
+  warnings: string[];
+  completed: boolean;
+}> {
+  if (
+    !shouldRunConfiguredPluginInstallUpdateMigration({
+      beforeVersion: params.beforeVersion,
+      afterVersion: params.afterVersion,
+    })
+  ) {
+    return { attempted: false, changes: [], warnings: [], completed: false };
+  }
+
+  const env = {
+    ...(params.env ?? process.env),
+    [UPDATE_IN_PROGRESS_ENV]: undefined,
+  };
+  const configured = collectReleaseConfiguredPluginIds({ cfg: params.cfg, env });
+  if (configured.pluginIds.length === 0 && configured.channelIds.length === 0) {
+    return { attempted: true, changes: [], warnings: [], completed: true };
+  }
+
+  const repaired = await repairMissingPluginInstallsForIds({
+    cfg: params.cfg,
+    pluginIds: configured.pluginIds,
+    channelIds: configured.channelIds,
+    blockedPluginIds: collectBlockedPluginIds(params.cfg),
+    env,
+  });
+  return {
+    attempted: true,
+    changes: repaired.changes,
+    warnings: repaired.warnings,
+    completed: repaired.warnings.length === 0,
   };
 }

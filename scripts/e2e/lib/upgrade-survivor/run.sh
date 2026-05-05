@@ -723,6 +723,12 @@ update_candidate() {
   installed_version="$(read_installed_version)"
 }
 
+assert_configured_plugin_installs_after_update() {
+  configured_plugin_installs_enabled || return 0
+  OPENCLAW_UPGRADE_SURVIVOR_ASSERT_STAGE=post-update \
+    node scripts/e2e/lib/upgrade-survivor/assertions.mjs assert-configured-plugin-installs
+}
+
 run_doctor() {
   if ! openclaw doctor --fix --non-interactive >"$DOCTOR_LOG" 2>&1; then
     echo "openclaw doctor failed" >&2
@@ -830,9 +836,10 @@ phase seed-source-only-plugin-shadow seed_source_only_plugin_shadow
 phase assert-baseline assert_baseline_state
 phase seed-legacy-runtime-deps-symlink seed_legacy_runtime_deps_symlink
 phase resolve-candidate resolve_candidate_version
-phase update-candidate update_candidate
-phase assert-legacy-plugin-dependency-debris-before-doctor assert_legacy_plugin_dependency_debris_before_doctor
 phase configure-configured-plugin-install-fixture-registry configure_configured_plugin_install_fixture_registry
+phase update-candidate update_candidate
+phase assert-configured-plugin-installs-after-update assert_configured_plugin_installs_after_update
+phase assert-legacy-plugin-dependency-debris-before-doctor assert_legacy_plugin_dependency_debris_before_doctor
 phase doctor run_doctor
 phase assert-legacy-plugin-dependency-debris-cleaned assert_legacy_plugin_dependency_debris_cleaned
 phase assert-legacy-runtime-deps-symlink-repaired assert_legacy_runtime_deps_symlink_repaired
