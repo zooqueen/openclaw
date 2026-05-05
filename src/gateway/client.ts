@@ -798,8 +798,9 @@ export class GatewayClient {
     // Legacy compatibility: keep `auth.token` populated for device-token auth when
     // no explicit shared token is present.
     const authToken = explicitGatewayToken ?? resolvedDeviceToken;
-    const shouldUseBootstrapToken = !explicitGatewayToken && !authPassword && !resolvedDeviceToken;
-    const authBootstrapToken = shouldUseBootstrapToken ? explicitBootstrapToken : undefined;
+    const shouldFallbackToBootstrapToken =
+      !explicitGatewayToken && !authPassword && !resolvedDeviceToken;
+    const authBootstrapToken = shouldFallbackToBootstrapToken ? explicitBootstrapToken : undefined;
     return {
       authToken,
       authBootstrapToken,
