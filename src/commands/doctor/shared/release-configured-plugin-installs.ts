@@ -283,8 +283,10 @@ export function shouldRunConfiguredPluginInstallUpdateMigration(params: {
 export function collectReleaseConfiguredPluginIds(params: {
   cfg: OpenClawConfig;
   env?: NodeJS.ProcessEnv;
+  includeAllowOnlyOfficialPluginIds?: boolean;
 }): ReleaseConfiguredPluginIds {
   const env = params.env ?? process.env;
+  const includeAllowOnlyOfficialPluginIds = params.includeAllowOnlyOfficialPluginIds ?? true;
   const pluginIds = new Set<string>();
   const channelIds = new Set<string>();
   if (isPluginsGloballyDisabled(params.cfg)) {
@@ -315,8 +317,10 @@ export function collectReleaseConfiguredPluginIds(params: {
   for (const pluginId of collectAcpRuntimePluginIds(params.cfg)) {
     addEligiblePluginId(params.cfg, pluginIds, pluginId);
   }
-  for (const pluginId of collectAllowOnlyOfficialPluginIds(params.cfg)) {
-    addEligiblePluginId(params.cfg, pluginIds, pluginId);
+  if (includeAllowOnlyOfficialPluginIds) {
+    for (const pluginId of collectAllowOnlyOfficialPluginIds(params.cfg)) {
+      addEligiblePluginId(params.cfg, pluginIds, pluginId);
+    }
   }
   for (const channelId of collectConfiguredChannelIds(params.cfg, env)) {
     if (
@@ -413,7 +417,11 @@ export async function maybeRunConfiguredPluginInstallUpdateMigration(params: {
     ...(params.env ?? process.env),
     [UPDATE_IN_PROGRESS_ENV]: undefined,
   };
-  const configured = collectReleaseConfiguredPluginIds({ cfg: params.cfg, env });
+  const configured = collectReleaseConfiguredPluginIds({
+    cfg: params.cfg,
+    env,
+    includeAllowOnlyOfficialPluginIds: false,
+  });
   if (configured.pluginIds.length === 0 && configured.channelIds.length === 0) {
     return { attempted: true, changes: [], warnings: [], completed: true };
   }

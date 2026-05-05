@@ -132,6 +132,7 @@ describe("configured plugin install release step", () => {
   it("repairs configured plugins during the update migration without flipping disabled state", async () => {
     const cfg = {
       plugins: {
+        allow: ["allow-only-official"],
         entries: {
           brave: {
             enabled: true,
@@ -151,6 +152,12 @@ describe("configured plugin install release step", () => {
         discord: { enabled: false, token: "secret" },
       },
     };
+    mocks.getOfficialExternalPluginCatalogEntry.mockImplementation((pluginId: string) => {
+      if (pluginId === "allow-only-official") {
+        return { name: "@openclaw/allow-only-official" };
+      }
+      return undefined;
+    });
 
     const { maybeRunConfiguredPluginInstallUpdateMigration } =
       await import("./release-configured-plugin-installs.js");
