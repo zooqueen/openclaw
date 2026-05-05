@@ -478,6 +478,10 @@ export async function statPathWithinRoot(params: {
   if (!isPathInside(resolved.rootWithSep, realPath)) {
     throw new SafeOpenError("outside-workspace", "file is outside workspace root");
   }
+  const relativeRealPath = path.relative(resolved.rootReal, realPath);
+  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
+    throw new SafeOpenError("outside-workspace", "file is outside workspace root");
+  }
   const expectedPinnedStat = params.followSymlinks !== false ? await fs.lstat(realPath) : undefined;
   let stat: SafePathStats;
   try {
@@ -487,7 +491,7 @@ export async function statPathWithinRoot(params: {
       const stdout = await runPinnedPathHelper({
         operation: "stat",
         rootPath: resolved.rootReal,
-        relativePath: path.relative(resolved.rootReal, realPath).split(path.sep).join("/"),
+        relativePath: relativeRealPath.split(path.sep).join("/"),
         overwrite: false,
       });
       stat = parsePinnedStatPayload(stdout);
