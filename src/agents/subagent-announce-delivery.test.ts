@@ -1241,8 +1241,8 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        delivered: false,
-        path: "direct",
+        delivered: true,
+        path: "direct-fallback",
       }),
     );
     expect(callGateway).toHaveBeenCalledWith(
