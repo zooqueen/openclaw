@@ -1069,7 +1069,7 @@ describe("uninstallPlugin", () => {
     await expect(fs.lstat(peerLink).then((stat) => stat.isSymbolicLink())).resolves.toBe(true);
   });
 
-  it("skips npm cleanup when the managed package directory is already absent", async () => {
+  it("runs npm cleanup when the managed package directory is already absent", async () => {
     const stateDir = path.join(tempDir, "state");
     const npmRoot = path.join(stateDir, "npm");
     const pluginDir = path.join(npmRoot, "node_modules", "missing-plugin");
@@ -1099,7 +1099,30 @@ describe("uninstallPlugin", () => {
     });
 
     expect(applied).toEqual({ directoryRemoved: false, warnings: [] });
-    expect(runCommandWithTimeoutMock).not.toHaveBeenCalled();
+    expect(runCommandWithTimeoutMock).toHaveBeenCalledWith(
+      [
+        "npm",
+        "uninstall",
+        "--loglevel=error",
+        "--legacy-peer-deps",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--prefix",
+        ".",
+        "missing-plugin",
+      ],
+      expect.objectContaining({
+        cwd: npmRoot,
+        timeoutMs: 300_000,
+        env: expect.objectContaining({
+          NPM_CONFIG_IGNORE_SCRIPTS: "true",
+          npm_config_legacy_peer_deps: "true",
+          npm_config_package_lock: "true",
+        }),
+      }),
+    );
+    await expect(fs.lstat(peerLink).then((stat) => stat.isSymbolicLink())).resolves.toBe(true);
   });
 
   it("removes stale npm install config when the managed npm root is already absent", async () => {
