@@ -1,6 +1,10 @@
 import { execFileSync, execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  parseRenderedClawtributorEntries,
+  renderClawtributorsBlock,
+} from "./update-clawtributors-render.js";
 import type { ApiContributor, Entry, MapConfig, User } from "./update-clawtributors.types.js";
 
 const REPO = "openclaw/openclaw";
@@ -290,16 +294,12 @@ visibleEntries.sort((a, b) => {
   return a.display.localeCompare(b.display);
 });
 
-const markdownLines: string[] = [];
-for (let i = 0; i < visibleEntries.length; i += PER_LINE) {
-  const chunk = visibleEntries.slice(i, i + PER_LINE);
-  const parts = chunk.map((entry) => {
-    return `[![${escapeMarkdownLabel(entry.display)}](${entry.avatar_url})](${entry.html_url})`;
-  });
-  markdownLines.push(parts.join(" "));
-}
-
-const block = `${CLAWTRIBUTORS_START}\n${markdownLines.join("\n")}\n${CLAWTRIBUTORS_END}`;
+const block = renderClawtributorsBlock(visibleEntries, {
+  perLine: PER_LINE,
+  avatarSize: AVATAR_SIZE,
+  startMarker: CLAWTRIBUTORS_START,
+  endMarker: CLAWTRIBUTORS_END,
+});
 const hiddenBlock = buildHiddenReadmeBlock(entries, visibleEntries);
 const hiddenRange = findHiddenReadmeRange(currentReadme);
 const readmeWithoutMeta = hiddenRange
@@ -674,10 +674,6 @@ function normalizeIdentifier(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function escapeMarkdownLabel(value: string): string {
-  return value.replace(/([\\[\]])/g, "\\$1");
-}
-
 function parseReadmeEntries(
   content: string,
 ): Array<{ display: string; html_url: string; avatar_url: string }> {
@@ -686,35 +682,7 @@ function parseReadmeEntries(
     return [];
   }
   const block = content.slice(range.start, range.end);
-  const entries: Array<{ display: string; html_url: string; avatar_url: string }> = [];
-  const markdown = /\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)/g;
-  for (const match of block.matchAll(markdown)) {
-    const [, alt, src, href] = match;
-    if (!href || !src || !alt) {
-      continue;
-    }
-    entries.push({ html_url: href, avatar_url: src, display: alt.replace(/\\([\\[\]])/g, "$1") });
-  }
-  const linked = /<a href="([^"]+)"><img src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>/g;
-  for (const match of block.matchAll(linked)) {
-    const [, href, src, alt] = match;
-    if (!href || !src || !alt) {
-      continue;
-    }
-    entries.push({ html_url: href, avatar_url: src, display: alt });
-  }
-  const standalone = /<img src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>/g;
-  for (const match of block.matchAll(standalone)) {
-    const [, src, alt] = match;
-    if (!src || !alt) {
-      continue;
-    }
-    if (entries.some((entry) => entry.display === alt && entry.avatar_url === src)) {
-      continue;
-    }
-    entries.push({ html_url: fallbackHref(alt), avatar_url: src, display: alt });
-  }
-  return entries;
+  return parseRenderedClawtributorEntries(block);
 }
 
 function parseHiddenReadmeLogins(content: string): string[] {
