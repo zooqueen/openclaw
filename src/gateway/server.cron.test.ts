@@ -157,9 +157,7 @@ async function setupCronTestRun(params: {
   return { prevSkipCron, dir };
 }
 
-type DirectCronState = {
-  cron: GatewayCronState["cron"];
-  storePath: string;
+type DirectCronState = GatewayCronState & {
   getRuntimeConfig: () => import("../config/types.openclaw.js").OpenClawConfig;
 };
 
@@ -194,9 +192,6 @@ function createCronEventCollector() {
   const flush = (payload: Record<string, unknown>) => {
     for (let index = waiters.length - 1; index >= 0; index -= 1) {
       const waiter = waiters[index];
-      if (!waiter) {
-        continue;
-      }
       if (!waiter.check(payload)) {
         continue;
       }

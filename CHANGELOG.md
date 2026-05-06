@@ -108,6 +108,8 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Onboard/channels: recover externalized channel plugins from stale `channels.<id>` config by falling back to `ensureChannelSetupPluginInstalled` via the trusted catalog when the plugin is missing on disk, so leftover `appId`/token entries no longer dead-end onboard with "<channel> plugin not available." (#78328) Thanks @sliverp.
+- Codex/app-server: forward the OpenClaw workspace bootstrap block through Codex `developerInstructions` instead of `config.instructions`, so persona/style guidance reaches the behavior-shaping app-server lane. Fixes #77363. Thanks @lonexreb.
 - Dependencies: override transitive `ip-address` to `10.2.0` so the runtime lockfile no longer includes the vulnerable `10.1.0` build flagged by Dependabot alert 109. Thanks @vincentkoc.
 - Feishu: hydrate missing native topic starter thread IDs before session routing so first turns and follow-ups stay in the same topic session. Fixes #78262. Thanks @joeyzenghuan.
 - LINE: reject `dmPolicy: "open"` configs without wildcard `allowFrom` so webhook DMs fail validation instead of being acknowledged and silently blocked before inbound processing. Fixes #78316.
@@ -143,6 +145,7 @@ Docs: https://docs.openclaw.ai
 - Agents/media: avoid direct generated-media completion fallback while the announce-agent run is still pending, so async video and music completions do not duplicate raw media messages. (#77754)
 - WebChat/Codex media: stage Codex app-server generated local images into managed media before Gateway display, so Codex-home image paths no longer hit `LocalMediaAccessError` while keeping Codex home out of the display allowlist. Thanks @frankekn.
 - Plugins/update: repair plugin-local `openclaw` peer links for all recorded npm plugins after any npm update mutates the shared managed npm tree, so targeted or batch updates cannot leave Codex, Discord, or Brave with pruned SDK imports. (#77787) Thanks @ProspectOre.
+- Codex harness: honor `models.providers.openai-codex.models[].contextTokens` for native `openai/*` Codex runtime runs and `/status` context reporting, so subscription-backed Codex agents use the configured OAuth context cap without inflating past the runtime model window. Fixes #77858. Thanks @lilesjtu.
 - TUI/sessions: bound the session picker to recent rows and use exact lookup-style refreshes for the active session, so dusty stores no longer make TUI hydrate weeks-old transcripts before becoming responsive. Thanks @vincentkoc.
 - Doctor/gateway: report recent supervisor restart handoffs in `openclaw doctor --deep`, using the installed service environment when available so service-managed clean exits are visible in guided diagnostics. Thanks @shakkernerd.
 - Gateway/status: show recent supervisor restart handoffs in `openclaw gateway status --deep`, including JSON details, so clean service-managed restarts are reported as restart handoffs instead of opaque stopped-service diagnostics. Thanks @shakkernerd.

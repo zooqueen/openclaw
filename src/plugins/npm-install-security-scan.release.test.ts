@@ -154,6 +154,7 @@ async function mapWithConcurrency<T, U>(
   fn: (item: T) => Promise<U>,
 ): Promise<U[]> {
   const results: U[] = [];
+  results.length = items.length;
   let nextIndex = 0;
   const workerCount = Math.min(concurrency, items.length);
   await Promise.all(
