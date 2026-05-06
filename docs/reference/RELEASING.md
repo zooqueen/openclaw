@@ -82,7 +82,11 @@ the maintainer-only release runbook.
    artifact with the matching dist-tag as soon as plugin npm publish succeeds.
    ClawHub publishing may still be running while OpenClaw npm publishes, but the
    release publish workflow does not finish until both plugin publish paths and
-   the OpenClaw npm publish path have completed successfully. After publish, run
+   the OpenClaw npm publish path have completed successfully. The ClawHub path
+   retries transient CLI dependency install failures, publishes preview-passing
+   plugins even when one preview cell flakes, and ends with registry verification
+   for every expected plugin version so partial publishes remain visible and
+   retryable. After publish, run
    the post-publish package
    acceptance against the published `openclaw@YYYY.M.D-beta.N` or
    `openclaw@beta` package. If a pushed or published prerelease needs a fix,
