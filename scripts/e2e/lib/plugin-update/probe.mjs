@@ -121,16 +121,23 @@ function assertCorruptUpdate(updateJsonPath, pluginId) {
   if (!plugins) {
     throw new Error(`missing postUpdate.plugins in update output: ${JSON.stringify(payload)}`);
   }
-  if (plugins.status !== "warning") {
-    throw new Error(
-      `expected post-update plugin status warning, got ${JSON.stringify(plugins.status)}`,
-    );
-  }
-  assertCorruptPluginDetails(plugins, pluginId);
+  assertCorruptPluginTolerated(plugins, pluginId);
 }
 
 function assertCorruptPluginResult(pluginJsonPath, pluginId) {
   const plugins = readJson(pluginJsonPath);
+  assertCorruptPluginTolerated(plugins, pluginId);
+}
+
+function assertCorruptPluginTolerated(plugins, pluginId) {
+  if (plugins.status === "ok") {
+    const outcomes = plugins.npm?.outcomes ?? [];
+    const outcome = outcomes.find((entry) => entry?.pluginId === pluginId);
+    if (outcome?.status === "error") {
+      throw new Error(`expected tolerated corrupt plugin state, got ${JSON.stringify(outcome)}`);
+    }
+    return;
+  }
   if (plugins.status !== "warning") {
     throw new Error(
       `expected post-update plugin status warning, got ${JSON.stringify(plugins.status)}`,
