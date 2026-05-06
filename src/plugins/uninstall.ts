@@ -589,7 +589,13 @@ export async function applyPluginUninstallDirectoryRemoval(
     return { directoryRemoved: false, warnings };
   }
 
-  if (removal.cleanup?.kind === "npm") {
+  if (
+    removal.cleanup?.kind === "npm" &&
+    (await fs
+      .access(path.join(removal.cleanup.npmRoot, "package.json"))
+      .then(() => true)
+      .catch(() => false))
+  ) {
     const uninstall = await runCommandWithTimeout(
       [
         "npm",
