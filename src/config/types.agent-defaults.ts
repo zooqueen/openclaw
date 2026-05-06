@@ -94,9 +94,10 @@ export type AgentContextLimitsConfig = {
 
 export type AgentRuntimeIsolationExperimentalConfig = {
   /**
-   * Run each agent attempt inside an isolated Node worker thread. Experimental
-   * preview only; currently isolates the in-repo runtime boundary, while CLI
-   * harnesses may still spawn their own child processes.
+   * Run /agent command attempts inside an isolated Node worker thread.
+   * Experimental preview only; gateway reply runs stay in-process until their
+   * streaming callbacks have a dedicated worker bridge, and CLI harnesses may
+   * still spawn their own child processes.
    */
   mode?: "off" | "worker";
   /**
@@ -273,8 +274,9 @@ export type AgentDefaultsConfig = {
      */
     localModelLean?: boolean;
     /**
-     * Run agent attempts through an isolated Node worker runtime. Experimental
-     * preview only.
+     * Run /agent command attempts through an isolated Node worker runtime.
+     * Gateway reply runs remain in-process until their streaming callbacks have
+     * a dedicated worker bridge. Experimental preview only.
      */
     runtimeIsolation?: AgentRuntimeIsolationExperimentalConfig;
   };

@@ -5,25 +5,7 @@ import type {
   AgentWorkerToParentMessage,
   ParentToAgentWorkerMessage,
 } from "./agent-runtime.types.js";
-
-function serializeWorkerError(error: unknown): AgentWorkerToParentMessage {
-  if (error instanceof Error) {
-    const code =
-      typeof (error as Error & { code?: unknown }).code === "string"
-        ? (error as Error & { code: string }).code
-        : undefined;
-    return {
-      type: "error",
-      error: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-        ...(code ? { code } : {}),
-      },
-    };
-  }
-  return { type: "error", error: { message: String(error) } };
-}
+import { serializeWorkerError } from "./errors.js";
 
 function post(message: AgentWorkerToParentMessage): void {
   // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads MessagePort has no targetOrigin.

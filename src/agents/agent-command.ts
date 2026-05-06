@@ -75,7 +75,7 @@ import { normalizeSpawnedRunMetadata } from "./spawned-context.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
 import {
   runAgentAttemptInWorker,
-  shouldRunAgentAttemptInWorker,
+  shouldRunAgentCommandAttemptInWorker,
 } from "./worker-runtime/agent-runtime.js";
 import { ensureAgentWorkspace } from "./workspace.js";
 
@@ -1045,7 +1045,7 @@ async function agentCommandInternal(
                 }
               },
             };
-            return shouldRunAgentAttemptInWorker({ config: cfg })
+            return shouldRunAgentCommandAttemptInWorker({ config: cfg })
               ? runAgentAttemptInWorker(attemptParams)
               : attemptExecutionRuntime.runAgentAttempt(attemptParams);
           },

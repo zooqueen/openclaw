@@ -16,6 +16,13 @@ export type SerializedWorkerError = {
   message: string;
   stack?: string;
   code?: string;
+  control?: {
+    type: "liveSessionModelSwitch";
+    provider: string;
+    model: string;
+    authProfileId?: string;
+    authProfileIdSource?: "auto" | "user";
+  };
 };
 
 export type AgentWorkerToParentMessage =

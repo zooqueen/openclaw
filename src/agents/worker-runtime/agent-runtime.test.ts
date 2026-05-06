@@ -9,11 +9,13 @@ import {
   type AgentEventPayload,
 } from "../../infra/agent-events.js";
 import type { RunAgentAttemptParams } from "../command/attempt-execution.js";
+import { LiveSessionModelSwitchError } from "../live-model-switch-error.js";
 import {
   AgentWorkerUnsupportedParamsError,
   runAgentAttemptInWorker,
-  shouldRunAgentAttemptInWorker,
+  shouldRunAgentCommandAttemptInWorker,
 } from "./agent-runtime.js";
+import { serializeWorkerError } from "./errors.js";
 
 function createFixtureWorkerUrl(): URL {
   const source = `
@@ -55,6 +57,17 @@ function createFixtureWorkerUrl(): URL {
       });
       post({
         type: "agentEvent",
+        origin: "runtime",
+        event: {
+          runId: "child-run",
+          seq: 1,
+          ts: 124,
+          stream: "lifecycle",
+          data: { phase: "end", runId: "child-run" }
+        }
+      });
+      post({
+        type: "agentEvent",
         origin: "callback",
         event: {
           stream: "lifecycle",
@@ -69,6 +82,23 @@ function createFixtureWorkerUrl(): URL {
 
       if (message.params.body === "throw") {
         post({ type: "error", error: { name: "FixtureError", message: "fixture failed", code: "FIXTURE" } });
+        return;
+      }
+      if (message.params.body === "switch") {
+        post({
+          type: "error",
+          error: {
+            name: "LiveSessionModelSwitchError",
+            message: "Live session model switch requested: anthropic/claude-sonnet-4.6",
+            control: {
+              type: "liveSessionModelSwitch",
+              provider: "anthropic",
+              model: "claude-sonnet-4.6",
+              authProfileId: "profile-1",
+              authProfileIdSource: "user"
+            }
+          }
+        });
         return;
       }
       if (message.params.body === "wait") {
@@ -138,7 +168,7 @@ describe("agent runtime worker bridge", () => {
 
   it("recognizes config and explicit environment overrides", () => {
     expect(
-      shouldRunAgentAttemptInWorker({
+      shouldRunAgentCommandAttemptInWorker({
         config: {
           agents: { defaults: { experimental: { runtimeIsolation: { mode: "worker" } } } },
         } as OpenClawConfig,
@@ -146,7 +176,7 @@ describe("agent runtime worker bridge", () => {
       }),
     ).toBe(true);
     expect(
-      shouldRunAgentAttemptInWorker({
+      shouldRunAgentCommandAttemptInWorker({
         config: {
           agents: { defaults: { experimental: { runtimeIsolation: { mode: "worker" } } } },
         } as OpenClawConfig,
@@ -154,13 +184,13 @@ describe("agent runtime worker bridge", () => {
       }),
     ).toBe(false);
     expect(
-      shouldRunAgentAttemptInWorker({
+      shouldRunAgentCommandAttemptInWorker({
         config: {} as OpenClawConfig,
         env: { OPENCLAW_AGENT_RUNTIME_WORKER: "yes" },
       }),
     ).toBe(true);
     expect(
-      shouldRunAgentAttemptInWorker({
+      shouldRunAgentCommandAttemptInWorker({
         config: {} as OpenClawConfig,
         env: { OPENCLAW_AGENT_WORKER_EXPERIMENT: "1" },
       }),
@@ -200,6 +230,13 @@ describe("agent runtime worker bridge", () => {
         seq: expect.any(Number),
         ts: expect.any(Number),
       }),
+      expect.objectContaining({
+        runId: "child-run",
+        stream: "lifecycle",
+        data: { phase: "end", runId: "child-run" },
+        seq: expect.any(Number),
+        ts: expect.any(Number),
+      }),
     ]);
     expect(onAgentEvent).toHaveBeenCalledWith({
       stream: "tool",
@@ -210,6 +247,10 @@ describe("agent runtime worker bridge", () => {
       stream: "lifecycle",
       sessionKey: "agent:main:worker-test",
       data: { phase: "fixture", runId: "run-worker-test" },
+    });
+    expect(onAgentEvent).not.toHaveBeenCalledWith({
+      stream: "lifecycle",
+      data: { phase: "end", runId: "child-run" },
     });
     expect(onUserMessagePersisted).toHaveBeenCalledWith({
       role: "user",
@@ -229,6 +270,50 @@ describe("agent runtime worker bridge", () => {
       message: "fixture failed",
       code: "FIXTURE",
     });
+  });
+
+  it("preserves live model switch errors across the worker boundary", async () => {
+    const error = new LiveSessionModelSwitchError({
+      provider: "anthropic",
+      model: "claude-sonnet-4.6",
+      authProfileId: "profile-1",
+      authProfileIdSource: "user",
+    });
+
+    expect(serializeWorkerError(error)).toMatchObject({
+      type: "error",
+      error: {
+        name: "LiveSessionModelSwitchError",
+        control: {
+          type: "liveSessionModelSwitch",
+          provider: "anthropic",
+          model: "claude-sonnet-4.6",
+          authProfileId: "profile-1",
+          authProfileIdSource: "user",
+        },
+      },
+    });
+
+    await expect(
+      runAgentAttemptInWorker(await makeWorkerParams("switch"), {
+        workerUrl: createFixtureWorkerUrl(),
+        execArgv: [],
+        usePermissions: false,
+      }),
+    ).rejects.toMatchObject({
+      name: "LiveSessionModelSwitchError",
+      provider: "anthropic",
+      model: "claude-sonnet-4.6",
+      authProfileId: "profile-1",
+      authProfileIdSource: "user",
+    });
+    await expect(
+      runAgentAttemptInWorker(await makeWorkerParams("switch"), {
+        workerUrl: createFixtureWorkerUrl(),
+        execArgv: [],
+        usePermissions: false,
+      }),
+    ).rejects.toBeInstanceOf(LiveSessionModelSwitchError);
   });
 
   it("forwards aborts into the worker", async () => {

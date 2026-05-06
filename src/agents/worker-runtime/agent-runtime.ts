@@ -7,6 +7,7 @@ import type {
   AgentWorkerToParentMessage,
   RunAgentAttemptResult,
 } from "./agent-runtime.types.js";
+import { deserializeWorkerError } from "./errors.js";
 import { buildAgentWorkerPermissionExecArgv } from "./permissions.js";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
@@ -47,7 +48,7 @@ function readBooleanOverride(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
-export function shouldRunAgentAttemptInWorker(
+export function shouldRunAgentCommandAttemptInWorker(
   params: RuntimeIsolationDecisionParams = {},
 ): boolean {
   const env = params.env ?? process.env;
@@ -95,18 +96,6 @@ function serializeInitialAbort(signal: AbortSignal | undefined): { reason?: unkn
   return { reason: serializeAbortReason(signal.reason) };
 }
 
-function deserializeWorkerError(message: AgentWorkerToParentMessage & { type: "error" }): Error {
-  const error = new Error(message.error.message);
-  error.name = message.error.name ?? "AgentWorkerError";
-  if (message.error.stack) {
-    error.stack = message.error.stack;
-  }
-  if (message.error.code) {
-    (error as Error & { code?: string }).code = message.error.code;
-  }
-  return error;
-}
-
 type ParentVisibleAgentEvent = Parameters<typeof emitAgentEvent>[0];
 type CallbackAgentEvent = Parameters<RunAgentAttemptParams["onAgentEvent"]>[0];
 
@@ -136,6 +125,13 @@ function toCallbackAgentEvent(event: ParentVisibleAgentEvent): CallbackAgentEven
     data: event.data,
     ...(event.sessionKey ? { sessionKey: event.sessionKey } : {}),
   };
+}
+
+function isActiveAttemptEvent(
+  params: RunAgentAttemptParams,
+  event: ParentVisibleAgentEvent,
+): boolean {
+  return event.runId === params.runId;
 }
 
 function stripWorkerCallbacks(params: RunAgentAttemptParams): AgentRuntimeWorkerRunParams {
@@ -213,7 +209,9 @@ export async function runAgentAttemptInWorker(
         if (message.origin === "runtime") {
           const event = toParentVisibleAgentEvent(params, message);
           emitAgentEvent(event);
-          params.onAgentEvent(toCallbackAgentEvent(event));
+          if (isActiveAttemptEvent(params, event)) {
+            params.onAgentEvent(toCallbackAgentEvent(event));
+          }
         } else {
           params.onAgentEvent(message.event);
         }
