@@ -120,6 +120,8 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Doctor/OpenAI Codex: revert the 2026.5.5 `doctor --fix` repair that rewrote valid `openai-codex/*` ChatGPT/Codex OAuth routes to `openai/*`, which could break OAuth-only GPT-5.5 setups or accidentally move users onto the OpenAI API-key route. If 2026.5.5 already changed your default model, run `openclaw models set openai-codex/gpt-5.5 && openclaw config validate` to switch the default agent back to the Codex OAuth PI route. Fixes #78407.
+- Sessions CLI: apply `--limit` before rich display hydration so large session stores avoid decorating rows that will never be shown. Thanks @vincentkoc.
+- Memory search: cap sync file discovery with `memorySearch.sync.maxFileScanEntries` and surface truncation warnings/status issues for oversized memory dirs or extra paths. Thanks @vincentkoc.
 - Discord/groups: instruct group-chat agents to stay silent when a message is addressed to someone else, replying only when invited or correcting key facts. (#78615)
 - Discord/groups: tell Discord-channel agents to wrap bare URLs as `<https://example.com>` so link previews do not expand into uninvited embeds. (#78614)
 - Telegram/Codex: generate DM topic labels with Codex-compatible simple-completion requests so auto-created private topics can be renamed instead of staying `New Chat`.
