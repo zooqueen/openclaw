@@ -41,6 +41,10 @@ loop, worker lifetime, and future filesystem permission scope. It will not make
 remote model calls faster, and CLI/ACP harnesses such as Codex may still spawn
 their own child processes inside the worker.
 
+Session-store writes still go through the normal `updateSessionStore(...)` path.
+That writer uses a `sessions.json.lock` file lock so worker-thread updates for
+different agents do not overwrite each other when they share the same store.
+
 ### Enable
 
 ```json5
