@@ -3,6 +3,9 @@ import path from "node:path";
 import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
 import { buildLegacyBundledRootPath } from "./bundled-load-path-aliases.js";
 
+const statCache = new Map<string, fs.Stats>();
+const MAX_STAT_CACHE_ENTRIES = 512;
+
 function decodeMountInfoPath(value: string): string {
   return value.replace(/\\([0-7]{3})/g, (_match, octal: string) =>
     String.fromCharCode(Number.parseInt(octal, 8)),
@@ -34,14 +37,31 @@ function readLinuxMountPoints(): Set<string> {
   }
 }
 
-function isFilesystemMountPoint(targetPath: string): boolean {
+function cachedStatSync(targetPath: string): fs.Stats | undefined {
+  const resolved = path.resolve(targetPath);
+  const cached = statCache.get(resolved);
+  if (cached) {
+    return cached;
+  }
   try {
-    const target = fs.statSync(targetPath);
-    const parent = fs.statSync(path.dirname(targetPath));
-    return target.dev !== parent.dev || target.ino === parent.ino;
+    const stat = fs.statSync(resolved);
+    if (statCache.size >= MAX_STAT_CACHE_ENTRIES) {
+      statCache.clear();
+    }
+    statCache.set(resolved, stat);
+    return stat;
   } catch {
+    return undefined;
+  }
+}
+
+function isFilesystemMountPoint(targetPath: string): boolean {
+  const target = cachedStatSync(targetPath);
+  const parent = cachedStatSync(path.dirname(targetPath));
+  if (!target || !parent) {
     return false;
   }
+  return target.dev !== parent.dev || target.ino === parent.ino;
 }
 
 function sourceOverlaysDisabled(env: NodeJS.ProcessEnv): boolean {
