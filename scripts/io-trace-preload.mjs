@@ -185,11 +185,11 @@ function flush() {
       .map((entry) => {
         const stacks = [...entry.stacks.entries()]
           .map(([stack, count]) => ({ count, stack }))
-          .sort((left, right) => right.count - left.count)
+          .toSorted((left, right) => right.count - left.count)
           .slice(0, 5);
         return { op: entry.op, path: entry.path, count: entry.count, bytes: entry.bytes, stacks };
       })
-      .sort((left, right) => {
+      .toSorted((left, right) => {
         const countDiff = right.count - left.count;
         return countDiff === 0 ? left.path.localeCompare(right.path) : countDiff;
       });
