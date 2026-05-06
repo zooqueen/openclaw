@@ -1377,6 +1377,7 @@ export async function installPluginFromNpmSpec(
       "npm",
       ...createSafeNpmInstallArgs({
         omitDev: true,
+        omitPeer: true,
         loglevel: "error",
         noAudit: true,
         noFund: true,
