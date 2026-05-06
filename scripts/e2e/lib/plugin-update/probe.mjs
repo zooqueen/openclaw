@@ -131,11 +131,7 @@ function assertCorruptPluginResult(pluginJsonPath, pluginId) {
 
 function assertCorruptPluginTolerated(plugins, pluginId) {
   if (plugins.status === "ok") {
-    const outcomes = plugins.npm?.outcomes ?? [];
-    const outcome = outcomes.find((entry) => entry?.pluginId === pluginId);
-    if (outcome?.status === "error") {
-      throw new Error(`expected tolerated corrupt plugin state, got ${JSON.stringify(outcome)}`);
-    }
+    assertCorruptPluginCleanOrRepaired(plugins, pluginId);
     return;
   }
   if (plugins.status !== "warning") {
@@ -146,23 +142,40 @@ function assertCorruptPluginTolerated(plugins, pluginId) {
   assertCorruptPluginDetails(plugins, pluginId);
 }
 
+function assertCorruptPluginCleanOrRepaired(plugins, pluginId) {
+  const evidence = collectPluginEvidence(plugins, pluginId);
+  if (evidence.outcome) {
+    throw new Error(
+      `expected clean or repaired corrupt plugin state, got ${JSON.stringify(evidence)}`,
+    );
+  }
+  if (evidence.warning || evidence.integrityDrift || evidence.syncMessages.length > 0) {
+    throw new Error(
+      `expected warning post-update status for corrupt plugin evidence, got ok: ${JSON.stringify(
+        evidence,
+      )}`,
+    );
+  }
+}
+
 function assertCorruptPluginDetails(plugins, pluginId) {
-  const outcomes = plugins.npm?.outcomes ?? [];
-  const outcome = outcomes.find((entry) => entry?.pluginId === pluginId);
+  const evidence = collectPluginEvidence(plugins, pluginId);
+  const outcome = evidence.outcome;
   if (!outcome || outcome.status !== "error") {
     throw new Error(
       `expected error outcome for ${pluginId}, got ${JSON.stringify({
-        outcomes,
+        outcomes: plugins.npm?.outcomes ?? [],
         warnings: plugins.warnings ?? [],
         sync: plugins.sync,
         integrityDrifts: plugins.integrityDrifts ?? [],
       })}`,
     );
   }
-  const warnings = plugins.warnings ?? [];
-  const warning = warnings.find((entry) => entry?.pluginId === pluginId);
+  const warning = evidence.warning;
   if (!warning) {
-    throw new Error(`expected warning for ${pluginId}, got ${JSON.stringify(warnings)}`);
+    throw new Error(
+      `expected warning for ${pluginId}, got ${JSON.stringify(plugins.warnings ?? [])}`,
+    );
   }
   const text = JSON.stringify({ outcome, warning });
   for (const expected of [
@@ -174,6 +187,21 @@ function assertCorruptPluginDetails(plugins, pluginId) {
       throw new Error(`expected update output to include ${expected}: ${text}`);
     }
   }
+}
+
+function collectPluginEvidence(plugins, pluginId) {
+  const outcomes = plugins.npm?.outcomes ?? [];
+  const warnings = plugins.warnings ?? [];
+  const integrityDrifts = plugins.integrityDrifts ?? [];
+  const syncMessages = [...(plugins.sync?.warnings ?? []), ...(plugins.sync?.errors ?? [])].filter(
+    (message) => String(message).includes(pluginId),
+  );
+  return {
+    outcome: outcomes.find((entry) => entry?.pluginId === pluginId),
+    warning: warnings.find((entry) => entry?.pluginId === pluginId),
+    integrityDrift: integrityDrifts.find((entry) => entry?.pluginId === pluginId),
+    syncMessages,
+  };
 }
 
 function assertLegacyPostUpdatePluginFailure(updateJsonPath) {
