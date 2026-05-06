@@ -3,6 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import {
+  onAgentEvent as onParentAgentEvent,
+  resetAgentEventsForTest,
+  type AgentEventPayload,
+} from "../../infra/agent-events.js";
 import type { RunAgentAttemptParams } from "../command/attempt-execution.js";
 import {
   AgentWorkerUnsupportedParamsError,
@@ -22,7 +27,9 @@ function createFixtureWorkerUrl(): URL {
 
     parentPort.on("message", (message) => {
       if (message.type === "abort") {
-        post({ type: "error", error: { name: "AbortError", message: "aborted:" + String(message.reason ?? "") } });
+        if (runStarted) {
+          post({ type: "error", error: { name: "AbortError", message: "aborted:" + String(message.reason ?? "") } });
+        }
         return;
       }
 
@@ -31,8 +38,24 @@ function createFixtureWorkerUrl(): URL {
       }
 
       runStarted = true;
+      if (message.initialAbort) {
+        post({ type: "error", error: { name: "AbortError", message: "initial-aborted:" + String(message.initialAbort.reason ?? "") } });
+        return;
+      }
       post({
         type: "agentEvent",
+        origin: "runtime",
+        event: {
+          runId: message.params.runId,
+          seq: 7,
+          ts: 123,
+          stream: "tool",
+          data: { phase: "runtime", runId: message.params.runId }
+        }
+      });
+      post({
+        type: "agentEvent",
+        origin: "callback",
         event: {
           stream: "lifecycle",
           sessionKey: message.params.sessionKey,
@@ -109,6 +132,7 @@ const tmpDirs: string[] = [];
 
 describe("agent runtime worker bridge", () => {
   afterEach(async () => {
+    resetAgentEventsForTest();
     await Promise.all(tmpDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   });
 
@@ -146,6 +170,10 @@ describe("agent runtime worker bridge", () => {
   it("runs an agent attempt through a real worker and proxies supported callbacks", async () => {
     const onAgentEvent = vi.fn();
     const onUserMessagePersisted = vi.fn();
+    const parentEvents: AgentEventPayload[] = [];
+    const stopParentEvents = onParentAgentEvent((event) => {
+      parentEvents.push(event);
+    });
 
     const result = await runAgentAttemptInWorker(
       {
@@ -155,12 +183,28 @@ describe("agent runtime worker bridge", () => {
       },
       { workerUrl: createFixtureWorkerUrl(), execArgv: [], usePermissions: false },
     );
+    stopParentEvents();
 
     expect(result.payloads?.[0]?.text).toBe("worker:hello");
     expect(result.meta.agentMeta).toMatchObject({
       sessionId: "session-worker-test",
       provider: "openai",
       model: "gpt-5.5",
+    });
+    expect(parentEvents).toEqual([
+      expect.objectContaining({
+        runId: "run-worker-test",
+        stream: "tool",
+        sessionKey: "agent:main:worker-test",
+        data: { phase: "runtime", runId: "run-worker-test" },
+        seq: expect.any(Number),
+        ts: expect.any(Number),
+      }),
+    ]);
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "tool",
+      sessionKey: "agent:main:worker-test",
+      data: { phase: "runtime", runId: "run-worker-test" },
     });
     expect(onAgentEvent).toHaveBeenCalledWith({
       stream: "lifecycle",
@@ -202,6 +246,28 @@ describe("agent runtime worker bridge", () => {
     await expect(promise).rejects.toMatchObject({
       name: "AbortError",
       message: "aborted:stop",
+    });
+  });
+
+  it("preserves an already-aborted signal when starting the worker run", async () => {
+    const controller = new AbortController();
+    controller.abort("already stopped");
+
+    await expect(
+      runAgentAttemptInWorker(
+        {
+          ...(await makeWorkerParams("hello")),
+          opts: {
+            message: "hello",
+            senderIsOwner: false,
+            abortSignal: controller.signal,
+          },
+        },
+        { workerUrl: createFixtureWorkerUrl(), execArgv: [], usePermissions: false },
+      ),
+    ).rejects.toMatchObject({
+      name: "AbortError",
+      message: "initial-aborted:already stopped",
     });
   });
 

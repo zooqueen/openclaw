@@ -1,4 +1,5 @@
 import { parentPort } from "node:worker_threads";
+import { onAgentEvent } from "../../infra/agent-events.js";
 import { runAgentAttempt } from "../command/attempt-execution.js";
 import type {
   AgentWorkerToParentMessage,
@@ -42,6 +43,12 @@ parentPort?.on("message", (message: ParentToAgentWorkerMessage) => {
   }
 
   abortController = new AbortController();
+  if (message.initialAbort) {
+    abortController.abort(message.initialAbort.reason);
+  }
+  const stopRuntimeEventBridge = onAgentEvent((event) => {
+    post({ type: "agentEvent", origin: "runtime", event });
+  });
   void runAgentAttempt({
     ...message.params,
     opts: {
@@ -49,7 +56,7 @@ parentPort?.on("message", (message: ParentToAgentWorkerMessage) => {
       abortSignal: abortController.signal,
     },
     onAgentEvent: (event) => {
-      post({ type: "agentEvent", event });
+      post({ type: "agentEvent", origin: "callback", event });
     },
     onUserMessagePersisted: (persisted) => {
       post({ type: "userMessagePersisted", message: persisted });
@@ -60,5 +67,9 @@ parentPort?.on("message", (message: ParentToAgentWorkerMessage) => {
     })
     .catch((error: unknown) => {
       post(serializeWorkerError(error));
+    })
+    .finally(() => {
+      stopRuntimeEventBridge();
+      abortController = undefined;
     });
 });

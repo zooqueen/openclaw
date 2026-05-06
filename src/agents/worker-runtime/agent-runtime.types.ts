@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentEventPayload } from "../../infra/agent-events.js";
 import type { runAgentAttempt, RunAgentAttemptParams } from "../command/attempt-execution.js";
 
 export type AgentRuntimeWorkerRunParams = Omit<
@@ -20,12 +21,18 @@ export type SerializedWorkerError = {
 export type AgentWorkerToParentMessage =
   | {
       type: "agentEvent";
+      origin: "callback";
       event: { stream: string; data?: Record<string, unknown>; sessionKey?: string };
+    }
+  | {
+      type: "agentEvent";
+      origin: "runtime";
+      event: AgentEventPayload;
     }
   | { type: "userMessagePersisted"; message: Extract<AgentMessage, { role: "user" }> }
   | { type: "result"; result: RunAgentAttemptResult }
   | { type: "error"; error: SerializedWorkerError };
 
 export type ParentToAgentWorkerMessage =
-  | { type: "run"; params: AgentRuntimeWorkerRunParams }
+  | { type: "run"; params: AgentRuntimeWorkerRunParams; initialAbort?: { reason?: unknown } }
   | { type: "abort"; reason?: unknown };

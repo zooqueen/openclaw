@@ -69,8 +69,9 @@ experiment is in flight.
 ### Worker permissions
 
 `runtimeIsolation.permissions: true` also starts the worker with Node permission
-flags scoped to the agent workspace, agent directory, session transcript, and
-runtime dependencies.
+flags scoped to the agent workspace, agent directory, session transcript,
+session store and lock files, OpenClaw runtime bundle/development source,
+bundled plugin source, and runtime dependencies.
 
 Keep this off unless you are explicitly testing filesystem hardening. Node
 permission behavior is stricter and more runtime-sensitive than worker

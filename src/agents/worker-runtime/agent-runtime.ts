@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { emitAgentEvent } from "../../infra/agent-events.js";
 import type { RunAgentAttemptParams } from "../command/attempt-execution.js";
 import type {
   AgentRuntimeWorkerRunParams,
@@ -87,6 +88,13 @@ function serializeAbortReason(reason: unknown): unknown {
   return reason;
 }
 
+function serializeInitialAbort(signal: AbortSignal | undefined): { reason?: unknown } | undefined {
+  if (!signal?.aborted) {
+    return undefined;
+  }
+  return { reason: serializeAbortReason(signal.reason) };
+}
+
 function deserializeWorkerError(message: AgentWorkerToParentMessage & { type: "error" }): Error {
   const error = new Error(message.error.message);
   error.name = message.error.name ?? "AgentWorkerError";
@@ -97,6 +105,37 @@ function deserializeWorkerError(message: AgentWorkerToParentMessage & { type: "e
     (error as Error & { code?: string }).code = message.error.code;
   }
   return error;
+}
+
+type ParentVisibleAgentEvent = Parameters<typeof emitAgentEvent>[0];
+type CallbackAgentEvent = Parameters<RunAgentAttemptParams["onAgentEvent"]>[0];
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function toParentVisibleAgentEvent(
+  params: RunAgentAttemptParams,
+  event: AgentWorkerToParentMessage & { type: "agentEvent"; origin: "runtime" },
+): ParentVisibleAgentEvent {
+  const runId = readNonEmptyString(event.event.runId) ?? params.runId;
+  const sessionKey =
+    readNonEmptyString(event.event.sessionKey) ??
+    (runId === params.runId ? params.sessionKey : undefined);
+  return {
+    runId,
+    stream: event.event.stream,
+    data: event.event.data,
+    ...(sessionKey ? { sessionKey } : {}),
+  };
+}
+
+function toCallbackAgentEvent(event: ParentVisibleAgentEvent): CallbackAgentEvent {
+  return {
+    stream: event.stream,
+    data: event.data,
+    ...(event.sessionKey ? { sessionKey: event.sessionKey } : {}),
+  };
 }
 
 function stripWorkerCallbacks(params: RunAgentAttemptParams): AgentRuntimeWorkerRunParams {
@@ -132,6 +171,7 @@ export async function runAgentAttemptInWorker(
               workspaceDir: params.workspaceDir,
               agentDir: params.agentDir,
               sessionFile: params.sessionFile,
+              storePath: params.storePath,
             }),
           ]
         : (options.execArgv ?? process.execArgv),
@@ -170,7 +210,13 @@ export async function runAgentAttemptInWorker(
     });
     worker.on("message", (message: AgentWorkerToParentMessage) => {
       if (message.type === "agentEvent") {
-        params.onAgentEvent(message.event);
+        if (message.origin === "runtime") {
+          const event = toParentVisibleAgentEvent(params, message);
+          emitAgentEvent(event);
+          params.onAgentEvent(toCallbackAgentEvent(event));
+        } else {
+          params.onAgentEvent(message.event);
+        }
         return;
       }
       if (message.type === "userMessagePersisted") {
@@ -193,12 +239,14 @@ export async function runAgentAttemptInWorker(
     });
 
     params.opts.abortSignal?.addEventListener("abort", abort, { once: true });
-    if (params.opts.abortSignal?.aborted) {
-      abort();
-    }
     try {
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads Worker has no targetOrigin.
-      worker.postMessage({ type: "run", params: workerParams });
+      // oxlint-disable unicorn/require-post-message-target-origin -- worker_threads Worker has no targetOrigin.
+      worker.postMessage({
+        type: "run",
+        params: workerParams,
+        initialAbort: serializeInitialAbort(params.opts.abortSignal),
+      });
+      // oxlint-enable unicorn/require-post-message-target-origin
     } catch (error) {
       settled = true;
       cleanup();
