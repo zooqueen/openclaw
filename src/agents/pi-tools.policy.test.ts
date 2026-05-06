@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
   filterToolsByPolicy,
@@ -14,6 +14,15 @@ import {
 } from "./pi-tools.policy.js";
 import { createStubTool } from "./test-helpers/pi-tool-stubs.js";
 import { providerAliasCases } from "./test-helpers/provider-alias-cases.js";
+
+vi.mock("../channels/plugins/session-conversation.js", () => ({
+  resolveSessionConversation: ({ rawId }: { rawId: string }) => ({
+    id: rawId,
+    threadId: undefined,
+    baseConversationId: rawId,
+    parentConversationCandidates: [],
+  }),
+}));
 
 describe("pi-tools.policy", () => {
   it("treats * in allow as allow-all", () => {
@@ -37,8 +46,8 @@ describe("pi-tools.policy", () => {
     expect(isToolAllowedByPolicyName("apply_patch", { allow: ["write"] })).toBe(true);
   });
 
-  it("blocks apply_patch when write is denylisted", () => {
-    expect(isToolAllowedByPolicyName("apply_patch", { deny: ["write"] })).toBe(false);
+  it("keeps apply_patch when write is denylisted", () => {
+    expect(isToolAllowedByPolicyName("apply_patch", { deny: ["write"] })).toBe(true);
   });
 });
 
@@ -504,7 +513,7 @@ describe("resolveEffectiveToolPolicy", () => {
     ).toBeUndefined();
   });
 
-  it("implicitly re-exposes exec and process when tools.exec is configured", () => {
+  it("does not implicitly re-expose exec when tools.exec is configured (#47487)", () => {
     const cfg = {
       tools: {
         profile: "messaging",
@@ -512,10 +521,10 @@ describe("resolveEffectiveToolPolicy", () => {
       },
     } as OpenClawConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
-    expect(result.profileAlsoAllow).toEqual(["exec", "process"]);
+    expect(result.profileAlsoAllow).toBeUndefined();
   });
 
-  it("implicitly re-exposes read, write, and edit when tools.fs is configured", () => {
+  it("does not implicitly re-expose fs tools when tools.fs is configured (#47487)", () => {
     const cfg = {
       tools: {
         profile: "messaging",
@@ -523,10 +532,10 @@ describe("resolveEffectiveToolPolicy", () => {
       },
     } as OpenClawConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
-    expect(result.profileAlsoAllow).toEqual(["read", "write", "edit"]);
+    expect(result.profileAlsoAllow).toBeUndefined();
   });
 
-  it("merges explicit alsoAllow with implicit tool-section exposure", () => {
+  it("explicit alsoAllow works without implicit widening (#47487)", () => {
     const cfg = {
       tools: {
         profile: "messaging",
@@ -535,10 +544,10 @@ describe("resolveEffectiveToolPolicy", () => {
       },
     } as OpenClawConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
-    expect(result.profileAlsoAllow).toEqual(["web_search", "exec", "process"]);
+    expect(result.profileAlsoAllow).toEqual(["web_search"]);
   });
 
-  it("uses agent tool sections when resolving implicit exposure", () => {
+  it("does not implicitly re-expose fs tools from agent tool sections (#47487)", () => {
     const cfg = {
       tools: {
         profile: "messaging",
@@ -555,6 +564,41 @@ describe("resolveEffectiveToolPolicy", () => {
       },
     } as OpenClawConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg, agentId: "coder" });
-    expect(result.profileAlsoAllow).toEqual(["read", "write", "edit"]);
+    expect(result.profileAlsoAllow).toBeUndefined();
+  });
+
+  it("global tools.exec does not widen agent messaging profile (#47487)", () => {
+    const cfg = {
+      tools: {
+        exec: { security: "allowlist" },
+      },
+      agents: {
+        list: [
+          {
+            id: "messenger",
+            tools: {
+              profile: "messaging",
+              alsoAllow: ["image"],
+            },
+          },
+        ],
+      },
+    } as OpenClawConfig;
+    const result = resolveEffectiveToolPolicy({ config: cfg, agentId: "messenger" });
+    expect(result.profileAlsoAllow).toEqual(["image"]);
+    expect(result.profileAlsoAllow).not.toContain("exec");
+    expect(result.profileAlsoAllow).not.toContain("process");
+  });
+
+  it("explicit alsoAllow with exec still grants exec under messaging profile", () => {
+    const cfg = {
+      tools: {
+        profile: "messaging",
+        alsoAllow: ["exec", "process"],
+        exec: { host: "sandbox" },
+      },
+    } as OpenClawConfig;
+    const result = resolveEffectiveToolPolicy({ config: cfg });
+    expect(result.profileAlsoAllow).toEqual(["exec", "process"]);
   });
 });

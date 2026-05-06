@@ -981,7 +981,7 @@ describe("sanitizeSessionHistory", () => {
 
     expect(result).toEqual([
       {
-        ...(messages[0] as Record<string, unknown>),
+        ...(messages[0] as unknown as Record<string, unknown>),
         usage: makeZeroUsageSnapshot(),
       },
     ]);
@@ -1141,17 +1141,9 @@ describe("sanitizeSessionHistory", () => {
       "```",
     ].join("\n");
     const messages = castAgentMessages([
-      {
-        role: "user",
-        content: [{ type: "text", text: "First" }],
-        timestamp: nextTimestamp(),
-      },
+      makeUserMessage("First"),
       makeAssistantMessage([{ type: "text", text: metadataOnlyText }]),
-      {
-        role: "user",
-        content: [{ type: "text", text: "Second" }],
-        timestamp: nextTimestamp(),
-      },
+      makeUserMessage("Second"),
     ]);
 
     const sanitized = await sanitizeSessionHistory({
