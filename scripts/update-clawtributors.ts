@@ -761,11 +761,6 @@ function loginFromUrl(url: string): string | null {
   return login;
 }
 
-function fallbackHref(value: string): string {
-  const encoded = encodeURIComponent(value.trim());
-  return encoded ? `https://github.com/search?q=${encoded}` : "https://github.com";
-}
-
 function pickDisplay(
   baseName: string | null | undefined,
   login: string,

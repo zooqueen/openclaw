@@ -94,4 +94,23 @@ describe("scripts/update-clawtributors-render", () => {
 
     expect(parseRenderedClawtributorEntries(block)).toHaveLength(entries.length);
   });
+
+  it("does not re-parse markdown-looking alt text during html validation", () => {
+    const entries = [
+      {
+        display: "[![x](u)](h)",
+        html_url: "https://github.com/example-markdown-alt",
+        avatar_url: "https://avatars.githubusercontent.com/u/99?v=4&s=48",
+      },
+    ];
+
+    expect(() =>
+      renderClawtributorsBlock(entries, {
+        perLine: 10,
+        avatarSize: 48,
+        startMarker: "<!-- clawtributors:start -->",
+        endMarker: "<!-- clawtributors:end -->",
+      }),
+    ).not.toThrow();
+  });
 });

@@ -15,7 +15,7 @@ export function renderClawtributorsBlock(
 ): string {
   const lines = renderClawtributorsLines(entries, options.perLine, options.avatarSize);
   const block = `${options.startMarker}\n${lines.join("\n")}\n${options.endMarker}`;
-  const renderedCount = parseRenderedClawtributorEntries(block).length;
+  const renderedCount = parseRenderedClawtributorEntries(block, { markdown: false }).length;
   if (renderedCount !== entries.length) {
     throw new Error(
       `Rendered clawtributors count mismatch: expected ${entries.length}, got ${renderedCount}`,
@@ -49,15 +49,22 @@ export function renderClawtributorEntry(
 
 export function parseRenderedClawtributorEntries(
   content: string,
+  options: { markdown?: boolean } = {},
 ): Array<{ display: string; html_url: string; avatar_url: string }> {
   const entries: Array<{ display: string; html_url: string; avatar_url: string }> = [];
-  const markdown = /\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)/g;
-  for (const match of content.matchAll(markdown)) {
-    const [, alt, src, href] = match;
-    if (!href || !src || !alt) {
-      continue;
+  if (options.markdown !== false) {
+    const markdown = /\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)/g;
+    for (const match of content.matchAll(markdown)) {
+      const [, alt, src, href] = match;
+      if (!href || !src || !alt) {
+        continue;
+      }
+      entries.push({
+        html_url: href,
+        avatar_url: src,
+        display: alt.replace(/\\([\\[\]])/g, "$1"),
+      });
     }
-    entries.push({ html_url: href, avatar_url: src, display: alt.replace(/\\([\\[\]])/g, "$1") });
   }
   const linked = /<a href="([^"]+)"><img src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>/g;
   for (const match of content.matchAll(linked)) {
