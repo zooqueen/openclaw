@@ -54,6 +54,7 @@ function expectNpmInstallIntoRoot(params: { calls: unknown[][]; npmRoot: string 
     "npm",
     "install",
     "--omit=dev",
+    "--omit=peer",
     "--loglevel=error",
     "--ignore-scripts",
     "--no-audit",
@@ -145,6 +146,7 @@ type MockNpmPackage = {
   versions?: string[];
   installedVersion?: string;
   installedIntegrity?: string;
+  materializesRootOpenClaw?: boolean;
   skipLockfileEntry?: boolean;
 };
 
@@ -166,6 +168,11 @@ function writeNpmRootPackageLock(params: {
       version: pkg.installedVersion ?? pkg.version,
       integrity: pkg.installedIntegrity ?? pkg.integrity ?? "sha512-plugin-test",
     };
+    if (pkg.materializesRootOpenClaw) {
+      lockPackages["node_modules/openclaw"] = {
+        version: "2026.5.3",
+      };
+    }
   }
   fs.writeFileSync(
     path.join(params.npmRoot, "package-lock.json"),
@@ -190,6 +197,7 @@ function mockNpmViewAndInstall(params: {
   versions?: string[];
   installedVersion?: string;
   installedIntegrity?: string;
+  materializesRootOpenClaw?: boolean;
   skipLockfileEntry?: boolean;
 }) {
   mockNpmViewAndInstallMany([params]);
@@ -255,6 +263,15 @@ function mockNpmViewAndInstallMany(packages: MockNpmPackage[]) {
             ...pkg,
             version: pkg.installedVersion ?? pkg.version,
           });
+          if (pkg.materializesRootOpenClaw) {
+            const openclawRoot = path.join(npmRoot, "node_modules", "openclaw");
+            fs.mkdirSync(openclawRoot, { recursive: true });
+            fs.writeFileSync(
+              path.join(openclawRoot, "package.json"),
+              JSON.stringify({ name: "openclaw", version: "2026.5.3" }),
+              "utf-8",
+            );
+          }
           installedPackages.push(pkg);
         }
         writeNpmRootPackageLock({
@@ -550,6 +567,39 @@ describe("installPluginFromNpmSpec", () => {
       if (!second.ok) {
         expect(second.error).not.toContain("peer-plugin/node_modules/openclaw");
       }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "repairs root openclaw materialized by npm peer handling and links the host peer",
+    async () => {
+      const stateDir = suiteTempRootTracker.makeTempDir();
+      const npmRoot = path.join(stateDir, "npm");
+
+      mockNpmViewAndInstall({
+        spec: "peer-plugin@1.0.0",
+        packageName: "peer-plugin",
+        version: "1.0.0",
+        pluginId: "peer-plugin",
+        npmRoot,
+        peerDependencies: { openclaw: "^2026.0.0" },
+        materializesRootOpenClaw: true,
+      });
+
+      const result = await installPluginFromNpmSpec({
+        spec: "peer-plugin@1.0.0",
+        npmDir: npmRoot,
+        trustedManagedNpmRoot: true,
+        logger: { info: () => {}, warn: () => {} },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(fs.existsSync(path.join(npmRoot, "node_modules", "openclaw"))).toBe(false);
+      expect(
+        fs
+          .lstatSync(path.join(npmRoot, "node_modules", "peer-plugin", "node_modules", "openclaw"))
+          .isSymbolicLink(),
+      ).toBe(true);
     },
   );
 

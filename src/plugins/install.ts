@@ -744,6 +744,14 @@ type ValidatedPackagePlugin = {
   peerDependencies: Record<string, string>;
 };
 
+function resolveOpenClawHostLinkDependencies(manifest: PackageManifest): Record<string, string> {
+  const spec =
+    manifest.peerDependencies?.openclaw ??
+    manifest.dependencies?.openclaw ??
+    manifest.optionalDependencies?.openclaw;
+  return spec ? { openclaw: spec } : {};
+}
+
 async function validatePackagePluginInstallSource(params: {
   runtime: Awaited<ReturnType<typeof loadPluginInstallRuntime>>;
   packageDir: string;
@@ -901,7 +909,7 @@ async function validatePackagePluginInstallSource(params: {
       version: typeof manifest.version === "string" ? manifest.version : undefined,
       extensions,
       hasRuntimeDependencies: hasPackageRuntimeDependencies(manifest),
-      peerDependencies: manifest.peerDependencies ?? {},
+      peerDependencies: resolveOpenClawHostLinkDependencies(manifest),
     },
   };
 }
@@ -913,7 +921,15 @@ async function scanAndLinkInstalledPackage(params: {
   pluginId: string;
   peerDependencies: Record<string, string>;
   logger: PluginInstallLogger;
+  linkOpenClawBeforeScan?: boolean;
 }): Promise<Extract<InstallPluginResult, { ok: false }> | null> {
+  if (params.linkOpenClawBeforeScan) {
+    await linkOpenClawPeerDependencies({
+      installedDir: params.installedDir,
+      peerDependencies: params.peerDependencies,
+      logger: params.logger,
+    });
+  }
   const scanResult = await runInstallSourceScan({
     subject: `Plugin "${params.pluginId}"`,
     scan: async () =>
@@ -929,11 +945,13 @@ async function scanAndLinkInstalledPackage(params: {
   if (scanResult) {
     return scanResult;
   }
-  await linkOpenClawPeerDependencies({
-    installedDir: params.installedDir,
-    peerDependencies: params.peerDependencies,
-    logger: params.logger,
-  });
+  if (!params.linkOpenClawBeforeScan) {
+    await linkOpenClawPeerDependencies({
+      installedDir: params.installedDir,
+      peerDependencies: params.peerDependencies,
+      logger: params.logger,
+    });
+  }
   return null;
 }
 
@@ -966,6 +984,7 @@ export async function installPluginFromInstalledPackageDir(
     pluginId: validated.plugin.pluginId,
     peerDependencies: validated.plugin.peerDependencies,
     logger,
+    linkOpenClawBeforeScan: params.dependencyScanRootDir !== undefined,
   });
   if (postInstallError) {
     return postInstallError;
@@ -1216,6 +1235,40 @@ export async function installPluginFromFile(params: {
   return buildFileInstallResult(pluginId, preparedTarget.targetPath);
 }
 
+async function repairManagedNpmRootOpenClawPeerForInstall(params: {
+  logger: PluginInstallLogger;
+  npmRoot: string;
+  phase: "before npm install" | "after npm install";
+  timeoutMs: number;
+  trustedManagedNpmRoot?: boolean;
+}): Promise<void> {
+  const repairedOpenClawPeer = await repairManagedNpmRootOpenClawPeer({
+    defaultNpmRoot: resolveDefaultPluginNpmDir(),
+    env: createSafeNpmInstallEnv(process.env, { packageLock: true, quiet: true }),
+    hostPackageRoot: resolveOpenClawPackageRootSync({
+      argv1: process.argv[1],
+      moduleUrl: import.meta.url,
+      cwd: process.cwd(),
+    }),
+    npmRoot: params.npmRoot,
+    runCommand: runCommandWithTimeout,
+    timeoutMs: params.timeoutMs,
+    trustedByInstallRecord: params.trustedManagedNpmRoot,
+  });
+  for (const warning of repairedOpenClawPeer.warnings) {
+    params.logger.warn?.(warning);
+  }
+  if (repairedOpenClawPeer.status === "repaired") {
+    params.logger.info?.(
+      `Repaired stale openclaw peer dependency in ${params.npmRoot} ${params.phase}`,
+    );
+  } else if (repairedOpenClawPeer.status === "skipped") {
+    params.logger.warn?.(
+      `Skipped stale openclaw peer repair in ${params.npmRoot} ${params.phase}: ${repairedOpenClawPeer.reason ?? "unproven managed npm root"}`,
+    );
+  }
+}
+
 export async function installPluginFromNpmSpec(
   params: InstallSafetyOverrides & {
     spec: string;
@@ -1340,29 +1393,13 @@ export async function installPluginFromNpmSpec(
 
   logger.info?.(`Installing ${spec} into ${npmRoot}…`);
   if (parsedSpec.name !== "openclaw") {
-    const repairedOpenClawPeer = await repairManagedNpmRootOpenClawPeer({
-      defaultNpmRoot: resolveDefaultPluginNpmDir(),
-      env: createSafeNpmInstallEnv(process.env, { packageLock: true, quiet: true }),
-      hostPackageRoot: resolveOpenClawPackageRootSync({
-        argv1: process.argv[1],
-        moduleUrl: import.meta.url,
-        cwd: process.cwd(),
-      }),
+    await repairManagedNpmRootOpenClawPeerForInstall({
+      logger,
       npmRoot,
-      runCommand: runCommandWithTimeout,
+      phase: "before npm install",
       timeoutMs,
-      trustedByInstallRecord: params.trustedManagedNpmRoot,
+      trustedManagedNpmRoot: params.trustedManagedNpmRoot,
     });
-    for (const warning of repairedOpenClawPeer.warnings) {
-      logger.warn?.(warning);
-    }
-    if (repairedOpenClawPeer.status === "repaired") {
-      logger.info?.(`Repaired stale openclaw peer dependency in ${npmRoot}`);
-    } else if (repairedOpenClawPeer.status === "skipped") {
-      logger.warn?.(
-        `Skipped stale openclaw peer repair in ${npmRoot}: ${repairedOpenClawPeer.reason ?? "unproven managed npm root"}`,
-      );
-    }
   }
   await upsertManagedNpmRootDependency({
     npmRoot,
@@ -1377,6 +1414,7 @@ export async function installPluginFromNpmSpec(
       "npm",
       ...createSafeNpmInstallArgs({
         omitDev: true,
+        omitPeer: true,
         loglevel: "error",
         noAudit: true,
         noFund: true,
@@ -1399,6 +1437,16 @@ export async function installPluginFromNpmSpec(
       ok: false,
       error: `npm install failed: ${install.stderr.trim() || install.stdout.trim()}`,
     };
+  }
+
+  if (parsedSpec.name !== "openclaw") {
+    await repairManagedNpmRootOpenClawPeerForInstall({
+      logger,
+      npmRoot,
+      phase: "after npm install",
+      timeoutMs,
+      trustedManagedNpmRoot: params.trustedManagedNpmRoot,
+    });
   }
 
   let installedDependency: ManagedNpmRootInstalledDependency | null;
