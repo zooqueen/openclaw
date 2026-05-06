@@ -10,6 +10,9 @@ describe("LineConfigSchema", () => {
     });
 
     expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("expected dmPolicy open without wildcard allowFrom to fail validation");
+    }
     expect(result.error.issues).toEqual([
       expect.objectContaining({
         path: ["allowFrom"],
@@ -41,6 +44,11 @@ describe("LineConfigSchema", () => {
     });
 
     expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error(
+        "expected account dmPolicy open without wildcard allowFrom to fail validation",
+      );
+    }
     expect(result.error.issues).toEqual([
       expect.objectContaining({
         path: ["accounts", "work", "allowFrom"],
