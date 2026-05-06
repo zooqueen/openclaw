@@ -35,6 +35,8 @@ Docs: https://docs.openclaw.ai
 - Gateway/status: show recent supervisor restart handoffs in `openclaw gateway status --deep`, including JSON details, so clean service-managed restarts are reported as restart handoffs instead of opaque stopped-service diagnostics. Thanks @shakkernerd.
 - Providers/Fireworks: expose Kimi models as thinking-off-only and keep K2.5/K2.6 requests on `thinking: disabled`, so manual model switches do not send Fireworks-rejected `reasoning*` parameters. Refs #74289. Thanks @frankekn.
 - WhatsApp responsiveness: stop only verified stale local TUI clients when they degrade the Gateway event loop and delay replies. Thanks @vincentkoc.
+- Plugins/update: repair stale managed npm-root `openclaw` peer packages before plugin installs, so beta-channel official plugin updates are not downgraded by old core package-lock state. Thanks @vincentkoc.
+- Plugins/install: reassert managed npm plugin `openclaw` peer links after shared-root npm installs, updates, and uninstalls, so mutating one plugin does not leave previously installed SDK-using plugins unable to resolve `openclaw/plugin-sdk/*`.
 - Hooks/session-memory: add collision suffixes to fallback memory filenames so repeated `/new` or `/reset` captures in the same minute do not overwrite the earlier session archive. Thanks @vincentkoc.
 - Agents/config: remove the ambiguous legacy `main` agent dir helper from runtime paths; model, auth, gateway, bundled plugin, and test helpers now resolve default/session agent dirs through `agents.list`/agent-scope helpers while plugin SDK keeps a deprecated compatibility export.
 - CLI/status: show the selected agent runtime/harness in `openclaw status` session rows so terminal status matches the `/status` runtime line. Thanks @vincentkoc.
