@@ -9,6 +9,7 @@ import {
 import { resolveNpmIntegrityDriftWithDefaultMessage } from "../infra/npm-integrity.js";
 import {
   readManagedNpmRootInstalledDependency,
+  readOpenClawManagedNpmRootOverrides,
   repairManagedNpmRootOpenClawPeer,
   removeManagedNpmRootDependency,
   resolveManagedNpmRootDependencySpec,
@@ -1369,6 +1370,7 @@ export async function installPluginFromNpmSpec(
       parsedSpec,
       resolution: npmResolution,
     }),
+    managedOverrides: await readOpenClawManagedNpmRootOverrides(),
   });
   const install = await runCommandWithTimeout(
     [
