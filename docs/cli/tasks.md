@@ -77,6 +77,10 @@ openclaw tasks audit [--severity <warn|error>] [--code <name>] [--limit <n>] [--
 
 Surfaces stale, lost, delivery-failed, or otherwise inconsistent task and Task Flow records. Lost tasks retained until `cleanupAfter` are warnings; expired or unstamped lost tasks are errors.
 
+`--code` accepts one of:
+
+`stale_queued`, `stale_running`, `stale_waiting`, `stale_blocked`, `lost`, `delivery_failed`, `missing_cleanup`, `inconsistent_timestamps`, `restore_failed`, `cancel_stuck`, `missing_linked_tasks`, `blocked_task_missing`.
+
 ### `maintenance`
 
 ```bash
