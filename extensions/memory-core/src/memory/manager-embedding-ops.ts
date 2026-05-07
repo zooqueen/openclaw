@@ -546,7 +546,6 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
           tableName: FTS_TABLE,
           path: pathname,
           source,
-          currentModel: this.provider?.model,
         });
       } catch {}
     }

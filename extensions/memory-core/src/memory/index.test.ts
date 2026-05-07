@@ -727,6 +727,81 @@ describe("memory index", () => {
     ).toEqual({ path: "memory/full-preserved.md" });
   });
 
+  it("clears seeded old-model FTS rows when safe full reindex rewrites a file", async () => {
+    vi.stubEnv("OPENCLAW_TEST_MEMORY_UNSAFE_REINDEX", "0");
+
+    const cfg = createCfg({
+      storePath: path.join(workspaceDir, "index-seeded-fts-model-change.sqlite"),
+      hybrid: { enabled: true },
+    });
+    const manager = await getPersistentManager(cfg);
+    if (!manager.status().fts?.available) {
+      return;
+    }
+
+    let db = (
+      manager as unknown as {
+        db: {
+          prepare: (sql: string) => {
+            all: (...args: unknown[]) => Array<{ model: string }>;
+            run: (...args: unknown[]) => void;
+          };
+        };
+      }
+    ).db;
+    db.prepare("INSERT INTO files (path, source, hash, mtime, size) VALUES (?, ?, ?, ?, ?)").run(
+      "memory/2026-01-12.md",
+      "memory",
+      "old-hash",
+      0,
+      21,
+    );
+    db.prepare(
+      `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "old-model-chunk",
+      "memory/2026-01-12.md",
+      "memory",
+      1,
+      1,
+      "old-chunk-hash",
+      "old-embed-model",
+      "old model stale row",
+      "[]",
+      0,
+    );
+    db.prepare(
+      `INSERT INTO chunks_fts (text, id, path, source, model, start_line, end_line)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "old model stale row",
+      "old-model-chunk",
+      "memory/2026-01-12.md",
+      "memory",
+      "old-embed-model",
+      1,
+      1,
+    );
+
+    await manager.sync({ reason: "test", force: true });
+
+    db = (
+      manager as unknown as {
+        db: {
+          prepare: (sql: string) => {
+            all: (...args: unknown[]) => Array<{ model: string }>;
+            run: (...args: unknown[]) => void;
+          };
+        };
+      }
+    ).db;
+    const rows = db
+      .prepare("SELECT model FROM chunks_fts WHERE path = ? AND source = ? ORDER BY model")
+      .all("memory/2026-01-12.md", "memory");
+    expect(rows).toEqual([{ model: "mock-embed" }]);
+  });
+
   it("prefers exact session transcript hits in FTS-only mode", async () => {
     try {
       const manager = await getFtsSessionManager({
