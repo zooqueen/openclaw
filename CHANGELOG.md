@@ -17,6 +17,7 @@ Docs: https://docs.openclaw.ai
 - Agents/subagents: have completed session-mode subagent registry rows honor `agents.defaults.subagents.archiveAfterMinutes` instead of a hardcoded 5-minute TTL, so registry-backed surfaces keep one retention knob across spawn modes. (#78263) Thanks @arniesaha.
 - Plugins/channel setup: forward `setChannelRuntime` from non-bundled external plugin setup entries so deferred external channel runtime initializers are installed before startup polling. Fixes #77779. (#77799) Thanks @openperf.
 - Telegram: treat successful same-chat `message` tool outbound sends during an inbound Telegram turn as delivered when deciding whether to emit the rewritten silent reply fallback. (#78685) Thanks @neeravmakwana.
+- Gateway/tasks: reconcile stale CLI run-context tasks whose live run context disappeared and bound channel hot-reload deferrals so stale task records cannot block Discord/Slack/Telegram reloads forever.
 
 ## 2026.5.6
 
