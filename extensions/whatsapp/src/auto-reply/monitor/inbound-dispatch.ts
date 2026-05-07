@@ -1,4 +1,3 @@
-import { deliverInboundReplyWithMessageSendContext } from "openclaw/plugin-sdk/channel-message";
 import { hasVisibleInboundReplyDispatch } from "openclaw/plugin-sdk/inbound-reply-dispatch";
 import {
   type DeliverableWhatsAppOutboundPayload,
@@ -513,37 +512,6 @@ export async function dispatchWhatsAppBufferedReply(params: {
         }
         if (!reply.hasMedia) {
           logWhatsAppMediaOnlyFlushResult(await mediaOnlyCoalescer.flushAll());
-          const durable = await deliverInboundReplyWithMessageSendContext({
-            cfg: params.cfg,
-            channel: "whatsapp",
-            accountId: params.route.accountId,
-            agentId: params.route.agentId,
-            ctxPayload: params.context as FinalizedMsgContext,
-            payload: normalizedDeliveryPayload,
-            info,
-            to: params.msg.from,
-            formatting: {
-              textLimit,
-              tableMode,
-              chunkMode,
-            },
-          });
-          if (durable.status === "failed") {
-            throw durable.error;
-          }
-          if (durable.status === "handled_visible") {
-            didSendReply = true;
-            const shouldLog = normalizedDeliveryPayload.text ? true : undefined;
-            params.rememberSentText(normalizedDeliveryPayload.text, {
-              combinedBody: params.context.Body as string | undefined,
-              combinedBodySessionKey: params.route.sessionKey,
-              logVerboseMessage: shouldLog,
-            });
-            return;
-          }
-          if (durable.status === "handled_no_send") {
-            return;
-          }
           await deliverNormalizedPayload(normalizedDeliveryPayload, info);
           return;
         }
