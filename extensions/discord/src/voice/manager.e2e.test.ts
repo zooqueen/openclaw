@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelType } from "../internal/discord.js";
 import { createVoiceCaptureState } from "./capture-state.js";
@@ -586,7 +587,8 @@ describe("DiscordVoiceManager", () => {
           captureSilenceGraceMs: 4_000,
         },
       });
-      const stream = { destroy: vi.fn() };
+      const stream = new PassThrough();
+      const destroy = vi.spyOn(stream, "destroy");
       const entry = {
         guildId: "g1",
         channelId: "1001",
@@ -603,10 +605,10 @@ describe("DiscordVoiceManager", () => {
       ).scheduleCaptureFinalize(entry, "u1", "test");
 
       await vi.advanceTimersByTimeAsync(3_999);
-      expect(stream.destroy).not.toHaveBeenCalled();
+      expect(destroy).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
-      expect(stream.destroy).toHaveBeenCalledTimes(1);
+      expect(destroy).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
