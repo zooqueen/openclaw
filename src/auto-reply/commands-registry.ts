@@ -103,7 +103,11 @@ function resolveNativeNames(command: ChatCommandDefinition, provider?: string): 
     names.push(primary);
   }
   if (command.nativeAliases?.length) {
-    names.push(...command.nativeAliases);
+    for (const alias of command.nativeAliases) {
+      if (alias) {
+        names.push(alias);
+      }
+    }
   }
   return names;
 }
