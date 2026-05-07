@@ -76,6 +76,42 @@ type MemoryIndexEntry = {
   content?: string;
 };
 
+type MemoryFileRecord = {
+  path: string;
+  source: MemorySource;
+  hash: string;
+  mtime: number;
+  size: number;
+};
+
+type MemoryChunkRecord = {
+  id: string;
+  path: string;
+  source: MemorySource;
+  start_line: number;
+  end_line: number;
+  hash: string;
+  model: string;
+  text: string;
+  embedding: string;
+  updated_at: number;
+};
+
+type MemoryFtsRecord = {
+  text: string;
+  id: string;
+  path: string;
+  source: MemorySource;
+  model: string;
+  start_line: number;
+  end_line: number;
+};
+
+type MemoryVectorRecord = {
+  id: string;
+  embedding: Buffer | Uint8Array;
+};
+
 const META_KEY = "memory_index_meta_v1";
 const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
@@ -1125,6 +1161,148 @@ export abstract class MemoryManagerSyncOps {
     }
   }
 
+  private copyMemoryRowsFromOriginalIndex(originalDb: DatabaseSync): {
+    files: number;
+    chunks: number;
+  } {
+    const insertFile = this.db.prepare(
+      `INSERT OR IGNORE INTO files (path, source, hash, mtime, size) VALUES (?, ?, ?, ?, ?)`,
+    );
+    const insertChunk = this.db.prepare(
+      `INSERT OR IGNORE INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    let files = 0;
+    let chunks = 0;
+    this.db.exec("BEGIN");
+    try {
+      const fileRows = originalDb
+        .prepare(`SELECT path, source, hash, mtime, size FROM files WHERE source = ?`)
+        .iterate("memory") as IterableIterator<MemoryFileRecord>;
+      for (const row of fileRows) {
+        insertFile.run(row.path, row.source, row.hash, row.mtime, row.size);
+        files += 1;
+      }
+      const chunkRows = originalDb
+        .prepare(
+          `SELECT id, path, source, start_line, end_line, hash, model, text, embedding, updated_at
+           FROM chunks WHERE source = ?`,
+        )
+        .iterate("memory") as IterableIterator<MemoryChunkRecord>;
+      for (const row of chunkRows) {
+        insertChunk.run(
+          row.id,
+          row.path,
+          row.source,
+          row.start_line,
+          row.end_line,
+          row.hash,
+          row.model,
+          row.text,
+          row.embedding,
+          row.updated_at,
+        );
+        chunks += 1;
+      }
+      this.db.exec("COMMIT");
+    } catch (err) {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {}
+      throw err;
+    }
+    return { files, chunks };
+  }
+
+  private copyMemoryFtsRowsFromOriginalIndex(originalDb: DatabaseSync): number {
+    if (!this.fts.enabled || !this.fts.available) {
+      return 0;
+    }
+    const insertFts = this.db.prepare(
+      `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    let rows = 0;
+    try {
+      const ftsRows = originalDb
+        .prepare(
+          `SELECT text, id, path, source, model, start_line, end_line
+           FROM ${FTS_TABLE} WHERE source = ?`,
+        )
+        .iterate("memory") as IterableIterator<MemoryFtsRecord>;
+      for (const row of ftsRows) {
+        insertFts.run(
+          row.text,
+          row.id,
+          row.path,
+          row.source,
+          row.model,
+          row.start_line,
+          row.end_line,
+        );
+        rows += 1;
+      }
+    } catch (err) {
+      log.debug("memory sync: skipped existing FTS row copy during full reindex", {
+        error: formatErrorMessage(err),
+      });
+      return 0;
+    }
+    return rows;
+  }
+
+  private async copyMemoryVectorRowsFromOriginalIndex(params: {
+    originalDb: DatabaseSync;
+    vectorDims?: number;
+  }): Promise<number> {
+    if (!this.vector.enabled || !params.vectorDims) {
+      return 0;
+    }
+    const ready = await this.ensureVectorReady(params.vectorDims);
+    if (!ready) {
+      return 0;
+    }
+    const insertVector = this.db.prepare(
+      `INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`,
+    );
+    let rows = 0;
+    try {
+      const vectorRows = params.originalDb
+        .prepare(
+          `SELECT id, embedding FROM ${VECTOR_TABLE}
+           WHERE id IN (SELECT id FROM chunks WHERE source = ?)`,
+        )
+        .iterate("memory") as IterableIterator<MemoryVectorRecord>;
+      for (const row of vectorRows) {
+        try {
+          insertVector.run(row.id, row.embedding);
+          rows += 1;
+        } catch {}
+      }
+    } catch (err) {
+      log.debug("memory sync: skipped existing vector row copy during full reindex", {
+        error: formatErrorMessage(err),
+      });
+      return 0;
+    }
+    return rows;
+  }
+
+  private async seedExistingMemoryRowsForFullReindex(params: {
+    originalDb: DatabaseSync;
+    vectorDims?: number;
+  }): Promise<void> {
+    const copied = this.copyMemoryRowsFromOriginalIndex(params.originalDb);
+    const ftsRows = this.copyMemoryFtsRowsFromOriginalIndex(params.originalDb);
+    const vectorRows = await this.copyMemoryVectorRowsFromOriginalIndex(params);
+    log.debug("memory sync: seeded existing memory rows for full reindex", {
+      files: copied.files,
+      chunks: copied.chunks,
+      ftsRows,
+      vectorRows,
+    });
+  }
+
   private shouldFallbackOnError(message: string): boolean {
     return /embedding|embeddings|batch/i.test(message);
   }
@@ -1248,6 +1426,10 @@ export abstract class MemoryManagerSyncOps {
           );
 
           if (shouldSyncMemory) {
+            await this.seedExistingMemoryRowsForFullReindex({
+              originalDb,
+              vectorDims: originalState.vectorDims,
+            });
             await this.syncMemoryFiles({ needsFullReindex: true, progress: params.progress });
             this.dirty = false;
           }

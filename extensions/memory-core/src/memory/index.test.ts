@@ -644,6 +644,88 @@ describe("memory index", () => {
     ).toEqual({ path: "memory/preserved.md" });
   });
 
+  it("carries existing memory rows through truncated safe full reindexes", async () => {
+    forceNoProvider = true;
+    vi.stubEnv("OPENCLAW_TEST_MEMORY_UNSAFE_REINDEX", "0");
+
+    const cfg = createCfg({
+      storePath: path.join(workspaceDir, "index-truncated-safe-reindex.sqlite"),
+      maxFileScanEntries: 0,
+      hybrid: { enabled: true },
+    });
+    const manager = await getPersistentManager(cfg);
+    if (!manager.status().fts?.available) {
+      return;
+    }
+
+    let db = (
+      manager as unknown as {
+        db: {
+          prepare: (sql: string) => {
+            get: (...args: unknown[]) => { path: string } | undefined;
+            run: (...args: unknown[]) => void;
+          };
+        };
+      }
+    ).db;
+    db.prepare("INSERT INTO files (path, source, hash, mtime, size) VALUES (?, ?, ?, ?, ?)").run(
+      "memory/full-preserved.md",
+      "memory",
+      "full-preserved-hash",
+      0,
+      21,
+    );
+    db.prepare(
+      `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "full-preserved-chunk",
+      "memory/full-preserved.md",
+      "memory",
+      1,
+      1,
+      "full-preserved-chunk-hash",
+      "fts-only",
+      "full reindex preserved row",
+      "[]",
+      0,
+    );
+    db.prepare(
+      `INSERT INTO chunks_fts (text, id, path, source, model, start_line, end_line)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "full reindex preserved row",
+      "full-preserved-chunk",
+      "memory/full-preserved.md",
+      "memory",
+      "fts-only",
+      1,
+      1,
+    );
+
+    await manager.sync({ reason: "test", force: true });
+
+    db = (
+      manager as unknown as {
+        db: {
+          prepare: (sql: string) => {
+            get: (...args: unknown[]) => { path: string } | undefined;
+          };
+        };
+      }
+    ).db;
+    expect(
+      db
+        .prepare("SELECT path FROM files WHERE path = ? AND source = ?")
+        .get("memory/full-preserved.md", "memory"),
+    ).toEqual({ path: "memory/full-preserved.md" });
+    expect(
+      db
+        .prepare("SELECT path FROM chunks WHERE id = ? AND source = ?")
+        .get("full-preserved-chunk", "memory"),
+    ).toEqual({ path: "memory/full-preserved.md" });
+  });
+
   it("prefers exact session transcript hits in FTS-only mode", async () => {
     try {
       const manager = await getFtsSessionManager({
