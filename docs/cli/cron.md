@@ -219,6 +219,8 @@ openclaw cron run <job-id> --due
 openclaw cron runs --id <job-id> --limit 50
 ```
 
+`cron list --json` and `cron show <job-id> --json` include a top-level `status` field on each job, computed from `enabled`, `state.runningAtMs`, and `state.lastRunStatus`. Values: `disabled`, `running`, `ok`, `error`, `skipped`, or `idle`. This mirrors the human-readable status column so external tooling can read job state without re-deriving it.
+
 `cron runs` entries include delivery diagnostics with the intended cron target, the resolved target, message-tool sends, fallback use, and delivered state.
 
 Agent and session retargeting:
