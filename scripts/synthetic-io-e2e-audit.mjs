@@ -61,39 +61,47 @@ await fsp.mkdir(summariesRoot, { recursive: true });
 generateSyntheticState();
 
 const cliResults = [];
-for (const [label, args, opts] of [
-  ["config validate", ["config", "validate", "--json"], { timeoutMs: 20_000, stacks: true }],
-  ["status deep", ["status", "--deep", "--json"], { timeoutMs: 45_000, stacks: true }],
-  [
-    "sessions limit 50",
-    ["sessions", "--json", "--limit", "50"],
-    { timeoutMs: 45_000, stacks: true },
-  ],
-  [
-    "sessions all agents",
-    ["sessions", "--json", "--limit", "50", "--all-agents"],
-    { timeoutMs: 45_000 },
-  ],
-  [
-    "memory status deep",
-    ["memory", "status", "--json", "--deep"],
-    { timeoutMs: 60_000, stacks: true },
-  ],
-  [
-    "memory search qmd",
-    ["memory", "search", "gateway rpc synthetic memory", "--json", "--max-results", "20"],
-    { timeoutMs: 60_000 },
-  ],
-  [
-    "memory rem harness",
-    ["memory", "rem-harness", "--json", "--path", path.join(workspaceRoot, "memory")],
-    { timeoutMs: 60_000 },
-  ],
-  [
-    "gateway status no service",
-    ["gateway", "status", "--json", "--url", `ws://127.0.0.1:${gatewayPort}`],
-    { timeoutMs: 25_000 },
-  ],
+for (const { label, args, opts } of [
+  {
+    label: "config validate",
+    args: ["config", "validate", "--json"],
+    opts: { timeoutMs: 20_000, stacks: true },
+  },
+  {
+    label: "status deep",
+    args: ["status", "--deep", "--json"],
+    opts: { timeoutMs: 45_000, stacks: true },
+  },
+  {
+    label: "sessions limit 50",
+    args: ["sessions", "--json", "--limit", "50"],
+    opts: { timeoutMs: 45_000, stacks: true },
+  },
+  {
+    label: "sessions all agents",
+    args: ["sessions", "--json", "--limit", "50", "--all-agents"],
+    opts: { timeoutMs: 45_000 },
+  },
+  {
+    label: "memory status deep",
+    args: ["memory", "status", "--json", "--deep"],
+    opts: { timeoutMs: 60_000, stacks: true },
+  },
+  {
+    label: "memory search qmd",
+    args: ["memory", "search", "gateway rpc synthetic memory", "--json", "--max-results", "20"],
+    opts: { timeoutMs: 60_000 },
+  },
+  {
+    label: "memory rem harness",
+    args: ["memory", "rem-harness", "--json", "--path", path.join(workspaceRoot, "memory")],
+    opts: { timeoutMs: 60_000 },
+  },
+  {
+    label: "gateway status no service",
+    args: ["gateway", "status", "--json", "--url", `ws://127.0.0.1:${gatewayPort}`],
+    opts: { timeoutMs: 25_000 },
+  },
 ]) {
   console.log(`[audit] ${label}`);
   cliResults.push(await runOpenClaw(label, args, opts));
@@ -127,50 +135,54 @@ for (let attempt = 0; attempt < 30; attempt += 1) {
 
 const rpcResults = [];
 if (ready) {
-  for (const [label, method, params] of [
-    ["rpc health", "health", {}],
-    ["rpc status", "status", {}],
-    ["rpc diagnostics stability", "diagnostics.stability", {}],
-    ["rpc config get", "config.get", {}],
-    ["rpc config schema", "config.schema", {}],
-    ["rpc commands list", "commands.list", {}],
-    ["rpc tools catalog", "tools.catalog", {}],
-    [
-      "rpc tools effective",
-      "tools.effective",
-      { sessionKey: "agent:main:synthetic-session-00042" },
-    ],
-    ["rpc plugins ui descriptors", "plugins.uiDescriptors", {}],
-    ["rpc skills status", "skills.status", {}],
-    ["rpc agents list", "agents.list", {}],
-    ["rpc sessions list bounded", "sessions.list", { limit: 50, agentId: "main" }],
-    [
-      "rpc sessions list derived",
-      "sessions.list",
-      { limit: 50, agentId: "main", includeDerivedTitles: true, includeLastMessage: true },
-    ],
-    [
-      "rpc sessions preview",
-      "sessions.preview",
-      { keys: ["agent:main:synthetic-session-00042"], limit: 6, maxChars: 2000 },
-    ],
-    [
-      "rpc sessions describe",
-      "sessions.describe",
-      { key: "agent:main:synthetic-session-00042", includeLastMessage: true },
-    ],
-    [
-      "rpc sessions create",
-      "sessions.create",
-      { agentId: "main", task: "synthetic create smoke", emitCommandHooks: false },
-    ],
-    ["rpc doctor memory status", "doctor.memory.status", { deep: true }],
-    [
-      "rpc doctor memory rem harness",
-      "doctor.memory.remHarness",
-      { path: path.join(workspaceRoot, "memory") },
-    ],
-    ["rpc logs tail", "logs.tail", { limit: 20 }],
+  for (const { label, method, params } of [
+    { label: "rpc health", method: "health", params: {} },
+    { label: "rpc status", method: "status", params: {} },
+    { label: "rpc diagnostics stability", method: "diagnostics.stability", params: {} },
+    { label: "rpc config get", method: "config.get", params: {} },
+    { label: "rpc config schema", method: "config.schema", params: {} },
+    { label: "rpc commands list", method: "commands.list", params: {} },
+    { label: "rpc tools catalog", method: "tools.catalog", params: {} },
+    {
+      label: "rpc tools effective",
+      method: "tools.effective",
+      params: { sessionKey: "agent:main:synthetic-session-00042" },
+    },
+    { label: "rpc plugins ui descriptors", method: "plugins.uiDescriptors", params: {} },
+    { label: "rpc skills status", method: "skills.status", params: {} },
+    { label: "rpc agents list", method: "agents.list", params: {} },
+    {
+      label: "rpc sessions list bounded",
+      method: "sessions.list",
+      params: { limit: 50, agentId: "main" },
+    },
+    {
+      label: "rpc sessions list derived",
+      method: "sessions.list",
+      params: { limit: 50, agentId: "main", includeDerivedTitles: true, includeLastMessage: true },
+    },
+    {
+      label: "rpc sessions preview",
+      method: "sessions.preview",
+      params: { keys: ["agent:main:synthetic-session-00042"], limit: 6, maxChars: 2000 },
+    },
+    {
+      label: "rpc sessions describe",
+      method: "sessions.describe",
+      params: { key: "agent:main:synthetic-session-00042", includeLastMessage: true },
+    },
+    {
+      label: "rpc sessions create",
+      method: "sessions.create",
+      params: { agentId: "main", task: "synthetic create smoke", emitCommandHooks: false },
+    },
+    { label: "rpc doctor memory status", method: "doctor.memory.status", params: { deep: true } },
+    {
+      label: "rpc doctor memory rem harness",
+      method: "doctor.memory.remHarness",
+      params: { path: path.join(workspaceRoot, "memory") },
+    },
+    { label: "rpc logs tail", method: "logs.tail", params: { limit: 20 } },
   ]) {
     console.log(`[audit] ${label}`);
     rpcResults.push(

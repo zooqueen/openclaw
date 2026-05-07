@@ -405,8 +405,7 @@ export async function sessionsCommand(
       sessions: await Promise.all(
         rows.map(async (row) => {
           const modelRef = resolveSessionDisplayModelRef(cfg, row);
-          return {
-            ...row,
+          return Object.assign({}, row, {
             totalTokens: resolveSessionTotalTokens(row) ?? null,
             totalTokensFresh:
               typeof row.totalTokens === "number" ? row.totalTokensFresh !== false : false,
@@ -418,7 +417,7 @@ export async function sessionsCommand(
               null,
             modelProvider: modelRef.provider,
             model: modelRef.model,
-          };
+          });
         }),
       ),
     });
