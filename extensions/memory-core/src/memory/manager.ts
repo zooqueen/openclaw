@@ -846,7 +846,14 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       this.vector.semanticAvailable = false;
       return false;
     }
-    await this.ensureProviderInitialized();
+    try {
+      await this.ensureProviderInitialized();
+    } catch (err) {
+      const message = formatErrorMessage(err);
+      this.providerUnavailableReason = message;
+      this.vector.semanticAvailable = false;
+      return false;
+    }
     // FTS-only mode: vector search not available
     if (!this.provider) {
       this.vector.semanticAvailable = false;
@@ -899,15 +906,16 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (cached) {
       return cached;
     }
-    await this.ensureProviderInitialized();
-    // FTS-only mode: embeddings not available but search still works
-    if (!this.provider) {
-      return this.cacheProbeResult({
-        ok: false,
-        error: this.providerUnavailableReason ?? "No embedding provider available (FTS-only mode)",
-      });
-    }
     try {
+      await this.ensureProviderInitialized();
+      // FTS-only mode: embeddings not available but search still works
+      if (!this.provider) {
+        return this.cacheProbeResult({
+          ok: false,
+          error:
+            this.providerUnavailableReason ?? "No embedding provider available (FTS-only mode)",
+        });
+      }
       await this.embedBatchWithRetry(["ping"]);
       return this.cacheProbeResult({ ok: true });
     } catch (err) {

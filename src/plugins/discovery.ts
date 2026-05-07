@@ -493,13 +493,30 @@ function derivePackagePluginIdHint(params: {
     : unscoped;
 }
 
-function resolveIdHintManifestId(
+type IdHintManifestResolution = {
+  id?: string;
+  manifest?: PluginManifest;
+  manifestPath?: string;
+};
+
+function resolveIdHintManifest(
   rootDir: string,
   rejectHardlinks: boolean,
   rootRealPath?: string,
-): string | undefined {
+): IdHintManifestResolution {
   const manifest = loadPluginManifest(rootDir, rejectHardlinks, rootRealPath);
-  return manifest.ok ? manifest.manifest.id : undefined;
+  return manifest.ok
+    ? { id: manifest.manifest.id, manifest: manifest.manifest, manifestPath: manifest.manifestPath }
+    : {};
+}
+
+function bundledIdHintManifestFields(
+  origin: PluginOrigin,
+  resolution: IdHintManifestResolution,
+): Pick<PluginCandidate, "bundledManifest" | "bundledManifestPath"> {
+  return origin === "bundled" && resolution.manifest && resolution.manifestPath
+    ? { bundledManifest: resolution.manifest, bundledManifestPath: resolution.manifestPath }
+    : {};
 }
 
 function addCandidate(params: {
@@ -694,7 +711,7 @@ function discoverInDirectory(params: {
     });
     const extensionResolution = resolvePackageExtensionEntries(manifest ?? undefined);
     const extensions = extensionResolution.status === "ok" ? extensionResolution.entries : [];
-    const manifestId = resolveIdHintManifestId(fullPath, rejectHardlinks, fullPathRealPath);
+    const idHintManifest = resolveIdHintManifest(fullPath, rejectHardlinks, fullPathRealPath);
     const setupSource = resolvePackageSetupSource({
       packageDir: fullPath,
       ...(fullPathRealPath !== undefined ? { packageRootRealPath: fullPathRealPath } : {}),
@@ -712,7 +729,10 @@ function discoverInDirectory(params: {
         manifest,
         extensions,
         origin: params.origin,
-        pluginIdHint: derivePackagePluginIdHint({ manifestId, packageName: manifest?.name }),
+        pluginIdHint: derivePackagePluginIdHint({
+          manifestId: idHintManifest.id,
+          packageName: manifest?.name,
+        }),
         sourceLabel: fullPath,
         diagnostics: params.diagnostics,
         rejectHardlinks,
@@ -724,7 +744,7 @@ function discoverInDirectory(params: {
           seen: params.seen,
           idHint: deriveIdHint({
             filePath: resolved,
-            manifestId,
+            manifestId: idHintManifest.id,
             packageName: manifest?.name,
             hasMultipleExtensions: extensions.length > 1,
           }),
@@ -736,6 +756,7 @@ function discoverInDirectory(params: {
           workspaceDir: params.workspaceDir,
           manifest,
           packageDir: fullPath,
+          ...bundledIdHintManifestFields(params.origin, idHintManifest),
           realpathCache: params.realpathCache,
         });
       }
@@ -765,7 +786,7 @@ function discoverInDirectory(params: {
         candidates: params.candidates,
         diagnostics: params.diagnostics,
         seen: params.seen,
-        idHint: manifestId ?? entry.name,
+        idHint: idHintManifest.id ?? entry.name,
         source: indexFile,
         ...(setupSource ? { setupSource } : {}),
         rootDir: fullPath,
@@ -774,6 +795,7 @@ function discoverInDirectory(params: {
         workspaceDir: params.workspaceDir,
         manifest,
         packageDir: fullPath,
+        ...bundledIdHintManifestFields(params.origin, idHintManifest),
         realpathCache: params.realpathCache,
       });
       continue;
@@ -900,7 +922,7 @@ function discoverFromPath(params: {
     });
     const extensionResolution = resolvePackageExtensionEntries(manifest ?? undefined);
     const extensions = extensionResolution.status === "ok" ? extensionResolution.entries : [];
-    const manifestId = resolveIdHintManifestId(resolved, rejectHardlinks, resolvedRealPath);
+    const idHintManifest = resolveIdHintManifest(resolved, rejectHardlinks, resolvedRealPath);
     const setupSource = resolvePackageSetupSource({
       packageDir: resolved,
       ...(resolvedRealPath !== undefined ? { packageRootRealPath: resolvedRealPath } : {}),
@@ -918,7 +940,10 @@ function discoverFromPath(params: {
         manifest,
         extensions,
         origin: params.origin,
-        pluginIdHint: derivePackagePluginIdHint({ manifestId, packageName: manifest?.name }),
+        pluginIdHint: derivePackagePluginIdHint({
+          manifestId: idHintManifest.id,
+          packageName: manifest?.name,
+        }),
         sourceLabel: resolved,
         diagnostics: params.diagnostics,
         rejectHardlinks,
@@ -930,7 +955,7 @@ function discoverFromPath(params: {
           seen: params.seen,
           idHint: deriveIdHint({
             filePath: source,
-            manifestId,
+            manifestId: idHintManifest.id,
             packageName: manifest?.name,
             hasMultipleExtensions: extensions.length > 1,
           }),
@@ -942,6 +967,7 @@ function discoverFromPath(params: {
           workspaceDir: params.workspaceDir,
           manifest,
           packageDir: resolved,
+          ...bundledIdHintManifestFields(params.origin, idHintManifest),
           realpathCache: params.realpathCache,
         });
       }
@@ -972,7 +998,7 @@ function discoverFromPath(params: {
         candidates: params.candidates,
         diagnostics: params.diagnostics,
         seen: params.seen,
-        idHint: manifestId ?? path.basename(resolved),
+        idHint: idHintManifest.id ?? path.basename(resolved),
         source: indexFile,
         ...(setupSource ? { setupSource } : {}),
         rootDir: resolved,
@@ -981,6 +1007,7 @@ function discoverFromPath(params: {
         workspaceDir: params.workspaceDir,
         manifest,
         packageDir: resolved,
+        ...bundledIdHintManifestFields(params.origin, idHintManifest),
         realpathCache: params.realpathCache,
       });
       return;

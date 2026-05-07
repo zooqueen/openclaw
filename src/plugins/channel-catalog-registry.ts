@@ -45,7 +45,10 @@ export function listChannelCatalogEntries(
     if (!channel?.id) {
       return [];
     }
-    const manifest = loadPluginManifest(candidate.rootDir, candidate.origin !== "bundled");
+    const manifest =
+      candidate.origin === "bundled" && candidate.bundledManifest
+        ? { ok: true as const, manifest: candidate.bundledManifest }
+        : loadPluginManifest(candidate.rootDir, candidate.origin !== "bundled");
     if (!manifest.ok) {
       return [];
     }

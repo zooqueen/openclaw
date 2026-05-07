@@ -5,6 +5,7 @@ import {
   setCurrentPluginMetadataSnapshotState,
 } from "./current-plugin-metadata-state.js";
 import { resolveInstalledPluginIndexPolicyHash } from "./installed-plugin-index-policy.js";
+import { resolveInstalledManifestRegistryIndexFingerprint } from "./manifest-registry-installed.js";
 import {
   resolvePluginControlPlaneFingerprint,
   type ResolvePluginControlPlaneContextParams,
@@ -32,6 +33,9 @@ export function setCurrentPluginMetadataSnapshot(
     workspaceDir?: string;
   } = {},
 ): void {
+  const inventoryFingerprint = snapshot
+    ? resolveInstalledManifestRegistryIndexFingerprint(snapshot.index)
+    : undefined;
   const compatiblePolicyHashes = snapshot
     ? options.compatibleConfigs?.map((config) => resolveInstalledPluginIndexPolicyHash(config))
     : undefined;
@@ -39,7 +43,7 @@ export function setCurrentPluginMetadataSnapshot(
     ? options.compatibleConfigs?.map((config, index) =>
         resolvePluginMetadataControlPlaneFingerprint(config, {
           env: options.env,
-          index: snapshot.index,
+          ...(inventoryFingerprint ? { inventoryFingerprint } : { index: snapshot.index }),
           policyHash: compatiblePolicyHashes?.[index],
           workspaceDir: options.workspaceDir ?? snapshot.workspaceDir,
         }),
@@ -50,13 +54,14 @@ export function setCurrentPluginMetadataSnapshot(
     snapshot
       ? resolvePluginMetadataControlPlaneFingerprint(options.config, {
           env: options.env,
-          index: snapshot.index,
+          ...(inventoryFingerprint ? { inventoryFingerprint } : { index: snapshot.index }),
           policyHash: snapshot.policyHash,
           workspaceDir: options.workspaceDir ?? snapshot.workspaceDir,
         })
       : undefined,
     compatiblePolicyHashes,
     compatibleConfigFingerprints,
+    inventoryFingerprint,
   );
 }
 
@@ -77,6 +82,7 @@ export function getCurrentPluginMetadataSnapshot(
     configFingerprint,
     compatiblePolicyHashes,
     compatibleConfigFingerprints,
+    inventoryFingerprint,
   } = getCurrentPluginMetadataSnapshotState();
   const snapshot = rawSnapshot as PluginMetadataSnapshot | undefined;
   if (!snapshot) {
@@ -97,7 +103,7 @@ export function getCurrentPluginMetadataSnapshot(
   if (params.config) {
     const requestedConfigFingerprint = resolvePluginMetadataControlPlaneFingerprint(params.config, {
       env: params.env,
-      index: snapshot.index,
+      ...(inventoryFingerprint ? { inventoryFingerprint } : { index: snapshot.index }),
       policyHash: requestedPolicyHash,
       workspaceDir: requestedWorkspaceDir,
     });

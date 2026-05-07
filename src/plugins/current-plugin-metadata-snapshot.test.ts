@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearCurrentPluginMetadataSnapshot,
   getCurrentPluginMetadataSnapshot,
@@ -9,6 +9,7 @@ import {
 } from "./current-plugin-metadata-snapshot.js";
 import { resolveInstalledPluginIndexPolicyHash } from "./installed-plugin-index-policy.js";
 import { writePersistedInstalledPluginIndexSync } from "./installed-plugin-index-store.js";
+import { loadPluginMetadataSnapshot } from "./plugin-metadata-snapshot.js";
 import type { PluginMetadataSnapshot } from "./plugin-metadata-snapshot.js";
 
 function createSnapshot(
@@ -57,6 +58,11 @@ function createSnapshot(
     },
   };
 }
+
+afterEach(() => {
+  clearCurrentPluginMetadataSnapshot();
+  vi.restoreAllMocks();
+});
 
 describe("current plugin metadata snapshot", () => {
   it("returns the current snapshot only for matching config policy and workspace", () => {
@@ -179,6 +185,56 @@ describe("current plugin metadata snapshot", () => {
     expect(
       getCurrentPluginMetadataSnapshot({ config: runtimeConfig, workspaceDir: "/workspace" }),
     ).toBe(snapshot);
+  });
+
+  it("reuses the stored inventory fingerprint while checking snapshot compatibility", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-plugin-metadata-"));
+    try {
+      const config = { plugins: { allow: ["demo"] } };
+      const manifestPath = path.join(tempDir, "openclaw.plugin.json");
+      fs.writeFileSync(manifestPath, JSON.stringify({ id: "demo" }), "utf8");
+      const snapshot = createSnapshot({ config });
+      snapshot.index.plugins = [
+        {
+          pluginId: "demo",
+          manifestPath,
+          manifestHash: "demo-manifest",
+          rootDir: tempDir,
+          origin: "global",
+          enabled: true,
+          startup: {
+            sidecar: false,
+            memory: false,
+            deferConfiguredChannelFullLoadUntilAfterListen: false,
+            agentHarnesses: [],
+          },
+          compat: [],
+        },
+      ];
+      const statSync = vi.spyOn(fs, "statSync");
+
+      setCurrentPluginMetadataSnapshot(snapshot, { config });
+      expect(statSync.mock.calls.filter((call) => String(call[0]) === manifestPath)).toHaveLength(
+        1,
+      );
+      statSync.mockClear();
+
+      expect(getCurrentPluginMetadataSnapshot({ config })).toBe(snapshot);
+      expect(getCurrentPluginMetadataSnapshot({ config })).toBe(snapshot);
+      expect(statSync.mock.calls.filter((call) => String(call[0]) === manifestPath)).toHaveLength(
+        0,
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("lets direct metadata snapshot loaders reuse the current gateway snapshot", () => {
+    const config = { plugins: { allow: ["demo"] } };
+    const snapshot = createSnapshot({ config, workspaceDir: "/workspace" });
+    setCurrentPluginMetadataSnapshot(snapshot, { config, workspaceDir: "/workspace" });
+
+    expect(loadPluginMetadataSnapshot({ config, env: process.env })).toBe(snapshot);
   });
 
   it("clears the current snapshot", () => {

@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PluginInstallRecord } from "../config/types.plugins.js";
 import type { PluginCandidate, PluginDiscoveryResult } from "./discovery.js";
+import type { PluginManifest } from "./manifest.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.doUnmock("./discovery.js");
+  vi.doUnmock("./manifest.js");
   vi.doUnmock("./installed-plugin-index-record-reader.js");
 });
 
@@ -28,25 +30,38 @@ function emptyDiscoveryResult(): PluginDiscoveryResult {
 }
 
 async function loadWithMocks(params: {
+  discoveryResult?: PluginDiscoveryResult;
+  loadManifest?: (rootDir: string, rejectHardlinks?: boolean) => unknown;
   loadRecords?: (env: NodeJS.ProcessEnv | undefined) => Record<string, PluginInstallRecord>;
 }): Promise<{
   module: typeof import("./channel-catalog-registry.js");
   discoverSpy: ReturnType<typeof vi.fn>;
+  loadManifestSpy: ReturnType<typeof vi.fn>;
   loadRecordsSpy: ReturnType<typeof vi.fn>;
 }> {
   vi.resetModules();
-  const discoverSpy = vi.fn(() => emptyDiscoveryResult());
+  const discoverSpy = vi.fn(() => params.discoveryResult ?? emptyDiscoveryResult());
+  const loadManifestSpy = vi.fn((rootDir: string, rejectHardlinks?: boolean) => {
+    return params.loadManifest
+      ? params.loadManifest(rootDir, rejectHardlinks)
+      : {
+          ok: false,
+          error: "not mocked",
+          manifestPath: `${rootDir}/openclaw.plugin.json`,
+        };
+  });
   const loadRecordsSpy = vi.fn((opts: { env?: NodeJS.ProcessEnv } = {}) => {
     return params.loadRecords ? params.loadRecords(opts.env) : RECORDS;
   });
 
   vi.doMock("./discovery.js", () => ({ discoverOpenClawPlugins: discoverSpy }));
+  vi.doMock("./manifest.js", () => ({ loadPluginManifest: loadManifestSpy }));
   vi.doMock("./installed-plugin-index-record-reader.js", () => ({
     loadInstalledPluginIndexInstallRecordsSync: loadRecordsSpy,
   }));
 
   const module = await import("./channel-catalog-registry.js");
-  return { module, discoverSpy, loadRecordsSpy };
+  return { module, discoverSpy, loadManifestSpy, loadRecordsSpy };
 }
 
 describe("listChannelCatalogEntries", () => {
@@ -112,5 +127,39 @@ describe("listChannelCatalogEntries", () => {
     expect(loadRecordsSpy).toHaveBeenCalledTimes(1);
     expect(discoverSpy).toHaveBeenCalledTimes(1);
     expect(discoverSpy.mock.calls[0][0]).not.toHaveProperty("installRecords");
+  });
+
+  it("uses bundled manifests carried by discovery instead of rereading channel plugin roots", async () => {
+    const manifest = { id: "discord" } as PluginManifest;
+    const candidate = {
+      idHint: "discord",
+      source: "/repo/extensions/discord/src/index.ts",
+      rootDir: "/repo/extensions/discord",
+      origin: "bundled",
+      packageManifest: {
+        channel: {
+          id: "discord",
+          label: "Discord",
+        },
+      },
+      bundledManifest: manifest,
+      bundledManifestPath: "/repo/extensions/discord/openclaw.plugin.json",
+    } satisfies PluginCandidate;
+    const { module, loadManifestSpy } = await loadWithMocks({
+      discoveryResult: { candidates: [candidate], diagnostics: [] },
+    });
+
+    expect(module.listChannelCatalogEntries({ origin: "bundled" })).toEqual([
+      {
+        pluginId: "discord",
+        origin: "bundled",
+        rootDir: "/repo/extensions/discord",
+        channel: {
+          id: "discord",
+          label: "Discord",
+        },
+      },
+    ]);
+    expect(loadManifestSpy).not.toHaveBeenCalled();
   });
 });

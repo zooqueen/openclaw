@@ -3,6 +3,7 @@ import {
   getActiveDiagnosticsTimelineSpan,
   measureDiagnosticsTimelineSpanSync,
 } from "../infra/diagnostics-timeline.js";
+import { getCurrentPluginMetadataSnapshot } from "./current-plugin-metadata-snapshot.js";
 import { resolveInstalledPluginIndexPolicyHash } from "./installed-plugin-index-policy.js";
 import type { InstalledPluginIndex } from "./installed-plugin-index.js";
 import {
@@ -176,6 +177,17 @@ export function listPluginOriginsFromMetadataSnapshot(
 export function loadPluginMetadataSnapshot(
   params: LoadPluginMetadataSnapshotParams,
 ): PluginMetadataSnapshot {
+  if (!params.index && !params.stateDir && params.preferPersisted !== false) {
+    const current = getCurrentPluginMetadataSnapshot({
+      config: params.config,
+      env: params.env,
+      workspaceDir: params.workspaceDir,
+      allowWorkspaceScopedSnapshot: params.workspaceDir === undefined,
+    });
+    if (current) {
+      return current;
+    }
+  }
   const activeTimelineSpan = getActiveDiagnosticsTimelineSpan();
   return measureDiagnosticsTimelineSpanSync(
     "plugins.metadata.scan",

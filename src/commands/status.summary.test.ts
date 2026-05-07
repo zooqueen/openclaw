@@ -128,6 +128,7 @@ vi.mock("./status.link-channel.js", () => ({
 }));
 
 const { buildChannelSummary } = await import("../infra/channel-summary.js");
+const { parseAgentSessionKey } = await import("../routing/session-key.js");
 const { resolveLinkChannelContext } = await import("./status.link-channel.js");
 let getStatusSummary: typeof import("./status.summary.js").getStatusSummary;
 let statusSummaryRuntime: typeof import("./status.summary.runtime.js").statusSummaryRuntime;
@@ -199,5 +200,29 @@ describe("getStatusSummary", () => {
     const summary = await getStatusSummary();
 
     expect(summary.sessions.recent[0]?.runtime).toBe("OpenAI Codex");
+  });
+
+  it("reuses repeated runtime labels while summarizing session rows", async () => {
+    vi.mocked(parseAgentSessionKey).mockImplementation(
+      (key) => (String(key).startsWith("agent:main:") ? { agentId: "main" } : null) as never,
+    );
+    vi.mocked(statusSummaryRuntime.resolveSessionRuntimeLabel).mockReturnValue(
+      "OpenClaw Pi Default",
+    );
+    statusSummaryMocks.readSessionStoreReadOnly.mockReturnValue({
+      "agent:main:first": {
+        sessionId: "session-1",
+        updatedAt: Date.now(),
+      },
+      "agent:main:second": {
+        sessionId: "session-2",
+        updatedAt: Date.now() - 1,
+      },
+    });
+
+    const summary = await getStatusSummary();
+
+    expect(summary.sessions.count).toBe(2);
+    expect(statusSummaryRuntime.resolveSessionRuntimeLabel).toHaveBeenCalledTimes(1);
   });
 });

@@ -183,6 +183,40 @@ export async function getStatusSummary(
     storeCache.set(storePath, store);
     return store;
   };
+  const runtimeLabelCache = new Map<string, string>();
+  const resolveRuntimeLabelForSession = (params: {
+    entry?: SessionEntry;
+    provider: string;
+    model: string;
+    agentId?: string;
+    sessionKey: string;
+  }) => {
+    const runtimeCacheKey = JSON.stringify([
+      params.entry?.acp?.agent ?? "",
+      params.entry?.acp?.backend ?? "",
+      params.entry?.agentRuntimeOverride ?? "",
+      params.entry?.agentHarnessId ?? "",
+      params.entry?.modelProvider ?? "",
+      params.entry?.providerOverride ?? "",
+      params.provider,
+      params.model,
+      params.agentId ?? params.sessionKey,
+    ]);
+    const cached = runtimeLabelCache.get(runtimeCacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const runtime = resolveSessionRuntimeLabel({
+      cfg,
+      entry: params.entry,
+      provider: params.provider,
+      model: params.model,
+      agentId: params.agentId,
+      sessionKey: params.sessionKey,
+    });
+    runtimeLabelCache.set(runtimeCacheKey, runtime);
+    return runtime;
+  };
   const buildSessionRows = (
     store: Record<string, SessionEntry | undefined>,
     opts: { agentIdOverride?: string } = {},
@@ -214,8 +248,7 @@ export async function getStatusSummary(
           contextTokens && contextTokens > 0 && total !== undefined
             ? Math.min(999, Math.round((total / contextTokens) * 100))
             : null;
-        const runtime = resolveSessionRuntimeLabel({
-          cfg,
+        const runtime = resolveRuntimeLabelForSession({
           entry,
           provider: resolvedModel.provider,
           model: model ?? "",
