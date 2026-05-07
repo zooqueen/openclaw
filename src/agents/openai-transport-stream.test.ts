@@ -2902,7 +2902,7 @@ describe("openai transport stream", () => {
       );
     });
 
-    it("does not replay thought_signature across a different API surface", () => {
+    it("uses the Gemini skip-validator signature across a different API surface", () => {
       const params = buildOpenAICompletionsParams(
         geminiModel,
         {
@@ -2939,12 +2939,14 @@ describe("openai transport stream", () => {
       ) as { messages: Array<Record<string, unknown>> };
 
       const assistant = params.messages.find((message) => message.role === "assistant") as
-        | { tool_calls?: Array<{ extra_content?: unknown }> }
+        | { tool_calls?: Array<{ extra_content?: { google?: { thought_signature?: string } } }> }
         | undefined;
-      expect(assistant?.tool_calls?.[0]?.extra_content).toBeUndefined();
+      expect(assistant?.tool_calls?.[0]?.extra_content?.google?.thought_signature).toBe(
+        "skip_thought_signature_validator",
+      );
     });
 
-    it("does not emit extra_content when no thought_signature was captured", () => {
+    it("uses the Gemini skip-validator signature when no thought_signature was captured", () => {
       const params = buildOpenAICompletionsParams(
         geminiModel,
         {
@@ -2973,9 +2975,11 @@ describe("openai transport stream", () => {
       ) as { messages: Array<Record<string, unknown>> };
 
       const assistant = params.messages.find((message) => message.role === "assistant") as
-        | { tool_calls?: Array<{ extra_content?: unknown }> }
+        | { tool_calls?: Array<{ extra_content?: { google?: { thought_signature?: string } } }> }
         | undefined;
-      expect(assistant?.tool_calls?.[0]?.extra_content).toBeUndefined();
+      expect(assistant?.tool_calls?.[0]?.extra_content?.google?.thought_signature).toBe(
+        "skip_thought_signature_validator",
+      );
     });
   });
 
