@@ -10,6 +10,7 @@ type SafeNpmInstallEnvOptions = NpmProjectInstallEnvOptions & {
 
 type SafeNpmInstallArgsOptions = {
   ignoreWorkspaces?: boolean;
+  legacyPeerDeps?: boolean;
   loglevel?: "error" | "silent";
   noAudit?: boolean;
   noFund?: boolean;
