@@ -397,6 +397,10 @@
       "destination": "/clawhub"
     },
     {
+      "source": "/publishing",
+      "destination": "/clawhub/publishing"
+    },
+    {
       "source": "/tools/clawhub",
       "destination": "/clawhub"
     },
