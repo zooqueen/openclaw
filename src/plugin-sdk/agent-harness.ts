@@ -3,3 +3,5 @@
 
 export * from "./agent-harness-runtime.js";
 export { createOpenClawCodingTools } from "../agents/pi-tools.js";
+export { createPolicyAwareBundleMcpToolRuntime } from "../agents/harness/bundle-mcp-tools.js";
+export type { PolicyAwareBundleMcpToolRuntimeParams } from "../agents/harness/bundle-mcp-tools.js";

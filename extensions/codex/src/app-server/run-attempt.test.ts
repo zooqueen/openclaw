@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
+import { createPolicyAwareBundleMcpToolRuntime } from "openclaw/plugin-sdk/agent-harness";
 import {
   abortAgentHarnessRun,
   embeddedAgentLog,
@@ -536,6 +537,7 @@ describe("runCodexAppServerAttempt", () => {
   afterEach(async () => {
     __testing.resetCodexAppServerClientFactoryForTests();
     __testing.resetOpenClawCodingToolsFactoryForTests();
+    __testing.resetPolicyAwareBundleMcpToolRuntimeFactoryForTests();
     resetCodexRateLimitCacheForTests();
     nativeHookRelayTesting.clearNativeHookRelaysForTests();
     resetAgentEventsForTest();
@@ -724,6 +726,91 @@ describe("runCodexAppServerAttempt", () => {
       sessionKey: "agent:main:main",
       runSessionKey: undefined,
     });
+  });
+
+  it("exposes a configured bundle MCP tool to Codex dynamic tools when policy allows it", async () => {
+    const workspaceDir = path.join(tempDir, "workspace");
+    const params = createParams(path.join(tempDir, "session.jsonl"), workspaceDir);
+    params.disableTools = false;
+    params.toolsAllow = ["bundle-mcp"];
+    params.config = { tools: { profile: "coding" } };
+    __testing.setOpenClawCodingToolsFactoryForTests(() => []);
+
+    const dispose = vi.fn(async () => undefined);
+    const callTool = vi.fn(async () => ({
+      content: [{ type: "text", text: "configured bundle MCP response" }],
+    }));
+    const fakeRuntime = {
+      sessionId: "bundle-mcp-test-session",
+      workspaceDir,
+      configFingerprint: "bundle-mcp-test-config",
+      createdAt: 1,
+      lastUsedAt: 1,
+      getCatalog: async () => ({
+        version: 1,
+        generatedAt: 1,
+        servers: {
+          configured: {
+            serverName: "configured",
+            launchSummary: "test server",
+            toolCount: 1,
+          },
+        },
+        tools: [
+          {
+            serverName: "configured",
+            safeServerName: "configured",
+            toolName: "probe",
+            description: "Configured MCP server tool.",
+            fallbackDescription: "Configured MCP server tool.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            },
+          },
+        ],
+      }),
+      markUsed: vi.fn(),
+      callTool,
+      dispose,
+    };
+
+    __testing.setPolicyAwareBundleMcpToolRuntimeFactoryForTests((runtimeParams) =>
+      createPolicyAwareBundleMcpToolRuntime({
+        ...runtimeParams,
+        createRuntime: () => fakeRuntime as never,
+      }),
+    );
+
+    const runtime = await __testing.buildDynamicToolRuntime({
+      params,
+      resolvedWorkspace: workspaceDir,
+      effectiveWorkspace: workspaceDir,
+      sandboxSessionKey: params.sessionKey ?? params.sessionId,
+      sandbox: null,
+      runAbortController: new AbortController(),
+      sessionAgentId: "main",
+      pluginConfig: {},
+      onYieldDetected: () => undefined,
+    });
+
+    try {
+      const tool = runtime.tools.find((candidate) => candidate.name === "configured__probe");
+      expect(tool?.description).toBe("Configured MCP server tool.");
+
+      await expect(tool?.execute("call-1", {}, new AbortController().signal)).resolves.toEqual({
+        content: [{ type: "text", text: "configured bundle MCP response" }],
+        details: {
+          mcpServer: "configured",
+          mcpTool: "probe",
+        },
+      });
+      expect(callTool).toHaveBeenCalledWith("configured", "probe", {});
+    } finally {
+      await runtime.dispose();
+    }
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it("returns a failed dynamic tool response when an app-server tool call exceeds the deadline", async () => {

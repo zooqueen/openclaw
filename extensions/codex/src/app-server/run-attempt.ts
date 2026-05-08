@@ -156,10 +156,17 @@ type OpenClawCodingToolsOptions = NonNullable<
 >;
 type OpenClawCodingToolsFactory =
   (typeof import("openclaw/plugin-sdk/agent-harness"))["createOpenClawCodingTools"];
+type PolicyAwareBundleMcpToolRuntimeFactory =
+  (typeof import("openclaw/plugin-sdk/agent-harness"))["createPolicyAwareBundleMcpToolRuntime"];
+type DynamicToolRuntime = {
+  tools: ReturnType<OpenClawCodingToolsFactory>;
+  dispose: () => Promise<void>;
+};
 
 const testClientFactoryStorage = new AsyncLocalStorage<CodexAppServerClientFactory | undefined>();
 const clientFactory = defaultCodexAppServerClientFactory;
 let openClawCodingToolsFactoryForTests: OpenClawCodingToolsFactory | undefined;
+let bundleMcpToolRuntimeFactoryForTests: PolicyAwareBundleMcpToolRuntimeFactory | undefined;
 
 function resolveCodexAppServerClientFactory(): CodexAppServerClientFactory {
   return testClientFactoryStorage.getStore() ?? clientFactory;
@@ -507,7 +514,7 @@ export async function runCodexAppServerAttempt(
     ? params.contextEngine
     : undefined;
   let yieldDetected = false;
-  const tools = await buildDynamicTools({
+  const dynamicToolRuntime = await buildDynamicToolRuntime({
     params,
     resolvedWorkspace,
     effectiveWorkspace,
@@ -521,7 +528,7 @@ export async function runCodexAppServerAttempt(
     },
   });
   const toolBridge = createCodexDynamicToolBridge({
-    tools,
+    tools: dynamicToolRuntime.tools,
     signal: runAbortController.signal,
     loading: pluginConfig.codexDynamicToolsLoading ?? "searchable",
     directToolNames: shouldForceMessageTool(params) ? ["message"] : [],
@@ -809,6 +816,13 @@ export async function runCodexAppServerAttempt(
   } catch (error) {
     nativeHookRelay?.unregister();
     clearSharedCodexAppServerClientIfCurrent(startupClientForCleanup);
+    await runAgentCleanupStep({
+      runId: params.runId,
+      sessionId: params.sessionId,
+      step: "codex-dynamic-tools-cleanup-startup-failure",
+      log: embeddedAgentLog,
+      cleanup: dynamicToolRuntime.dispose,
+    });
     params.abortSignal?.removeEventListener("abort", abortFromUpstream);
     throw error;
   }
@@ -1539,6 +1553,13 @@ export async function runCodexAppServerAttempt(
     nativeHookRelay?.unregister();
     runAbortController.signal.removeEventListener("abort", abortListener);
     params.abortSignal?.removeEventListener("abort", abortFromUpstream);
+    await runAgentCleanupStep({
+      runId: params.runId,
+      sessionId: params.sessionId,
+      step: "codex-dynamic-tools-cleanup",
+      log: embeddedAgentLog,
+      cleanup: dynamicToolRuntime.dispose,
+    });
     steeringQueue?.cancel();
     clearActiveEmbeddedRun(params.sessionId, handle, params.sessionKey);
   }
@@ -1721,16 +1742,18 @@ function resolveOpenClawCodingToolsSessionKeys(
   };
 }
 
-async function buildDynamicTools(input: DynamicToolBuildParams) {
+async function buildDynamicToolRuntime(input: DynamicToolBuildParams): Promise<DynamicToolRuntime> {
   const { params } = input;
   if (params.disableTools || !supportsModelTools(params.model)) {
-    return [];
+    return { tools: [], dispose: async () => undefined };
   }
   const modelHasVision = params.model.input?.includes("image") ?? false;
   const agentDir = params.agentDir ?? resolveAgentDir(params.config ?? {}, input.sessionAgentId);
+  const agentHarness = await import("openclaw/plugin-sdk/agent-harness");
   const createOpenClawCodingTools =
-    openClawCodingToolsFactoryForTests ??
-    (await import("openclaw/plugin-sdk/agent-harness")).createOpenClawCodingTools;
+    openClawCodingToolsFactoryForTests ?? agentHarness.createOpenClawCodingTools;
+  const createPolicyAwareBundleMcpToolRuntime =
+    bundleMcpToolRuntimeFactoryForTests ?? agentHarness.createPolicyAwareBundleMcpToolRuntime;
   const sessionKeys = resolveOpenClawCodingToolsSessionKeys(params, input.sandboxSessionKey);
   const allTools = createOpenClawCodingTools({
     agentId: input.sessionAgentId,
@@ -1804,7 +1827,7 @@ async function buildDynamicTools(input: DynamicToolBuildParams) {
     hasInboundImages: (params.images?.length ?? 0) > 0,
   });
   const filteredTools = filterCodexDynamicToolsForAllowlist(visionFilteredTools, params.toolsAllow);
-  return normalizeAgentRuntimeTools({
+  const normalizedTools = normalizeAgentRuntimeTools({
     runtimePlan: params.runtimePlan,
     tools: filteredTools,
     provider: params.provider,
@@ -1815,6 +1838,47 @@ async function buildDynamicTools(input: DynamicToolBuildParams) {
     modelApi: params.model.api,
     model: params.model,
   });
+  const excludedToolNames = new Set(input.pluginConfig.codexDynamicToolsExclude ?? []);
+  const bundleMcpRuntime = await createPolicyAwareBundleMcpToolRuntime({
+    toolsEnabled: true,
+    disableTools: params.disableTools,
+    toolsAllow: params.toolsAllow,
+    workspaceDir: input.effectiveWorkspace,
+    config: params.config,
+    reservedToolNames: normalizedTools.map((tool) => tool.name),
+    sandboxToolPolicy: input.sandbox?.tools,
+    sessionKey: input.sandboxSessionKey,
+    agentId: input.sessionAgentId,
+    modelProvider: params.provider,
+    modelId: params.modelId,
+    messageProvider: params.messageChannel ?? params.messageProvider,
+    agentAccountId: params.agentAccountId,
+    groupId: params.groupId,
+    groupChannel: params.groupChannel,
+    groupSpace: params.groupSpace,
+    spawnedBy: params.spawnedBy,
+    senderId: params.senderId,
+    senderName: params.senderName,
+    senderUsername: params.senderUsername,
+    senderE164: params.senderE164,
+    senderIsOwner: params.senderIsOwner,
+    ownerOnlyToolAllowlist: params.ownerOnlyToolAllowlist,
+    warn: (message) => embeddedAgentLog.warn(message),
+  });
+
+  return {
+    tools: [
+      ...normalizedTools,
+      ...(bundleMcpRuntime?.tools.filter((tool) => !excludedToolNames.has(tool.name)) ?? []),
+    ],
+    dispose: async () => {
+      await bundleMcpRuntime?.dispose();
+    },
+  };
+}
+
+async function buildDynamicTools(input: DynamicToolBuildParams) {
+  return (await buildDynamicToolRuntime(input)).tools;
 }
 
 function filterCodexDynamicToolsForAllowlist<T extends { name: string }>(
@@ -2251,6 +2315,7 @@ export const __testing = {
   CODEX_TURN_TERMINAL_IDLE_TIMEOUT_MS,
   buildCodexNativeHookRelayId,
   applyCodexDynamicToolProfile,
+  buildDynamicToolRuntime,
   buildDynamicTools,
   filterCodexDynamicToolsForAllowlist,
   filterToolsForVisionInputs,
@@ -2263,6 +2328,14 @@ export const __testing = {
   },
   resetOpenClawCodingToolsFactoryForTests(): void {
     openClawCodingToolsFactoryForTests = undefined;
+  },
+  setPolicyAwareBundleMcpToolRuntimeFactoryForTests(
+    factory: PolicyAwareBundleMcpToolRuntimeFactory,
+  ): void {
+    bundleMcpToolRuntimeFactoryForTests = factory;
+  },
+  resetPolicyAwareBundleMcpToolRuntimeFactoryForTests(): void {
+    bundleMcpToolRuntimeFactoryForTests = undefined;
   },
   setCodexAppServerClientFactoryForTests(factory: CodexAppServerClientFactory): void {
     testClientFactoryStorage.enterWith(factory);
