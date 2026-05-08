@@ -12,6 +12,19 @@ type FakeServer = EventEmitter & {
   headersTimeout: number;
 };
 
+type RegisterHandlerDeps = { cfg: OpenClawConfig };
+type MSTeamsChannelResolution = {
+  input: string;
+  resolved: boolean;
+  teamId?: string;
+  channelId?: string;
+};
+type MSTeamsUserResolution = {
+  input: string;
+  resolved: boolean;
+  id?: string;
+};
+
 const expressControl = vi.hoisted(() => ({
   mode: { value: "listening" as "listening" | "error" },
   apps: [] as Array<{
@@ -94,7 +107,7 @@ vi.mock("express", () => {
 });
 
 const registerMSTeamsHandlers = vi.hoisted(() =>
-  vi.fn(() => ({
+  vi.fn((_handler: unknown, _deps: RegisterHandlerDeps) => ({
     run: vi.fn(async () => {}),
   })),
 );
@@ -118,12 +131,13 @@ const loadMSTeamsSdkWithAuth = vi.hoisted(() =>
 );
 
 vi.mock("./monitor-handler.js", () => ({
-  registerMSTeamsHandlers: (...args: unknown[]) => registerMSTeamsHandlers(...args),
+  registerMSTeamsHandlers: (handler: unknown, deps: RegisterHandlerDeps) =>
+    registerMSTeamsHandlers(handler, deps),
 }));
 
 const resolveAllowlistMocks = vi.hoisted(() => ({
-  resolveMSTeamsChannelAllowlist: vi.fn(async () => []),
-  resolveMSTeamsUserAllowlist: vi.fn(async () => []),
+  resolveMSTeamsChannelAllowlist: vi.fn(async (): Promise<MSTeamsChannelResolution[]> => []),
+  resolveMSTeamsUserAllowlist: vi.fn(async (): Promise<MSTeamsUserResolution[]> => []),
 }));
 
 vi.mock("./resolve-allowlist.js", () => ({
@@ -331,13 +345,13 @@ describe("monitorMSTeamsProvider lifecycle", () => {
       entries: ["Product/Roadmap"],
     });
 
-    const registeredCfg = registerMSTeamsHandlers.mock.calls[0]?.[1] as { cfg: OpenClawConfig };
-    expect(registeredCfg.cfg.channels?.msteams?.allowFrom).toEqual([
+    const registeredCfg = registerMSTeamsHandlers.mock.calls[0]?.[1];
+    expect(registeredCfg?.cfg.channels?.msteams?.allowFrom).toEqual([
       "Alice",
       "user:40a1a0ed-4ff2-4164-a219-55518990c197",
       "40a1a0ed-4ff2-4164-a219-55518990c197",
     ]);
-    expect(registeredCfg.cfg.channels?.msteams?.groupAllowFrom).toEqual([
+    expect(registeredCfg?.cfg.channels?.msteams?.groupAllowFrom).toEqual([
       "Bob",
       "msteams:user:50a1a0ed-4ff2-4164-a219-55518990c198",
       "50a1a0ed-4ff2-4164-a219-55518990c198",
@@ -383,9 +397,9 @@ describe("monitorMSTeamsProvider lifecycle", () => {
       entries: ["Bob"],
     });
 
-    const registeredCfg = registerMSTeamsHandlers.mock.calls[0]?.[1] as { cfg: OpenClawConfig };
-    expect(registeredCfg.cfg.channels?.msteams?.allowFrom).toEqual(["Alice", "alice-aad"]);
-    expect(registeredCfg.cfg.channels?.msteams?.groupAllowFrom).toEqual(["Bob", "bob-aad"]);
+    const registeredCfg = registerMSTeamsHandlers.mock.calls[0]?.[1];
+    expect(registeredCfg?.cfg.channels?.msteams?.allowFrom).toEqual(["Alice", "alice-aad"]);
+    expect(registeredCfg?.cfg.channels?.msteams?.groupAllowFrom).toEqual(["Bob", "bob-aad"]);
 
     abort.abort();
     await task;
