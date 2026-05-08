@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CliDeps } from "../cli/deps.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { SsrFBlockedError } from "../infra/net/ssrf.js";
-import { mergeMockedModule } from "../test-utils/vitest-module-mocks.js";
 
 const {
   enqueueSystemEventMock,
@@ -33,52 +32,25 @@ const {
   })),
 }));
 
-function enqueueSystemEvent(...args: unknown[]) {
-  return enqueueSystemEventMock(...args);
-}
-
-function requestHeartbeat(...args: unknown[]) {
-  return requestHeartbeatMock(...args);
-}
-
-function runHeartbeatOnce(...args: unknown[]) {
-  return runHeartbeatOnceMock(...args);
-}
-
 vi.mock("../infra/system-events.js", () => ({
-  enqueueSystemEvent,
+  enqueueSystemEvent: (...args: unknown[]) => enqueueSystemEventMock(...args),
 }));
 
-vi.mock("../infra/heartbeat-wake.js", async () => {
-  return await mergeMockedModule(
-    await vi.importActual<typeof import("../infra/heartbeat-wake.js")>(
-      "../infra/heartbeat-wake.js",
-    ),
-    () => ({
-      requestHeartbeat,
-    }),
-  );
-});
+vi.mock("../infra/heartbeat-wake.js", () => ({
+  requestHeartbeat: (...args: unknown[]) => requestHeartbeatMock(...args),
+}));
 
 vi.mock("../infra/heartbeat-runner.js", () => ({
-  runHeartbeatOnce,
+  runHeartbeatOnce: (...args: unknown[]) => runHeartbeatOnceMock(...args),
 }));
 
-vi.mock("../config/config.js", async () => {
-  const actual = await vi.importActual<typeof import("../config/config.js")>("../config/config.js");
-  return {
-    ...actual,
-    getRuntimeConfig: () => loadConfigMock(),
-  };
-});
+vi.mock("../config/config.js", () => ({
+  getRuntimeConfig: () => loadConfigMock(),
+}));
 
-vi.mock("../config/io.js", async () => {
-  const actual = await vi.importActual<typeof import("../config/io.js")>("../config/io.js");
-  return {
-    ...actual,
-    getRuntimeConfig: () => loadConfigMock(),
-  };
-});
+vi.mock("../config/io.js", () => ({
+  getRuntimeConfig: () => loadConfigMock(),
+}));
 
 vi.mock("../infra/net/fetch-guard.js", () => ({
   fetchWithSsrFGuard: fetchWithSsrFGuardMock,
