@@ -16,14 +16,6 @@ vi.mock("../config/io.js", () => ({
   getRuntimeConfig: vi.fn(() => ({})),
 }));
 
-vi.mock("../infra/heartbeat-visibility.js", () => ({
-  resolveHeartbeatVisibility: vi.fn(() => ({
-    showOk: false,
-    showAlerts: true,
-    useIndicator: true,
-  })),
-}));
-
 vi.mock("./server-chat.load-gateway-session-row.runtime.js", () => ({
   loadGatewaySessionRow: vi.fn(),
 }));
@@ -40,7 +32,6 @@ vi.mock("./session-utils.js", () => ({
 }));
 
 import { getRuntimeConfig } from "../config/io.js";
-import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import {
   createAgentEventHandler,
   createChatRunState,
@@ -53,11 +44,6 @@ import { loadSessionEntry } from "./session-utils.js";
 describe("agent event handler", () => {
   beforeEach(() => {
     vi.mocked(getRuntimeConfig).mockReturnValue({});
-    vi.mocked(resolveHeartbeatVisibility).mockReturnValue({
-      showOk: false,
-      showAlerts: true,
-      useIndicator: true,
-    });
     vi.mocked(loadSessionEntry).mockReset().mockReturnValue({
       cfg: {},
       storePath: "/tmp/sessions.json",
@@ -991,6 +977,50 @@ describe("agent event handler", () => {
     resetAgentRunContextForTest();
   });
 
+  it("does not mirror heartbeat tool events to session subscribers as chat cards", () => {
+    const { broadcastToConnIds, sessionEventSubscribers, toolEventRecipients, handler } =
+      createHarness({
+        resolveSessionKeyForRun: () => "session-heartbeat-tool",
+      });
+
+    registerAgentRunContext("run-heartbeat-tool", {
+      sessionKey: "session-heartbeat-tool",
+      isHeartbeat: true,
+      verboseLevel: "off",
+    });
+    sessionEventSubscribers.subscribe("conn-session");
+    toolEventRecipients.add("run-heartbeat-tool", "conn-run");
+
+    handler({
+      runId: "run-heartbeat-tool",
+      seq: 1,
+      stream: "tool",
+      ts: 1_234,
+      data: {
+        phase: "start",
+        name: "read",
+        toolCallId: "tool-heartbeat-1",
+        args: { path: "HEARTBEAT.md" },
+      },
+    });
+
+    expect(broadcastToConnIds.mock.calls.some(([event]) => event === "session.tool")).toBe(false);
+    expect(broadcastToConnIds).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        runId: "run-heartbeat-tool",
+        sessionKey: "session-heartbeat-tool",
+        stream: "tool",
+        data: expect.objectContaining({
+          phase: "start",
+          name: "read",
+          toolCallId: "tool-heartbeat-1",
+        }),
+      }),
+      new Set(["conn-run"]),
+    );
+  });
+
   it("hydrates node session tool events with session ownership metadata", () => {
     const { nodeSendToSession, handler } = createHarness({
       resolveSessionKeyForRun: () => "session-1",
@@ -1626,6 +1656,43 @@ describe("agent event handler", () => {
     expect(sessionChatCalls(nodeSendToSession)).toHaveLength(0);
 
     emitLifecycleEnd(handler, "run-heartbeat");
+
+    const finalPayload = expectSingleFinalChatPayload(broadcast) as { message?: unknown };
+    expect(finalPayload.message).toBeUndefined();
+    expect(sessionChatCalls(nodeSendToSession)).toHaveLength(1);
+  });
+
+  it("suppresses heartbeat ack-like chat output when showOk is true", () => {
+    vi.mocked(getRuntimeConfig).mockReturnValue({
+      agents: { defaults: { heartbeat: {} } },
+      channels: { defaults: { heartbeat: { showOk: true } } },
+    });
+
+    const { broadcast, nodeSendToSession, chatRunState, handler } = createHarness({
+      now: 4_000,
+    });
+    chatRunState.registry.add("run-heartbeat-showok", {
+      sessionKey: "session-heartbeat-showok",
+      clientRunId: "client-heartbeat-showok",
+    });
+    registerAgentRunContext("run-heartbeat-showok", {
+      sessionKey: "session-heartbeat-showok",
+      isHeartbeat: true,
+      verboseLevel: "off",
+    });
+
+    handler({
+      runId: "run-heartbeat-showok",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "HEARTBEAT_OK" },
+    });
+
+    expect(chatBroadcastCalls(broadcast)).toHaveLength(0);
+    expect(sessionChatCalls(nodeSendToSession)).toHaveLength(0);
+
+    emitLifecycleEnd(handler, "run-heartbeat-showok");
 
     const finalPayload = expectSingleFinalChatPayload(broadcast) as { message?: unknown };
     expect(finalPayload.message).toBeUndefined();

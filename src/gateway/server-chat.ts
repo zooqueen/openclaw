@@ -3,7 +3,6 @@ import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { detectErrorKind, type ErrorKind } from "../infra/errors.js";
-import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { isAcpSessionKey, isSubagentSessionKey } from "../sessions/session-key-utils.js";
 import { setSafeTimeout } from "../utils/timer-delay.js";
 import {
@@ -67,21 +66,11 @@ function resolveHeartbeatContext(runId: string, sourceRunId?: string) {
 
 /**
  * Check if heartbeat ACK/noise should be hidden from interactive chat surfaces.
+ * `showOk` controls external channel delivery, not webchat chat projection.
  */
 function shouldHideHeartbeatChatOutput(runId: string, sourceRunId?: string): boolean {
   const runContext = resolveHeartbeatContext(runId, sourceRunId);
-  if (!runContext?.isHeartbeat) {
-    return false;
-  }
-
-  try {
-    const cfg = getRuntimeConfig();
-    const visibility = resolveHeartbeatVisibility({ cfg, channel: "webchat" });
-    return !visibility.showOk;
-  } catch {
-    // Default to suppressing if we can't load config
-    return true;
-  }
+  return Boolean(runContext?.isHeartbeat);
 }
 
 function normalizeHeartbeatChatFinalText(params: {
@@ -613,6 +602,7 @@ export function createAgentEventHandler({
     const isToolEvent = evt.stream === "tool";
     const isItemEvent = evt.stream === "item";
     const toolVerbose = isToolEvent ? resolveToolVerboseLevel(evt.runId, sessionKey) : "off";
+    const suppressHeartbeatChatProjection = shouldHideHeartbeatChatOutput(clientRunId, evt.runId);
     // Channel/node subscribers respect verbose; authenticated Control UI
     // recipients need tool result payloads to render live tool cards.
     const channelToolPayload =
@@ -645,7 +635,13 @@ export function createAgentEventHandler({
       const toolPhase = typeof evt.data?.phase === "string" ? evt.data.phase : "";
       // Flush pending assistant text before tool-start events so clients can
       // render complete pre-tool text above tool cards (not truncated by delta throttle).
-      if (toolPhase === "start" && isControlUiVisible && sessionKey && !isAborted) {
+      if (
+        toolPhase === "start" &&
+        isControlUiVisible &&
+        sessionKey &&
+        !isAborted &&
+        !suppressHeartbeatChatProjection
+      ) {
         flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, evt.runId, evt.seq);
       }
       // Always broadcast tool events to registered WS recipients with
@@ -665,7 +661,7 @@ export function createAgentEventHandler({
       // not know the runId in advance, so they cannot register as run-scoped
       // tool recipients. Mirror tool lifecycle onto a session-scoped event so
       // they can render live pending tool cards without polling history.
-      if (isControlUiVisible && sessionKey) {
+      if (isControlUiVisible && sessionKey && !suppressHeartbeatChatProjection) {
         const sessionSubscribers = sessionEventSubscribers.getAll();
         if (sessionSubscribers.size > 0) {
           broadcastToConnIds(
