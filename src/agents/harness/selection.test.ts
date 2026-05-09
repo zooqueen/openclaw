@@ -101,7 +101,7 @@ function registerSuccessfulCodexHarness(): void {
       id: "codex",
       label: "Codex",
       supports: (ctx) =>
-        ctx.provider === "codex" || ctx.provider === "openai"
+        ctx.provider === "codex" || ctx.provider === "openai" || ctx.provider === "openai-codex"
           ? { supported: true, priority: 100 }
           : { supported: false },
       runAttempt: vi.fn(async () => createAttemptResult("codex")),

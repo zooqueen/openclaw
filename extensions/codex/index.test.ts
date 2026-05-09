@@ -88,7 +88,7 @@ describe("codex plugin", () => {
     expect(api.registerProvider).toHaveBeenCalledWith(expect.objectContaining({ id: "codex" }));
   });
 
-  it("only claims the codex provider by default", () => {
+  it("claims the codex provider and openai-codex compatibility provider by default", () => {
     const harness = createCodexAppServerAgentHarness();
 
     expect(harness.deliveryDefaults?.sourceVisibleReplies).toBe("message_tool");
@@ -102,6 +102,6 @@ describe("codex plugin", () => {
         modelId: "gpt-5.4",
         requestedRuntime: "auto",
       }),
-    ).toMatchObject({ supported: false });
+    ).toMatchObject({ supported: true });
   });
 });
