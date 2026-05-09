@@ -20,6 +20,7 @@ export function applyOpenAIProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
   const models = { ...next.agents?.defaults?.models };
   models[OPENAI_DEFAULT_MODEL] = {
     ...models[OPENAI_DEFAULT_MODEL],
+    agentRuntime: models[OPENAI_DEFAULT_MODEL]?.agentRuntime ?? { id: "pi" },
     alias: models[OPENAI_DEFAULT_MODEL]?.alias ?? "GPT",
   };
 

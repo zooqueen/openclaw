@@ -8,6 +8,28 @@ describe("openai default models", () => {
     expect(Object.keys(next.agents?.defaults?.models ?? {})).toContain(OPENAI_DEFAULT_MODEL);
   });
 
+  it("pins the default API-key model to PI runtime", () => {
+    const next = applyOpenAIProviderConfig({});
+    expect(next.agents?.defaults?.models?.[OPENAI_DEFAULT_MODEL]?.agentRuntime).toEqual({
+      id: "pi",
+    });
+  });
+
+  it("preserves an existing runtime for the default model", () => {
+    const next = applyOpenAIProviderConfig({
+      agents: {
+        defaults: {
+          models: {
+            [OPENAI_DEFAULT_MODEL]: { agentRuntime: { id: "codex" } },
+          },
+        },
+      },
+    });
+    expect(next.agents?.defaults?.models?.[OPENAI_DEFAULT_MODEL]?.agentRuntime).toEqual({
+      id: "codex",
+    });
+  });
+
   it("preserves existing alias for the default model", () => {
     const next = applyOpenAIProviderConfig({
       agents: {
