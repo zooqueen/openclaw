@@ -122,7 +122,14 @@ describe("install.sh", () => {
     const installedNode = join(installedBin, "node");
     writeFileSync(
       join(home, ".bashrc"),
-      ["case $- in", "  *i*) ;;", "  *) return ;;", "esac", ""].join("\n"),
+      [
+        "case $- in",
+        "  *i*) ;;",
+        "  *) return ;;",
+        "esac",
+        `export PATH="${installedBin}:$PATH"`,
+        "",
+      ].join("\n"),
     );
     writeFileSync(
       oldNode,
@@ -226,7 +233,14 @@ describe("install.sh", () => {
     mkdirSync(home, { recursive: true });
     writeFileSync(
       join(home, ".bashrc"),
-      ["case $- in", "  *i*) ;;", "  *) return ;;", "esac", ""].join("\n"),
+      [
+        "case $- in",
+        "  *i*) ;;",
+        "  *) return ;;",
+        "esac",
+        'export PATH="$HOME/.npm-global/bin:$PATH"',
+        "",
+      ].join("\n"),
     );
 
     let result: ReturnType<typeof runInstallShell> | undefined;
