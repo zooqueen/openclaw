@@ -1324,6 +1324,25 @@ node_is_at_least_required() {
     return 1
 }
 
+node_binary_is_at_least_required() {
+    local node_bin="$1"
+    local major minor
+    if [[ -z "$node_bin" || ! -x "$node_bin" ]]; then
+        return 1
+    fi
+    read -r major minor < <("$node_bin" -p '`${process.versions.node.split(".")[0]} ${process.versions.node.split(".")[1]}`' 2>/dev/null || true)
+    if [[ ! "$major" =~ ^[0-9]+$ || ! "$minor" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    if [[ "$major" -gt "$NODE_MIN_MAJOR" ]]; then
+        return 0
+    fi
+    if [[ "$major" -eq "$NODE_MIN_MAJOR" && "$minor" -ge "$NODE_MIN_MINOR" ]]; then
+        return 0
+    fi
+    return 1
+}
+
 print_active_node_paths() {
     if ! command -v node &> /dev/null; then
         return 1
@@ -1409,6 +1428,91 @@ ensure_default_node_active_shell() {
     else
         echo "Install/select Node.js ${NODE_DEFAULT_MAJOR} (or Node ${NODE_MIN_VERSION}+ minimum) and ensure it is first on PATH, then rerun installer."
     fi
+
+    return 1
+}
+
+prepend_path_dir() {
+    local dir="${1%/}"
+    if [[ -z "$dir" || ! -d "$dir" ]]; then
+        return 1
+    fi
+    local current=":${PATH:-}:"
+    current="${current//:${dir}:/:}"
+    current="${current#:}"
+    current="${current%:}"
+    if [[ -n "$current" ]]; then
+        export PATH="${dir}:${current}"
+    else
+        export PATH="${dir}"
+    fi
+    refresh_shell_command_cache
+}
+
+persist_shell_path_prepend() {
+    local dir="${1%/}"
+    if [[ -z "$dir" ]]; then
+        return 1
+    fi
+
+    local path_line="export PATH=\"${dir}:\$PATH\""
+    local wrote_rc=0
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [[ -f "$rc" ]]; then
+            if ! grep -Fq "$dir" "$rc"; then
+                local tmp_rc="${rc}.openclaw-tmp"
+                {
+                    printf '%s\n' "$path_line"
+                    cat "$rc"
+                } > "$tmp_rc"
+                mv "$tmp_rc" "$rc"
+            fi
+            wrote_rc=1
+        fi
+    done
+    if [[ "$wrote_rc" -eq 0 ]]; then
+        printf '%s\n' "$path_line" >> "$HOME/.bashrc"
+    fi
+}
+
+activate_supported_node_on_path() {
+    if node_is_at_least_required; then
+        return 0
+    fi
+
+    local -a candidates=()
+    local candidate=""
+    while IFS= read -r candidate; do
+        [[ -n "$candidate" ]] && candidates+=("$candidate")
+    done < <(type -aP node 2>/dev/null || true)
+    candidates+=(
+        "/usr/bin/node"
+        "/usr/local/bin/node"
+        "/opt/homebrew/bin/node"
+        "/opt/homebrew/opt/node@${NODE_DEFAULT_MAJOR}/bin/node"
+        "/usr/local/opt/node@${NODE_DEFAULT_MAJOR}/bin/node"
+    )
+
+    local seen=":"
+    for candidate in "${candidates[@]}"; do
+        if [[ -z "$candidate" || ! -x "$candidate" ]]; then
+            continue
+        fi
+        case "$seen" in
+            *":$candidate:"*) continue ;;
+        esac
+        seen="${seen}${candidate}:"
+        if node_binary_is_at_least_required "$candidate"; then
+            local candidate_dir
+            candidate_dir="$(dirname "$candidate")"
+            prepend_path_dir "$candidate_dir" || continue
+            if [[ "$OS" == "linux" ]]; then
+                persist_shell_path_prepend "$candidate_dir" || true
+            fi
+            ui_info "Using Node.js runtime at ${candidate}"
+            return 0
+        fi
+    done
 
     return 1
 }
@@ -1533,6 +1637,7 @@ install_node() {
         fi
 
         ui_success "Node.js v${NODE_DEFAULT_MAJOR} installed"
+        activate_supported_node_on_path || true
         print_active_node_paths || true
     fi
 }
@@ -1642,11 +1747,23 @@ fix_npm_permissions() {
 
     # shellcheck disable=SC2016
     local path_line='export PATH="$HOME/.npm-global/bin:$PATH"'
+    local wrote_rc=0
     for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$rc" ]] && ! grep -q ".npm-global" "$rc"; then
-            echo "$path_line" >> "$rc"
+        if [[ -f "$rc" ]]; then
+            if ! grep -q ".npm-global" "$rc"; then
+                local tmp_rc="${rc}.openclaw-tmp"
+                {
+                    printf '%s\n' "$path_line"
+                    cat "$rc"
+                } > "$tmp_rc"
+                mv "$tmp_rc" "$rc"
+            fi
+            wrote_rc=1
         fi
     done
+    if [[ "$wrote_rc" -eq 0 ]]; then
+        printf '%s\n' "$path_line" >> "$HOME/.bashrc"
+    fi
 
     export PATH="$HOME/.npm-global/bin:$PATH"
     ui_success "npm configured for user installs"
@@ -2561,6 +2678,7 @@ main() {
     if ! check_node; then
         install_node
     fi
+    activate_supported_node_on_path || true
     if ! ensure_default_node_active_shell; then
         exit 1
     fi
