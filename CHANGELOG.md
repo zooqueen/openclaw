@@ -21,6 +21,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - CLI/gateway: keep `gateway status --deep` plugin-aware so configured plugin manifest warnings, including missing channel config metadata, stay visible during install and update smoke checks.
+- Gateway: reread config from disk after the first in-process restart loop startup, preventing SIGUSR1 restarts from reusing a stale startup snapshot and dropping config written after boot. Fixes #79947. Thanks @TheLevti.
 - Agents: apply the LLM idle watchdog while provider stream setup is still pending, preventing silent pre-stream model hangs from waiting for the full agent timeout.
 - Cron: let isolated self-cleanup runs inspect their own job run history while keeping other cron jobs and mutation actions blocked. Fixes #80019. Thanks @hclsys.
 - CLI/config: persist explicit `config set` and `config patch` values that equal runtime defaults instead of reporting success while dropping them. Fixes #79856. (#80106) Thanks @abodanty and @hclsys.
