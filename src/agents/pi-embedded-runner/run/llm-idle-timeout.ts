@@ -127,6 +127,9 @@ export function resolveLlmIdleTimeoutMs(params?: {
       value > 0 &&
       value < MAX_SAFE_TIMEOUT_MS,
   );
+  const baseUrl = params?.model?.baseUrl;
+  const isLocalProvider =
+    typeof baseUrl === "string" && baseUrl.length > 0 && isLocalProviderBaseUrl(baseUrl);
 
   const modelRequestTimeoutMs = params?.modelRequestTimeoutMs;
   if (
@@ -134,7 +137,11 @@ export function resolveLlmIdleTimeoutMs(params?: {
     Number.isFinite(modelRequestTimeoutMs) &&
     modelRequestTimeoutMs > 0
   ) {
-    return clampTimeoutMs(Math.min(modelRequestTimeoutMs, ...timeoutBounds));
+    const boundedTimeoutMs = Math.min(modelRequestTimeoutMs, ...timeoutBounds);
+    if (params?.trigger === "cron" || isLocalProvider) {
+      return clampTimeoutMs(boundedTimeoutMs);
+    }
+    return clampImplicitTimeoutMs(boundedTimeoutMs);
   }
 
   if (typeof runTimeoutMs === "number" && Number.isFinite(runTimeoutMs) && runTimeoutMs > 0) {
@@ -157,8 +164,7 @@ export function resolveLlmIdleTimeoutMs(params?: {
   // prompt evaluation or thinking, so falling back to the default would abort
   // valid local runs. Honor it only when the user has not opted out via the
   // baseUrl pointing at loopback / private-network / `.local`.
-  const baseUrl = params?.model?.baseUrl;
-  if (typeof baseUrl === "string" && baseUrl.length > 0 && isLocalProviderBaseUrl(baseUrl)) {
+  if (isLocalProvider) {
     return 0;
   }
 
@@ -182,24 +188,27 @@ export function streamWithIdleTimeout(
   return (model, context, options) => {
     const maybeStream = baseFn(model, context, options);
 
+    const createIdleTimeoutError = () =>
+      new Error(`LLM idle timeout (${Math.floor(timeoutMs / 1000)}s): no response from model`);
+
+    const createTimeoutPromise = (setTimer: (timer: NodeJS.Timeout) => void): Promise<never> => {
+      return new Promise((_, reject) => {
+        const timer = setTimeout(() => {
+          const error = createIdleTimeoutError();
+          onIdleTimeout?.(error);
+          reject(error);
+        }, timeoutMs);
+        timer.unref?.();
+        setTimer(timer);
+      });
+    };
+
     const wrapStream = (stream: ReturnType<typeof streamSimple>) => {
       const originalAsyncIterator = stream[Symbol.asyncIterator].bind(stream);
       (stream as { [Symbol.asyncIterator]: typeof originalAsyncIterator })[Symbol.asyncIterator] =
         function () {
           const iterator = originalAsyncIterator();
           let idleTimer: NodeJS.Timeout | null = null;
-
-          const createTimeoutPromise = (): Promise<never> => {
-            return new Promise((_, reject) => {
-              idleTimer = setTimeout(() => {
-                const error = new Error(
-                  `LLM idle timeout (${Math.floor(timeoutMs / 1000)}s): no response from model`,
-                );
-                onIdleTimeout?.(error);
-                reject(error);
-              }, timeoutMs);
-            });
-          };
 
           const clearTimer = () => {
             if (idleTimer) {
@@ -215,7 +224,12 @@ export function streamWithIdleTimeout(
 
               try {
                 // Race between the actual next() and the timeout
-                const result = await Promise.race([streamIterator.next(), createTimeoutPromise()]);
+                const result = await Promise.race([
+                  streamIterator.next(),
+                  createTimeoutPromise((timer) => {
+                    idleTimer = timer;
+                  }),
+                ]);
 
                 if (result.done) {
                   clearTimer();
@@ -244,7 +258,29 @@ export function streamWithIdleTimeout(
     };
 
     if (maybeStream && typeof maybeStream === "object" && "then" in maybeStream) {
-      return Promise.resolve(maybeStream).then(wrapStream);
+      let streamPromiseTimer: NodeJS.Timeout | null = null;
+      const clearStreamPromiseTimer = () => {
+        if (streamPromiseTimer) {
+          clearTimeout(streamPromiseTimer);
+          streamPromiseTimer = null;
+        }
+      };
+
+      return Promise.race([
+        Promise.resolve(maybeStream),
+        createTimeoutPromise((timer) => {
+          streamPromiseTimer = timer;
+        }),
+      ]).then(
+        (stream) => {
+          clearStreamPromiseTimer();
+          return wrapStream(stream);
+        },
+        (error) => {
+          clearStreamPromiseTimer();
+          throw error;
+        },
+      );
     }
     return wrapStream(maybeStream);
   };
