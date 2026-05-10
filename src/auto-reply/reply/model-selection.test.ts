@@ -859,6 +859,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
     provider?: string;
     model?: string;
     isHeartbeat?: boolean;
+    currentSelectionFromStoredOverride?: boolean;
   }) {
     const cfg = {} as OpenClawConfig;
     const sessionEntry = makeEntry({
@@ -883,6 +884,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       model: params.model ?? defaultModel,
       hasModelDirective: false,
       isHeartbeat: params.isHeartbeat,
+      currentSelectionFromStoredOverride: params.currentSelectionFromStoredOverride,
     });
     return { state, sessionEntry, sessionStore };
   }
@@ -914,6 +916,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       provider: "openrouter",
       model: "minimax/minimax-m2.7",
       isHeartbeat: true,
+      currentSelectionFromStoredOverride: true,
     });
 
     expect(state.provider).toBe(defaultProvider);
@@ -938,6 +941,7 @@ describe("createModelSelectionState auto-failover overrides", () => {
       provider: "openrouter",
       model: "minimax/minimax-m2.7",
       isHeartbeat: true,
+      currentSelectionFromStoredOverride: true,
     });
 
     expect(state.provider).toBe(defaultProvider);
@@ -965,6 +969,30 @@ describe("createModelSelectionState auto-failover overrides", () => {
 
     expect(state.provider).toBe("anthropic");
     expect(state.model).toBe("claude-opus-4-6");
+    expect(state.resetModelOverride).toBe(true);
+    expect(sessionStore[sessionKey]?.providerOverride).toBeUndefined();
+    expect(sessionStore[sessionKey]?.modelOverride).toBeUndefined();
+    expect(sessionStore[sessionKey]?.modelOverrideSource).toBeUndefined();
+    expect(sessionStore[sessionKey]?.fallbackOverrideSelectedModel).toBeUndefined();
+  });
+
+  it("keeps matching channel heartbeat selection while clearing stale auto-failover override", async () => {
+    const { state, sessionStore } = await resolveStateWithOverride({
+      providerOverride: "openrouter",
+      modelOverride: "minimax/minimax-m2.7",
+      modelOverrideSource: "auto",
+      fallbackOverrideSelectedModel: "openai-codex/gpt-5.3",
+      fallbackNoticeSelectedModel: "openai-codex/gpt-5.3",
+      fallbackNoticeActiveModel: "openrouter/minimax/minimax-m2.7",
+      fallbackNoticeReason: "rate_limit",
+      provider: "openrouter",
+      model: "minimax/minimax-m2.7",
+      isHeartbeat: true,
+      currentSelectionFromStoredOverride: false,
+    });
+
+    expect(state.provider).toBe("openrouter");
+    expect(state.model).toBe("minimax/minimax-m2.7");
     expect(state.resetModelOverride).toBe(true);
     expect(sessionStore[sessionKey]?.providerOverride).toBeUndefined();
     expect(sessionStore[sessionKey]?.modelOverride).toBeUndefined();

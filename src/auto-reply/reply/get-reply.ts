@@ -457,6 +457,7 @@ export async function getReplyFromConfig(
     defaultProvider,
     defaultModel,
   });
+  let currentSelectionFromStoredOverride = false;
   if (
     storedModelOverride?.model &&
     !hasResolvedHeartbeatModelOverride &&
@@ -464,6 +465,7 @@ export async function getReplyFromConfig(
   ) {
     provider = storedModelOverride.provider ?? defaultProvider;
     model = storedModelOverride.model;
+    currentSelectionFromStoredOverride = true;
   }
   const hasEffectiveSessionModelOverride =
     hasSessionModelOverride && !staleHeartbeatAutoFallbackOverride;
@@ -480,6 +482,7 @@ export async function getReplyFromConfig(
     if (resolved) {
       provider = resolved.ref.provider;
       model = resolved.ref.model;
+      currentSelectionFromStoredOverride = false;
     }
   }
 
@@ -585,6 +588,7 @@ export async function getReplyFromConfig(
       provider,
       model,
       hasResolvedHeartbeatModelOverride,
+      currentSelectionFromStoredOverride,
       typing,
       opts: resolvedOpts,
       skillFilter: mergedSkillFilter,
