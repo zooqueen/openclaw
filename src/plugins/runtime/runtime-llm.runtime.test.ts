@@ -663,7 +663,24 @@ describe("runtime.llm.complete", () => {
     ).rejects.toThrow('model override "openai/gpt-5.6" is not allowlisted');
   });
 
-  it("rejects auth-profile suffixes on complete without explicit trust", async () => {
+  it("rejects auth-profile suffixes on complete without profile or model override trust", async () => {
+    const llm = createRuntimeLlm({
+      getConfig: () => cfg,
+      authority: {
+        caller: { kind: "host", id: "runtime-test" },
+        allowComplete: true,
+      },
+    });
+
+    await expect(
+      llm.complete({
+        model: "openai/gpt-5.5@openai-codex:work",
+        messages: [{ role: "user", content: "Ping" }],
+      }),
+    ).rejects.toThrow("cannot override the target model");
+  });
+
+  it("preserves auth-profile suffix compatibility when the model override is trusted", async () => {
     const llm = createRuntimeLlm({
       getConfig: () => cfg,
       authority: {
@@ -673,12 +690,17 @@ describe("runtime.llm.complete", () => {
       },
     });
 
-    await expect(
-      llm.complete({
-        model: "openai/gpt-5.5@openai-codex:work",
-        messages: [{ role: "user", content: "Ping" }],
+    await llm.complete({
+      model: "openai/gpt-5.4@openai-codex:work",
+      messages: [{ role: "user", content: "Ping" }],
+    });
+
+    expect(hoisted.prepareSimpleCompletionModelForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelRef: "openai/gpt-5.4",
+        preferredProfile: "openai-codex:work",
       }),
-    ).rejects.toThrow("cannot override the auth profile");
+    );
   });
 
   it("treats same-as-default auth-profile suffixes on complete as profile-only overrides", async () => {
@@ -873,13 +895,12 @@ describe("runtime.llm.complete", () => {
     );
   });
 
-  it("rejects auth-profile suffixes in structured model refs without explicit trust", async () => {
+  it("rejects auth-profile suffixes in structured model refs without profile or model override trust", async () => {
     const llm = createRuntimeLlm({
       getConfig: () => cfg,
       authority: {
         caller: { kind: "host", id: "runtime-test" },
         allowComplete: true,
-        allowModelOverride: true,
       },
     });
 
@@ -890,7 +911,32 @@ describe("runtime.llm.complete", () => {
         input: [{ type: "text", text: "Hello" }],
         jsonMode: false,
       }),
-    ).rejects.toThrow("cannot override the auth profile");
+    ).rejects.toThrow("cannot override the target model");
+  });
+
+  it("preserves structured auth-profile suffix compatibility when the model override is trusted", async () => {
+    const llm = createRuntimeLlm({
+      getConfig: () => cfg,
+      authority: {
+        caller: { kind: "host", id: "runtime-test" },
+        allowComplete: true,
+        allowModelOverride: true,
+      },
+    });
+
+    await llm.completeStructured({
+      model: "openai/gpt-5.4@openai-codex:work",
+      instructions: "Extract summary.",
+      input: [{ type: "text", text: "Hello" }],
+      jsonMode: false,
+    });
+
+    expect(hoisted.prepareSimpleCompletionModelForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelRef: "openai/gpt-5.4",
+        preferredProfile: "openai-codex:work",
+      }),
+    );
   });
 
   it("treats same-as-default auth-profile suffixes in structured model refs as profile-only overrides when trusted", async () => {

@@ -483,6 +483,16 @@ function assertAllowedProfileOverride(params: {
   throw new Error(`Plugin LLM completion cannot override the auth profile${owner}.`);
 }
 
+function hasAllowedProfileOverride(params: {
+  authorityPolicy: RuntimeLlmOverridePolicy | undefined;
+  pluginPolicy: RuntimeLlmOverridePolicy | undefined;
+}): boolean {
+  return (
+    params.authorityPolicy?.allowProfileOverride === true ||
+    params.pluginPolicy?.allowProfileOverride === true
+  );
+}
+
 function assertAllowedModelOverride(params: {
   resolvedModelRef: string | null;
   pluginPolicyId: string | undefined;
@@ -575,13 +585,8 @@ export function createRuntimeLlm(options: CreateRuntimeLlmOptions = {}): PluginR
       );
     }
     const effectiveRequestedProfile = requestedProfile ?? requestedProfileFromModel;
-    assertAllowedProfileOverride({
-      requestedProfile: effectiveRequestedProfile,
-      pluginPolicyId,
-      authorityPolicy,
-      pluginPolicy,
-    });
     let effectiveRequestedModelRef = requestedModelRef;
+    let modelRefProfileCoveredByModelOverride = false;
     if (requestedModelRef) {
       const selection = resolveSimpleCompletionSelectionForAgent({
         cfg,
@@ -603,9 +608,37 @@ export function createRuntimeLlm(options: CreateRuntimeLlmOptions = {}): PluginR
           authorityPolicy,
           pluginPolicy,
         });
+        modelRefProfileCoveredByModelOverride = requestedProfileFromModel !== undefined;
       } else {
+        if (
+          requestedProfileFromModel &&
+          !hasAllowedProfileOverride({ authorityPolicy, pluginPolicy })
+        ) {
+          assertAllowedModelOverride({
+            resolvedModelRef,
+            pluginPolicyId,
+            authorityPolicy,
+            pluginPolicy,
+          });
+          modelRefProfileCoveredByModelOverride = true;
+        }
         effectiveRequestedModelRef = undefined;
       }
+    }
+    if (requestedProfile) {
+      assertAllowedProfileOverride({
+        requestedProfile,
+        pluginPolicyId,
+        authorityPolicy,
+        pluginPolicy,
+      });
+    } else if (requestedProfileFromModel && !modelRefProfileCoveredByModelOverride) {
+      assertAllowedProfileOverride({
+        requestedProfile: requestedProfileFromModel,
+        pluginPolicyId,
+        authorityPolicy,
+        pluginPolicy,
+      });
     }
 
     let hostResolvedModelRef = effectiveRequestedModelRef;
