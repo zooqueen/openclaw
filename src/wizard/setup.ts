@@ -285,7 +285,11 @@ export async function runSetupWizard(
     flow = "advanced";
   }
 
-  if (snapshot.exists) {
+  if (snapshot.exists && !onboardHelpers.hasKeyConfigSettings(baseConfig)) {
+    await prompter.note("No existing config detected.");
+  }
+
+  if (snapshot.exists && onboardHelpers.hasKeyConfigSettings(baseConfig)) {
     await prompter.note(
       onboardHelpers.summarizeExistingConfig(baseConfig),
       "Existing config detected",

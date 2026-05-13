@@ -39,7 +39,7 @@ export function guardCancel<T>(value: T | symbol, runtime: RuntimeEnv): T {
   return value;
 }
 
-export function summarizeExistingConfig(config: OpenClawConfig): string {
+function collectKeyConfigRows(config: OpenClawConfig): string[] {
   const rows: string[] = [];
   const defaults = config.agents?.defaults;
   if (defaults?.workspace) {
@@ -66,6 +66,15 @@ export function summarizeExistingConfig(config: OpenClawConfig): string {
   if (config.skills?.install?.nodeManager) {
     rows.push(shortenHomeInString(`skills.nodeManager: ${config.skills.install.nodeManager}`));
   }
+  return rows;
+}
+
+export function hasKeyConfigSettings(config: OpenClawConfig): boolean {
+  return collectKeyConfigRows(config).length > 0;
+}
+
+export function summarizeExistingConfig(config: OpenClawConfig): string {
+  const rows = collectKeyConfigRows(config);
   return rows.length ? rows.join("\n") : "No key settings detected.";
 }
 
