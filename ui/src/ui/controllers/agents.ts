@@ -3,8 +3,9 @@ import {
   resolvePreferredServerChatModelValue,
 } from "../chat-model-ref.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
-import { resolveAgentIdFromSessionKey } from "../session-key.ts";
+import { normalizeAgentId, resolveAgentIdFromSessionKey } from "../session-key.ts";
 import type {
+  AgentsCreateResult,
   AgentsListResult,
   ChatModelOverride,
   ModelCatalogEntry,
@@ -18,6 +19,14 @@ import {
   formatMissingOperatorReadScopeMessage,
   isMissingOperatorReadScopeError,
 } from "./scope-errors.ts";
+
+export type AgentCreateDraft = {
+  name: string;
+  workspace: string;
+  model: string;
+  emoji: string;
+  avatar: string;
+};
 
 export type AgentsState = {
   client: GatewayBrowserClient | null;
@@ -43,6 +52,110 @@ export type AgentsState = {
 };
 
 export type AgentsConfigSaveState = AgentsState & ConfigState;
+
+const DEFAULT_CREATE_AGENT_WORKSPACE = "~/.openclaw/workspace-agent";
+
+function splitWorkspacePath(value: string): { parent: string; leaf: string; separator: string } {
+  const trimmed = value.trim().replace(/[\\/]+$/, "");
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (slash < 0) {
+    return { parent: "", leaf: trimmed, separator };
+  }
+  return {
+    parent: trimmed.slice(0, slash),
+    leaf: trimmed.slice(slash + 1),
+    separator: trimmed[slash] ?? separator,
+  };
+}
+
+function joinWorkspacePath(parent: string, leaf: string, separator: string): string {
+  return parent ? `${parent}${separator}${leaf}` : leaf;
+}
+
+export function buildDefaultCreateAgentWorkspace(
+  agentsList: AgentsListResult | null | undefined,
+  agentIdInput: string,
+): string {
+  const agentId = normalizeAgentId(agentIdInput);
+  const suffix = agentId && agentId !== "main" ? agentId : "agent";
+  const defaultAgentId = normalizeAgentId(agentsList?.defaultId);
+  const defaultWorkspace =
+    agentsList?.agents.find((entry) => normalizeAgentId(entry.id) === defaultAgentId)?.workspace ??
+    agentsList?.agents[0]?.workspace;
+  const base = defaultWorkspace?.trim();
+  if (!base) {
+    return suffix === "agent" ? DEFAULT_CREATE_AGENT_WORKSPACE : `~/.openclaw/workspace-${suffix}`;
+  }
+  const { parent, leaf, separator } = splitWorkspacePath(base);
+  if (!leaf) {
+    return suffix === "agent" ? DEFAULT_CREATE_AGENT_WORKSPACE : `~/.openclaw/workspace-${suffix}`;
+  }
+  const nextLeaf = /^workspace(?:-[a-z0-9_-]+)?$/i.test(leaf)
+    ? `workspace-${suffix}`
+    : `${leaf}-${suffix}`;
+  return joinWorkspacePath(parent, nextLeaf, separator);
+}
+
+export function createDefaultAgentCreateDraft(
+  agentsList?: AgentsListResult | null,
+): AgentCreateDraft {
+  return {
+    name: "",
+    workspace: buildDefaultCreateAgentWorkspace(agentsList, ""),
+    model: "",
+    emoji: "",
+    avatar: "",
+  };
+}
+
+export function validateAgentCreateDraft(
+  draft: AgentCreateDraft,
+  agentsList?: AgentsListResult | null,
+): string | null {
+  const name = draft.name.trim();
+  if (!name) {
+    return "Agent name is required.";
+  }
+  const agentId = normalizeAgentId(name);
+  if (agentId === "main") {
+    return '"main" is reserved.';
+  }
+  if (agentsList?.agents.some((entry) => normalizeAgentId(entry.id) === agentId)) {
+    return `Agent "${agentId}" already exists.`;
+  }
+  if (!draft.workspace.trim()) {
+    return "Workspace path is required.";
+  }
+  return null;
+}
+
+export async function createAgentFromDraft(
+  state: AgentsState,
+  draft: AgentCreateDraft,
+): Promise<AgentsCreateResult> {
+  if (!state.client || !state.connected) {
+    throw new Error("Gateway is not connected.");
+  }
+  const validationError = validateAgentCreateDraft(draft, state.agentsList);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  const payload = {
+    name: draft.name.trim(),
+    workspace: draft.workspace.trim(),
+    ...(draft.model.trim() ? { model: draft.model.trim() } : {}),
+    ...(draft.emoji.trim() ? { emoji: draft.emoji.trim() } : {}),
+    ...(draft.avatar.trim() ? { avatar: draft.avatar.trim() } : {}),
+  };
+  const created = await state.client.request<AgentsCreateResult>("agents.create", payload);
+  await loadAgents(state);
+  if (!state.agentsList?.agents.some((entry) => normalizeAgentId(entry.id) === created.agentId)) {
+    throw new Error(`Created agent "${created.agentId}" was not returned by agents.list.`);
+  }
+  state.agentsSelectedId = created.agentId;
+  return created;
+}
 
 function hasSelectedAgentMismatch(state: AgentsState, agentId: string): boolean {
   return Boolean(state.agentsSelectedId && state.agentsSelectedId !== agentId);
