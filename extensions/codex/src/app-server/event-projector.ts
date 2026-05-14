@@ -82,6 +82,31 @@ const CURRENT_TOKEN_USAGE_KEYS = [
   "last_token_usage",
 ] as const;
 
+const PROMPT_CACHE_KEYS = ["promptCache", "prompt_cache"] as const;
+const PROMPT_CACHE_EXPIRES_AT_KEYS = [
+  "expiresAt",
+  "expires_at",
+  "cacheExpiresAt",
+  "cache_expires_at",
+  "promptCacheExpiresAt",
+  "prompt_cache_expires_at",
+] as const;
+const PROMPT_CACHE_TOUCH_AT_KEYS = [
+  "lastCacheTouchAt",
+  "last_cache_touch_at",
+  "cacheTouchedAt",
+  "cache_touched_at",
+  "promptCacheTouchedAt",
+  "prompt_cache_touched_at",
+] as const;
+const PROMPT_CACHE_RETENTION_KEYS = [
+  "retention",
+  "cacheRetention",
+  "cache_retention",
+  "promptCacheRetention",
+  "prompt_cache_retention",
+] as const;
+
 const CODEX_PROMPT_TOTAL_INPUT_KEYS = [
   "inputTokens",
   "input_tokens",
@@ -139,6 +164,7 @@ export class CodexAppServerEventProjector {
   private guardianReviewCount = 0;
   private completedCompactionCount = 0;
   private latestRateLimits: JsonValue | undefined;
+  private promptCacheInfo: EmbeddedRunAttemptResult["promptCache"];
   private readonly nativeSubagentTaskMirror: CodexNativeSubagentTaskMirror;
 
   constructor(
@@ -289,6 +315,11 @@ export class CodexAppServerEventProjector {
     if (lastAssistant) {
       messagesSnapshot.push(attachCodexMirrorIdentity(lastAssistant, `${turnId}:assistant`));
     }
+    const promptCache = buildCodexAttemptPromptCacheInfo({
+      runtimePromptCache: this.promptCacheInfo,
+      usage: this.tokenUsage,
+      fallbackLastCacheTouchAt: lastAssistant?.timestamp,
+    });
     const turnFailed = this.completedTurn?.status === "failed";
     const turnInterrupted = this.completedTurn?.status === "interrupted";
     const promptError =
@@ -329,6 +360,7 @@ export class CodexAppServerEventProjector {
       successfulCronAdds: toolTelemetry.successfulCronAdds,
       cloudCodeAssistFormatError: false,
       attemptUsage: this.tokenUsage,
+      ...(promptCache ? { promptCache } : {}),
       replayMetadata: {
         hadPotentialSideEffects: toolTelemetry.didSendViaMessagingTool,
         replaySafe: !toolTelemetry.didSendViaMessagingTool,
@@ -554,6 +586,10 @@ export class CodexAppServerEventProjector {
     const usage = normalizeCodexTokenUsage(current);
     if (usage) {
       this.tokenUsage = usage;
+    }
+    const promptCache = normalizeCodexPromptCacheInfo(params, tokenUsage, current);
+    if (promptCache) {
+      this.promptCacheInfo = promptCache;
     }
   }
 
@@ -1328,6 +1364,91 @@ function readNumberAlias(record: JsonObject, keys: readonly string[]): number | 
     }
   }
   return undefined;
+}
+
+function readTimestampAlias(record: JsonObject, keys: readonly string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const timestamp = Date.parse(value);
+      if (Number.isFinite(timestamp)) {
+        return timestamp;
+      }
+    }
+  }
+  return undefined;
+}
+
+type CodexPromptCacheInfo = NonNullable<EmbeddedRunAttemptResult["promptCache"]>;
+
+function readPromptCacheRetention(record: JsonObject): CodexPromptCacheInfo["retention"] {
+  for (const key of PROMPT_CACHE_RETENTION_KEYS) {
+    const value = readString(record, key);
+    if (
+      value === "none" ||
+      value === "short" ||
+      value === "long" ||
+      value === "in_memory" ||
+      value === "24h"
+    ) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function applyCodexPromptCacheRecord(
+  target: CodexPromptCacheInfo,
+  record: JsonObject | undefined,
+): void {
+  if (!record) {
+    return;
+  }
+  target.retention ??= readPromptCacheRetention(record);
+  target.expiresAt ??= readTimestampAlias(record, PROMPT_CACHE_EXPIRES_AT_KEYS);
+  target.lastCacheTouchAt ??= readTimestampAlias(record, PROMPT_CACHE_TOUCH_AT_KEYS);
+}
+
+function normalizeCodexPromptCacheInfo(
+  params: JsonObject,
+  tokenUsage: JsonObject | undefined,
+  currentUsage: JsonObject,
+): EmbeddedRunAttemptResult["promptCache"] {
+  const promptCache: CodexPromptCacheInfo = {};
+  applyCodexPromptCacheRecord(promptCache, readFirstJsonObject(currentUsage, PROMPT_CACHE_KEYS));
+  applyCodexPromptCacheRecord(promptCache, currentUsage);
+  if (tokenUsage) {
+    applyCodexPromptCacheRecord(promptCache, readFirstJsonObject(tokenUsage, PROMPT_CACHE_KEYS));
+    applyCodexPromptCacheRecord(promptCache, tokenUsage);
+  }
+  applyCodexPromptCacheRecord(promptCache, readFirstJsonObject(params, PROMPT_CACHE_KEYS));
+  applyCodexPromptCacheRecord(promptCache, params);
+  return Object.keys(promptCache).length > 0 ? promptCache : undefined;
+}
+
+function buildCodexAttemptPromptCacheInfo(params: {
+  runtimePromptCache?: EmbeddedRunAttemptResult["promptCache"];
+  usage?: ReturnType<typeof normalizeUsage>;
+  fallbackLastCacheTouchAt?: number;
+}): EmbeddedRunAttemptResult["promptCache"] {
+  const promptCache: CodexPromptCacheInfo = { ...(params.runtimePromptCache ?? {}) };
+  if (params.usage) {
+    promptCache.lastCallUsage = { ...params.usage };
+  }
+  const hasCacheUsage =
+    typeof params.usage?.cacheRead === "number" || typeof params.usage?.cacheWrite === "number";
+  if (
+    hasCacheUsage &&
+    promptCache.lastCacheTouchAt === undefined &&
+    typeof params.fallbackLastCacheTouchAt === "number" &&
+    Number.isFinite(params.fallbackLastCacheTouchAt)
+  ) {
+    promptCache.lastCacheTouchAt = params.fallbackLastCacheTouchAt;
+  }
+  return Object.keys(promptCache).length > 0 ? promptCache : undefined;
 }
 
 function normalizeCodexTokenUsage(record: JsonObject): ReturnType<typeof normalizeUsage> {

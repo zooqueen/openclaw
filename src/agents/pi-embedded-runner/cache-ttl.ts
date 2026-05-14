@@ -15,6 +15,7 @@ const CACHE_TTL_CUSTOM_TYPE = "openclaw.cache-ttl";
 
 export type CacheTtlEntryData = {
   timestamp: number;
+  expiresAt?: number;
   provider?: string;
   modelId?: string;
 };
@@ -22,7 +23,16 @@ export type CacheTtlEntryData = {
 type CacheTtlContext = {
   provider?: string;
   modelId?: string;
+  retention?: "none" | "short" | "long";
 };
+
+export type CacheTtlInfo = {
+  lastCacheTouchAt: number;
+  expiresAt?: number;
+};
+
+const SHORT_CACHE_TTL_MS = 5 * 60_000;
+const LONG_CACHE_TTL_MS = 60 * 60_000;
 
 export function isCacheTtlEligibleProvider(
   provider: string,
@@ -75,17 +85,32 @@ function matchesCacheTtlContext(
   return true;
 }
 
-export function readLastCacheTtlTimestamp(
+export function resolveCacheTtlExpiresAt(
+  lastCacheTouchAt: number | null | undefined,
+  retention: CacheTtlContext["retention"],
+): number | null {
+  if (typeof lastCacheTouchAt !== "number" || !Number.isFinite(lastCacheTouchAt)) {
+    return null;
+  }
+  if (retention === "short") {
+    return lastCacheTouchAt + SHORT_CACHE_TTL_MS;
+  }
+  if (retention === "long") {
+    return lastCacheTouchAt + LONG_CACHE_TTL_MS;
+  }
+  return null;
+}
+
+export function readLastCacheTtlInfo(
   sessionManager: unknown,
   context?: CacheTtlContext,
-): number | null {
+): CacheTtlInfo | null {
   const sm = sessionManager as { getEntries?: () => CustomEntryLike[] };
   if (!sm?.getEntries) {
     return null;
   }
   try {
     const entries = sm.getEntries();
-    let last: number | null = null;
     for (let i = entries.length - 1; i >= 0; i--) {
       const entry = entries[i];
       if (entry?.type !== "custom" || entry?.customType !== CACHE_TTL_CUSTOM_TYPE) {
@@ -97,12 +122,26 @@ export function readLastCacheTtlTimestamp(
       }
       const ts = typeof data?.timestamp === "number" ? data.timestamp : null;
       if (ts && Number.isFinite(ts)) {
-        last = ts;
-        break;
+        const storedExpiresAt =
+          typeof data?.expiresAt === "number" && Number.isFinite(data.expiresAt)
+            ? data.expiresAt
+            : null;
+        const expiresAt = storedExpiresAt ?? resolveCacheTtlExpiresAt(ts, context?.retention);
+        return {
+          lastCacheTouchAt: ts,
+          ...(expiresAt ? { expiresAt } : {}),
+        };
       }
     }
-    return last;
+    return null;
   } catch {
     return null;
   }
+}
+
+export function readLastCacheTtlTimestamp(
+  sessionManager: unknown,
+  context?: CacheTtlContext,
+): number | null {
+  return readLastCacheTtlInfo(sessionManager, context)?.lastCacheTouchAt ?? null;
 }

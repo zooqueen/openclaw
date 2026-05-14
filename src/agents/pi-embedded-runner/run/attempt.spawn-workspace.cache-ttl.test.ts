@@ -25,6 +25,7 @@ describe("runEmbeddedAttempt cache-ttl tracking after compaction", () => {
       provider: "anthropic",
       modelId: "claude-sonnet-4-20250514",
       modelApi: "anthropic-messages",
+      cacheRetention: "short",
       isCacheTtlEligibleProvider: () => true,
       now: 123,
     });
@@ -53,6 +54,7 @@ describe("runEmbeddedAttempt cache-ttl tracking after compaction", () => {
       provider: "anthropic",
       modelId: "claude-sonnet-4-20250514",
       modelApi: "anthropic-messages",
+      cacheRetention: "short",
       isCacheTtlEligibleProvider: () => true,
       now: 123,
     });
@@ -60,6 +62,7 @@ describe("runEmbeddedAttempt cache-ttl tracking after compaction", () => {
     expect(appended).toBe(true);
     expect(sessionManager.appendCustomEntry).toHaveBeenCalledWith(ATTEMPT_CACHE_TTL_CUSTOM_TYPE, {
       timestamp: 123,
+      expiresAt: 300_123,
       provider: "anthropic",
       modelId: "claude-sonnet-4-20250514",
     });

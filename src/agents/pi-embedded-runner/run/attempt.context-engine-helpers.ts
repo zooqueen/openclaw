@@ -70,6 +70,7 @@ export function buildContextEnginePromptCacheInfo(params: {
       }
     | undefined;
   lastCacheTouchAt?: number | null;
+  expiresAt?: number | null;
 }): EmbeddedRunAttemptResult["promptCache"] {
   const promptCache: NonNullable<EmbeddedRunAttemptResult["promptCache"]> = {};
   if (params.retention) {
@@ -99,6 +100,9 @@ export function buildContextEnginePromptCacheInfo(params: {
   }
   if (typeof params.lastCacheTouchAt === "number" && Number.isFinite(params.lastCacheTouchAt)) {
     promptCache.lastCacheTouchAt = params.lastCacheTouchAt;
+  }
+  if (typeof params.expiresAt === "number" && Number.isFinite(params.expiresAt)) {
+    promptCache.expiresAt = params.expiresAt;
   }
   return Object.keys(promptCache).length > 0 ? promptCache : undefined;
 }
@@ -150,6 +154,7 @@ export function buildLoopPromptCacheInfo(params: {
   prePromptMessageCount: number;
   retention?: "none" | "short" | "long";
   fallbackLastCacheTouchAt?: number | null;
+  fallbackExpiresAt?: number | null;
 }): EmbeddedRunAttemptResult["promptCache"] {
   const currentAttemptAssistant = findCurrentAttemptAssistantMessage({
     messagesSnapshot: params.messagesSnapshot,
@@ -165,5 +170,6 @@ export function buildLoopPromptCacheInfo(params: {
       assistantTimestamp: currentAttemptAssistant?.timestamp,
       fallbackLastCacheTouchAt: params.fallbackLastCacheTouchAt,
     }),
+    expiresAt: params.fallbackExpiresAt,
   });
 }

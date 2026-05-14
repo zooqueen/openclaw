@@ -191,7 +191,7 @@ import { shouldAllowProviderOwnedThinkingReplay } from "../../transcript-policy.
 import { normalizeUsage, type NormalizedUsage } from "../../usage.js";
 import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
 import { isRunnerAbortError } from "../abort.js";
-import { isCacheTtlEligibleProvider, readLastCacheTtlTimestamp } from "../cache-ttl.js";
+import { isCacheTtlEligibleProvider, readLastCacheTtlInfo } from "../cache-ttl.js";
 import { resolveCompactionTimeoutMs } from "../compaction-safety-timeout.js";
 import { runContextEngineMaintenance } from "../context-engine-maintenance.js";
 import { applyFinalEffectiveToolPolicy } from "../effective-tool-policy.js";
@@ -1999,8 +1999,13 @@ export async function runEmbeddedAttempt(
           onAfterTurnCheckpoint: (messageCount) => {
             contextEngineAfterTurnCheckpoint = messageCount;
           },
-          getRuntimeContext: ({ messages, prePromptMessageCount: loopPrePromptMessageCount }) =>
-            buildAfterTurnRuntimeContext({
+          getRuntimeContext: ({ messages, prePromptMessageCount: loopPrePromptMessageCount }) => {
+            const cacheTtlInfo = readLastCacheTtlInfo(sessionManager, {
+              provider: params.provider,
+              modelId: params.modelId,
+              retention: effectivePromptCacheRetention,
+            });
+            return buildAfterTurnRuntimeContext({
               attempt: params,
               workspaceDir: effectiveWorkspace,
               agentDir,
@@ -2011,12 +2016,11 @@ export async function runEmbeddedAttempt(
                   messagesSnapshot: messages,
                   prePromptMessageCount: loopPrePromptMessageCount,
                   retention: effectivePromptCacheRetention,
-                  fallbackLastCacheTouchAt: readLastCacheTtlTimestamp(sessionManager, {
-                    provider: params.provider,
-                    modelId: params.modelId,
-                  }),
+                  fallbackLastCacheTouchAt: cacheTtlInfo?.lastCacheTouchAt,
+                  fallbackExpiresAt: cacheTtlInfo?.expiresAt,
                 }),
-            }),
+            });
+          },
         });
       }
       const removeLoopContextGuard = removeToolResultContextGuard;
@@ -3665,6 +3669,7 @@ export async function runEmbeddedAttempt(
           provider: params.provider,
           modelId: params.modelId,
           modelApi: params.model.api,
+          cacheRetention: effectivePromptCacheRetention,
           isCacheTtlEligibleProvider,
         });
 
@@ -3723,9 +3728,10 @@ export async function runEmbeddedAttempt(
                 changes: cacheBreak?.changes ?? promptCacheChangesForTurn,
               }
             : undefined;
-        const fallbackLastCacheTouchAt = readLastCacheTtlTimestamp(sessionManager, {
+        const cacheTtlInfo = readLastCacheTtlInfo(sessionManager, {
           provider: params.provider,
           modelId: params.modelId,
+          retention: effectivePromptCacheRetention,
         });
         promptCache = buildContextEnginePromptCacheInfo({
           retention: effectivePromptCacheRetention,
@@ -3734,8 +3740,9 @@ export async function runEmbeddedAttempt(
           lastCacheTouchAt: resolvePromptCacheTouchTimestamp({
             lastCallUsage,
             assistantTimestamp: currentAttemptAssistant?.timestamp,
-            fallbackLastCacheTouchAt,
+            fallbackLastCacheTouchAt: cacheTtlInfo?.lastCacheTouchAt,
           }),
+          expiresAt: cacheTtlInfo?.expiresAt,
         });
 
         if (promptError && promptErrorSource === "prompt" && !compactionOccurredThisAttempt) {

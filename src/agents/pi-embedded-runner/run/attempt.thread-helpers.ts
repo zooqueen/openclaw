@@ -65,14 +65,23 @@ export function appendAttemptCacheTtlIfNeeded(params: {
   provider: string;
   modelId: string;
   modelApi?: string;
+  cacheRetention?: "none" | "short" | "long";
   isCacheTtlEligibleProvider: (provider: string, modelId: string, modelApi?: string) => boolean;
   now?: number;
 }): boolean {
   if (!shouldAppendAttemptCacheTtl(params)) {
     return false;
   }
+  const timestamp = params.now ?? Date.now();
+  const expiresAt =
+    params.cacheRetention === "short"
+      ? timestamp + 5 * 60_000
+      : params.cacheRetention === "long"
+        ? timestamp + 60 * 60_000
+        : undefined;
   params.sessionManager.appendCustomEntry?.(ATTEMPT_CACHE_TTL_CUSTOM_TYPE, {
-    timestamp: params.now ?? Date.now(),
+    timestamp,
+    ...(expiresAt ? { expiresAt } : {}),
     provider: params.provider,
     modelId: params.modelId,
   });

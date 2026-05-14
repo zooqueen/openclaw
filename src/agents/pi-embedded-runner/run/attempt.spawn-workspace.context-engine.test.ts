@@ -1136,6 +1136,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
           total: 57,
         },
         lastCacheTouchAt: 123,
+        expiresAt: 456,
       }),
     ).toEqual({
       retention: "short",
@@ -1147,6 +1148,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
         total: 57,
       },
       lastCacheTouchAt: 123,
+      expiresAt: 456,
     });
   });
 
@@ -1198,12 +1200,14 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
       prePromptMessageCount: 1,
       retention: "short",
       fallbackLastCacheTouchAt: 123,
+      fallbackExpiresAt: 456,
     });
     expect(promptCache?.retention).toBe("short");
     expect(promptCache?.lastCallUsage?.cacheRead).toBe(39036);
     expect(promptCache?.lastCallUsage?.cacheWrite).toBe(59934);
     expect(promptCache?.lastCallUsage?.total).toBe(98973);
     expect(promptCache?.lastCacheTouchAt).toBe(Date.parse("2026-04-16T16:49:59.536Z"));
+    expect(promptCache?.expiresAt).toBe(456);
   });
 
   it("falls back to the persisted cache touch when loop usage has no cache metrics", () => {

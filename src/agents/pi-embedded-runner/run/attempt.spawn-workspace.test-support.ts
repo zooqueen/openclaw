@@ -649,17 +649,12 @@ vi.mock("../../transcript-policy.js", () => ({
   }),
 }));
 
-vi.mock("../cache-ttl.js", () => ({
-  appendCacheTtlTimestamp: (
-    sessionManager: { appendCustomEntry?: (customType: string, data: unknown) => void },
-    data: unknown,
-  ) => sessionManager.appendCustomEntry?.("openclaw.cache-ttl", data),
-  isCacheTtlEligibleProvider: (provider?: string) => provider === "anthropic",
-  readLastCacheTtlTimestamp: (
+vi.mock("../cache-ttl.js", () => {
+  const readLastCacheTtlInfo = (
     sessionManager: {
       appendCustomEntry?: { mock?: { calls?: unknown[][] } };
     },
-    context?: { provider?: string; modelId?: string },
+    context?: { provider?: string; modelId?: string; retention?: "none" | "short" | "long" },
   ) => {
     const calls = sessionManager.appendCustomEntry?.mock?.calls ?? [];
     for (let index = calls.length - 1; index >= 0; index -= 1) {
@@ -670,6 +665,7 @@ vi.mock("../cache-ttl.js", () => ({
       const entry = data as
         | {
             timestamp?: unknown;
+            expiresAt?: unknown;
             provider?: string;
             modelId?: string;
           }
@@ -689,11 +685,40 @@ vi.mock("../cache-ttl.js", () => ({
         continue;
       }
       const timestamp = entry?.timestamp;
-      return typeof timestamp === "number" ? timestamp : null;
+      if (typeof timestamp !== "number") {
+        return null;
+      }
+      const expiresAt =
+        typeof entry?.expiresAt === "number"
+          ? entry.expiresAt
+          : context?.retention === "short"
+            ? timestamp + 5 * 60_000
+            : context?.retention === "long"
+              ? timestamp + 60 * 60_000
+              : undefined;
+      return {
+        lastCacheTouchAt: timestamp,
+        ...(expiresAt ? { expiresAt } : {}),
+      };
     }
     return null;
-  },
-}));
+  };
+
+  return {
+    appendCacheTtlTimestamp: (
+      sessionManager: { appendCustomEntry?: (customType: string, data: unknown) => void },
+      data: unknown,
+    ) => sessionManager.appendCustomEntry?.("openclaw.cache-ttl", data),
+    isCacheTtlEligibleProvider: (provider?: string) => provider === "anthropic",
+    readLastCacheTtlInfo,
+    readLastCacheTtlTimestamp: (
+      sessionManager: {
+        appendCustomEntry?: { mock?: { calls?: unknown[][] } };
+      },
+      context?: { provider?: string; modelId?: string; retention?: "none" | "short" | "long" },
+    ) => readLastCacheTtlInfo(sessionManager, context)?.lastCacheTouchAt ?? null,
+  };
+});
 
 vi.mock("../compaction-runtime-context.js", () => ({
   buildEmbeddedCompactionRuntimeContext: () => ({}),

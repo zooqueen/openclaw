@@ -25,7 +25,12 @@ vi.mock("../../plugins/provider-runtime.js", async () => {
   };
 });
 
-import { isCacheTtlEligibleProvider, readLastCacheTtlTimestamp } from "./cache-ttl.js";
+import {
+  isCacheTtlEligibleProvider,
+  readLastCacheTtlInfo,
+  readLastCacheTtlTimestamp,
+  resolveCacheTtlExpiresAt,
+} from "./cache-ttl.js";
 
 describe("isCacheTtlEligibleProvider", () => {
   it("allows anthropic", () => {
@@ -139,5 +144,74 @@ describe("readLastCacheTtlTimestamp", () => {
         modelId: "claude-sonnet-4-5",
       }),
     ).toBeNull();
+  });
+});
+
+describe("readLastCacheTtlInfo", () => {
+  it("returns stored cache expiry when available", () => {
+    const sessionManager = {
+      getEntries: () => [
+        {
+          type: "custom",
+          customType: "openclaw.cache-ttl",
+          data: {
+            timestamp: 1_700_000_000_000,
+            expiresAt: 1_700_000_300_000,
+            provider: "anthropic",
+            modelId: "claude-sonnet-4-5",
+          },
+        },
+      ],
+    };
+
+    expect(
+      readLastCacheTtlInfo(sessionManager, {
+        provider: "anthropic",
+        modelId: "claude-sonnet-4-5",
+        retention: "long",
+      }),
+    ).toEqual({
+      lastCacheTouchAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_300_000,
+    });
+  });
+
+  it("derives cache expiry for older markers when retention is known", () => {
+    const sessionManager = {
+      getEntries: () => [
+        {
+          type: "custom",
+          customType: "openclaw.cache-ttl",
+          data: {
+            timestamp: 1_700_000_000_000,
+            provider: "anthropic",
+            modelId: "claude-sonnet-4-5",
+          },
+        },
+      ],
+    };
+
+    expect(
+      readLastCacheTtlInfo(sessionManager, {
+        provider: "anthropic",
+        modelId: "claude-sonnet-4-5",
+        retention: "short",
+      }),
+    ).toEqual({
+      lastCacheTouchAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_300_000,
+    });
+  });
+});
+
+describe("resolveCacheTtlExpiresAt", () => {
+  it("maps short and long retention to known provider TTLs", () => {
+    expect(resolveCacheTtlExpiresAt(1_700_000_000_000, "short")).toBe(1_700_000_300_000);
+    expect(resolveCacheTtlExpiresAt(1_700_000_000_000, "long")).toBe(1_700_003_600_000);
+  });
+
+  it("does not synthesize expiry when retention is disabled or unknown", () => {
+    expect(resolveCacheTtlExpiresAt(1_700_000_000_000, "none")).toBeNull();
+    expect(resolveCacheTtlExpiresAt(1_700_000_000_000, undefined)).toBeNull();
   });
 });

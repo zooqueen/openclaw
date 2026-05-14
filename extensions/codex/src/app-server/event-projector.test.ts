@@ -632,6 +632,36 @@ describe("CodexAppServerEventProjector", () => {
     });
   });
 
+  it("projects Codex prompt-cache metadata into attempt results", async () => {
+    const projector = await createProjector();
+
+    await projector.handleNotification(agentMessageDelta("done"));
+    await projector.handleNotification(
+      forCurrentTurn("thread/tokenUsage/updated", {
+        tokenUsage: {
+          last_token_usage: {
+            total_tokens: 17,
+            input_tokens: 8,
+            cached_input_tokens: 3,
+            output_tokens: 9,
+            prompt_cache: {
+              retention: "24h",
+              expires_at: "2026-05-14T12:00:00.000Z",
+              last_cache_touch_at: 1_800_000_000_000,
+            },
+          },
+        },
+      }),
+    );
+
+    const result = projector.buildResult(buildEmptyToolTelemetry());
+
+    expect(result.promptCache?.retention).toBe("24h");
+    expect(result.promptCache?.expiresAt).toBe(Date.parse("2026-05-14T12:00:00.000Z"));
+    expect(result.promptCache?.lastCacheTouchAt).toBe(1_800_000_000_000);
+    expect(result.promptCache?.lastCallUsage?.cacheRead).toBe(3);
+  });
+
   it("keeps intermediate agentMessage items out of the final visible reply", async () => {
     const { onAssistantMessageStart, onPartialReply, projector } =
       await createProjectorWithAssistantHooks();

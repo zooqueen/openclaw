@@ -500,6 +500,49 @@ describe("runCodexAppServerAttempt context-engine lifecycle", () => {
     expect(maintain).toHaveBeenCalledTimes(1);
   });
 
+  it("passes Codex prompt-cache telemetry to context-engine afterTurn", async () => {
+    const sessionFile = path.join(tempDir, "session.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace");
+    const afterTurn = vi.fn(
+      async (_params: Parameters<NonNullable<ContextEngine["afterTurn"]>>[0]) => undefined,
+    );
+    const contextEngine = createContextEngine({ afterTurn, maintain: undefined });
+    const harness = createStartedThreadHarness();
+    const params = createParams(sessionFile, workspaceDir);
+    params.contextEngine = contextEngine;
+
+    const run = runCodexAppServerAttempt(params);
+    await harness.waitForMethod("turn/start");
+    await harness.notify({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: {
+          last_token_usage: {
+            total_tokens: 17,
+            input_tokens: 8,
+            cached_input_tokens: 3,
+            output_tokens: 9,
+            prompt_cache: {
+              retention: "24h",
+              expires_at: 1_800_000_000_000,
+            },
+          },
+        },
+      },
+    });
+    await harness.completeTurn();
+    await run;
+
+    const afterTurnCall = requireFirstCallArg(afterTurn, "afterTurn") as Parameters<
+      NonNullable<ContextEngine["afterTurn"]>
+    >[0];
+    expect(afterTurnCall.runtimeContext?.promptCache?.retention).toBe("24h");
+    expect(afterTurnCall.runtimeContext?.promptCache?.expiresAt).toBe(1_800_000_000_000);
+    expect(afterTurnCall.runtimeContext?.promptCache?.lastCallUsage?.cacheRead).toBe(3);
+  });
+
   it("reloads mirrored history after bootstrap mutates the session transcript", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
