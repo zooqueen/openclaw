@@ -271,6 +271,89 @@ describe("runMessageAction media behavior", () => {
     vi.mocked(loadWebMedia).mockImplementation(actualLoadWebMedia);
   });
 
+  it("lowers WhatsApp upload-file with a path into send media", async () => {
+    const whatsappPlugin: ChannelPlugin = {
+      ...createChannelTestPluginBase({
+        id: "whatsapp",
+        label: "WhatsApp",
+        config: {
+          listAccountIds: () => ["default"],
+          resolveAccount: () => ({ enabled: true }),
+          isConfigured: () => true,
+        },
+      }),
+      outbound: {
+        deliveryMode: "direct",
+        resolveTarget: ({ to }) => ({ ok: true, to: to ?? "" }),
+        sendText: async () => ({ channel: "whatsapp", messageId: "msg-test" }),
+        sendMedia: async () => ({ channel: "whatsapp", messageId: "msg-test" }),
+      },
+    };
+    setActivePluginRegistry(
+      createTestRegistry([
+        {
+          pluginId: "whatsapp",
+          source: "test",
+          plugin: whatsappPlugin,
+        },
+      ]),
+    );
+
+    const result = await runMessageAction({
+      cfg: { channels: { whatsapp: { enabled: true } } } as OpenClawConfig,
+      action: "upload-file",
+      params: {
+        channel: "whatsapp",
+        target: "12345678",
+        filePath: "https://example.com/pic.png",
+        caption: "picture caption",
+      },
+      dryRun: true,
+    });
+
+    expect(result.kind).toBe("send");
+    const sendArgs = firstMockArg(channelResolutionMocks.executeSendAction, "executeSendAction");
+    expect(sendArgs.message).toBe("picture caption");
+    expect(sendArgs.mediaUrl).toBe("https://example.com/pic.png");
+  });
+
+  it("rejects WhatsApp upload-file buffer payloads instead of silently lowering them", async () => {
+    const whatsappPlugin: ChannelPlugin = {
+      ...createChannelTestPluginBase({
+        id: "whatsapp",
+        label: "WhatsApp",
+        config: {
+          listAccountIds: () => ["default"],
+          resolveAccount: () => ({ enabled: true }),
+          isConfigured: () => true,
+        },
+      }),
+    };
+    setActivePluginRegistry(
+      createTestRegistry([
+        {
+          pluginId: "whatsapp",
+          source: "test",
+          plugin: whatsappPlugin,
+        },
+      ]),
+    );
+
+    await expect(
+      runMessageAction({
+        cfg: { channels: { whatsapp: { enabled: true } } } as OpenClawConfig,
+        action: "upload-file",
+        params: {
+          channel: "whatsapp",
+          target: "12345678",
+          buffer: Buffer.from("hello").toString("base64"),
+          filename: "hello.txt",
+        },
+      }),
+    ).rejects.toThrow("WhatsApp upload-file cannot send buffer payloads");
+    expect(channelResolutionMocks.executeSendAction).not.toHaveBeenCalled();
+  });
+
   it("forwards asVoice from send actions into core delivery", async () => {
     setActivePluginRegistry(
       createTestRegistry([

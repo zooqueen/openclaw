@@ -1138,6 +1138,53 @@ async function handlePluginAction(ctx: ResolvedActionContext): Promise<MessageAc
   };
 }
 
+function readUploadFileMediaSource(args: Record<string, unknown>): string | undefined {
+  return (
+    readStringParam(args, "media", { trim: false }) ??
+    readStringParam(args, "mediaUrl", { trim: false }) ??
+    readStringParam(args, "filePath", { trim: false }) ??
+    readStringParam(args, "path", { trim: false }) ??
+    readStringParam(args, "fileUrl", { trim: false })
+  );
+}
+
+function readUploadFileCaptionText(args: Record<string, unknown>): string {
+  return (
+    readStringParam(args, "message", { allowEmpty: true }) ??
+    readStringParam(args, "content", { allowEmpty: true }) ??
+    readStringParam(args, "caption", { allowEmpty: true }) ??
+    ""
+  );
+}
+
+function maybeLowerWhatsAppUploadFileToSend(params: {
+  action: ChannelMessageActionName;
+  args: Record<string, unknown>;
+  channel: ChannelId;
+}): { action: "send"; args: Record<string, unknown> } | null {
+  if (params.action !== "upload-file" || params.channel !== "whatsapp") {
+    return null;
+  }
+  if (readStringParam(params.args, "buffer", { trim: false })) {
+    throw new Error(
+      "WhatsApp upload-file cannot send buffer payloads. Use media, mediaUrl, filePath, path, or fileUrl instead.",
+    );
+  }
+  const media = readUploadFileMediaSource(params.args);
+  if (!media) {
+    throw new Error("WhatsApp upload-file requires media, mediaUrl, filePath, path, or fileUrl.");
+  }
+  return {
+    action: "send",
+    args: {
+      ...params.args,
+      action: "send",
+      media,
+      message: readUploadFileCaptionText(params.args),
+    },
+  };
+}
+
 export async function runMessageAction(
   input: RunMessageActionParams,
 ): Promise<MessageActionRunResult> {
@@ -1152,7 +1199,7 @@ export async function runMessageAction(
   parseJsonMessageParam(params, "delivery");
   parseInteractiveParam(params);
 
-  const action = input.action;
+  let action = input.action;
   enforceMessageActionAllowlist({
     cfg,
     agentId: resolvedAgentId,
@@ -1185,6 +1232,20 @@ export async function runMessageAction(
   }
   if (accountId) {
     params.accountId = accountId;
+  }
+  const loweredUploadFile = maybeLowerWhatsAppUploadFileToSend({ action, args: params, channel });
+  if (loweredUploadFile) {
+    action = loweredUploadFile.action;
+    params = normalizeMessageActionInput({
+      action,
+      args: loweredUploadFile.args,
+      toolContext: input.toolContext,
+    });
+    enforceMessageActionAllowlist({
+      cfg,
+      agentId: resolvedAgentId,
+      action,
+    });
   }
   const dryRun = Boolean(input.dryRun ?? readBooleanParam(params, "dryRun"));
   const normalizationPolicy = resolveAttachmentMediaPolicy({
