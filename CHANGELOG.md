@@ -43,10 +43,12 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
-- Doctor/OpenAI config: keep the 2026.5.6 release branch clear of the legacy Codex route rewrite that could change OpenAI model config during `doctor --fix`, preserving existing OpenAI routes unless a supported repair path applies.
+- Doctor/OpenAI Codex: revert the 2026.5.5 `doctor --fix` repair that rewrote valid `openai-codex/*` ChatGPT/Codex OAuth routes to `openai/*`, which could break OAuth-only GPT-5.5 setups or accidentally move users onto the OpenAI API-key route. If 2026.5.5 already changed your default model, run `openclaw models set openai-codex/gpt-5.5 && openclaw config validate` to switch the default agent back to the Codex OAuth PI route. Fixes #78407.
 - Plugins/runtime fetch: drop third-party symbol metadata from plain request header dictionaries before passing them into native `fetch` or `Headers`, so SDK and guarded/proxy fetch paths do not reject otherwise valid plugin requests. Fixes #77846. Thanks @shakkernerd.
 - Debug proxy: normalize captured fetch header dictionaries before replaying requests so symbol metadata from caller-owned header objects cannot make debug-proxy fetches fail.
 - Web fetch: bound guarded dispatcher cleanup after request timeouts so timed-out fetches return tool errors instead of leaving Gateway tool lanes active. (#78439) Thanks @obviyus.
+
+Recovery docs: https://docs.openclaw.ai/providers/openai#check-and-recover-codex-oauth-routing
 
 ## 2026.5.5
 
