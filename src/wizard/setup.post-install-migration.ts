@@ -150,12 +150,11 @@ export async function offerPostInstallMigrations(
       const { migrateDefaultCommand } = await import("../commands/migrate.js");
       await migrateDefaultCommand(params.runtime, {
         provider: candidate.provider.id,
-        suppressPlanLog: true,
       });
     } catch (error) {
       params.runtime.log(
-        `${candidate.provider.label} migration failed: ${formatErrorMessage(error)}. ` +
-          `Re-run with ${formatCliCommand(`openclaw migrate ${candidate.provider.id} --dry-run`)} to inspect.`,
+        `${candidate.provider.label} migration failed: ${formatErrorMessage(error)}\n` +
+          `Re-run ${formatCliCommand(`openclaw migrate ${candidate.provider.id} --dry-run`)} to inspect the plan.`,
       );
     }
   }
