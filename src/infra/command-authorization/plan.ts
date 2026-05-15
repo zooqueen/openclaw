@@ -31,6 +31,7 @@ import type {
   CommandAuthorizationChainOperator,
   CommandAuthorizationContext,
   CommandAuthorizationInput,
+  CommandAuthorizationArgSpan,
   CommandAuthorizationPlan,
   CommandAuthorizationRelationship,
   CommandAuthorizationTree,
@@ -62,6 +63,12 @@ type UnsupportedWrapper = {
 };
 
 const SEMANTICS_NEUTRAL_RENDER_WRAPPERS = new Set(["env", "nice"]);
+
+type RawShellArgvReplacement = {
+  tokenIndex: number | null;
+  expectedToken: string;
+  replacement: string;
+};
 
 export async function planCommandForAuthorization(
   input: CommandAuthorizationInput,
@@ -640,9 +647,19 @@ function renderAllowlistPinnedRawUnit(params: {
       if (!canRenderWithoutLeadingWrappers(params.segment)) {
         return { ok: false, reason: "allowlist wrapper preservation unavailable" };
       }
-      const rendered = renderQuotedPlannedSegmentArgv(params.segment, params.platform);
+      const rendered = renderRawShellArgvSuffixWithReplacements({
+        unit: params.unit,
+        effectiveArgvStartIndex,
+        replacements: [
+          {
+            tokenIndex: effectiveArgvStartIndex,
+            expectedToken: executionRaw,
+            replacement: shellEscapeSingleArg(pinnedExecutable),
+          },
+        ],
+      });
       if (!rendered) {
-        return { ok: false, reason: "allowlist wrapper argv render unavailable" };
+        return { ok: false, reason: "allowlist wrapper raw executable replacement unavailable" };
       }
       return { ok: true, command: rendered };
     }
@@ -688,12 +705,30 @@ function renderPinnedRawUnitArgvToken(params: {
     if (!canRenderWithoutLeadingWrappers(params.segment)) {
       return { ok: false, reason: "allowlist wrapper preservation unavailable" };
     }
-    const rendered = renderQuotedPlannedSegmentArgv(params.segment, params.platform, {
-      tokenIndex: params.pinnedArgvToken.tokenIndex - effectiveArgvStartIndex,
-      replacement: params.pinnedArgvToken.replacement,
+    const executionRaw = params.segment.resolution?.execution.rawExecutable?.trim();
+    const argv = resolvePlannedSegmentArgv(params.segment);
+    const pinnedExecutable = argv?.[0]?.trim();
+    const replacements: RawShellArgvReplacement[] = [
+      {
+        tokenIndex: params.pinnedArgvToken.tokenIndex,
+        expectedToken,
+        replacement: shellEscapeSingleArg(params.pinnedArgvToken.replacement),
+      },
+    ];
+    if (executionRaw && pinnedExecutable) {
+      replacements.push({
+        tokenIndex: effectiveArgvStartIndex,
+        expectedToken: executionRaw,
+        replacement: shellEscapeSingleArg(pinnedExecutable),
+      });
+    }
+    const rendered = renderRawShellArgvSuffixWithReplacements({
+      unit: params.unit,
+      effectiveArgvStartIndex,
+      replacements,
     });
     if (!rendered) {
-      return { ok: false, reason: "allowlist pinned wrapper argv render unavailable" };
+      return { ok: false, reason: "allowlist pinned wrapper argv token replacement unavailable" };
     }
     return { ok: true, command: rendered };
   }
@@ -742,22 +777,59 @@ function requiresLeadingWrapperPreservation(segment: ExecCommandSegment): boolea
   return effectiveArgvStartIndex !== null && effectiveArgvStartIndex > 0;
 }
 
-function renderQuotedPlannedSegmentArgv(
-  segment: ExecCommandSegment,
-  platform?: string | null,
-  replacement?: { tokenIndex: number; replacement: string },
-): string | null {
-  const argv = resolvePlannedSegmentArgv(segment);
-  if (!argv) {
+function renderRawShellArgvSuffixWithReplacements(params: {
+  unit: CommandAuthorizationUnit;
+  effectiveArgvStartIndex: number;
+  replacements: readonly RawShellArgvReplacement[];
+}): string | null {
+  const raw = params.unit.raw.trim();
+  const argvSpans = params.unit.argvSpans;
+  if (
+    !argvSpans ||
+    argvSpans.length !== params.unit.argv.length ||
+    params.effectiveArgvStartIndex < 0 ||
+    params.effectiveArgvStartIndex >= argvSpans.length
+  ) {
     return null;
   }
-  if (replacement) {
-    if (replacement.tokenIndex < 0 || replacement.tokenIndex >= argv.length) {
+  const suffixSpan = argvSpans[params.effectiveArgvStartIndex];
+  if (!isValidShellArgvSpan(suffixSpan, raw)) {
+    return null;
+  }
+
+  const replacements: Array<{ span: { startIndex: number; endIndex: number }; value: string }> = [];
+  for (const replacement of params.replacements) {
+    if (
+      replacement.tokenIndex === null ||
+      replacement.tokenIndex < params.effectiveArgvStartIndex ||
+      replacement.tokenIndex >= params.unit.argv.length ||
+      params.unit.argv[replacement.tokenIndex] !== replacement.expectedToken
+    ) {
       return null;
     }
-    argv[replacement.tokenIndex] = replacement.replacement;
+    const span = argvSpans[replacement.tokenIndex];
+    if (!isValidShellArgvSpan(span, raw)) {
+      return null;
+    }
+    replacements.push({ span, value: replacement.replacement });
   }
-  return renderQuotedArgv(argv, platform);
+
+  let rendered = raw;
+  for (const { span, value } of replacements.sort(
+    (left, right) => right.span.startIndex - left.span.startIndex,
+  )) {
+    rendered = `${rendered.slice(0, span.startIndex)}${value}${rendered.slice(span.endIndex)}`;
+  }
+  return rendered.slice(suffixSpan.startIndex);
+}
+
+function isValidShellArgvSpan(
+  span: CommandAuthorizationArgSpan | undefined,
+  raw: string,
+): span is CommandAuthorizationArgSpan {
+  return Boolean(
+    span && span.startIndex >= 0 && span.endIndex > span.startIndex && span.endIndex <= raw.length,
+  );
 }
 
 function resolveEffectiveArgvStartIndex(

@@ -245,6 +245,33 @@ describe("command authorization planner corpus", () => {
     expect(rendered.command).toMatch(/'(?:[^']*\/)?head' '-n' '5'/);
   });
 
+  it("preserves shell-expanded arguments when rendering allowlisted transparent wrappers", async () => {
+    const plan = await planCommandForAuthorization({
+      dialect: "posix-shell",
+      command: 'env echo "$HOME" && nice printf src/*.ts',
+    });
+    const analysis = createExecCommandAnalysisFromAuthorizationPlan({ plan });
+    expect(analysis?.ok).toBe(true);
+    if (!analysis) {
+      throw new Error("expected command analysis");
+    }
+
+    const rendered = renderAuthorizationShellCommand({
+      plan,
+      segments: analysis.segments,
+      segmentSatisfiedBy: ["allowlist", "allowlist"],
+      mode: "safe-bins",
+    });
+
+    expect(rendered.ok).toBe(true);
+    expect(rendered.command).toMatch(/'(?:[^']*\/)?echo' "\$HOME"/);
+    expect(rendered.command).toMatch(/'(?:[^']*\/)?printf' src\/\*\.ts/);
+    expect(rendered.command).not.toContain("'$HOME'");
+    expect(rendered.command).not.toContain("'src/*.ts'");
+    expect(rendered.command).not.toContain("env");
+    expect(rendered.command).not.toContain("nice");
+  });
+
   it.each([
     {
       command: "sh -c 'sh -c \"echo hi\"'",
