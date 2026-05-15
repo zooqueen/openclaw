@@ -149,32 +149,26 @@ const mocks = vi.hoisted(() => {
     loadProviderUsageSummary: vi.fn().mockResolvedValue(undefined),
     resolveRuntimeSyntheticAuthProviderRefs: vi.fn().mockReturnValue([]),
     resolveProviderSyntheticAuthWithPlugin: vi.fn().mockReturnValue(undefined),
-    externalCliDiscoveryForConfigStatus: vi.fn(
-      ({ cfg }: { cfg: Record<string, unknown> }) => {
-        const auth = cfg.auth as
-          | { profiles?: Record<string, { provider?: string }> }
-          | undefined;
-        const agents = cfg.agents as
-          | { defaults?: { model?: { primary?: string } } }
-          | undefined;
-        const models = cfg.models as { providers?: Record<string, unknown> } | undefined;
-        const profileIds = Object.keys(auth?.profiles ?? {});
-        const providerIds = [
-          ...Object.keys(models?.providers ?? {}),
-          ...profileIds
-            .map((profileId) => auth?.profiles?.[profileId]?.provider)
-            .filter((provider): provider is string => Boolean(provider)),
-          agents?.defaults?.model?.primary?.split("/")[0],
-        ].filter((provider): provider is string => Boolean(provider));
-        return {
-          mode: "scoped",
-          allowKeychainPrompt: false,
-          config: cfg,
-          providerIds: [...new Set(providerIds)].sort(),
-          profileIds,
-        };
-      },
-    ),
+    externalCliDiscoveryForConfigStatus: vi.fn(({ cfg }: { cfg: Record<string, unknown> }) => {
+      const auth = cfg.auth as { profiles?: Record<string, { provider?: string }> } | undefined;
+      const agents = cfg.agents as { defaults?: { model?: { primary?: string } } } | undefined;
+      const models = cfg.models as { providers?: Record<string, unknown> } | undefined;
+      const profileIds = Object.keys(auth?.profiles ?? {});
+      const providerIds = [
+        ...Object.keys(models?.providers ?? {}),
+        ...profileIds
+          .map((profileId) => auth?.profiles?.[profileId]?.provider)
+          .filter((provider): provider is string => Boolean(provider)),
+        agents?.defaults?.model?.primary?.split("/")[0],
+      ].filter((provider): provider is string => Boolean(provider));
+      return {
+        mode: "scoped",
+        allowKeychainPrompt: false,
+        config: cfg,
+        providerIds: [...new Set(providerIds)].sort(),
+        profileIds,
+      };
+    }),
   };
 });
 
