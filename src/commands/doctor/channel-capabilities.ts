@@ -10,31 +10,79 @@ export type DoctorGroupModel = "sender" | "route" | "hybrid";
 export type DoctorChannelCapabilities = {
   dmAllowFromMode: AllowFromMode;
   groupModel: DoctorGroupModel;
+  supportsGroupChats: boolean;
   groupAllowFromFallbackToAllowFrom: boolean;
+  groupOwnerAllowFromFallbackToAllowFrom: boolean;
+  groupOwnerAllowFromFallbackToAllowFromExplicit?: boolean;
+  commandGroupAllowFromFallbackToAllowFrom?: boolean;
+  commandAllowFromFallbackToAllowFrom: boolean;
+  commandAllowFromFallbackToAllowFromExplicit?: boolean;
+  elevatedAllowFromFallbackToAllowFrom: boolean;
   warnOnEmptyGroupSenderAllowlist: boolean;
 };
 
 const DEFAULT_DOCTOR_CHANNEL_CAPABILITIES: DoctorChannelCapabilities = {
   dmAllowFromMode: "topOnly",
   groupModel: "sender",
+  supportsGroupChats: true,
   groupAllowFromFallbackToAllowFrom: true,
+  groupOwnerAllowFromFallbackToAllowFrom: true,
+  commandAllowFromFallbackToAllowFrom: true,
+  // Elevated fallback is implemented only by a channel runtime hook, so doctor
+  // must not warn unless channel metadata explicitly declares it.
+  elevatedAllowFromFallbackToAllowFrom: false,
   warnOnEmptyGroupSenderAllowlist: true,
 };
 
-function mergeDoctorChannelCapabilities(
+export function mergeDoctorChannelCapabilities(
   capabilities?: PluginPackageChannelDoctorCapabilities,
+  options: { supportsGroupChats?: boolean } = {},
 ): DoctorChannelCapabilities {
   return {
     dmAllowFromMode:
       capabilities?.dmAllowFromMode ?? DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.dmAllowFromMode,
     groupModel: capabilities?.groupModel ?? DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.groupModel,
+    supportsGroupChats:
+      options.supportsGroupChats ?? DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.supportsGroupChats,
     groupAllowFromFallbackToAllowFrom:
       capabilities?.groupAllowFromFallbackToAllowFrom ??
       DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.groupAllowFromFallbackToAllowFrom,
+    groupOwnerAllowFromFallbackToAllowFrom:
+      capabilities?.groupOwnerAllowFromFallbackToAllowFrom ??
+      DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.groupOwnerAllowFromFallbackToAllowFrom,
+    ...(capabilities?.groupOwnerAllowFromFallbackToAllowFrom !== undefined
+      ? { groupOwnerAllowFromFallbackToAllowFromExplicit: true }
+      : {}),
+    ...(capabilities?.commandGroupAllowFromFallbackToAllowFrom !== undefined
+      ? {
+          commandGroupAllowFromFallbackToAllowFrom:
+            capabilities.commandGroupAllowFromFallbackToAllowFrom,
+        }
+      : {}),
+    commandAllowFromFallbackToAllowFrom:
+      capabilities?.commandAllowFromFallbackToAllowFrom ??
+      DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.commandAllowFromFallbackToAllowFrom,
+    ...(capabilities?.commandAllowFromFallbackToAllowFrom !== undefined
+      ? { commandAllowFromFallbackToAllowFromExplicit: true }
+      : {}),
+    elevatedAllowFromFallbackToAllowFrom:
+      capabilities?.elevatedAllowFromFallbackToAllowFrom ??
+      DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.elevatedAllowFromFallbackToAllowFrom,
     warnOnEmptyGroupSenderAllowlist:
       capabilities?.warnOnEmptyGroupSenderAllowlist ??
       DEFAULT_DOCTOR_CHANNEL_CAPABILITIES.warnOnEmptyGroupSenderAllowlist,
   };
+}
+
+function resolveSupportsGroupChats(
+  plugin:
+    | {
+        capabilities?: { chatTypes?: readonly string[] };
+      }
+    | undefined,
+): boolean | undefined {
+  const chatTypes = plugin?.capabilities?.chatTypes;
+  return Array.isArray(chatTypes) ? chatTypes.some((chatType) => chatType !== "direct") : undefined;
 }
 
 function getManifestDoctorCapabilities(
@@ -57,10 +105,11 @@ export function getDoctorChannelCapabilities(channelName?: string): DoctorChanne
   if (!channelId) {
     return DEFAULT_DOCTOR_CHANNEL_CAPABILITIES;
   }
-  const pluginDoctor =
-    getChannelPlugin(channelId)?.doctor ?? getBundledChannelPlugin(channelId)?.doctor;
-  if (pluginDoctor) {
-    return mergeDoctorChannelCapabilities(pluginDoctor);
+  const plugin = getChannelPlugin(channelId) ?? getBundledChannelPlugin(channelId);
+  if (plugin?.doctor) {
+    return mergeDoctorChannelCapabilities(plugin.doctor, {
+      supportsGroupChats: resolveSupportsGroupChats(plugin),
+    });
   }
   return mergeDoctorChannelCapabilities(getManifestDoctorCapabilities(channelId));
 }

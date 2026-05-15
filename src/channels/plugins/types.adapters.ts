@@ -512,6 +512,10 @@ export type ChannelDoctorAdapter = {
   dmAllowFromMode?: "topOnly" | "topOrNested" | "nestedOnly";
   groupModel?: "sender" | "route" | "hybrid";
   groupAllowFromFallbackToAllowFrom?: boolean;
+  groupOwnerAllowFromFallbackToAllowFrom?: boolean;
+  commandGroupAllowFromFallbackToAllowFrom?: boolean;
+  commandAllowFromFallbackToAllowFrom?: boolean;
+  elevatedAllowFromFallbackToAllowFrom?: boolean;
   warnOnEmptyGroupSenderAllowlist?: boolean;
   legacyConfigRules?: LegacyConfigRule[];
   normalizeCompatibilityConfig?: (params: { cfg: OpenClawConfig }) => ChannelDoctorConfigMutation;

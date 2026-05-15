@@ -171,6 +171,7 @@ function writeExternalSetupChannelPlugin(
     manifestChannelConfig?: boolean;
     manifestChannelDescription?: string;
     manifestChannelLabel?: string;
+    packageDoctorCapabilities?: Record<string, unknown>;
     setupRequiresRuntime?: boolean;
     setupChannelId?: string;
   } = {},
@@ -194,6 +195,14 @@ function writeExternalSetupChannelPlugin(
         openclaw: {
           extensions: ["./index.cjs"],
           ...(setupEntry ? { setupEntry: "./setup-entry.cjs" } : {}),
+          ...(options.packageDoctorCapabilities
+            ? {
+                channel: {
+                  id: channelId,
+                  doctorCapabilities: options.packageDoctorCapabilities,
+                },
+              }
+            : {}),
         },
       },
       null,
@@ -730,6 +739,37 @@ describe("listReadOnlyChannelPluginsForConfig", () => {
     );
     expect(fs.existsSync(setupMarker)).toBe(false);
     expect(fs.existsSync(fullMarker)).toBe(false);
+  });
+
+  it("exposes package doctor capabilities through read-only channel plugins", () => {
+    const { pluginDir } = writeExternalSetupChannelPlugin({
+      setupEntry: false,
+      pluginId: "external-chat-plugin",
+      channelId: "external-chat",
+      packageDoctorCapabilities: {
+        groupAllowFromFallbackToAllowFrom: false,
+      },
+    });
+    const plugins = listReadOnlyChannelPluginsForConfig(
+      {
+        channels: {
+          "external-chat": { token: "configured" },
+        },
+        plugins: {
+          load: { paths: [pluginDir] },
+          allow: ["external-chat-plugin"],
+        },
+      } as never,
+      {
+        env: { ...process.env },
+        includePersistedAuthState: false,
+        includeSetupFallbackPlugins: true,
+      },
+    );
+
+    expect(plugins.find((entry) => entry.id === "external-chat")?.doctor).toMatchObject({
+      groupAllowFromFallbackToAllowFrom: false,
+    });
   });
 
   it("uses manifest channel configs before setup-only plugin loading", () => {

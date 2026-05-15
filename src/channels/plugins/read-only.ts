@@ -321,6 +321,7 @@ function buildManifestChannelPlugin(params: {
   const commands = normalizeChannelCommandDefaults(
     channelConfig?.commands ?? catalogMeta?.commands,
   );
+  const doctorCapabilities = catalogMeta?.doctorCapabilities;
   return {
     id: params.channelId,
     meta: {
@@ -337,6 +338,7 @@ function buildManifestChannelPlugin(params: {
     },
     capabilities: { chatTypes: ["direct"] },
     ...(commands ? { commands } : {}),
+    ...(doctorCapabilities ? { doctor: doctorCapabilities } : {}),
     ...(channelConfig
       ? {
           configSchema: {

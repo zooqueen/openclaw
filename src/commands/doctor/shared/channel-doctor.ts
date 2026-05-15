@@ -12,6 +12,10 @@ import type {
 } from "../../../channels/plugins/types.adapters.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import { normalizeOptionalLowercaseString } from "../../../shared/string-coerce.js";
+import {
+  mergeDoctorChannelCapabilities,
+  type DoctorChannelCapabilities,
+} from "../channel-capabilities.js";
 
 type ChannelDoctorEntry = {
   doctor: ChannelDoctorAdapter;
@@ -19,6 +23,7 @@ type ChannelDoctorEntry = {
 
 type ChannelDoctorPluginCandidate = {
   id: string;
+  capabilities?: { chatTypes?: readonly string[] };
   doctor?: ChannelDoctorAdapter;
 };
 
@@ -44,6 +49,10 @@ const channelDoctorFunctionKeys = new Set<keyof ChannelDoctorAdapter>([
 
 const channelDoctorBooleanKeys = new Set<keyof ChannelDoctorAdapter>([
   "groupAllowFromFallbackToAllowFrom",
+  "groupOwnerAllowFromFallbackToAllowFrom",
+  "commandGroupAllowFromFallbackToAllowFrom",
+  "commandAllowFromFallbackToAllowFrom",
+  "elevatedAllowFromFallbackToAllowFrom",
   "warnOnEmptyGroupSenderAllowlist",
 ]);
 
@@ -170,6 +179,23 @@ function mergeDoctorAdapters(
   return Object.keys(merged).length > 0 ? (merged as ChannelDoctorAdapter) : undefined;
 }
 
+function resolveSupportsGroupChats(
+  candidates: Array<ChannelDoctorPluginCandidate | undefined>,
+): boolean | undefined {
+  let hasChatTypeMetadata = false;
+  for (const candidate of candidates) {
+    const chatTypes = candidate?.capabilities?.chatTypes;
+    if (!Array.isArray(chatTypes)) {
+      continue;
+    }
+    hasChatTypeMetadata = true;
+    if (chatTypes.some((chatType) => chatType !== "direct")) {
+      return true;
+    }
+  }
+  return hasChatTypeMetadata ? false : undefined;
+}
+
 function isValidChannelDoctorAdapterValue(
   key: keyof ChannelDoctorAdapter,
   value: unknown,
@@ -283,6 +309,42 @@ export function createChannelDoctorEmptyAllowlistPolicyHooks(
         params,
       ),
   };
+}
+
+export function resolveDoctorChannelCapabilities(
+  context: ChannelDoctorLookupContext,
+  channelId?: string,
+): DoctorChannelCapabilities {
+  if (!channelId || isChannelDoctorBlockedByConfig(channelId, context.cfg)) {
+    return mergeDoctorChannelCapabilities();
+  }
+  const readOnlyPluginsById = listReadOnlyChannelPluginsById(context);
+  const candidates = [
+    readOnlyPluginsById.get(channelId),
+    safeGetLoadedChannelPlugin(channelId),
+    safeGetBundledChannelSetupPlugin(channelId),
+    safeGetBundledChannelPlugin(channelId),
+  ];
+  const doctor = mergeDoctorAdapters(candidates.map((candidate) => candidate?.doctor));
+  return mergeDoctorChannelCapabilities(doctor, {
+    supportsGroupChats: resolveSupportsGroupChats(candidates),
+  });
+}
+
+export function resolveDoctorChannelCapabilityMetadata(
+  context: ChannelDoctorLookupContext,
+  channelId?: string,
+) {
+  if (!channelId || isChannelDoctorBlockedByConfig(channelId, context.cfg)) {
+    return undefined;
+  }
+  const readOnlyPluginsById = listReadOnlyChannelPluginsById(context);
+  return mergeDoctorAdapters([
+    readOnlyPluginsById.get(channelId)?.doctor,
+    safeGetLoadedChannelPlugin(channelId)?.doctor,
+    safeGetBundledChannelSetupPlugin(channelId)?.doctor,
+    safeGetBundledChannelPlugin(channelId)?.doctor,
+  ]);
 }
 
 export async function runChannelDoctorConfigSequences(params: {
