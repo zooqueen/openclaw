@@ -346,6 +346,10 @@ function resolveCommandsAllowFromList(params: {
   });
 }
 
+function allowsCommandAllowFromFallback(plugin?: ChannelPlugin): boolean {
+  return plugin?.doctor?.commandAllowFromFallbackToAllowFrom !== false;
+}
+
 function resolveOwnerCandidatesForCommands(params: {
   plugin?: ChannelPlugin;
   cfg: OpenClawConfig;
@@ -653,6 +657,8 @@ export function resolveCommandAuthorization(params: {
     accountId: ctx.AccountId,
     providerId,
   });
+  const effectiveCommandsAllowFromList =
+    commandsAllowFromList ?? (allowsCommandAllowFromFallback(plugin) ? null : []);
 
   const resolvedAllowFrom = buildProviderAllowFromResolution({
     plugin,
@@ -719,7 +725,7 @@ export function resolveCommandAuthorization(params: {
     nativeCommandAuthorized,
     isOwnerForCommands,
     senderCandidates,
-    commandsAllowFromList,
+    commandsAllowFromList: effectiveCommandsAllowFromList,
     providerResolutionError,
     commandsAllowFromConfigured,
   });
