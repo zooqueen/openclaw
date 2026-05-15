@@ -5,11 +5,11 @@
     "sessionsView.checkpointPanelTitle",
     "sessionsView.checkpointPanelTokensUnit"
   ],
-  "generatedAt": "2026-05-15T12:23:11.238Z",
+  "generatedAt": "2026-05-15T19:05:59.392Z",
   "locale": "ja-JP",
   "model": "claude-opus-4-6",
   "provider": "anthropic",
-  "sourceHash": "25f2ace429cfb9821fbafb3aeaa2c05e6bd5e811d399284cdd343019d3d21660",
+  "sourceHash": "81b61047bd4e7e70d6f537bc002a464bed325461d5daff2a4d892edc6f5a4969",
   "totalKeys": 1118,
   "translatedKeys": 1114,
   "workflow": 1

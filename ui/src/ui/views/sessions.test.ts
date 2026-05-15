@@ -83,7 +83,7 @@ const SESSION_TABLE_HEADERS = [
   "Type",
   "Status",
   "Runtime",
-  "Last updated",
+  "Updated",
   "Tokens",
   "Compaction",
   "Thinking mode",

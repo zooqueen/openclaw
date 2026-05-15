@@ -180,7 +180,7 @@ export const en: TranslationMap = {
     key: "Session",
     label: "Label",
     kind: "Type",
-    updated: "Last updated",
+    updated: "Updated",
     tokens: "Tokens",
     compaction: "Compaction",
     thinking: "Thinking mode",
