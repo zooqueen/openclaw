@@ -721,6 +721,9 @@ function argvFromTestCommand(node: TreeSitterNode, state: WalkState): CommandArg
   for (const child of namedChildren(node)) {
     appendTestCommandArguments(child, argv, argumentsList, dynamicArguments, state);
   }
+  if (executable === "[") {
+    argv.push("]");
+  }
   return { argv, arguments: argumentsList, dynamicArguments };
 }
 

@@ -1037,6 +1037,9 @@ function promptOnlyReasonsForStep(
   if (hasEnvMutationShellWrapperCarrier(step)) {
     reasons.push("unsupported-shell-syntax");
   }
+  if (step.argv[0] === "[[") {
+    reasons.push("unsupported-shell-syntax");
+  }
   return uniquePromptOnlyReasons(reasons);
 }
 

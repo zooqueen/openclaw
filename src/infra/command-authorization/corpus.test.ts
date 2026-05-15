@@ -157,6 +157,41 @@ describe("command authorization planner corpus", () => {
     expect(rendered.command).not.toContain("'env'");
   });
 
+  it("preserves single-bracket shell test terminators when rendering", async () => {
+    const plan = await planCommandForAuthorization({
+      dialect: "posix-shell",
+      command: "[ -f package.json ] && echo ok",
+    });
+    const analysis = createExecCommandAnalysisFromAuthorizationPlan({ plan });
+    expect(analysis?.ok).toBe(true);
+    if (!analysis) {
+      throw new Error("expected command analysis");
+    }
+
+    expect(analysis.segments[0]?.argv).toEqual(["[", "-f", "package.json", "]"]);
+    const rendered = renderAuthorizationShellCommand({
+      plan,
+      segments: analysis.segments,
+      mode: "enforced",
+    });
+
+    expect(rendered.ok).toBe(true);
+    expect(rendered.command).toMatch(/'(?:[^']*\/)?\[' '-f' 'package\.json' '\]'/);
+  });
+
+  it("makes double-bracket shell tests prompt-only", async () => {
+    const plan = await planCommandForAuthorization({
+      dialect: "posix-shell",
+      command: "[[ -f package.json ]] && echo ok",
+    });
+
+    expect(plan.kind).toBe("prompt-only");
+    if (plan.kind !== "prompt-only") {
+      throw new Error(`expected prompt-only plan, got ${plan.kind}`);
+    }
+    expect(plan.promptOnlyReasons).toContain("unsupported-shell-syntax");
+  });
+
   it("fails closed when rendering shell payloads with semantic dispatch wrappers", async () => {
     const plan = await planCommandForAuthorization(
       {

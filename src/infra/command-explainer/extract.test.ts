@@ -360,7 +360,7 @@ describe("command explainer tree-sitter runtime", () => {
     const testCommand = await explainShellCommand("[ -f package.json ]");
     expect(testCommand.topLevelCommands).toHaveLength(1);
     expect(testCommand.topLevelCommands[0]?.executable).toBe("[");
-    expect(testCommand.topLevelCommands[0]?.argv).toEqual(["[", "-f", "package.json"]);
+    expect(testCommand.topLevelCommands[0]?.argv).toEqual(["[", "-f", "package.json", "]"]);
 
     const doubleBracket = await explainShellCommand("[[ -f package.json ]]");
     expect(doubleBracket.topLevelCommands).toHaveLength(1);
