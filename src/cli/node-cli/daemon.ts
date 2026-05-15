@@ -9,6 +9,7 @@ import {
   resolveNodeWindowsTaskName,
 } from "../../daemon/constants.js";
 import { resolveNodeService } from "../../daemon/node-service.js";
+import { resolveOpenClawRuntimePath } from "../../daemon/program-args.js";
 import {
   buildPlatformRuntimeLogHints,
   buildPlatformServiceStartHints,
@@ -44,6 +45,7 @@ type NodeDaemonInstallOptions = {
   nodeId?: string;
   displayName?: string;
   runtime?: string;
+  runtimePath?: string;
   force?: boolean;
   json?: boolean;
 };
@@ -109,6 +111,19 @@ export async function runNodeDaemonInstall(opts: NodeDaemonInstallOptions) {
     fail('Invalid --runtime (use "node" or "bun")');
     return;
   }
+  let runtimePath: string | undefined;
+  if (opts.runtimePath !== undefined) {
+    try {
+      runtimePath = await resolveOpenClawRuntimePath(opts.runtimePath, runtimeRaw);
+      if (!runtimePath) {
+        fail("Invalid --runtime-path");
+        return;
+      }
+    } catch (err) {
+      fail(`Invalid --runtime-path: ${String(err)}`);
+      return;
+    }
+  }
 
   const service = resolveNodeService();
   let loaded = false;
@@ -146,6 +161,7 @@ export async function runNodeDaemonInstall(opts: NodeDaemonInstallOptions) {
       nodeId: opts.nodeId,
       displayName: opts.displayName,
       runtime: runtimeRaw,
+      runtimePath,
       warn: (message) => {
         if (json) {
           warnings.push(message);
