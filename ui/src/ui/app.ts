@@ -372,6 +372,7 @@ export class OpenClawApp extends LitElement {
   @state() presenceStatus: string | null = null;
 
   @state() agentsLoading = false;
+  agentsLoadRequestId = 0;
   @state() agentsList: AgentsListResult | null = null;
   @state() agentsError: string | null = null;
   @state() agentsSelectedId: string | null = null;

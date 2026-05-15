@@ -245,6 +245,7 @@ export type AppViewState = {
   presenceError: string | null;
   presenceStatus: string | null;
   agentsLoading: boolean;
+  agentsLoadRequestId: number;
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;

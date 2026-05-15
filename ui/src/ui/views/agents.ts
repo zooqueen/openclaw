@@ -24,7 +24,12 @@ import {
 } from "./agents-panels-status-files.ts";
 export type { AgentsPanel } from "./agents.types.ts";
 import { renderAgentTools, renderAgentSkills } from "./agents-panels-tools-skills.ts";
-import { agentBadgeText, buildAgentContext, normalizeAgentLabel } from "./agents-utils.ts";
+import {
+  agentBadgeText,
+  buildAgentContext,
+  buildCatalogModelOptions,
+  normalizeAgentLabel,
+} from "./agents-utils.ts";
 import type { AgentsPanel } from "./agents.types.ts";
 
 export type ConfigState = {
@@ -384,7 +389,7 @@ function renderAgentCreateDialog(props: AgentsProps) {
     ? t("agents.create.pendingConfigError")
     : validateAgentCreateDraft(draft, props.agentsList);
   const disableSubmit = Boolean(validationError || props.create.submitting);
-  const modelOptions = props.modelCatalog.filter((entry) => entry.id?.trim());
+  const modelOptions = buildCatalogModelOptions(props.modelCatalog);
 
   return html`
     <section
@@ -462,9 +467,9 @@ function renderAgentCreateDialog(props: AgentsProps) {
                     ${t("agents.create.modelDefault")}
                   </option>
                   ${modelOptions.map(
-                    (entry) => html`
-                      <option value=${entry.id} ?selected=${entry.id === draft.model}>
-                        ${entry.name || entry.id}
+                    (option) => html`
+                      <option value=${option.value} ?selected=${option.value === draft.model}>
+                        ${option.label}
                       </option>
                     `,
                   )}

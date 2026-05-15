@@ -32,6 +32,7 @@ export type AgentsState = {
   client: GatewayBrowserClient | null;
   connected: boolean;
   agentsLoading: boolean;
+  agentsLoadRequestId?: number;
   agentsError: string | null;
   agentsList: AgentsListResult | null;
   agentsSelectedId: string | null;
@@ -141,15 +142,30 @@ export async function createAgentFromDraft(
   if (validationError) {
     throw new Error(validationError);
   }
-  const payload = {
+  const payload: {
+    name: string;
+    workspace: string;
+    model?: string;
+    emoji?: string;
+    avatar?: string;
+  } = {
     name: draft.name.trim(),
     workspace: draft.workspace.trim(),
-    ...(draft.model.trim() ? { model: draft.model.trim() } : {}),
-    ...(draft.emoji.trim() ? { emoji: draft.emoji.trim() } : {}),
-    ...(draft.avatar.trim() ? { avatar: draft.avatar.trim() } : {}),
   };
+  const model = draft.model.trim();
+  if (model) {
+    payload.model = model;
+  }
+  const emoji = draft.emoji.trim();
+  if (emoji) {
+    payload.emoji = emoji;
+  }
+  const avatar = draft.avatar.trim();
+  if (avatar) {
+    payload.avatar = avatar;
+  }
   const created = await state.client.request<AgentsCreateResult>("agents.create", payload);
-  await loadAgents(state);
+  await loadAgents(state, { force: true });
   if (!state.agentsList?.agents.some((entry) => normalizeAgentId(entry.id) === created.agentId)) {
     throw new Error(`Created agent "${created.agentId}" was not returned by agents.list.`);
   }
@@ -170,14 +186,20 @@ function resolveToolsErrorMessage(
     : String(err);
 }
 
-export async function loadAgents(state: AgentsState) {
-  if (!state.client || !state.connected || state.agentsLoading) {
+export async function loadAgents(state: AgentsState, options?: { force?: boolean }) {
+  if (!state.client || !state.connected || (state.agentsLoading && !options?.force)) {
     return;
   }
+  const requestId = (state.agentsLoadRequestId ?? 0) + 1;
+  state.agentsLoadRequestId = requestId;
+  const shouldIgnoreResponse = () => state.agentsLoadRequestId !== requestId;
   state.agentsLoading = true;
   state.agentsError = null;
   try {
     const res = await state.client.request<AgentsListResult>("agents.list", {});
+    if (shouldIgnoreResponse()) {
+      return;
+    }
     if (res) {
       state.agentsList = res;
       const selected = state.agentsSelectedId;
@@ -186,6 +208,9 @@ export async function loadAgents(state: AgentsState) {
       }
     }
   } catch (err) {
+    if (shouldIgnoreResponse()) {
+      return;
+    }
     if (isMissingOperatorReadScopeError(err)) {
       state.agentsList = null;
       state.agentsError = formatMissingOperatorReadScopeMessage("agent list");
@@ -193,7 +218,9 @@ export async function loadAgents(state: AgentsState) {
       state.agentsError = String(err);
     }
   } finally {
-    state.agentsLoading = false;
+    if (!shouldIgnoreResponse()) {
+      state.agentsLoading = false;
+    }
   }
 }
 

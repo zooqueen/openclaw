@@ -375,7 +375,7 @@ describe("renderAgents", () => {
     }
   });
 
-  it("shows a New Agent action and opens the create dialog", async () => {
+  it("shows a New Agent action and provider-qualified model options", async () => {
     const container = document.createElement("div");
     const onCreateOpen = vi.fn();
     render(renderAgents(createProps({ onCreateOpen })), container);
@@ -403,7 +403,7 @@ describe("renderAgents", () => {
             submitting: false,
             error: null,
           },
-          modelCatalog: [{ id: "openai/gpt-5.5", name: "GPT-5.5", provider: "openai" }],
+          modelCatalog: [{ id: "gpt-5.5", name: "GPT-5.5", provider: "openai" }],
         }),
       ),
       container,
@@ -417,6 +417,13 @@ describe("renderAgents", () => {
     expect(
       container.querySelector<HTMLSelectElement>(".agent-create-field select.agents-select")?.value,
     ).toBe("openai/gpt-5.5");
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLOptionElement>(".agent-create-field select option"),
+      ).some(
+        (option) => option.value === "openai/gpt-5.5" && option.textContent?.includes("openai"),
+      ),
+    ).toBe(true);
   });
 
   it("shows duplicate agent validation and blocks create submit", async () => {

@@ -157,6 +157,46 @@ describe("loadAgents", () => {
 
     expect(state.agentsSelectedId).toBe("main");
   });
+
+  it("ignores stale responses when a forced refresh starts later", async () => {
+    const { state, request } = createState();
+    const resolvers: Array<(value: unknown) => void> = [];
+    request.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const staleRefresh = loadAgents(state);
+    expect(state.agentsLoading).toBe(true);
+    const forcedRefresh = loadAgents(state, { force: true });
+
+    resolvers[0]?.({
+      defaultId: "main",
+      mainKey: "main",
+      scope: "per-sender",
+      agents: [{ id: "main", name: "main" }],
+    });
+    await staleRefresh;
+
+    expect(state.agentsList).toBeNull();
+    expect(state.agentsLoading).toBe(true);
+
+    resolvers[1]?.({
+      defaultId: "main",
+      mainKey: "main",
+      scope: "per-sender",
+      agents: [
+        { id: "main", name: "main" },
+        { id: "ops-agent", name: "Ops Agent" },
+      ],
+    });
+    await forcedRefresh;
+
+    expect(state.agentsList?.agents.map((entry) => entry.id)).toEqual(["main", "ops-agent"]);
+    expect(state.agentsLoading).toBe(false);
+  });
 });
 
 describe("createAgentFromDraft", () => {
@@ -196,6 +236,39 @@ describe("createAgentFromDraft", () => {
       emoji: "O",
     });
     expect(request).toHaveBeenNthCalledWith(2, "agents.list", {});
+    expect(state.agentsSelectedId).toBe("ops-agent");
+  });
+
+  it("forces the post-create list refresh even when another refresh is in flight", async () => {
+    const { state, request } = createState();
+    state.agentsLoading = true;
+    request
+      .mockResolvedValueOnce({
+        ok: true,
+        agentId: "ops-agent",
+        name: "Ops Agent",
+        workspace: "/tmp/workspace-ops-agent",
+      })
+      .mockResolvedValueOnce({
+        defaultId: "main",
+        mainKey: "main",
+        scope: "per-sender",
+        agents: [
+          { id: "main", name: "main" },
+          { id: "ops-agent", name: "Ops Agent" },
+        ],
+      });
+
+    await createAgentFromDraft(state, {
+      name: "Ops Agent",
+      workspace: "/tmp/workspace-ops-agent",
+      model: "",
+      emoji: "",
+      avatar: "",
+    });
+
+    expect(request).toHaveBeenNthCalledWith(2, "agents.list", {});
+    expect(state.agentsLoading).toBe(false);
     expect(state.agentsSelectedId).toBe("ops-agent");
   });
 
