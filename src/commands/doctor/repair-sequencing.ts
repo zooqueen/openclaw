@@ -1,3 +1,4 @@
+import { applyAllowFromFallbackTransition } from "../../config/allowfrom-fallback-transition.js";
 import { applyPluginAutoEnable } from "../../config/plugin-auto-enable.js";
 import { sanitizeForLog } from "../../terminal/ansi.js";
 import {
@@ -9,6 +10,8 @@ import { maybeRepairBundledPluginLoadPaths } from "./shared/bundled-plugin-load-
 import {
   createChannelDoctorEmptyAllowlistPolicyHooks,
   collectChannelDoctorRepairMutations,
+  resolveDoctorChannelCapabilityMetadata,
+  resolveDoctorChannelCapabilities,
 } from "./shared/channel-doctor.js";
 import { maybeRepairCodexRoutes } from "./shared/codex-route-warnings.js";
 import {
@@ -66,7 +69,6 @@ export async function runDoctorRepairSequence(params: {
   })) {
     applyMutation(mutation);
   }
-  applyMutation(maybeRepairOpenPolicyAllowFrom(state.candidate));
   applyMutation(maybeRepairBundledPluginLoadPaths(state.candidate, env));
   maybeRepairStaleManagedNpmBundledPlugins({
     config: state.candidate,
@@ -106,9 +108,18 @@ export async function runDoctorRepairSequence(params: {
   }
   applyMutation(maybeRepairInvalidPluginConfig(state.candidate));
   applyMutation(await maybeRepairAllowlistPolicyAllowFrom(state.candidate));
+  applyMutation(
+    applyAllowFromFallbackTransition(state.candidate, {
+      resolveCapabilities: (channelName) =>
+        resolveDoctorChannelCapabilityMetadata({ cfg: state.candidate, env }, channelName),
+    }),
+  );
+  applyMutation(maybeRepairOpenPolicyAllowFrom(state.candidate));
 
   const emptyAllowlistWarnings = scanEmptyAllowlistPolicyWarnings(state.candidate, {
     doctorFixCommand: params.doctorFixCommand,
+    resolveCapabilities: (channelName) =>
+      resolveDoctorChannelCapabilities({ cfg: state.candidate, env }, channelName),
     ...createChannelDoctorEmptyAllowlistPolicyHooks({ cfg: state.candidate, env }),
   });
   if (emptyAllowlistWarnings.length > 0) {
