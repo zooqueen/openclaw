@@ -197,7 +197,9 @@ describe("runHeartbeatOnce commitments", () => {
         };
         await fs.writeFile(
           path.join(tmpDir, "HEARTBEAT.md"),
-          `tasks:
+          `Do not contact the user unless critical.
+
+tasks:
   - name: deployment-status
     interval: 0
     prompt: Check deployment status with the normal tools
@@ -226,6 +228,7 @@ describe("runHeartbeatOnce commitments", () => {
             if (replySpy.mock.calls.length === 1) {
               expect(ctx.Body).toContain("Run the following periodic tasks");
               expect(ctx.Body).toContain("- deployment-status: Check deployment status");
+              expect(ctx.Body).toContain("Do not contact the user unless critical.");
               expect(ctx.Body).not.toContain("Due inferred follow-up commitments");
               expect(ctx.OriginatingChannel).toBe("telegram");
               expect(ctx.OriginatingTo).toBe("stale-target");
@@ -235,6 +238,8 @@ describe("runHeartbeatOnce commitments", () => {
             }
             expect(ctx.Body).toContain("Due inferred follow-up commitments");
             expect(ctx.Body).toContain("How did the interview go?");
+            expect(ctx.Body).toContain("Do not contact the user unless critical.");
+            expect(ctx.Body).not.toContain("Check deployment status");
             expect(ctx.OriginatingChannel).toBe("telegram");
             expect(ctx.OriginatingTo).toBe("155462274");
             expect(opts?.disableTools).toBe(true);
