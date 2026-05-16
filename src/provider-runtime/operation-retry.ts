@@ -1,3 +1,4 @@
+import { runRetryingPromise } from "../effect-runtime/retry.js";
 import { sleepWithAbort } from "../infra/backoff.js";
 import { formatErrorMessage } from "../infra/errors.js";
 
@@ -232,35 +233,30 @@ export async function executeProviderOperationWithRetry<T>(params: {
   const retryConfig = providerOperationRetryConfig(params.stage, params.retry);
   const retryOptions = resolveTransientProviderRetryOptions(retryConfig);
   const maxAttempts = resolveTransientProviderAttempts(retryOptions);
-  let lastError: unknown;
 
-  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber += 1) {
-    try {
-      return await params.operation();
-    } catch (error) {
-      lastError = error;
-      const message = formatErrorMessage(error);
-      if (
-        !retryOptions ||
-        !shouldRetrySameKeyProviderOperation({
-          options: retryOptions,
-          error,
-          message,
-          provider: params.provider,
-          apiKeyIndex: 0,
-          attemptNumber,
-          maxAttempts,
-          stage: params.stage,
-        })
-      ) {
-        throw error;
+  return await runRetryingPromise({
+    operation: params.operation,
+    maxAttempts,
+    shouldRetry: (error, attemptNumber) => {
+      if (!retryOptions) {
+        return false;
       }
-
-      const delayMs = resolveTransientProviderDelayMs(retryOptions, attemptNumber);
+      return shouldRetrySameKeyProviderOperation({
+        options: retryOptions,
+        error,
+        message: formatErrorMessage(error),
+        provider: params.provider,
+        apiKeyIndex: 0,
+        attemptNumber,
+        maxAttempts,
+        stage: params.stage,
+      });
+    },
+    resolveDelayMs: (attemptNumber) =>
+      retryOptions ? resolveTransientProviderDelayMs(retryOptions, attemptNumber) : 0,
+    sleep: async (delayMs) => {
       const sleep = retryOptions.sleep ?? sleepWithAbort;
       await sleep(delayMs, retryOptions.signal);
-    }
-  }
-
-  throw lastError;
+    },
+  });
 }
