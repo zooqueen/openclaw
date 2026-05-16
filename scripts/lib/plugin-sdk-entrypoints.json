@@ -8,6 +8,7 @@
   "self-hosted-provider-setup",
   "routing",
   "runtime",
+  "effect-runtime",
   "runtime-doctor",
   "runtime-env",
   "runtime-logger",

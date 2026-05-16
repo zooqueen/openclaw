@@ -1,5 +1,5 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "openclaw/plugin-sdk/effect-runtime";
 import {
   DEFAULT_CACHE_TTL_MINUTES,
   DEFAULT_SEARCH_COUNT,

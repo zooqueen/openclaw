@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect } from "openclaw/plugin-sdk/effect-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { __testing } from "./ddg-client.js";
 

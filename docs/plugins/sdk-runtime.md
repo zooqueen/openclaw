@@ -56,6 +56,41 @@ Provider and channel execution paths must use the active runtime config snapshot
 
 ## Reusable runtime utilities
 
+Use `openclaw/plugin-sdk/effect-runtime` when plugin code needs OpenClaw's
+pinned Effect integration for typed async programs, injectable services, retry
+policies, or stream bridges. This subpath keeps plugin code on a supported SDK
+surface instead of importing host internals or relying on a different Effect
+version.
+
+```typescript
+import {
+  Context,
+  Effect,
+  Layer,
+  runOpenClawEffect,
+} from "openclaw/plugin-sdk/effect-runtime";
+
+type SearchRuntime = {
+  now: () => number;
+};
+
+const SearchRuntime = Context.GenericTag<SearchRuntime>("my-plugin/SearchRuntime");
+
+const program = SearchRuntime.pipe(
+  Effect.map((runtime) => ({ startedAt: runtime.now() })),
+);
+
+const result = await runOpenClawEffect(
+  program.pipe(
+    Effect.provide(
+      Layer.succeed(SearchRuntime, {
+        now: Date.now,
+      }),
+    ),
+  ),
+);
+```
+
 Use the channel-turn `botLoopProtection` facts for bot-authored inbound messages. Core applies the shared in-memory sliding-window guard before session record and dispatch, without tying the policy to one channel. The guard tracks `(scopeId, conversationId, participant pair)` keys, counts both directions of a pair together, applies a cooldown once the window budget is exceeded, and prunes inactive entries opportunistically.
 
 Channel plugins that expose this behavior to operators should prefer the shared `channels.defaults.botLoopProtection` shape for baseline budgets, then layer channel/provider-specific overrides on top. The shared config uses seconds because it is user-facing:
