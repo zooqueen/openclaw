@@ -22,7 +22,9 @@ describe("duckduckgo effect runtime", () => {
   it("runs the search through an injectable Effect runtime and caches payloads", async () => {
     const cache: NonNullable<DuckDuckGoSearchRuntimeOverrides["cache"]> = new Map();
     const now = vi.fn().mockReturnValueOnce(1_000).mockReturnValueOnce(1_037);
-    const runEndpoint = vi.fn<DuckDuckGoRunEndpoint>(async (request, run) => {
+    const runEndpointMock = vi.fn();
+    const runEndpoint: DuckDuckGoRunEndpoint = async (request, run) => {
+      runEndpointMock(request);
       expect(request.timeoutSeconds).toBe(12);
       expect(new URL(request.url).searchParams.get("q")).toBe("openclaw effect");
       expect(new URL(request.url).searchParams.get("kl")).toBe("us-en");
@@ -37,7 +39,7 @@ describe("duckduckgo effect runtime", () => {
           { status: 200 },
         ),
       );
-    });
+    };
     const runtime = __testing.duckDuckGoSearchRuntimeLayer({
       cache,
       now,
@@ -58,7 +60,7 @@ describe("duckduckgo effect runtime", () => {
       __testing.runDuckDuckGoSearchEffect(search).pipe(Effect.provide(runtime)),
     );
 
-    expect(runEndpoint).toHaveBeenCalledOnce();
+    expect(runEndpointMock).toHaveBeenCalledOnce();
     expect(first).toMatchObject({
       count: 1,
       provider: "duckduckgo",
