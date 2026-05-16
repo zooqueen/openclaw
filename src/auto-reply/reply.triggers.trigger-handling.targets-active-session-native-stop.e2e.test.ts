@@ -14,7 +14,7 @@ import {
   expectBareNewOrResetAcknowledged,
   withTempHome,
 } from "../../test/helpers/auto-reply/trigger-handling-test-harness.js";
-import { loadSessionStore, resolveSessionKey } from "../config/sessions.js";
+import { loadSessionStore } from "../config/sessions.js";
 import { registerGroupIntroPromptCases } from "./reply.triggers.group-intro-prompts.cases.js";
 import { registerTriggerHandlingUsageSummaryCases } from "./reply.triggers.trigger-handling.filters-usage-summary-current-model-provider.cases.js";
 import { enqueueFollowupRun, getFollowupQueueDepth, type FollowupRun } from "./reply/queue.js";
@@ -537,6 +537,7 @@ describe("trigger handling", () => {
       const storePath = join(home, "compact-main.sessions.json");
       const cfg = makeCfg(home);
       cfg.session = { ...cfg.session, store: storePath };
+      await seedTargetSession(storePath, MAIN_SESSION_KEY);
       mockSuccessfulCompaction();
 
       const request = {
@@ -557,7 +558,7 @@ describe("trigger handling", () => {
       expect(text?.startsWith("⚙️ Compacted")).toBe(true);
       expect(getCompactEmbeddedPiSessionMock()).toHaveBeenCalledOnce();
       const store = loadSessionStore(storePath);
-      const sessionKey = resolveSessionKey("per-sender", request);
+      const sessionKey = MAIN_SESSION_KEY;
       expect(store[sessionKey]?.compactionCount).toBe(1);
     });
   });
