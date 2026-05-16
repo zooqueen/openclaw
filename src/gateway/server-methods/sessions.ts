@@ -516,6 +516,34 @@ function ensureSessionTranscriptFile(params: {
   }
 }
 
+function readRawSessionCreateLabelFallback(params: {
+  storePath: string;
+  storeKeys: string[];
+}): string | undefined {
+  let parsed: unknown;
+  try {
+    const raw = fs.readFileSync(params.storePath, "utf-8");
+    parsed = raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const store = parsed as Record<string, unknown>;
+  for (const key of params.storeKeys) {
+    const entry = store[key];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const label = normalizeOptionalString((entry as { label?: unknown }).label);
+    if (label) {
+      return label;
+    }
+  }
+  return undefined;
+}
+
 function resolveAbortSessionKey(params: {
   context: Pick<GatewayRequestContext, "chatAbortControllers">;
   requestedKey: string;
@@ -1271,6 +1299,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       : buildDashboardSessionKey(agentId);
     const target = resolveGatewaySessionStoreTarget({ cfg, key });
     const targetAgentId = resolveAgentIdFromSessionKey(target.canonicalKey);
+    const requestedLabel = normalizeOptionalString(p.label);
+    const label =
+      requestedLabel ??
+      (!("label" in p)
+        ? readRawSessionCreateLabelFallback({
+            storePath: target.storePath,
+            storeKeys: target.storeKeys,
+          })
+        : undefined);
     const created = await updateSessionStore(target.storePath, async (store) => {
       const patched = await applySessionsPatchToStore({
         cfg,
@@ -1278,7 +1315,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         storeKey: target.canonicalKey,
         patch: {
           key: target.canonicalKey,
-          label: normalizeOptionalString(p.label),
+          label,
           model: normalizeOptionalString(p.model),
         },
         loadGatewayModelCatalog: context.loadGatewayModelCatalog,
