@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import { runOpenClawEffect } from "./index.js";
+import { runOpenClawEffect, syncEffect } from "./index.js";
 import { runRetryingPromise } from "./retry.js";
 
 describe("effect runtime kernel", () => {
@@ -9,6 +9,21 @@ describe("effect runtime kernel", () => {
     const error = new Error("typed failure");
 
     await expect(runOpenClawEffect(Effect.fail(error))).rejects.toBe(error);
+  });
+
+  it("maps thrown sync exceptions into typed failures", async () => {
+    const error = new Error("sync failure");
+
+    await expect(
+      runOpenClawEffect(
+        syncEffect({
+          try: () => {
+            throw error;
+          },
+          catch: (err) => err,
+        }),
+      ),
+    ).rejects.toBe(error);
   });
 
   it("retries failed promise operations through the internal Effect runtime", async () => {

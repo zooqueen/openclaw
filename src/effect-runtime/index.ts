@@ -12,6 +12,16 @@ export function promiseEffect<A, E = unknown>(params: {
   });
 }
 
+export function syncEffect<A, E = unknown>(params: {
+  try: () => A;
+  catch?: (error: unknown) => E;
+}): OpenClawEffect<A, E> {
+  return Effect.try({
+    try: params.try,
+    catch: params.catch ?? ((error) => error as E),
+  });
+}
+
 export async function runOpenClawEffect<A, E>(
   effect: OpenClawEffect<A, E, never>,
 ): Promise<A> {
