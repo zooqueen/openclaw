@@ -259,6 +259,26 @@ describe("executeWithApiKeyRotation", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it("throws the original rate-limit error after exhausting rotated keys", async () => {
+    const firstError = new Error("HTTP 429 too many requests on key 1");
+    const secondError = new Error("HTTP 429 too many requests on key 2");
+    const execute = vi
+      .fn<(apiKey: string) => Promise<string>>()
+      .mockRejectedValueOnce(firstError)
+      .mockRejectedValueOnce(secondError);
+
+    await expect(
+      executeWithApiKeyRotation({
+        provider: "openai",
+        apiKeys: ["key-1", "key-2"],
+        transientRetry: { attempts: 2, baseDelayMs: 0, maxDelayMs: 0 },
+        execute,
+      }),
+    ).rejects.toBe(secondError);
+
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("does not rotate keys for transient 500 after same-key retry exhaustion", async () => {
     const sleep = vi.fn(async () => undefined);
     const execute = vi.fn(async () => {
