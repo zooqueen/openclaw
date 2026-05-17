@@ -1201,10 +1201,7 @@ function applyLegacyOllamaProviderNumCtxParams(params: {
   return {
     provider: {
       ...params.provider,
-      params: {
-        ...rawParams,
-        num_ctx: numCtx,
-      },
+      params: rawParams ? { ...rawParams, num_ctx: numCtx } : { num_ctx: numCtx },
     },
     changed: true,
   };
@@ -1248,10 +1245,9 @@ export function normalizeLegacyOllamaNativeNumCtxParams(
     }
 
     let modelsChanged = false;
-    const nextModels = [...rawModels];
-    for (const [index, model] of rawModels.entries()) {
+    const nextModels = rawModels.map((model, index) => {
       if (!isRecord(model)) {
-        continue;
+        return model;
       }
       if (
         !isNativeOllamaModelConfig({
@@ -1260,15 +1256,15 @@ export function normalizeLegacyOllamaNativeNumCtxParams(
           model,
         })
       ) {
-        continue;
+        return model;
       }
 
       const rawParams = model.params;
       if (rawParams !== undefined && !isRecord(rawParams)) {
-        continue;
+        return model;
       }
       if (rawParams && hasOwnKey(rawParams, "num_ctx")) {
-        continue;
+        return model;
       }
 
       const numCtx = resolveConfiguredOllamaModelNumCtxBudget({
@@ -1277,21 +1273,17 @@ export function normalizeLegacyOllamaNativeNumCtxParams(
         providerNumCtxApplies,
       });
       if (numCtx === undefined) {
-        continue;
+        return model;
       }
 
       modelsChanged = true;
       changes.push(
         `Set models.providers.${sanitizeForLog(providerId)}.models[${index}].params.num_ctx to ${numCtx} for native Ollama compatibility.`,
       );
-      nextModels[index] = {
-        ...model,
-        params: {
-          ...rawParams,
-          num_ctx: numCtx,
-        },
-      };
-    }
+      return Object.assign({}, model, {
+        params: rawParams ? { ...rawParams, num_ctx: numCtx } : { num_ctx: numCtx },
+      });
+    });
 
     if (!modelsChanged && !providerParams.changed) {
       continue;
