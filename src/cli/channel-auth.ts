@@ -244,7 +244,13 @@ export async function runChannelLogin(
       }
     }
   }
-  const resolvedChannel = await resolveChannelPluginForMode(opts, "login", loadedCfg, runtime);
+  const loginResolutionCfg = explicitChannel ? loadedCfg : authoredCfg;
+  const resolvedChannel = await resolveChannelPluginForMode(
+    opts,
+    "login",
+    loginResolutionCfg,
+    runtime,
+  );
   let cfg = resolvedChannel.cfg;
   const { configChanged, channelInput, plugin } = resolvedChannel;
   const configBlockError = resolveChannelConfigBlockError({

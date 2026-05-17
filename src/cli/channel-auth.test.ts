@@ -175,6 +175,9 @@ describe("channel-auth", () => {
       },
     );
     mocks.callGateway.mockResolvedValue({ ok: true });
+    plugin.config.listAccountIds.mockImplementation((cfg: { channels?: Record<string, unknown> }) =>
+      cfg.channels?.whatsapp ? ["default"] : [],
+    );
     mocks.listChannelPlugins.mockReturnValue([plugin]);
     mocks.resolveDefaultAgentId.mockReturnValue("main");
     mocks.resolveAgentWorkspaceDir.mockReturnValue("/tmp/workspace");
@@ -318,7 +321,7 @@ describe("channel-auth", () => {
     mocks.applyPluginAutoEnable.mockReturnValue({ config: autoEnabledCfg, changes: ["whatsapp"] });
 
     await expect(runChannelLogin({}, runtime)).rejects.toThrow(
-      "Channel whatsapp is not configured. Add channels.whatsapp to your config before logging in.",
+      "No configured channel supports login.",
     );
 
     expect(mocks.applyPluginAutoEnable).toHaveBeenCalledWith({
@@ -326,6 +329,46 @@ describe("channel-auth", () => {
       env: process.env,
     });
     expect(mocks.login).not.toHaveBeenCalled();
+    expect(mocks.replaceConfigFile).not.toHaveBeenCalled();
+  });
+
+  it("auto-picks from authored config instead of transient auto-enabled channels", async () => {
+    const zaloPlugin = {
+      id: "zalouser",
+      auth: { login: vi.fn() },
+      gateway: {},
+      config: {
+        listAccountIds: vi.fn((cfg: { channels?: Record<string, unknown> }) =>
+          cfg.channels?.zalouser ? ["default"] : [],
+        ),
+        resolveAccount: vi.fn().mockReturnValue({ enabled: true }),
+      },
+    };
+    mocks.loadConfig.mockReturnValue({ channels: { whatsapp: {} } });
+    mocks.applyPluginAutoEnable.mockReturnValue({
+      config: { channels: { whatsapp: {}, zalouser: {} } },
+      changes: ["zalouser"],
+    });
+    mocks.listChannelPlugins.mockReturnValue([plugin, zaloPlugin]);
+    mocks.normalizeChannelId.mockImplementation((value) => value);
+    mocks.getChannelPlugin.mockImplementation((value) =>
+      value === "whatsapp"
+        ? plugin
+        : value === "zalouser"
+          ? (zaloPlugin as typeof plugin)
+          : undefined,
+    );
+
+    await runChannelLogin({}, runtime);
+
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.login).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg: { channels: { whatsapp: {} } },
+        channelInput: "whatsapp",
+      }),
+    );
+    expect(zaloPlugin.auth.login).not.toHaveBeenCalled();
     expect(mocks.replaceConfigFile).not.toHaveBeenCalled();
   });
 
