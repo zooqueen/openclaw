@@ -439,7 +439,37 @@ function hasEnabledChannelAccountActivation(params: {
   });
 }
 
-function listNoopEnabledChannelActivationReasons(params: {
+function hasEnabledChannelAccountDeactivation(params: {
+  previousConfig: OpenClawConfig;
+  nextConfig: OpenClawConfig;
+  channelId: string;
+}): boolean {
+  if (readChannelEnabled(params.previousConfig, params.channelId) === false) {
+    return false;
+  }
+  const channels = isPlainObject(params.previousConfig.channels)
+    ? params.previousConfig.channels
+    : null;
+  const channelCfg =
+    channels && isPlainObject(channels[params.channelId]) ? channels[params.channelId] : null;
+  const accounts = channelCfg && isPlainObject(channelCfg.accounts) ? channelCfg.accounts : null;
+  if (!accounts) {
+    return false;
+  }
+  const channelEnabled = readChannelEnabled(params.nextConfig, params.channelId) !== false;
+  return Object.entries(accounts).some(([accountId, accountCfg]) => {
+    if (!isPlainObject(accountCfg) || accountCfg.enabled === false) {
+      return false;
+    }
+    return (
+      !channelEnabled ||
+      !hasChannelAccountConfig(params.nextConfig, params.channelId, accountId) ||
+      readChannelAccountEnabled(params.nextConfig, params.channelId, accountId) === false
+    );
+  });
+}
+
+function listNoopEnabledChannelLifecycleReasons(params: {
   previousConfig: OpenClawConfig;
   nextConfig: OpenClawConfig;
   changedPaths: string[];
@@ -470,6 +500,17 @@ function listNoopEnabledChannelActivationReasons(params: {
       ) {
         reasons.push(`${changedPath}: enabled channel account activation requires gateway restart`);
       }
+      if (
+        hasEnabledChannelAccountDeactivation({
+          previousConfig: params.previousConfig,
+          nextConfig: params.nextConfig,
+          channelId,
+        })
+      ) {
+        reasons.push(
+          `${changedPath}: enabled channel account deactivation requires gateway restart`,
+        );
+      }
       continue;
     }
     if (accountMatch) {
@@ -489,6 +530,11 @@ function listNoopEnabledChannelActivationReasons(params: {
       if (!wasEnabled && isEnabled) {
         reasons.push(`${changedPath}: enabled channel account activation requires gateway restart`);
       }
+      if (wasEnabled && !isEnabled) {
+        reasons.push(
+          `${changedPath}: enabled channel account deactivation requires gateway restart`,
+        );
+      }
       continue;
     }
     const hadChannelConfig = hasChannelConfig(params.previousConfig, channelId);
@@ -500,6 +546,9 @@ function listNoopEnabledChannelActivationReasons(params: {
     if (!wasEnabled && isEnabled) {
       reasons.push(`${changedPath}: enabled channel activation requires gateway restart`);
     }
+    if (wasEnabled && !isEnabled) {
+      reasons.push(`${changedPath}: enabled channel deactivation requires gateway restart`);
+    }
   }
   return reasons;
 }
@@ -510,7 +559,7 @@ export function applyNoopEnabledChannelActivationRestarts(params: {
   nextConfig: OpenClawConfig;
   changedPaths: string[];
 }): GatewayReloadPlan {
-  const restartReasons = listNoopEnabledChannelActivationReasons(params);
+  const restartReasons = listNoopEnabledChannelLifecycleReasons(params);
   if (restartReasons.length === 0) {
     return params.plan;
   }
