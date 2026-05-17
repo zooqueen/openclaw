@@ -155,6 +155,14 @@ describe("tsdown config", () => {
     );
   });
 
+  it("keeps usage cost refresh worker behind one stable dist entry", () => {
+    const distGraph = requireUnifiedDistGraph();
+
+    expect(entrySources(distGraph)["infra/session-cost-usage.worker"]).toBe(
+      "src/infra/session-cost-usage.worker.ts",
+    );
+  });
+
   it("routes gateway run-loop lifecycle imports through the stable runtime boundary", () => {
     const importSpecifiers = [
       ...readGatewayRunLoopSource().matchAll(/import\(["']([^"']+)["']\)/gu),
