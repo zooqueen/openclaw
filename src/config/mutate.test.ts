@@ -180,6 +180,39 @@ describe("config mutate helpers", () => {
     );
   });
 
+  it("marks newly-created channel configs from transform mutations as explicit", async () => {
+    const snapshot = createSnapshot({
+      hash: "source-hash",
+      sourceConfig: {},
+    });
+    ioMocks.readConfigFileSnapshotForWrite.mockResolvedValue({
+      snapshot,
+      writeOptions: { expectedConfigPath: snapshot.path },
+    });
+
+    await transformConfigFileWithRetry({
+      baseHash: snapshot.hash,
+      base: "source",
+      transform(currentConfig) {
+        return {
+          nextConfig: {
+            ...currentConfig,
+            channels: { whatsapp: { enabled: true } },
+          },
+        };
+      },
+    });
+
+    expect(ioMocks.writeConfigFile).toHaveBeenCalledWith(
+      {
+        channels: { whatsapp: { enabled: true } },
+      },
+      expect.objectContaining({
+        explicitSetPaths: expect.arrayContaining([["channels", "whatsapp"]]),
+      }),
+    );
+  });
+
   it("retries transform mutations on stale config conflicts", async () => {
     const initial = createSnapshot({
       hash: "hash-1",

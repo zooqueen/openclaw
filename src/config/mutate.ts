@@ -299,6 +299,22 @@ function collectConfigMutationChangedPaths(
   if (!previousIsObject || !nextIsObject) {
     if (isPolicyConfigMutationPath(pathSegments)) {
       paths.push(pathSegments);
+      return paths;
+    }
+    const childRecord = previousIsObject
+      ? (previous as Record<string, unknown>)
+      : nextIsObject
+        ? (next as Record<string, unknown>)
+        : null;
+    if (childRecord) {
+      for (const key of Object.keys(childRecord)) {
+        collectConfigMutationChangedPaths(
+          previousIsObject ? childRecord[key] : undefined,
+          nextIsObject ? childRecord[key] : undefined,
+          [...pathSegments, key],
+          paths,
+        );
+      }
     }
     return paths;
   }
