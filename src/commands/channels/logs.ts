@@ -106,7 +106,7 @@ export async function channelsLogsCommand(
   if (!channel) {
     runtime.error(
       formatUnknownChannelMessage({
-        channel: String(opts.channel ?? ""),
+        channel: opts.channel ?? "",
         purpose: "logs",
       }),
     );
