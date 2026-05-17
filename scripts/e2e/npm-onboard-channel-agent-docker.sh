@@ -154,6 +154,16 @@ openclaw channels add --channel "$CHANNEL" "${CHANNEL_ADD_ARGS[@]}" >/tmp/opencl
 node scripts/e2e/lib/npm-onboard-channel-agent/assertions.mjs assert-channel-config "$CHANNEL" "${CHANNEL_CONFIG_TOKENS[@]}"
 
 echo "Checking missing WhatsApp login preflight..."
+node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const configPath = path.join(process.env.HOME, ".openclaw", "openclaw.json");
+const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+if (config.channels && Object.hasOwn(config.channels, "whatsapp")) {
+  delete config.channels.whatsapp;
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+}
+NODE
 set +e
 openclaw channels login --channel whatsapp >/tmp/openclaw-missing-whatsapp-login.log 2>&1
 missing_whatsapp_login_status=$?
@@ -168,7 +178,7 @@ node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 const config = JSON.parse(fs.readFileSync(path.join(process.env.HOME, ".openclaw", "openclaw.json"), "utf8"));
-if (config.channels?.whatsapp) {
+if (config.channels && Object.hasOwn(config.channels, "whatsapp")) {
   throw new Error("missing-config login unexpectedly created channels.whatsapp");
 }
 NODE
