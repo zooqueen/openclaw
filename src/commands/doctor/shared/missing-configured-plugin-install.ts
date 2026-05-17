@@ -1226,7 +1226,12 @@ async function repairMissingPluginInstalls(params: {
       records: nextRecords,
       env,
       updateChannel,
-      mode: shouldReplaceBrokenOfficialInstall ? "update" : "install",
+      mode:
+        shouldReplaceBrokenOfficialInstall ||
+        candidate.trustedSourceLinkedOfficialInstall ||
+        preferNpmInstalls
+          ? "update"
+          : "install",
       preferNpm: preferNpmInstalls,
     });
     if (shouldReplaceBrokenOfficialInstall) {
