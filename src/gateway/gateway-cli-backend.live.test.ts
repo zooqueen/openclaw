@@ -157,6 +157,67 @@ async function requestWithProviderCapacityRetry<T>(
   return undefined;
 }
 
+type SeededClaudeCliProofSession = {
+  cliSessionId: string;
+  sessionId: string;
+  storePath: string;
+};
+
+type SeededSessionStoreEntry = {
+  cliSessionBindings?: Record<string, unknown>;
+  cliSessionIds?: Record<string, unknown>;
+  claudeCliSessionId?: unknown;
+};
+
+async function seedClaudeCliReusedSessionProof(params: {
+  sessionKey: string;
+  stateDir: string;
+}): Promise<SeededClaudeCliProofSession> {
+  const cliSessionId = randomUUID();
+  const sessionId = randomUUID();
+  const now = Date.now();
+  const sessionsDir = path.join(params.stateDir, "agents", "dev", "sessions");
+  const storePath = path.join(sessionsDir, "sessions.json");
+  await fs.mkdir(sessionsDir, { recursive: true });
+  await fs.writeFile(
+    storePath,
+    `${JSON.stringify(
+      {
+        [params.sessionKey]: {
+          sessionId,
+          updatedAt: now,
+          sessionStartedAt: now,
+          cliSessionBindings: {
+            "claude-cli": { sessionId: cliSessionId, forceReuse: true },
+          },
+          cliSessionIds: { "claude-cli": cliSessionId },
+          claudeCliSessionId: cliSessionId,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  const claudeProjectDir = path.join(os.homedir(), ".claude", "projects", "openclaw-live-proof");
+  await fs.mkdir(claudeProjectDir, { recursive: true });
+  await fs.writeFile(
+    path.join(claudeProjectDir, `${cliSessionId}.jsonl`),
+    `${JSON.stringify({ message: { role: "assistant", content: "seed" } })}\n`,
+  );
+
+  return { cliSessionId, sessionId, storePath };
+}
+
+async function readSeededSessionStoreEntry(params: {
+  sessionKey: string;
+  storePath: string;
+}): Promise<SeededSessionStoreEntry> {
+  const raw = await fs.readFile(params.storePath, "utf8");
+  const store = JSON.parse(raw) as Record<string, SeededSessionStoreEntry>;
+  return store[params.sessionKey] ?? {};
+}
+
 async function createMcpSchemaProbePlugin(tempDir: string): Promise<string> {
   const pluginDir = path.join(tempDir, MCP_SCHEMA_PROBE_PLUGIN_ID);
   await fs.mkdir(pluginDir, { recursive: true });
@@ -424,6 +485,58 @@ describeLive("gateway live (cli backend)", () => {
 
       try {
         const sessionKey = "agent:dev:live-cli-backend";
+        if (providerId === "claude-cli") {
+          const seeded = await seedClaudeCliReusedSessionProof({ sessionKey, stateDir });
+          logCliBackendLiveStep("poison-proof:seeded", {
+            sessionKey,
+            seededCliSessionId: seeded.cliSessionId,
+            seededSessionId: seeded.sessionId,
+            storePath: seeded.storePath,
+          });
+
+          let proofStatus: unknown;
+          let proofError: string | undefined;
+          try {
+            const proofPayload = await client.request(
+              "agent",
+              {
+                sessionKey,
+                idempotencyKey: `idem-${randomUUID()}`,
+                message:
+                  "This is a live Claude CLI reused-session invalidation proof. " +
+                  "Reply with any short acknowledgement.",
+                deliver: false,
+                timeout: 1,
+              },
+              { expectFinal: true, timeoutMs: 30_000 },
+            );
+            proofStatus = proofPayload?.status;
+          } catch (error) {
+            proofError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          }
+
+          if (proofStatus === "ok" && !proofError) {
+            throw new Error("Expected the seeded reused Claude CLI turn to fail or time out.");
+          }
+
+          const proofEntry = await readSeededSessionStoreEntry({
+            sessionKey,
+            storePath: seeded.storePath,
+          });
+          logCliBackendLiveStep("poison-proof:after", {
+            sessionKey,
+            status: proofStatus,
+            error: proofError,
+            bindingCleared: proofEntry.cliSessionBindings?.["claude-cli"] === undefined,
+            idCleared: proofEntry.cliSessionIds?.["claude-cli"] === undefined,
+            legacyCleared: proofEntry.claudeCliSessionId === undefined,
+          });
+
+          expect(proofEntry.cliSessionBindings?.["claude-cli"]).toBeUndefined();
+          expect(proofEntry.cliSessionIds?.["claude-cli"]).toBeUndefined();
+          expect(proofEntry.claudeCliSessionId).toBeUndefined();
+          return;
+        }
         const nonce = randomBytes(3).toString("hex").toUpperCase();
         const memoryNonce = randomBytes(3).toString("hex").toUpperCase();
         const memoryToken = `CLI-MEM-${memoryNonce}`;
