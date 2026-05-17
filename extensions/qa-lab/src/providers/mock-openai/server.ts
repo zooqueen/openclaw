@@ -1134,7 +1134,8 @@ function buildAssistantText(
     return "RECOVERED-SUBAGENT-OK";
   }
   if (
-    /Internal task completion event/i.test(allInputText) &&
+    (/Internal task completion event/i.test(allInputText) ||
+      /Auto-announce is push-based/i.test(allInputText)) &&
     /fanout worker (?:alpha|beta)/i.test(allInputText)
   ) {
     return "";
@@ -1616,7 +1617,8 @@ async function buildResponsesPayload(
     return buildAssistantEvents("");
   }
   if (
-    /Internal task completion event/i.test(allInputText) &&
+    (/Internal task completion event/i.test(allInputText) ||
+      /Auto-announce is push-based/i.test(allInputText)) &&
     /fanout worker (?:alpha|beta)/i.test(allInputText)
   ) {
     return buildAssistantEvents("");
