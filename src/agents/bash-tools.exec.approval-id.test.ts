@@ -853,7 +853,7 @@ describe("exec approvals", () => {
     expect(calls).toContain("exec.approval.request");
   });
 
-  it("keeps prompt-only node shell-wrapper reruns approval-gated despite exact-command durable trust", async () => {
+  it("allows prompt-only node shell-wrapper reruns with exact-command durable trust", async () => {
     const calls: string[] = [];
     vi.mocked(callGatewayTool).mockImplementation(async (method, _opts, params) => {
       calls.push(method);
@@ -905,8 +905,9 @@ describe("exec approvals", () => {
       command: "cd .",
     });
 
-    expect(result.details.status).toBe("approval-pending");
-    expect(calls).toContain("exec.approval.request");
+    expect(result.details.status).toBe("completed");
+    expect(getResultText(result)).toContain("node-shell-wrapper-ok");
+    expect(calls).not.toContain("exec.approval.request");
   });
 
   it("requires approval for elevated ask when allowlist misses", async () => {

@@ -757,7 +757,7 @@ describe("exec approvals store helpers", () => {
     expect(patterns).not.toEqual([{ pattern: earlyTool, argPattern: undefined }]);
   });
 
-  it("blocks exact-command allow-always fallback for unsafe POSIX shell", async () => {
+  it("keeps exact-command allow-always fallback available for POSIX shell text", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -765,6 +765,8 @@ describe("exec approvals store helpers", () => {
 
     for (const commandText of [
       "$(cat /tmp/tool) --help",
+      'echo "$(date)"',
+      "python -c 'print(1)'",
       "printf x > out.txt",
       "echo 'unterminated",
       "sh -c './tool'",
@@ -787,7 +789,7 @@ describe("exec approvals store helpers", () => {
           env: { PATH: process.env.PATH ?? "" },
           platform: process.platform,
         }),
-      ).resolves.toBe(false);
+      ).resolves.toBe(true);
     }
   });
 
@@ -800,7 +802,7 @@ describe("exec approvals store helpers", () => {
     ).resolves.toBe(true);
   });
 
-  it("blocks exact-command allow-always fallback for resolved POSIX executables", async () => {
+  it("keeps exact-command allow-always fallback available for resolved POSIX executables", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -816,7 +818,7 @@ describe("exec approvals store helpers", () => {
         env: { PATH: binDir },
         platform: process.platform,
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
   });
 
   it("keeps planner-backed allow-always persistence scoped to POSIX executable units", async () => {
@@ -901,7 +903,7 @@ describe("exec approvals store helpers", () => {
     await expect(persistCommand("python -c 'print(1)'")).resolves.toStrictEqual([]);
   });
 
-  it("does not persist allow-always patterns when POSIX shell analysis fails", async () => {
+  it("leaves exact-command fallback available when POSIX shell analysis fails", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -936,6 +938,15 @@ describe("exec approvals store helpers", () => {
 
     expect(analysis.analysisOk).toBe(false);
     expect(patterns).toStrictEqual([]);
+    await expect(
+      canPersistExactCommandAllowAlways({
+        analysisOk: analysis.analysisOk,
+        commandText,
+        cwd: dir,
+        env,
+        platform: process.platform,
+      }),
+    ).resolves.toBe(true);
     expect(allowlistEntries(dir, "worker")).toStrictEqual([]);
   });
 

@@ -1209,15 +1209,7 @@ export async function canPersistExactCommandAllowAlways(params: {
   platform?: string | null;
 }): Promise<boolean> {
   const commandText = params.commandText?.trim();
-  if (!commandText || params.analysisOk === false) {
-    return false;
-  }
-  if (isWindowsPlatform(params.platform)) {
-    return true;
-  }
-  // POSIX exact command hashes do not bind the resolved executable identity. Use
-  // planner-backed path entries instead so PATH changes cannot inherit trust.
-  return false;
+  return Boolean(commandText);
 }
 
 export async function persistAllowAlwaysPatterns(params: {

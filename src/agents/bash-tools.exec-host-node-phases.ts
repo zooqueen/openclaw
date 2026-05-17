@@ -329,7 +329,7 @@ export async function analyzeNodeApprovalRequirement(params: {
       )}.`,
     );
   }
-  if ((params.hostAsk === "always" || params.hostSecurity === "allowlist") && analysisOk) {
+  if (params.hostAsk === "always" || params.hostSecurity === "allowlist") {
     try {
       const approvalsSnapshot = await callGatewayTool<{ file: string }>(
         "exec.approvals.node.get",

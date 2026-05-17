@@ -1595,7 +1595,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     }
   });
 
-  it("does not persist exact-command allow-always approvals for planner-rejected shell", async () => {
+  it("persists exact-command allow-always approvals for planner-rejected shell", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -1617,7 +1617,41 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
 
         expect(runCommand).toHaveBeenCalledTimes(1);
         expectInvokeOk(sendInvokeResult, { payloadContains: "allow-always-ok" });
-        expect(loadExecApprovals().agents?.main?.allowlist ?? []).toStrictEqual([]);
+        const allowlist = loadExecApprovals().agents?.main?.allowlist ?? [];
+        expect(allowlist).toHaveLength(1);
+        expect(allowlist[0]).toEqual(
+          expect.objectContaining({
+            pattern: expect.stringMatching(/^=command:[0-9a-f]{16}$/),
+            source: "allow-always",
+          }),
+        );
+
+        const rerun = await runSystemInvoke({
+          preferMacAppExecHost: false,
+          command: ["/bin/sh", "-lc", "printf x > out.txt"],
+          rawCommand: "printf x > out.txt",
+          cwd: createFixtureDir("openclaw-exact-fallback-rerun-"),
+          security: "allowlist",
+          ask: "on-miss",
+          runCommand: vi.fn(async () => createLocalRunResult("exact-rerun-ok")),
+        });
+        expect(rerun.runCommand).toHaveBeenCalledTimes(1);
+        expectInvokeOk(rerun.sendInvokeResult, { payloadContains: "exact-rerun-ok" });
+
+        const changed = await runSystemInvoke({
+          preferMacAppExecHost: false,
+          command: ["/bin/sh", "-lc", "printf y > out.txt"],
+          rawCommand: "printf y > out.txt",
+          cwd: createFixtureDir("openclaw-exact-fallback-changed-"),
+          security: "allowlist",
+          ask: "on-miss",
+          runCommand: vi.fn(async () => createLocalRunResult("changed-ok")),
+        });
+        expect(changed.runCommand).not.toHaveBeenCalled();
+        expectApprovalRequiredDenied({
+          sendNodeEvent: changed.sendNodeEvent,
+          sendInvokeResult: changed.sendInvokeResult,
+        });
       },
     });
   });
@@ -2434,7 +2468,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     }
   });
 
-  it("keeps prompt-only shell-wrapper reruns approval-gated despite exact-command durable trust", async () => {
+  it("allows prompt-only shell-wrapper reruns with exact-command durable trust", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -2480,11 +2514,8 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
           runCommand: vi.fn(async () => createLocalRunResult("shell-wrapper-reused")),
         });
 
-        expect(rerun.runCommand).not.toHaveBeenCalled();
-        expectApprovalRequiredDenied({
-          sendNodeEvent: rerun.sendNodeEvent,
-          sendInvokeResult: rerun.sendInvokeResult,
-        });
+        expect(rerun.runCommand).toHaveBeenCalledTimes(1);
+        expectInvokeOk(rerun.sendInvokeResult, { payloadContains: "shell-wrapper-reused" });
       },
     });
   });
