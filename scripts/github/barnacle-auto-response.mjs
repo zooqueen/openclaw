@@ -798,6 +798,9 @@ function shouldRemoveProofSufficientLabel(context, proofEvaluation, hasExactHead
   if (hasExactHeadClawSweeperProof) {
     return false;
   }
+  if (proofEvaluation.status === "override") {
+    return false;
+  }
   if (proofEvaluation.status !== "passed") {
     return true;
   }
