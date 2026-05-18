@@ -78,6 +78,7 @@ type SlackQaBeforeRunResult =
     };
 
 type SlackQaConfigOverrides = {
+  requireMention?: boolean;
   replyToMode?: "all" | "off";
   users?: string[];
 };
@@ -276,12 +277,13 @@ const SLACK_QA_SCENARIOS: SlackQaScenarioDefinition[] = [
     standardId: "canary",
     title: "Slack canary echo",
     timeoutMs: 45_000,
-    buildRun: (sutUserId) => {
+    configOverrides: { requireMention: false },
+    buildRun: () => {
       const token = `SLACK_QA_PING_${randomUUID().slice(0, 8).toUpperCase()}`;
       const pong = `PONG_${token}`;
       return {
         expectReply: true,
-        input: `<@${sutUserId}> ping ${token}; reply with only this exact marker: ${pong}`,
+        input: `ping ${token}; reply with only this exact marker: ${pong}`,
         matchText: pong,
         replySearchMode: "channel",
       };
@@ -666,7 +668,7 @@ function buildSlackQaConfig(
             channels: {
               [params.channelId]: {
                 enabled: true,
-                requireMention: true,
+                requireMention: params.overrides?.requireMention ?? true,
                 allowBots: true,
                 users: params.overrides?.users ?? [params.driverBotUserId],
               },

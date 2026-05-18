@@ -71,9 +71,11 @@ describe("Slack live QA runtime helpers", () => {
     const scenario = __testing.findScenario(["slack-canary"])[0];
     const run = scenario?.buildRun("U999999999");
     expect(run?.input).toContain("ping SLACK_QA_PING_");
+    expect(run?.input).not.toContain("<@U999999999>");
     expect(run?.input).toContain("PONG_SLACK_QA_PING_");
     expect(run?.matchText).toContain("PONG_SLACK_QA_PING_");
     expect(run?.replySearchMode).toBe("channel");
+    expect(scenario?.configOverrides?.requireMention).toBe(false);
   });
 
   it("injects low-noise Slack RTT config", () => {
@@ -98,6 +100,7 @@ describe("Slack live QA runtime helpers", () => {
     const next = __testing.buildSlackQaConfig(baseCfg, {
       channelId: "C123456789",
       driverBotUserId: "U123456789",
+      overrides: { requireMention: false },
       sutAccountId: "sut",
       sutAppToken: "xapp-sut",
       sutBotToken: "xoxb-sut",
@@ -112,6 +115,7 @@ describe("Slack live QA runtime helpers", () => {
     });
     expect(next.messages?.statusReactions?.enabled).toBe(false);
     expect(next.messages?.groupChat?.visibleReplies).toBe("automatic");
+    expect(next.channels?.slack?.accounts?.sut?.channels?.C123456789?.requireMention).toBe(false);
   });
 
   it("records Slack accepted timestamps without thread polling for top-level replies", async () => {
