@@ -210,7 +210,7 @@ describe("doctor health contributions", () => {
     ).toBe(false);
   });
 
-  it("skips writes when older update parents only advertise doctor-write support", () => {
+  it("keeps older update parents with doctor-write support writable", () => {
     expect(
       shouldSkipLegacyUpdateDoctorConfigWrite({
         env: {
@@ -218,7 +218,7 @@ describe("doctor health contributions", () => {
           OPENCLAW_UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE: "1",
         },
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("treats falsey update env values as normal writes", () => {
