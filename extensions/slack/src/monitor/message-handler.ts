@@ -33,6 +33,7 @@ export type SlackMessageHandler = (
 ) => Promise<void>;
 
 const APP_MENTION_RETRY_TTL_MS = 60_000;
+const APP_MENTION_RETRY_MAX_KEYS = 2048;
 
 export class SlackRetryableInboundError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -56,6 +57,33 @@ function buildSeenMessageKey(channelId: string | undefined, ts: string | undefin
     return null;
   }
   return `${channelId}:${ts}`;
+}
+
+function pruneExpiringSlackKeyMap(
+  entries: Map<string, number>,
+  now: number,
+  maxKeys = APP_MENTION_RETRY_MAX_KEYS,
+): void {
+  for (const [key, expiresAt] of entries) {
+    if (expiresAt <= now) {
+      entries.delete(key);
+    }
+  }
+  while (entries.size > maxKeys) {
+    const oldest = entries.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    entries.delete(oldest);
+  }
+}
+
+function rememberExpiringSlackKey(entries: Map<string, number>, key: string, expiresAt: number) {
+  if (entries.has(key)) {
+    entries.delete(key);
+  }
+  entries.set(key, expiresAt);
+  pruneExpiringSlackKeyMap(entries, Date.now());
 }
 
 export function createSlackMessageHandler(params: {
@@ -140,7 +168,11 @@ export function createSlackMessageHandler(params: {
           pruneAppMentionRetryKeys(Date.now());
           if (last.opts.source === "app_mention") {
             // If app_mention wins the race and dispatches first, drop the later message dispatch.
-            appMentionDispatchedKeys.set(seenMessageKey, Date.now() + APP_MENTION_RETRY_TTL_MS);
+            rememberExpiringSlackKey(
+              appMentionDispatchedKeys,
+              seenMessageKey,
+              Date.now() + APP_MENTION_RETRY_TTL_MS,
+            );
           } else if (
             last.opts.source === "message" &&
             appMentionDispatchedKeys.has(seenMessageKey)
@@ -200,22 +232,14 @@ export function createSlackMessageHandler(params: {
   const appMentionDispatchedKeys = new Map<string, number>();
 
   const pruneAppMentionRetryKeys = (now: number) => {
-    for (const [key, expiresAt] of appMentionRetryKeys) {
-      if (expiresAt <= now) {
-        appMentionRetryKeys.delete(key);
-      }
-    }
-    for (const [key, expiresAt] of appMentionDispatchedKeys) {
-      if (expiresAt <= now) {
-        appMentionDispatchedKeys.delete(key);
-      }
-    }
+    pruneExpiringSlackKeyMap(appMentionRetryKeys, now);
+    pruneExpiringSlackKeyMap(appMentionDispatchedKeys, now);
   };
 
   const rememberAppMentionRetryKey = (key: string) => {
     const now = Date.now();
     pruneAppMentionRetryKeys(now);
-    appMentionRetryKeys.set(key, now + APP_MENTION_RETRY_TTL_MS);
+    rememberExpiringSlackKey(appMentionRetryKeys, key, now + APP_MENTION_RETRY_TTL_MS);
   };
 
   const consumeAppMentionRetryKey = (key: string) => {
@@ -301,13 +325,29 @@ export function createSlackMessageHandler(params: {
       pendingKeys.add(debounceKey);
       pendingTopLevelDebounceKeys.set(conversationKey, pendingKeys);
     }
-    await traceSlackQaPhase(
-      "inbound.enqueue",
-      () => debouncer.enqueue({ message: resolvedMessage, opts }),
-      {
-        debounced: canDebounce,
-        source: opts.source,
-      },
-    );
+    try {
+      await traceSlackQaPhase(
+        "inbound.enqueue",
+        () => debouncer.enqueue({ message: resolvedMessage, opts }),
+        {
+          debounced: canDebounce,
+          source: opts.source,
+        },
+      );
+    } catch (error) {
+      if (canDebounce && debounceKey && conversationKey) {
+        const pendingKeys = pendingTopLevelDebounceKeys.get(conversationKey);
+        pendingKeys?.delete(debounceKey);
+        if (pendingKeys?.size === 0) {
+          pendingTopLevelDebounceKeys.delete(conversationKey);
+        }
+      }
+      throw error;
+    }
   };
 }
+
+export const slackMessageHandlerTesting = {
+  APP_MENTION_RETRY_MAX_KEYS,
+  pruneExpiringSlackKeyMap,
+};

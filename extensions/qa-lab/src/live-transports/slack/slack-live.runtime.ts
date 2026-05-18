@@ -229,6 +229,10 @@ type SlackQaGatewayRssSample = {
 type SlackQaGatewayHeapSnapshot = {
   at: string;
   bytes: number;
+  durationMs?: number;
+  gatewayProcessRssAfterBytes?: number;
+  gatewayProcessRssBeforeBytes?: number;
+  gatewayProcessRssDeltaBytes?: number;
   label: string;
   path: string;
 };
@@ -594,6 +598,8 @@ async function captureSlackGatewayHeapSnapshotCheckpoint(params: {
   outputDir: string;
   label: string;
 }): Promise<SlackQaGatewayHeapSnapshot | undefined> {
+  const startedAt = Date.now();
+  const gatewayProcessRssBeforeBytes = params.gateway.getProcessRssBytes?.() ?? undefined;
   const before = new Set(
     (await listGatewayHeapSnapshotFiles(params.gateway.tempRoot)).map((file) => file.pathName),
   );
@@ -622,11 +628,20 @@ async function captureSlackGatewayHeapSnapshotCheckpoint(params: {
     `${sanitizeSlackQaArtifactLabel(params.label)}.heapsnapshot`,
   );
   await fs.copyFile(snapshotPath, path.join(params.outputDir, relativePath));
+  const gatewayProcessRssAfterBytes = params.gateway.getProcessRssBytes?.() ?? undefined;
   return {
     label: params.label,
     at: new Date().toISOString(),
     path: relativePath,
     bytes,
+    durationMs: Date.now() - startedAt,
+    ...(gatewayProcessRssBeforeBytes === undefined ? {} : { gatewayProcessRssBeforeBytes }),
+    ...(gatewayProcessRssAfterBytes === undefined ? {} : { gatewayProcessRssAfterBytes }),
+    ...(gatewayProcessRssBeforeBytes === undefined || gatewayProcessRssAfterBytes === undefined
+      ? {}
+      : {
+          gatewayProcessRssDeltaBytes: gatewayProcessRssAfterBytes - gatewayProcessRssBeforeBytes,
+        }),
   };
 }
 
