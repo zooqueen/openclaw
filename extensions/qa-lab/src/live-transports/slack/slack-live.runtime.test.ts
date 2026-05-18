@@ -74,6 +74,7 @@ describe("Slack live QA runtime helpers", () => {
     expect(run?.input).not.toContain("<@U999999999>");
     expect(run?.input).toContain("PONG_SLACK_QA_PING_");
     expect(run?.matchText).toContain("PONG_SLACK_QA_PING_");
+    expect(run?.beforeRun).toBeTypeOf("function");
     expect(run?.replySearchMode).toBe("channel");
     expect(scenario?.configOverrides?.requireMention).toBe(false);
   });

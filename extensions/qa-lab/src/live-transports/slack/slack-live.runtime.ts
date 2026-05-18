@@ -290,31 +290,31 @@ const SLACK_QA_SCENARIOS: SlackQaScenarioDefinition[] = [
     title: "Slack canary echo",
     timeoutMs: 45_000,
     configOverrides: { requireMention: false },
-    beforeRun: async (context) => {
-      const token = `SLACK_QA_WARMUP_${randomUUID().slice(0, 8).toUpperCase()}`;
-      const pong = `PONG_${token}`;
-      const sent = await context.postSlackMessage({
-        text: `ping ${token}; reply with only this exact marker: ${pong}`,
-      });
-      await waitForSlackScenarioReply({
-        channelId: context.channelId,
-        client: context.sutReadClient,
-        matchText: pong,
-        observedMessages: context.observedMessages,
-        observationScenarioId: "slack-canary",
-        observationScenarioTitle: "Slack canary warmup",
-        replySearchMode: "channel",
-        sentTs: sent.ts,
-        threadTs: sent.ts,
-        sutIdentity: context.sutIdentity,
-        timeoutMs: 45_000,
-      });
-      return "warmed ping/pong dispatch path";
-    },
     buildRun: () => {
       const token = `SLACK_QA_PING_${randomUUID().slice(0, 8).toUpperCase()}`;
       const pong = `PONG_${token}`;
       return {
+        beforeRun: async (context) => {
+          const warmupToken = `SLACK_QA_WARMUP_${randomUUID().slice(0, 8).toUpperCase()}`;
+          const warmupPong = `PONG_${warmupToken}`;
+          const sent = await context.postSlackMessage({
+            text: `ping ${warmupToken}; reply with only this exact marker: ${warmupPong}`,
+          });
+          await waitForSlackScenarioReply({
+            channelId: context.channelId,
+            client: context.sutReadClient,
+            matchText: warmupPong,
+            observedMessages: context.observedMessages,
+            observationScenarioId: "slack-canary",
+            observationScenarioTitle: "Slack canary warmup",
+            replySearchMode: "channel",
+            sentTs: sent.ts,
+            threadTs: sent.ts,
+            sutIdentity: context.sutIdentity,
+            timeoutMs: 45_000,
+          });
+          return "warmed ping/pong dispatch path";
+        },
         expectReply: true,
         input: `ping ${token}; reply with only this exact marker: ${pong}`,
         matchText: pong,
