@@ -421,6 +421,7 @@ async function tryWriteSingleTopLevelIncludeMutation(params: {
     previousConfig: params.snapshot.sourceConfig,
     nextConfig,
     explicitSetPaths: [...(params.writeOptions?.explicitSetPaths ?? []), ...unsetPaths],
+    explicitProtectedConfigPolicyPaths: params.writeOptions?.explicitProtectedConfigPolicyPaths,
     allowProtectedConfigPolicyDrop: params.writeOptions?.allowProtectedConfigPolicyDrop,
   });
   if (blockingReasons.length > 0 && params.writeOptions?.allowDestructiveWrite !== true) {

@@ -10,6 +10,7 @@ import {
   normalizeAgentModelRefForConfig,
 } from "../config/model-input.js";
 import { CONFIG_PATH } from "../config/paths.js";
+import { isChannelConfigMetaKey } from "../config/protected-policy.js";
 import { isBlockedObjectKey } from "../config/prototype-keys.js";
 import { redactConfigObject } from "../config/redact-snapshot.js";
 import { readBestEffortRuntimeConfigSchema } from "../config/runtime-schema.js";
@@ -266,8 +267,6 @@ function normalizeConfigMutationExplicitSetPath(path: PathSegment[]): PathSegmen
   return path;
 }
 
-const RESERVED_CHANNEL_CONFIG_KEYS = new Set(["defaults", "modelByChannel"]);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -295,7 +294,7 @@ function normalizeConfigMutationExplicitSetPaths(params: {
       continue;
     }
     const channelId = path[1];
-    if (!channelId || RESERVED_CHANNEL_CONFIG_KEYS.has(channelId)) {
+    if (!channelId || isChannelConfigMetaKey(channelId)) {
       continue;
     }
     const previousChannels = isRecord(params.previousConfig)

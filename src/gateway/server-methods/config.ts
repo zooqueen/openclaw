@@ -14,6 +14,7 @@ import {
   redactConfigSnapshot,
   restoreRedactedValues,
 } from "../../config/redact-snapshot.js";
+import { resolveProtectedConfigPolicyPath } from "../../config/protected-policy.js";
 import { loadGatewayRuntimeConfigSchema } from "../../config/runtime-schema.js";
 import { lookupConfigSchema, type ConfigSchemaResponse } from "../../config/schema.js";
 import type { ConfigValidationIssue, OpenClawConfig } from "../../config/types.openclaw.js";
@@ -59,41 +60,35 @@ let configSchemaResponseCache: {
   response: ConfigSchemaResponse;
 } | null = null;
 
-const PROTECTED_CONTROL_PLANE_CONFIG_PATHS = [
-  ["commands", "ownerAllowFrom"],
-  ["commands", "allowFrom"],
-  ["tools", "elevated", "allowFrom"],
-  ["agents", "list"],
-  ["channels"],
-] as const;
-
-function startsWithConfigPath(path: readonly string[], prefix: readonly string[]): boolean {
-  return prefix.every((segment, index) => path[index] === segment);
-}
-
-function isProtectedControlPlaneConfigPath(path: readonly string[]): boolean {
-  return PROTECTED_CONTROL_PLANE_CONFIG_PATHS.some(
-    (protectedPath) =>
-      startsWithConfigPath(path, protectedPath) || startsWithConfigPath(protectedPath, path),
-  );
-}
-
 function withExplicitProtectedControlPlanePaths(
   writeOptions: Awaited<ReturnType<typeof readConfigFileSnapshotForWrite>>["writeOptions"],
   changedPaths: readonly (readonly string[])[],
 ): Awaited<ReturnType<typeof readConfigFileSnapshotForWrite>>["writeOptions"] {
-  const explicitSetPaths: string[][] = [];
+  const exactSetPaths: string[][] = [];
+  const explicitProtectedConfigPolicyPaths: string[][] = [];
+  const seenExact = new Set<string>();
   for (const path of changedPaths) {
-    if (isProtectedControlPlaneConfigPath(path)) {
-      explicitSetPaths.push([...path]);
+    const protectedPath = resolveProtectedConfigPolicyPath(path);
+    if (!protectedPath) {
+      continue;
+    }
+    const exactKey = path.join("\u0000");
+    if (!seenExact.has(exactKey)) {
+      seenExact.add(exactKey);
+      exactSetPaths.push([...path]);
+      explicitProtectedConfigPolicyPaths.push([...path]);
     }
   }
-  if (explicitSetPaths.length === 0) {
+  if (explicitProtectedConfigPolicyPaths.length === 0) {
     return writeOptions;
   }
   return {
     ...writeOptions,
-    explicitSetPaths: [...(writeOptions.explicitSetPaths ?? []), ...explicitSetPaths],
+    explicitSetPaths: [...(writeOptions.explicitSetPaths ?? []), ...exactSetPaths],
+    explicitProtectedConfigPolicyPaths: [
+      ...(writeOptions.explicitProtectedConfigPolicyPaths ?? []),
+      ...explicitProtectedConfigPolicyPaths,
+    ],
   };
 }
 

@@ -16,6 +16,7 @@ import { commitConfigWithPendingPluginInstalls } from "../../cli/plugins-install
 import { refreshPluginRegistryAfterConfigMutation } from "../../cli/plugins-registry-refresh.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { ConfigWriteOptions } from "../../config/io.js";
+import { isChannelConfigMetaKey } from "../../config/protected-policy.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
 import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
@@ -53,7 +54,6 @@ export type ChannelsAddOptions = {
 
 const CHANNEL_ADD_CONTROL_OPTION_KEYS = new Set(["channel", "account"]);
 const NEXTCLOUD_TALK_CLI_ALIASES = new Set(["nextcloud-talk", "nc-talk", "nc"]);
-const RESERVED_CHANNEL_CONFIG_KEYS = new Set(["defaults", "modelByChannel"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -72,7 +72,7 @@ function resolveChannelAddWriteOptions(params: {
     ...Object.keys(nextChannels),
   ]);
   const explicitSetPaths = [...changedChannelKeys]
-    .filter((key) => !RESERVED_CHANNEL_CONFIG_KEYS.has(key))
+    .filter((key) => !isChannelConfigMetaKey(key))
     .filter((key) => !isDeepStrictEqual(previousChannels[key], nextChannels[key]))
     .map((key) => ["channels", key]);
   return explicitSetPaths.length > 0 ? { explicitSetPaths } : undefined;

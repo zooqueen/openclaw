@@ -203,6 +203,58 @@ describe("config shared auth disconnects", () => {
       nextConfig,
       expect.objectContaining({
         explicitSetPaths: [["commands", "ownerAllowFrom"]],
+        explicitProtectedConfigPolicyPaths: [["commands", "ownerAllowFrom"]],
+      }),
+    );
+  });
+
+  it("keeps protected control-plane exemptions at exact leaf paths", async () => {
+    const prevConfig: OpenClawConfig = {
+      tools: {
+        elevated: {
+          allowFrom: {
+            webchat: ["session:old"],
+            telegram: ["telegram:unchanged"],
+          },
+        },
+      },
+    };
+    const nextConfig: OpenClawConfig = {
+      tools: {
+        elevated: {
+          allowFrom: {
+            webchat: ["session:new"],
+            telegram: ["telegram:unchanged"],
+          },
+        },
+      },
+    };
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot(prevConfig));
+
+    const { options } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({
+          tools: {
+            elevated: {
+              allowFrom: {
+                webchat: ["session:new"],
+              },
+            },
+          },
+        }),
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+    await flushConfigHandlerMicrotasks();
+
+    expect(writeConfigFileMock).toHaveBeenCalledWith(
+      nextConfig,
+      expect.objectContaining({
+        explicitSetPaths: [["tools", "elevated", "allowFrom", "webchat"]],
+        explicitProtectedConfigPolicyPaths: [["tools", "elevated", "allowFrom", "webchat"]],
       }),
     );
   });
@@ -251,6 +303,9 @@ describe("config shared auth disconnects", () => {
       nextConfig,
       expect.objectContaining({
         explicitSetPaths: [["channels", "matrix", "groups", "!room:example.org", "users"]],
+        explicitProtectedConfigPolicyPaths: [
+          ["channels", "matrix", "groups", "!room:example.org", "users"],
+        ],
       }),
     );
   });
@@ -292,6 +347,12 @@ describe("config shared auth disconnects", () => {
       nextConfig,
       expect.objectContaining({
         explicitSetPaths: [["commands"], ["tools"], ["agents"], ["channels"]],
+        explicitProtectedConfigPolicyPaths: [
+          ["commands"],
+          ["tools"],
+          ["agents"],
+          ["channels"],
+        ],
       }),
     );
   });
@@ -530,6 +591,7 @@ describe("config shared auth disconnects", () => {
       },
       expect.objectContaining({
         explicitSetPaths: [["channels", "whatsapp"]],
+        explicitProtectedConfigPolicyPaths: [["channels", "whatsapp"]],
       }),
     );
     expect(scheduleGatewaySigusr1RestartMock).toHaveBeenCalledTimes(1);

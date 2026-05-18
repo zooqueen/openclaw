@@ -712,7 +712,7 @@ describe("config mutate helpers", () => {
       },
     });
     ioMocks.resolveProtectedConfigPolicyWriteBlockingReasons.mockReturnValueOnce([
-      "protected-list-removed:channels.whatsapp.allowFrom",
+      "protected-channel-config-changed:channels.whatsapp",
     ]);
 
     await expect(
@@ -724,7 +724,7 @@ describe("config mutate helpers", () => {
       }),
     ).rejects.toMatchObject({
       code: "CONFIG_WRITE_REJECTED",
-      reasons: ["protected-list-removed:channels.whatsapp.allowFrom"],
+      reasons: ["protected-channel-config-changed:channels.whatsapp"],
     });
     await expect(fs.readFile(channelsPath, "utf-8")).resolves.toContain("+15550001111");
     expect(ioMocks.writeConfigFile).not.toHaveBeenCalled();
