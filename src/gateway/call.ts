@@ -37,11 +37,13 @@ import {
 import { canSkipGatewayConfigLoad } from "./explicit-connection-policy.js";
 import { resolvePreauthHandshakeTimeoutMs } from "./handshake-timeouts.js";
 import {
+  APPROVALS_SCOPE,
   CLI_DEFAULT_OPERATOR_SCOPES,
   isGatewayMethodClassified,
   resolveLeastPrivilegeOperatorScopesForMethod,
   type OperatorScope,
 } from "./method-scopes.js";
+import { getOperatorApprovalRuntimeToken } from "./operator-approval-runtime-token.js";
 import { MIN_CLIENT_PROTOCOL_VERSION, PROTOCOL_VERSION } from "./protocol/index.js";
 export type { GatewayConnectionDetails };
 
@@ -322,6 +324,21 @@ function shouldOmitDeviceIdentityForGatewayCall(params: {
     clientName === GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT &&
     hasSharedAuth &&
     isLoopbackGatewayUrl(params.url)
+  );
+}
+
+function shouldAttachApprovalRuntimeToken(params: {
+  opts: CallGatewayBaseOptions;
+  scopes: OperatorScope[];
+  allowApprovalRuntimeToken: boolean;
+}): boolean {
+  const mode = params.opts.mode ?? GATEWAY_CLIENT_MODES.CLI;
+  const clientName = params.opts.clientName ?? GATEWAY_CLIENT_NAMES.CLI;
+  return (
+    params.allowApprovalRuntimeToken &&
+    mode === GATEWAY_CLIENT_MODES.BACKEND &&
+    clientName === GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT &&
+    params.scopes.includes(APPROVALS_SCOPE)
   );
 }
 
@@ -654,6 +671,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
   timeoutMs: number;
   safeTimerTimeoutMs: number;
   connectionDetails: GatewayConnectionDetails;
+  allowApprovalRuntimeToken: boolean;
 }): Promise<T> {
   const {
     opts,
@@ -700,6 +718,13 @@ async function executeGatewayRequestWithScopes<T>(params: {
       mode: opts.mode ?? GATEWAY_CLIENT_MODES.CLI,
       role: "operator",
       scopes,
+      ...(shouldAttachApprovalRuntimeToken({
+        opts,
+        scopes,
+        allowApprovalRuntimeToken: params.allowApprovalRuntimeToken,
+      })
+        ? { approvalRuntimeToken: getOperatorApprovalRuntimeToken() }
+        : {}),
       deviceIdentity:
         opts.deviceIdentity === undefined
           ? resolveDeviceIdentityForGatewayCall({ opts, url, token, password })
@@ -814,6 +839,7 @@ async function callGatewayWithScopes<T = Record<string, unknown>>(
     timeoutMs,
     safeTimerTimeoutMs,
     connectionDetails,
+    allowApprovalRuntimeToken: !context.urlOverride,
   });
 }
 

@@ -14,6 +14,7 @@ import {
   pickPrimaryTailnetIPv4Mock as pickPrimaryTailnetIPv4,
   resolveGatewayPortMock as resolveGatewayPort,
 } from "./gateway-connection.test-mocks.js";
+import { APPROVALS_SCOPE } from "./operator-scopes.js";
 
 const deviceIdentityState = vi.hoisted(() => ({
   value: {
@@ -52,6 +53,7 @@ let lastClientOptions: {
   clientDisplayName?: string;
   mode?: string;
   scopes?: string[];
+  approvalRuntimeToken?: string;
   deviceIdentity?: unknown;
   onHelloOk?: (hello: { features?: { methods?: string[] } }) => void | Promise<void>;
   onClose?: (code: number, reason: string) => void;
@@ -88,6 +90,7 @@ vi.mock("./client.js", () => ({
       clientDisplayName?: string;
       mode?: string;
       scopes?: string[];
+      approvalRuntimeToken?: string;
       onHelloOk?: (hello: { features?: { methods?: string[] } }) => void | Promise<void>;
       onClose?: (code: number, reason: string) => void;
     }) {
@@ -153,6 +156,7 @@ class StubGatewayClient {
     clientDisplayName?: string;
     mode?: string;
     scopes?: string[];
+    approvalRuntimeToken?: string;
     onHelloOk?: (hello: { features?: { methods?: string[] } }) => void | Promise<void>;
     onClose?: (code: number, reason: string) => void;
   }) {
@@ -387,6 +391,21 @@ describe("callGateway url resolution", () => {
     expect(lastClientOptions?.clientName).toBe(GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT);
     expect(lastClientOptions?.mode).toBe(GATEWAY_CLIENT_MODES.BACKEND);
     expect(lastClientOptions?.deviceIdentity).toBeNull();
+  });
+
+  it("marks local backend approval-scope gateway calls as approval runtime clients", async () => {
+    setLocalLoopbackGatewayConfig();
+
+    await callGateway({
+      method: "exec.approval.waitDecision",
+      params: { id: "approval-1" },
+      token: "explicit-token",
+    });
+
+    expect(lastClientOptions?.clientName).toBe(GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT);
+    expect(lastClientOptions?.mode).toBe(GATEWAY_CLIENT_MODES.BACKEND);
+    expect(lastClientOptions?.scopes).toContain(APPROVALS_SCOPE);
+    expect(lastClientOptions?.approvalRuntimeToken).toEqual(expect.any(String));
   });
 
   it("keeps device identity enabled for explicit CLI loopback shared-token auth", async () => {
