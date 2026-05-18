@@ -645,6 +645,30 @@ async function captureSlackGatewayHeapSnapshotCheckpoint(params: {
   };
 }
 
+async function stopSlackQaScenarioGateway(params: {
+  cleanupIssues: string[];
+  gatewayDebugDirPath: string;
+  gatewayHarness: Awaited<ReturnType<typeof startQaLiveLaneGateway>>;
+  issueLabel: string;
+  preserveDebugArtifacts: boolean;
+}): Promise<{ preservedDebugArtifacts: boolean; stopped: boolean }> {
+  try {
+    await params.gatewayHarness.stop(
+      params.preserveDebugArtifacts ? { preserveToDir: params.gatewayDebugDirPath } : undefined,
+    );
+    return {
+      preservedDebugArtifacts: params.preserveDebugArtifacts,
+      stopped: true,
+    };
+  } catch (error) {
+    appendLiveLaneIssue(params.cleanupIssues, params.issueLabel, error);
+    return {
+      preservedDebugArtifacts: false,
+      stopped: false,
+    };
+  }
+}
+
 function inferSlackCredentialSource(
   value: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
@@ -1237,6 +1261,7 @@ export async function runSlackQaLive(params: {
       let scenarioAttempt = 1;
       while (true) {
         let gatewayHarness: Awaited<ReturnType<typeof startQaLiveLaneGateway>> | undefined;
+        let preserveGatewayDebugOnStop = gatewayRttTraceEnabled;
         try {
           assertLeaseHealthy();
           const gatewayProcessRssSamples: SlackQaGatewayRssSample[] = [];
@@ -1439,29 +1464,22 @@ export async function runSlackQaLive(params: {
                 ? `${formatErrorMessage(error)}; retried ${scenarioAttempt - 1}x`
                 : formatErrorMessage(error),
           });
-          if (gatewayHarness) {
-            await gatewayHarness
-              .stop({ preserveToDir: gatewayDebugDirPath })
-              .then(() => {
-                preservedGatewayDebugArtifacts = true;
-              })
-              .catch((stopError) => {
-                appendLiveLaneIssue(cleanupIssues, "gateway debug preservation failed", stopError);
-              });
-          }
+          preserveGatewayDebugOnStop = true;
           break;
         } finally {
-          if (!preservedGatewayDebugArtifacts && gatewayHarness) {
-            await gatewayHarness
-              .stop(gatewayRttTraceEnabled ? { preserveToDir: gatewayDebugDirPath } : undefined)
-              .then(() => {
-                if (gatewayRttTraceEnabled) {
-                  preservedGatewayDebugArtifacts = true;
-                }
-              })
-              .catch((error) => {
-                appendLiveLaneIssue(cleanupIssues, "gateway stop failed", error);
-              });
+          if (gatewayHarness) {
+            const stopResult = await stopSlackQaScenarioGateway({
+              cleanupIssues,
+              gatewayDebugDirPath,
+              gatewayHarness,
+              issueLabel: preserveGatewayDebugOnStop
+                ? "gateway debug preservation failed"
+                : "gateway stop failed",
+              preserveDebugArtifacts: preserveGatewayDebugOnStop,
+            });
+            if (stopResult.preservedDebugArtifacts) {
+              preservedGatewayDebugArtifacts = true;
+            }
             await new Promise((resolve) => setTimeout(resolve, SLACK_QA_GATEWAY_STOP_SETTLE_MS));
           }
         }
@@ -1587,6 +1605,7 @@ export const testing = {
   parseSlackQaGatewayPhaseTrace,
   resolveSlackQaRuntimeEnv,
   SLACK_QA_STANDARD_SCENARIO_IDS,
+  stopSlackQaScenarioGateway,
   waitForSlackScenarioReply,
   waitForSlackNoReply,
 };
