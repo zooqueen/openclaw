@@ -872,6 +872,24 @@ describe("barnacle-auto-response", () => {
     expect(calls.removeLabel).toEqual([]);
   });
 
+  it("preserves sufficient proof on unrelated label events even without body proof", async () => {
+    const { calls, github } = barnacleGithub([file("src/gateway/server.ts")]);
+
+    await runBarnacleAutoResponse({
+      github,
+      context: barnacleContext({}, [PROOF_SUFFICIENT_LABEL], {
+        action: "labeled",
+        label: { name: "status: ready for maintainer look" },
+        sender: { login: "openclaw-clawsweeper[bot]", type: "Bot" },
+      }),
+      core: {
+        info: () => undefined,
+      },
+    });
+
+    expect(calls.removeLabel).toEqual([]);
+  });
+
   it("does not let Barnacle veto ClawSweeper's sufficient proof label add", async () => {
     const { calls, github } = barnacleGithub([file("src/gateway/server.ts")]);
 
