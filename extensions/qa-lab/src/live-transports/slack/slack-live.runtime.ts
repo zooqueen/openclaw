@@ -234,7 +234,6 @@ type SlackQaGatewayHeapSnapshot = {
   gatewayProcessRssBeforeBytes?: number;
   gatewayProcessRssDeltaBytes?: number;
   label: string;
-  path: string;
 };
 
 const SLACK_QA_CAPTURE_CONTENT_ENV = "OPENCLAW_QA_SLACK_CAPTURE_CONTENT";
@@ -559,10 +558,6 @@ function formatSlackQaGatewayPhaseTrace(phases: readonly SlackQaGatewayPhaseTrac
     .join(", ");
 }
 
-function sanitizeSlackQaArtifactLabel(label: string) {
-  return label.replace(/[^a-zA-Z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "") || "checkpoint";
-}
-
 async function listGatewayHeapSnapshotFiles(tempRoot: string) {
   const entries = await fs.readdir(tempRoot, { withFileTypes: true }).catch(() => []);
   const files = [];
@@ -595,7 +590,6 @@ async function waitForStableFileSize(pathName: string) {
 
 async function captureSlackGatewayHeapSnapshotCheckpoint(params: {
   gateway: SlackGatewayHandle;
-  outputDir: string;
   label: string;
 }): Promise<SlackQaGatewayHeapSnapshot | undefined> {
   const startedAt = Date.now();
@@ -620,19 +614,12 @@ async function captureSlackGatewayHeapSnapshotCheckpoint(params: {
   }
 
   const bytes = await waitForStableFileSize(snapshotPath);
-  const snapshotsDir = path.join(params.outputDir, "artifacts", "gateway-heap-snapshots");
-  await fs.mkdir(snapshotsDir, { recursive: true });
-  const relativePath = path.join(
-    "artifacts",
-    "gateway-heap-snapshots",
-    `${sanitizeSlackQaArtifactLabel(params.label)}.heapsnapshot`,
-  );
-  await fs.copyFile(snapshotPath, path.join(params.outputDir, relativePath));
+  // Raw V8 heaps can contain environment/config secrets. Keep only metadata in uploaded QA output.
+  await fs.rm(snapshotPath, { force: true }).catch(() => undefined);
   const gatewayProcessRssAfterBytes = params.gateway.getProcessRssBytes?.() ?? undefined;
   return {
     label: params.label,
     at: new Date().toISOString(),
-    path: relativePath,
     bytes,
     durationMs: Date.now() - startedAt,
     ...(gatewayProcessRssBeforeBytes === undefined ? {} : { gatewayProcessRssBeforeBytes }),
@@ -1283,7 +1270,6 @@ export async function runSlackQaLive(params: {
             }
             const snapshot = await captureSlackGatewayHeapSnapshotCheckpoint({
               gateway: gatewayHarness.gateway,
-              outputDir,
               label,
             });
             if (snapshot) {
@@ -1599,6 +1585,7 @@ export async function runSlackQaLive(params: {
 
 export const testing = {
   buildSlackQaConfig,
+  captureSlackGatewayHeapSnapshotCheckpoint,
   findScenario,
   parseSlackTimestampMs,
   parseSlackQaCredentialPayload,

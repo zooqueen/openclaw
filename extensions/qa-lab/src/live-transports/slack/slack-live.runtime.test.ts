@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -136,6 +137,44 @@ describe("Slack live QA runtime helpers", () => {
         streaming: false,
       },
     ]);
+  });
+
+  it("records gateway heap checkpoint metadata without preserving raw dumps", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(tmpdir(), "openclaw-slack-heap-"));
+    const snapshotPath = path.join(tempRoot, "Heap.123.heapsnapshot");
+    const snapshotBody = '{"token":"xoxb-secret"}';
+    let rssBytes = 10_000;
+
+    try {
+      const snapshot = await testing.captureSlackGatewayHeapSnapshotCheckpoint({
+        gateway: {
+          tempRoot,
+          signalProcess: () => {
+            writeFileSync(snapshotPath, snapshotBody);
+          },
+          getProcessRssBytes: () => {
+            const next = rssBytes;
+            rssBytes += 512;
+            return next;
+          },
+        } as never,
+        label: "slack-canary:ready",
+      });
+
+      expect(snapshot).toEqual({
+        label: "slack-canary:ready",
+        at: expect.any(String),
+        bytes: Buffer.byteLength(snapshotBody),
+        durationMs: expect.any(Number),
+        gatewayProcessRssBeforeBytes: 10_000,
+        gatewayProcessRssAfterBytes: 10_512,
+        gatewayProcessRssDeltaBytes: 512,
+      });
+      expect(snapshot).not.toHaveProperty("path");
+      await expect(fs.stat(snapshotPath)).rejects.toThrow();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("stops every scenario gateway when RTT debug artifacts are preserved", async () => {
