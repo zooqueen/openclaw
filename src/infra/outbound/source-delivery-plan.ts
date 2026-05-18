@@ -81,6 +81,21 @@ function normalizeDeliveryTarget(channel: string, to: string): string {
   return normalizeTargetForProvider(channel, toTrimmed) ?? toTrimmed;
 }
 
+function deliveryTargetRecipientsMatch(
+  channel: string,
+  targetTo: string,
+  deliveryTo: string,
+): boolean {
+  const strippedTargetTo = targetTo.replace(/:topic:\d+$/, "").trim();
+  const deliveryToTrimmed = deliveryTo.trim();
+  if (strippedTargetTo === deliveryToTrimmed) {
+    return true;
+  }
+  const normalizedTargetTo = normalizeDeliveryTarget(channel, strippedTargetTo);
+  const normalizedDeliveryTo = normalizeDeliveryTarget(channel, deliveryToTrimmed);
+  return normalizedTargetTo === normalizedDeliveryTo;
+}
+
 function normalizeDeliveryThreadId(threadId: string | number | undefined): string | undefined {
   return stringifyRouteThreadId(threadId)?.trim() || undefined;
 }
@@ -104,11 +119,10 @@ export function sourceDeliveryTargetsMatch(
   if (delivery.accountId && target.accountId && target.accountId !== delivery.accountId) {
     return false;
   }
-  // Strip :topic:NNN from message targets and normalize Feishu/Lark prefixes on
-  // both sides so source-delivery suppression compares canonical IDs.
-  const normalizedTargetTo = normalizeDeliveryTarget(channel, target.to.replace(/:topic:\d+$/, ""));
-  const normalizedDeliveryTo = normalizeDeliveryTarget(channel, delivery.to);
-  if (normalizedTargetTo !== normalizedDeliveryTo) {
+  // Strip :topic:NNN from message targets and only fall back to plugin
+  // normalization when raw recipients differ. Most source delivery checks
+  // already carry canonical ids, and plugin lookup is comparatively expensive.
+  if (!deliveryTargetRecipientsMatch(channel, target.to, delivery.to)) {
     return false;
   }
   const deliveryThreadId = normalizeDeliveryThreadId(delivery.threadId);
