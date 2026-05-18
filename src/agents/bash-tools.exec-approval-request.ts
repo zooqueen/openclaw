@@ -111,6 +111,7 @@ export type ExecApprovalRegistration = {
   id: string;
   expiresAtMs: number;
   finalDecision?: string | null;
+  suppressLocalPrompt?: boolean;
 };
 
 export async function registerExecApprovalRequest(
@@ -128,10 +129,20 @@ export async function registerExecApprovalRequest(
   const id = parseString(registrationResult?.id) ?? params.id;
   const expiresAtMs =
     parseExpiresAtMs(registrationResult?.expiresAtMs) ?? Date.now() + DEFAULT_APPROVAL_TIMEOUT_MS;
+  const suppressLocalPrompt = registrationResult?.suppressLocalPrompt === true;
   if (decision.present) {
-    return { id, expiresAtMs, finalDecision: decision.value };
+    return {
+      id,
+      expiresAtMs,
+      finalDecision: decision.value,
+      ...(suppressLocalPrompt ? { suppressLocalPrompt: true } : {}),
+    };
   }
-  return { id, expiresAtMs };
+  return {
+    id,
+    expiresAtMs,
+    ...(suppressLocalPrompt ? { suppressLocalPrompt: true } : {}),
+  };
 }
 
 export async function waitForExecApprovalDecision(id: string): Promise<string | null> {

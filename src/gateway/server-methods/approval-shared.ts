@@ -342,6 +342,7 @@ export async function handlePendingApprovalRequest<
         id: params.record.id,
         createdAtMs: params.record.createdAtMs,
         expiresAtMs: params.record.expiresAtMs,
+        suppressLocalPrompt: hasApprovalClients || delivered,
       },
       undefined,
     );

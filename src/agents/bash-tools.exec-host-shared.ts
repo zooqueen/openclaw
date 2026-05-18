@@ -80,6 +80,7 @@ export type RegisteredExecApprovalRequestContext = {
   initiatingSurface: ExecApprovalInitiatingSurfaceState;
   sentApproverDms: boolean;
   unavailableReason: ExecApprovalUnavailableReason | null;
+  suppressLocalPrompt?: boolean;
 };
 
 export type ExecApprovalFollowupTarget = {
@@ -300,6 +301,7 @@ export async function createAndRegisterDefaultExecApprovalRequest(params: {
     initiatingSurface,
     sentApproverDms,
     unavailableReason,
+    ...(registration.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
   };
 }
 
@@ -455,6 +457,7 @@ export function buildExecApprovalPendingToolResult(params: {
   initiatingSurface: ExecApprovalInitiatingSurfaceState;
   sentApproverDms: boolean;
   unavailableReason: ExecApprovalUnavailableReason | null;
+  suppressLocalPrompt?: boolean;
   allowedDecisions?: readonly ExecApprovalDecision[];
   nodeId?: string;
 }): AgentToolResult<ExecToolDetails> {
@@ -511,6 +514,7 @@ export function buildExecApprovalPendingToolResult(params: {
             cwd: params.cwd,
             nodeId: params.nodeId,
             warningText: params.warningText,
+            ...(params.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
           } satisfies ExecToolDetails),
   };
 }

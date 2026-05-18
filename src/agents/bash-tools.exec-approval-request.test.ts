@@ -37,6 +37,7 @@ vi.mock("./tools/gateway.js", () => ({
 
 let callGatewayTool: typeof import("./tools/gateway.js").callGatewayTool;
 let requestExecApprovalDecision: typeof import("./bash-tools.exec-approval-request.js").requestExecApprovalDecision;
+let registerExecApprovalRequest: typeof import("./bash-tools.exec-approval-request.js").registerExecApprovalRequest;
 let registerExecApprovalRequestForHost: typeof import("./bash-tools.exec-approval-request.js").registerExecApprovalRequestForHost;
 
 const initialProcessPlatform = Object.getOwnPropertyDescriptor(process, "platform");
@@ -72,8 +73,11 @@ function requireApprovalRequestPayload(callIndex: number): ApprovalRequestPayloa
 describe("requestExecApprovalDecision", () => {
   beforeAll(async () => {
     ({ callGatewayTool } = await import("./tools/gateway.js"));
-    ({ requestExecApprovalDecision, registerExecApprovalRequestForHost } =
-      await import("./bash-tools.exec-approval-request.js"));
+    ({
+      requestExecApprovalDecision,
+      registerExecApprovalRequest,
+      registerExecApprovalRequestForHost,
+    } = await import("./bash-tools.exec-approval-request.js"));
   });
 
   beforeEach(() => {
@@ -146,6 +150,30 @@ describe("requestExecApprovalDecision", () => {
       { timeoutMs: DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS },
       { id: "approval-id" },
     );
+  });
+
+  it("preserves local prompt suppression from registration", async () => {
+    vi.mocked(callGatewayTool).mockResolvedValueOnce({
+      status: "accepted",
+      id: "approval-id",
+      expiresAtMs: 1234,
+      suppressLocalPrompt: true,
+    });
+
+    await expect(
+      registerExecApprovalRequest({
+        id: "approval-id",
+        command: "echo hi",
+        cwd: "/tmp",
+        host: "gateway",
+        security: "allowlist",
+        ask: "always",
+      }),
+    ).resolves.toEqual({
+      id: "approval-id",
+      expiresAtMs: 1234,
+      suppressLocalPrompt: true,
+    });
   });
 
   it("returns null for missing or non-string decisions", async () => {

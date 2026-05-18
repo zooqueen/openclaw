@@ -290,6 +290,25 @@ describe("exec approval reply helpers", () => {
     expect(payload.text).toContain("Full id: `req-1`");
   });
 
+  it("carries local prompt suppression through pending reply metadata", () => {
+    const payload = buildExecApprovalPendingReplyPayload({
+      approvalId: "req-suppressed",
+      approvalSlug: "slug-suppressed",
+      command: "echo ok",
+      host: "gateway",
+      suppressLocalPrompt: true,
+    });
+
+    expect(getExecApprovalReplyMetadata(payload)?.suppressLocalPrompt).toBe(true);
+    expect(payload.channelData).toEqual({
+      execApproval: expect.objectContaining({
+        approvalId: "req-suppressed",
+        approvalSlug: "slug-suppressed",
+        suppressLocalPrompt: true,
+      }),
+    });
+  });
+
   it("compacts structured cwd paths in pending reply payloads", () => {
     const payload = buildExecApprovalPendingReplyPayload({
       approvalId: "req-home",

@@ -35,6 +35,7 @@ export type ExecApprovalReplyMetadata = {
   agentId?: string;
   allowedDecisions?: readonly ExecApprovalReplyDecision[];
   sessionKey?: string;
+  suppressLocalPrompt?: boolean;
 };
 
 export type ExecApprovalActionDescriptor = {
@@ -57,6 +58,7 @@ export type ExecApprovalPendingReplyParams = {
   host: ExecHost;
   nodeId?: string;
   sessionKey?: string | null;
+  suppressLocalPrompt?: boolean;
   expiresAtMs?: number;
   nowMs?: number;
 };
@@ -341,6 +343,7 @@ export function getExecApprovalReplyMetadata(
     agentId,
     allowedDecisions,
     sessionKey,
+    ...(record.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
   };
 }
 
@@ -407,6 +410,7 @@ export function buildExecApprovalPendingReplyPayload(
         agentId: normalizeOptionalString(params.agentId),
         allowedDecisions,
         sessionKey: normalizeOptionalString(params.sessionKey),
+        ...(params.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
       },
     },
   };

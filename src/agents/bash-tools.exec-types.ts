@@ -102,6 +102,7 @@ export type ExecToolDetails =
       cwd?: string;
       nodeId?: string;
       warningText?: string;
+      suppressLocalPrompt?: boolean;
     }
   | {
       status: "approval-unavailable";

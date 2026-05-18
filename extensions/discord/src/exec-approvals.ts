@@ -97,6 +97,7 @@ export function shouldSuppressLocalDiscordExecApprovalPrompt(params: {
     params.hint?.kind === "approval-pending" &&
     isDiscordExecApprovalClientEnabled(params) &&
     metadata !== null &&
+    metadata.suppressLocalPrompt === true &&
     matchesApprovalRequestFilters({
       request: {
         agentId: metadata.agentId,

@@ -325,6 +325,7 @@ describe("buildExecApprovalPendingToolResult", () => {
     channel: "discord" | "telegram";
     channelLabel: "Discord" | "Telegram";
     unavailableReason: "initiating-platform-disabled" | null;
+    suppressLocalPrompt?: boolean;
     allowedDecisions?: readonly ("allow-once" | "deny")[];
   }) {
     return buildExecApprovalPendingToolResult({
@@ -343,6 +344,7 @@ describe("buildExecApprovalPendingToolResult", () => {
       },
       sentApproverDms: false,
       unavailableReason: params.unavailableReason,
+      ...(params.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
       ...(params.allowedDecisions ? { allowedDecisions: params.allowedDecisions } : {}),
     });
   }
@@ -369,6 +371,22 @@ describe("buildExecApprovalPendingToolResult", () => {
     const text = result.content.find((part) => part.type === "text")?.text ?? "";
     expect(text).toContain("/approve approval-slug allow-once");
     expect(text).not.toContain("native chat exec approvals are not configured on Discord");
+  });
+
+  it("carries local prompt suppression in pending details", () => {
+    const result = buildDisabledSurfaceApprovalResult({
+      channel: "discord",
+      channelLabel: "Discord",
+      unavailableReason: null,
+      suppressLocalPrompt: true,
+    });
+
+    expect(result.details).toEqual(
+      expect.objectContaining({
+        status: "approval-pending",
+        suppressLocalPrompt: true,
+      }),
+    );
   });
 
   it("returns an unavailable reply when Discord exec approvals are disabled", () => {

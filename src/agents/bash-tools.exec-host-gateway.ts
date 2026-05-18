@@ -514,6 +514,7 @@ export async function processGatewayAllowlist(
       initiatingSurface,
       sentApproverDms,
       unavailableReason,
+      suppressLocalPrompt,
     } = await createAndRegisterDefaultExecApprovalRequest({
       ...requestArgs,
       register: registerGatewayApproval,
@@ -719,6 +720,7 @@ export async function processGatewayAllowlist(
         initiatingSurface,
         sentApproverDms,
         unavailableReason,
+        suppressLocalPrompt,
         allowedDecisions: resolveExecApprovalAllowedDecisions({ ask: hostAsk }),
       }),
     };

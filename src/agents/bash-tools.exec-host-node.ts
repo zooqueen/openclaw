@@ -108,6 +108,7 @@ export async function executeNodeHostCommand(
       initiatingSurface,
       sentApproverDms,
       unavailableReason,
+      suppressLocalPrompt,
     } = await execHostShared.createAndRegisterDefaultExecApprovalRequest({
       ...requestArgs,
       register: registerNodeApproval,
@@ -274,6 +275,7 @@ export async function executeNodeHostCommand(
         initiatingSurface,
         sentApproverDms,
         unavailableReason,
+        suppressLocalPrompt,
         allowedDecisions: resolveExecApprovalAllowedDecisions({ ask: hostAsk }),
         nodeId: target.nodeId,
       });

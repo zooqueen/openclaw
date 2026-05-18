@@ -453,6 +453,7 @@ function readExecApprovalPendingDetails(result: unknown): {
   cwd?: string;
   nodeId?: string;
   warningText?: string;
+  suppressLocalPrompt?: boolean;
 } | null {
   if (!result || typeof result !== "object") {
     return null;
@@ -487,6 +488,7 @@ function readExecApprovalPendingDetails(result: unknown): {
     cwd: readStringValue(details.cwd),
     nodeId: readStringValue(details.nodeId),
     warningText: readStringValue(details.warningText),
+    suppressLocalPrompt: details.suppressLocalPrompt === true,
   };
 }
 
@@ -568,6 +570,7 @@ async function emitToolResultOutput(params: {
           nodeId: approvalPending.nodeId,
           expiresAtMs: approvalPending.expiresAtMs,
           warningText: approvalPending.warningText,
+          ...(approvalPending.suppressLocalPrompt === true ? { suppressLocalPrompt: true } : {}),
         }),
       );
       ctx.state.deterministicApprovalPromptSent = true;

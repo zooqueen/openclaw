@@ -558,6 +558,7 @@ describe("handleToolExecutionEnd exec approval prompts", () => {
             command: "npm view diver name version description",
             cwd: "/tmp/work",
             warningText: "Warning: heredoc execution requires explicit approval in allowlist mode.",
+            suppressLocalPrompt: true,
           },
         },
       } as never,
@@ -575,6 +576,7 @@ describe("handleToolExecutionEnd exec approval prompts", () => {
         approvalSlug: "12345678",
         approvalKind: "exec",
         allowedDecisions: ["allow-once", "allow-always", "deny"],
+        suppressLocalPrompt: true,
       },
     );
     expectInteractiveApprovalButtons(result, [
