@@ -45,7 +45,7 @@ type SlackChannelStatus = {
 const SLACK_QA_READY_TIMEOUT_MS = 45_000;
 const SLACK_QA_READY_STABILITY_MS = 3_000;
 const SLACK_QA_GATEWAY_STOP_SETTLE_MS = 3_000;
-const SLACK_QA_REPLY_POLL_INTERVAL_MS = 250;
+const SLACK_QA_REPLY_POLL_INTERVAL_MS = 1_000;
 const SLACK_QA_RETRYABLE_SCENARIO_ATTEMPTS = 2;
 
 type SlackQaReplySearchMode = "any" | "channel" | "thread";
