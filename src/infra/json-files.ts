@@ -1,103 +1,98 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   readRootJsonObjectSync as rawReadRootJsonObjectSync,
   tryReadJsonSync as rawTryReadJsonSync,
-  writeJsonSync as rawWriteJsonSync,
 } from "@openclaw/fs-safe/json";
 import "./fs-safe-defaults.js";
 import { replaceFileAtomic } from "./replace-file.js";
 
-// Process-scoped memo for synchronous JSON reads. The TUI startup path (and a
-// few discovery flows) re-read the same plugin manifests hundreds of times
-// each; caching parsed values keyed by absolute path keeps memory cost tiny
-// (~one entry per unique file) while eliminating the repeated open + parse.
-// Disable with OPENCLAW_DISABLE_JSON_READ_CACHE=1 for tests that mutate JSON
-// files mid-process and need to observe fresh state.
-type CacheEntry = { value: unknown };
+// Process-scoped memo for sync JSON reads. Each cached parse is validated
+// against the file's (mtime, size, inode) on every lookup, so external writes,
+// atomic replaces, and deletions evict naturally. Disable with
+// OPENCLAW_DISABLE_JSON_READ_CACHE=1 for tests that mutate JSON mid-process.
+type CacheEntry = { value: unknown; mtimeMs: bigint; size: bigint; ino: bigint };
 const jsonReadCache = new Map<string, CacheEntry>();
 
 function isJsonReadCacheDisabled(): boolean {
   return process.env.OPENCLAW_DISABLE_JSON_READ_CACHE === "1";
 }
 
-function jsonReadCacheKey(filePath: string): string {
-  return path.resolve(filePath);
-}
-
-function getCachedJsonRead(filePath: string): { hit: true; value: unknown } | { hit: false } {
-  if (isJsonReadCacheDisabled()) {
-    return { hit: false };
+function statOrUndefined(filePath: string): fs.BigIntStats | undefined {
+  try {
+    return fs.statSync(filePath, { bigint: true });
+  } catch {
+    return undefined;
   }
-  const entry = jsonReadCache.get(jsonReadCacheKey(filePath));
-  return entry ? { hit: true, value: entry.value } : { hit: false };
 }
 
-function setCachedJsonRead(filePath: string, value: unknown): void {
-  if (isJsonReadCacheDisabled()) {
-    return;
-  }
-  jsonReadCache.set(jsonReadCacheKey(filePath), { value });
+function statMatches(entry: CacheEntry, stat: fs.BigIntStats): boolean {
+  return entry.mtimeMs === stat.mtimeMs && entry.size === stat.size && entry.ino === stat.ino;
 }
 
-function invalidateCachedJsonRead(filePath: string): void {
-  jsonReadCache.delete(jsonReadCacheKey(filePath));
-}
-
-/** Clear all memoized sync-JSON reads. */
 export function clearJsonReadCache(): void {
   jsonReadCache.clear();
 }
 
 export const tryReadJsonSync = ((...args: unknown[]) => {
   const filePath = args[0];
-  if (typeof filePath === "string") {
-    const cached = getCachedJsonRead(filePath);
-    if (cached.hit) {
-      return cached.value;
-    }
-    const result = (rawTryReadJsonSync as (...a: unknown[]) => unknown)(...args);
-    if (result !== null && result !== undefined) {
-      setCachedJsonRead(filePath, result);
-    }
-    return result;
+  if (typeof filePath !== "string" || isJsonReadCacheDisabled()) {
+    return (rawTryReadJsonSync as (...a: unknown[]) => unknown)(...args);
   }
-  return (rawTryReadJsonSync as (...a: unknown[]) => unknown)(...args);
+  const key = path.resolve(filePath);
+  const stat = statOrUndefined(key);
+  if (!stat) {
+    jsonReadCache.delete(key);
+    return (rawTryReadJsonSync as (...a: unknown[]) => unknown)(...args);
+  }
+  const entry = jsonReadCache.get(key);
+  if (entry && statMatches(entry, stat)) {
+    return entry.value;
+  }
+  const result = (rawTryReadJsonSync as (...a: unknown[]) => unknown)(...args);
+  if (result !== null && result !== undefined) {
+    jsonReadCache.set(key, {
+      value: result,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      ino: stat.ino,
+    });
+  }
+  return result;
 }) as typeof rawTryReadJsonSync;
 export const readJsonFileSync = tryReadJsonSync;
 
 export const readRootJsonObjectSync = ((...args: unknown[]) => {
   const params = args[0];
-  if (params && typeof params === "object") {
-    const rootDir = (params as { rootDir?: unknown }).rootDir;
-    const relativePath = (params as { relativePath?: unknown }).relativePath;
-    if (typeof rootDir === "string" && typeof relativePath === "string") {
-      const filePath = path.join(rootDir, relativePath);
-      const cached = getCachedJsonRead(filePath);
-      if (cached.hit) {
-        return cached.value;
-      }
-      const result = (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
-      if (result && typeof result === "object" && (result as { ok?: unknown }).ok === true) {
-        setCachedJsonRead(filePath, result);
-      }
-      return result;
-    }
+  if (!params || typeof params !== "object" || isJsonReadCacheDisabled()) {
+    return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
   }
-  return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
+  const rootDir = (params as { rootDir?: unknown }).rootDir;
+  const relativePath = (params as { relativePath?: unknown }).relativePath;
+  if (typeof rootDir !== "string" || typeof relativePath !== "string") {
+    return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
+  }
+  const key = path.resolve(rootDir, relativePath);
+  const stat = statOrUndefined(key);
+  if (!stat) {
+    jsonReadCache.delete(key);
+    return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
+  }
+  const entry = jsonReadCache.get(key);
+  if (entry && statMatches(entry, stat)) {
+    return entry.value;
+  }
+  const result = (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
+  if (result && typeof result === "object" && (result as { ok?: unknown }).ok === true) {
+    jsonReadCache.set(key, {
+      value: result,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      ino: stat.ino,
+    });
+  }
+  return result;
 }) as typeof rawReadRootJsonObjectSync;
-
-// Sync write paths invalidate any cached read for the same path so callers
-// that immediately re-read after writing observe their own change.
-function invalidateWriteTarget(target: unknown): void {
-  if (typeof target === "string") {
-    invalidateCachedJsonRead(target);
-  }
-}
-
-export const writeJsonSync = ((...args: unknown[]) => {
-  invalidateWriteTarget(args[0]);
-  return (rawWriteJsonSync as (...a: unknown[]) => unknown)(...args);
-}) as typeof rawWriteJsonSync;
 
 export {
   JsonFileReadError,
@@ -112,6 +107,7 @@ export {
   tryReadJson as readJsonFile,
   writeJson,
   writeJson as writeJsonAtomic,
+  writeJsonSync,
 } from "@openclaw/fs-safe/json";
 export { createAsyncLock } from "@openclaw/fs-safe/advanced";
 
