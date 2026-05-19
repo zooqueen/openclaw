@@ -72,6 +72,14 @@ export const readRootJsonObjectSync = ((...args: unknown[]) => {
   if (typeof rootDir !== "string" || typeof relativePath !== "string") {
     return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
   }
+  // Cache only the option-free shape. Any extra param (rejectHardlinks,
+  // maxBytes, rootRealPath, future fs-safe options) carries security or
+  // contract semantics that a path-only key cannot represent.
+  for (const k of Object.keys(params)) {
+    if (k !== "rootDir" && k !== "relativePath") {
+      return (rawReadRootJsonObjectSync as (...a: unknown[]) => unknown)(...args);
+    }
+  }
   const key = path.resolve(rootDir, relativePath);
   const stat = statOrUndefined(key);
   if (!stat) {

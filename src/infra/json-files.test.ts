@@ -1,12 +1,16 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTempDir } from "../test-helpers/temp-dir.js";
 import {
   JsonFileReadError,
+  clearJsonReadCache,
   createAsyncLock,
   readDurableJsonFile,
   readJsonFile,
+  readRootJsonObjectSync,
   writeJsonAtomic,
   writeTextAtomic,
 } from "./json-files.js";
@@ -146,6 +150,29 @@ describe("json file helpers", () => {
       expect(fileStat.isSymbolicLink()).toBe(true);
       await expect(fs.readFile(outsidePath, "utf8")).resolves.toBe("outside");
     });
+  });
+
+  it("readRootJsonObjectSync bypasses cache when safety-relevant options are set", () => {
+    const dir = fsSync.mkdtempSync(path.join(os.tmpdir(), "openclaw-json-root-cache-bypass-"));
+    try {
+      const filePath = path.join(dir, "manifest.json");
+      fsSync.writeFileSync(filePath, '{"name":"x"}', "utf8");
+      clearJsonReadCache();
+
+      const first = readRootJsonObjectSync({ rootDir: dir, relativePath: "manifest.json" });
+      const cached = readRootJsonObjectSync({ rootDir: dir, relativePath: "manifest.json" });
+      expect(cached).toBe(first);
+
+      const withOption = readRootJsonObjectSync({
+        rootDir: dir,
+        relativePath: "manifest.json",
+        rejectHardlinks: true,
+      } as Parameters<typeof readRootJsonObjectSync>[0]);
+      expect(withOption).not.toBe(first);
+    } finally {
+      clearJsonReadCache();
+      fsSync.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it.each([
