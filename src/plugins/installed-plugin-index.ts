@@ -21,38 +21,17 @@ import {
   type RefreshInstalledPluginIndexParams,
 } from "./installed-plugin-index-types.js";
 
-type MemoEntry = {
+let cached: {
   policyHash: string | null;
   env: NodeJS.ProcessEnv;
   workspaceDir: string | undefined;
   stateDir: string | undefined;
   pluginIndexFilePath: string | undefined;
   value: InstalledPluginIndex;
-};
-
-let memoEntry: MemoEntry | null = null;
-
-function isMemoEligible(params: LoadInstalledPluginIndexParams): boolean {
-  return (
-    params.installRecords === undefined &&
-    params.candidates === undefined &&
-    params.diagnostics === undefined &&
-    params.now === undefined
-  );
-}
-
-function memoMatches(entry: MemoEntry, key: Omit<MemoEntry, "value">): boolean {
-  return (
-    entry.policyHash === key.policyHash &&
-    entry.env === key.env &&
-    entry.workspaceDir === key.workspaceDir &&
-    entry.stateDir === key.stateDir &&
-    entry.pluginIndexFilePath === key.pluginIndexFilePath
-  );
-}
+} | null = null;
 
 export function invalidateInstalledPluginIndexMemo(): void {
-  memoEntry = null;
+  cached = null;
 }
 
 export {
@@ -116,22 +95,30 @@ function buildInstalledPluginIndex(
 export function loadInstalledPluginIndex(
   params: LoadInstalledPluginIndexParams = {},
 ): InstalledPluginIndex {
-  if (!isMemoEligible(params)) {
+  if (params.installRecords || params.candidates || params.diagnostics || params.now) {
     return buildInstalledPluginIndex(params);
   }
   const env = params.env ?? process.env;
-  const key = {
-    policyHash: params.config ? resolveInstalledPluginIndexPolicyHash(params.config) : null,
+  const policyHash = params.config ? resolveInstalledPluginIndexPolicyHash(params.config) : null;
+  if (
+    cached &&
+    cached.env === env &&
+    cached.policyHash === policyHash &&
+    cached.workspaceDir === params.workspaceDir &&
+    cached.stateDir === params.stateDir &&
+    cached.pluginIndexFilePath === params.pluginIndexFilePath
+  ) {
+    return cached.value;
+  }
+  const value = buildInstalledPluginIndex(params);
+  cached = {
+    policyHash,
     env,
     workspaceDir: params.workspaceDir,
     stateDir: params.stateDir,
     pluginIndexFilePath: params.pluginIndexFilePath,
+    value,
   };
-  if (memoEntry && memoMatches(memoEntry, key)) {
-    return memoEntry.value;
-  }
-  const value = buildInstalledPluginIndex(params);
-  memoEntry = { ...key, value };
   return value;
 }
 
