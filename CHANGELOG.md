@@ -11,6 +11,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Agents: honor `messages.suppressToolErrors` for mutating tool failures so configured suppression also hides write/message/apply-patch warning bubbles.
 - Plugins/perf: thread explicit plugin discovery results through `loadBundledCapabilityRuntimeRegistry`, `resolveBundledPluginSources`, and `listChannelCatalogEntries` so callers that already hold a discovery result skip redundant filesystem walks. Thanks @SebTardif.
 - harden update restart script creation [AI]. (#84088) Thanks @pgondhi987.
 - Docker: keep the bundled Codex plugin in official release image keep lists so the default OpenAI agent harness remains available after Docker pruning. Fixes #83613. (#83626) Thanks @YuanHanzhong.
