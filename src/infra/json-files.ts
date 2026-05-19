@@ -7,10 +7,6 @@ import {
 import "./fs-safe-defaults.js";
 import { replaceFileAtomic } from "./replace-file.js";
 
-// Process-scoped memo for sync JSON reads. Each cached parse is validated
-// against the file's (mtime, size, inode) on every lookup, so external writes,
-// atomic replaces, and deletions evict naturally. Disable with
-// OPENCLAW_DISABLE_JSON_READ_CACHE=1 for tests that mutate JSON mid-process.
 type CacheEntry = { value: unknown; mtimeMs: bigint; size: bigint; ino: bigint };
 const jsonReadCache = new Map<string, CacheEntry>();
 

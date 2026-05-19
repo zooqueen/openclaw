@@ -1,6 +1,5 @@
 import fsSync from "node:fs";
 import path from "node:path";
-// Route through json-files.js so reads share the process-scoped cache.
 import { readRootJsonObjectSync } from "./json-files.js";
 
 export function expectedIntegrityForUpdate(

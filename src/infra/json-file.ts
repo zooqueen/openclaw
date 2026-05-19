@@ -2,8 +2,6 @@ import "./fs-safe-defaults.js";
 import fs from "node:fs";
 import path from "node:path";
 import { tryReadJson } from "@openclaw/fs-safe/json";
-// Route synchronous reads/writes through `./json-files.js` so they share the
-// process-scoped read cache and its write-side invalidation.
 import { tryReadJsonSync, writeJsonSync } from "./json-files.js";
 
 export { tryReadJson, tryReadJsonSync, writeJsonSync };
