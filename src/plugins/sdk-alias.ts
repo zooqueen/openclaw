@@ -486,15 +486,22 @@ function isOfficialInstalledCodexPluginPackageRoot(packageRoot: string) {
   return last === "codex" && scope === "@openclaw" && nodeModules === "node_modules";
 }
 
+const officialInstalledCodexPluginModulePathMemo = new Map<string, boolean>();
+
 function isOfficialInstalledCodexPluginModulePath(params: { modulePath: string }) {
+  const cached = officialInstalledCodexPluginModulePathMemo.get(params.modulePath);
+  if (cached !== undefined) {
+    return cached;
+  }
   let cursor = path.dirname(path.resolve(params.modulePath));
   for (let depth = 0; depth < 12; depth += 1) {
     const packageJson = tryReadJsonSync<{ name?: unknown }>(path.join(cursor, "package.json"));
     if (packageJson) {
-      return (
+      const result =
         packageJson.name === OFFICIAL_CODEX_PLUGIN_PACKAGE_NAME &&
-        isOfficialInstalledCodexPluginPackageRoot(cursor)
-      );
+        isOfficialInstalledCodexPluginPackageRoot(cursor);
+      officialInstalledCodexPluginModulePathMemo.set(params.modulePath, result);
+      return result;
     }
     const parent = path.dirname(cursor);
     if (parent === cursor) {
@@ -502,6 +509,7 @@ function isOfficialInstalledCodexPluginModulePath(params: { modulePath: string }
     }
     cursor = parent;
   }
+  officialInstalledCodexPluginModulePathMemo.set(params.modulePath, false);
   return false;
 }
 
