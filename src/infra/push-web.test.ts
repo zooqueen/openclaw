@@ -58,7 +58,7 @@ describe("resolveVapidKeys", () => {
     const keys = await resolveVapidKeys(tmpDir);
     expect(keys.publicKey).toBe("test-public-key-base64url");
     expect(keys.privateKey).toBe("test-private-key-base64url");
-    expect(keys.subject).toMatch(/^mailto:/);
+    expect(keys.subject).toBe("https://openclaw.ai");
 
     // Second call returns same keys.
     const keys2 = await resolveVapidKeys(tmpDir);
@@ -211,7 +211,7 @@ describe("sending", () => {
     expect(result.ok).toBe(true);
     expect(vi.mocked(webPush.setVapidDetails)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(webPush.setVapidDetails)).toHaveBeenCalledWith(
-      "mailto:openclaw@localhost",
+      "https://openclaw.ai",
       "test-public-key-base64url",
       "test-private-key-base64url",
     );
