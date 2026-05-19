@@ -19,6 +19,7 @@ import {
   INSTALLED_PLUGIN_INDEX_WARNING,
   INSTALLED_PLUGIN_INDEX_VERSION,
   INSTALLED_PLUGIN_INDEX_MIGRATION_VERSION,
+  invalidateInstalledPluginIndexMemo,
   loadInstalledPluginIndex,
   resolveInstalledPluginIndexPolicyHash,
   refreshInstalledPluginIndex,
@@ -186,6 +187,7 @@ export async function writePersistedInstalledPluginIndex(
       mode: 0o600,
     },
   );
+  invalidateInstalledPluginIndexMemo();
   clearCurrentPluginMetadataSnapshotState();
   return filePath;
 }
@@ -196,6 +198,7 @@ export function writePersistedInstalledPluginIndexSync(
 ): string {
   const filePath = resolveInstalledPluginIndexStorePath(options);
   saveJsonFile(filePath, { ...index, warning: INSTALLED_PLUGIN_INDEX_WARNING });
+  invalidateInstalledPluginIndexMemo();
   clearCurrentPluginMetadataSnapshotState();
   return filePath;
 }

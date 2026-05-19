@@ -21,6 +21,40 @@ import {
   type RefreshInstalledPluginIndexParams,
 } from "./installed-plugin-index-types.js";
 
+type MemoEntry = {
+  policyHash: string | null;
+  env: NodeJS.ProcessEnv;
+  workspaceDir: string | undefined;
+  stateDir: string | undefined;
+  pluginIndexFilePath: string | undefined;
+  value: InstalledPluginIndex;
+};
+
+let memoEntry: MemoEntry | null = null;
+
+function isMemoEligible(params: LoadInstalledPluginIndexParams): boolean {
+  return (
+    params.installRecords === undefined &&
+    params.candidates === undefined &&
+    params.diagnostics === undefined &&
+    params.now === undefined
+  );
+}
+
+function memoMatches(entry: MemoEntry, key: Omit<MemoEntry, "value">): boolean {
+  return (
+    entry.policyHash === key.policyHash &&
+    entry.env === key.env &&
+    entry.workspaceDir === key.workspaceDir &&
+    entry.stateDir === key.stateDir &&
+    entry.pluginIndexFilePath === key.pluginIndexFilePath
+  );
+}
+
+export function invalidateInstalledPluginIndexMemo(): void {
+  memoEntry = null;
+}
+
 export {
   INSTALLED_PLUGIN_INDEX_MIGRATION_VERSION,
   INSTALLED_PLUGIN_INDEX_VERSION,
@@ -82,12 +116,29 @@ function buildInstalledPluginIndex(
 export function loadInstalledPluginIndex(
   params: LoadInstalledPluginIndexParams = {},
 ): InstalledPluginIndex {
-  return buildInstalledPluginIndex(params);
+  if (!isMemoEligible(params)) {
+    return buildInstalledPluginIndex(params);
+  }
+  const env = params.env ?? process.env;
+  const key = {
+    policyHash: params.config ? resolveInstalledPluginIndexPolicyHash(params.config) : null,
+    env,
+    workspaceDir: params.workspaceDir,
+    stateDir: params.stateDir,
+    pluginIndexFilePath: params.pluginIndexFilePath,
+  };
+  if (memoEntry && memoMatches(memoEntry, key)) {
+    return memoEntry.value;
+  }
+  const value = buildInstalledPluginIndex(params);
+  memoEntry = { ...key, value };
+  return value;
 }
 
 export function refreshInstalledPluginIndex(
   params: RefreshInstalledPluginIndexParams,
 ): InstalledPluginIndex {
+  invalidateInstalledPluginIndexMemo();
   return buildInstalledPluginIndex({ ...params, refreshReason: params.reason });
 }
 

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginCandidate } from "./discovery.js";
 import { buildInstalledPluginIndexRecords } from "./installed-plugin-index-record-builder.js";
 import {
@@ -11,6 +11,7 @@ import {
 import {
   diffInstalledPluginIndexInvalidationReasons,
   getInstalledPluginRecord,
+  invalidateInstalledPluginIndexMemo,
   isInstalledPluginEnabled,
   listEnabledInstalledPluginRecords,
   listInstalledPluginRecords,
@@ -200,6 +201,10 @@ function createRichPluginFixture(params: { id?: string; packageVersion?: string 
 }
 
 describe("installed plugin index", () => {
+  beforeEach(() => {
+    invalidateInstalledPluginIndexMemo();
+  });
+
   it("drops blocked install record keys while reading persisted index records", () => {
     const root = makeTempDir();
     const filePath = path.join(root, "installed-plugin-index.json");
@@ -1216,5 +1221,79 @@ describe("installed plugin index", () => {
       })),
     };
     expect(diffInstalledPluginIndexInvalidationReasons(current, moved)).toContain("source-changed");
+  });
+});
+
+describe("installed plugin index memo", () => {
+  beforeEach(() => {
+    invalidateInstalledPluginIndexMemo();
+  });
+
+  function buildHermeticParams(workspaceDir: string) {
+    return {
+      workspaceDir,
+      stateDir: workspaceDir,
+      env: hermeticEnv(),
+    };
+  }
+
+  it("returns the same index instance for repeated calls with stable inputs", () => {
+    const workspaceDir = makeTempDir();
+    const params = buildHermeticParams(workspaceDir);
+
+    const first = loadInstalledPluginIndex(params);
+    const second = loadInstalledPluginIndex(params);
+
+    expect(second).toBe(first);
+  });
+
+  it("rebuilds when a different env reference is passed", () => {
+    const workspaceDir = makeTempDir();
+    const sharedParams = { workspaceDir, stateDir: workspaceDir };
+
+    const first = loadInstalledPluginIndex({ ...sharedParams, env: hermeticEnv() });
+    const second = loadInstalledPluginIndex({ ...sharedParams, env: hermeticEnv() });
+
+    expect(second).not.toBe(first);
+  });
+
+  it("bypasses the memo when caller supplies candidates", () => {
+    const fixture = createRichPluginFixture();
+    const env = hermeticEnv();
+
+    const first = loadInstalledPluginIndex({
+      candidates: [fixture.candidate],
+      env,
+      now: () => new Date("2026-04-25T12:00:00.000Z"),
+    });
+    const second = loadInstalledPluginIndex({
+      candidates: [fixture.candidate],
+      env,
+      now: () => new Date("2026-04-25T12:00:00.000Z"),
+    });
+
+    expect(second).not.toBe(first);
+  });
+
+  it("invalidates the memo after refreshInstalledPluginIndex runs", () => {
+    const workspaceDir = makeTempDir();
+    const params = buildHermeticParams(workspaceDir);
+
+    const first = loadInstalledPluginIndex(params);
+    refreshInstalledPluginIndex({ ...params, reason: "manual" });
+    const second = loadInstalledPluginIndex(params);
+
+    expect(second).not.toBe(first);
+  });
+
+  it("rebuilds when explicit invalidation is requested", () => {
+    const workspaceDir = makeTempDir();
+    const params = buildHermeticParams(workspaceDir);
+
+    const first = loadInstalledPluginIndex(params);
+    invalidateInstalledPluginIndexMemo();
+    const second = loadInstalledPluginIndex(params);
+
+    expect(second).not.toBe(first);
   });
 });
