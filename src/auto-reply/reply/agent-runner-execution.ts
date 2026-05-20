@@ -2061,7 +2061,7 @@ export async function runAgentTurnWithFallback(params: {
                       ) {
                         didObserveMessagingToolSideEffect = true;
                       }
-                      if (wasPotentialSideEffect && evt.data.isError !== true) {
+                      if (wasPotentialSideEffect) {
                         didObservePotentialToolSideEffect = true;
                       }
                     }
