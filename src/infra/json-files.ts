@@ -64,8 +64,10 @@ export const readJsonFileSync = tryReadJsonSync;
 
 function describeOptionsKey(params: Record<string, unknown>): string | null {
   const safeEntries: [string, string | number | boolean | null][] = [];
-  for (const k of Object.keys(params).sort()) {
-    if (k === "rootDir" || k === "relativePath") continue;
+  for (const k of Object.keys(params).toSorted()) {
+    if (k === "rootDir" || k === "relativePath") {
+      continue;
+    }
     const v = params[k];
     if (v === null) {
       safeEntries.push([k, null]);
