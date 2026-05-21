@@ -1880,6 +1880,28 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
     expect(sessionEntry.execAsk).toBe("off");
   });
 
+  it("preserves existing legacy exec fields when persisting partial legacy directives", async () => {
+    const directives = parseInlineDirectives("/exec security=full");
+    const sessionEntry = createSessionEntry({
+      execSecurity: "allowlist",
+      execAsk: "always",
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+    await handleDirectiveOnly(
+      createHandleParams({
+        directives,
+        sessionEntry,
+        sessionStore,
+        surface: "webchat",
+        gatewayClientScopes: ["operator.admin"],
+      }),
+    );
+
+    expect(sessionEntry.execMode).toBeUndefined();
+    expect(sessionEntry.execSecurity).toBe("full");
+    expect(sessionEntry.execAsk).toBe("always");
+  });
+
   it("does not acknowledge legacy exec fields ignored by a normalized mode directive", async () => {
     const directives = parseInlineDirectives("/exec mode=auto security=deny ask=always");
     const sessionEntry = createSessionEntry();
