@@ -206,13 +206,14 @@ export async function runCodexAppServerSideQuestion(
     config: params.cfg,
     agentId: params.agentId,
   });
+  const execPolicy = resolveOpenClawExecPolicyForCodexAppServer({
+    config: params.cfg,
+    agentId: sessionAgentId,
+    execOverrides: resolveSideSessionExecOverrides(params.sessionEntry),
+  });
   const appServer = resolveCodexAppServerRuntimeOptions({
     pluginConfig,
-    execPolicy: resolveOpenClawExecPolicyForCodexAppServer({
-      config: params.cfg,
-      agentId: sessionAgentId,
-      execOverrides: resolveSideSessionExecOverrides(params.sessionEntry),
-    }),
+    execPolicy,
   });
   const authProfileId = params.authProfileId ?? binding.authProfileId;
   const client = await getSharedCodexAppServerClient({
@@ -330,8 +331,10 @@ export async function runCodexAppServerSideQuestion(
       }
     });
 
-    const approvalPolicy = binding.approvalPolicy ?? appServer.approvalPolicy;
-    const sandbox = binding.sandbox ?? appServer.sandbox;
+    const approvalPolicy = execPolicy.touched
+      ? appServer.approvalPolicy
+      : (binding.approvalPolicy ?? appServer.approvalPolicy);
+    const sandbox = execPolicy.touched ? appServer.sandbox : (binding.sandbox ?? appServer.sandbox);
     const serviceTier = binding.serviceTier ?? appServer.serviceTier;
     const nativeHookRelayEvents = resolveCodexSideNativeHookRelayEvents({
       configuredEvents: options.nativeHookRelay?.events,
