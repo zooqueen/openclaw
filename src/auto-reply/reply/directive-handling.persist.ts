@@ -23,6 +23,7 @@ import {
   canPersistInternalExecDirective,
   canPersistInternalVerboseDirective,
   enqueueModeSwitchEvents,
+  hasRejectedExecDirective,
 } from "./directive-handling.shared.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel } from "./directives.js";
 import { resolveContextTokens } from "./model-selection.js";
@@ -214,7 +215,12 @@ export async function persistInlineDirectives(params: {
         (directives.elevatedLevel !== prevElevatedLevel && directives.elevatedLevel !== undefined);
       updated = true;
     }
-    if (directives.hasExecDirective && directives.hasExecOptions && allowInternalExecPersistence) {
+    if (
+      directives.hasExecDirective &&
+      directives.hasExecOptions &&
+      !hasRejectedExecDirective(directives) &&
+      allowInternalExecPersistence
+    ) {
       updated = applyExecDirectivePersistence({ sessionEntry, directives }) || updated;
     }
 

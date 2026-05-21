@@ -174,16 +174,42 @@ describe("reply exec overrides", () => {
     });
   });
 
-  it("does not apply mixed inline exec mode and legacy policy fields", () => {
+  it("ignores mixed inline exec mode and legacy policy fields", () => {
     expect(
       resolveReplyExecOverrides({
         directives: parseInlineDirectives("/exec mode=full security=deny ask=always"),
         sessionEntry: createSessionEntry({
           execSecurity: "deny",
-          execAsk: "always",
+          execAsk: "off",
         }),
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
-    ).toBeUndefined();
+    ).toEqual({
+      host: "node",
+      mode: undefined,
+      security: "deny",
+      ask: "off",
+      node: "worker-alpha",
+    });
+  });
+
+  it("ignores inline exec options when any exec option is invalid", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec host=other mode=full"),
+        sessionEntry: createSessionEntry({
+          execHost: "gateway",
+          execSecurity: "deny",
+          execAsk: "off",
+        }),
+        agentExecDefaults: AGENT_EXEC_DEFAULTS,
+      }),
+    ).toEqual({
+      host: "gateway",
+      mode: undefined,
+      security: "deny",
+      ask: "off",
+      node: "worker-alpha",
+    });
   });
 });

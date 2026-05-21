@@ -7,6 +7,7 @@ import {
   type ExecSecurity,
 } from "../../infra/exec-approvals.js";
 import type { InlineDirectives } from "./directive-handling.parse.js";
+import { hasRejectedExecDirective } from "./directive-handling.shared.js";
 
 export type ReplyExecOverrides = Pick<
   ExecToolDefaults,
@@ -18,11 +19,18 @@ export function resolveReplyExecOverrides(params: {
   sessionEntry?: SessionEntry;
   agentExecDefaults?: ReplyExecOverrides;
 }): ReplyExecOverrides | undefined {
-  if (params.directives.invalidExecPolicyCombination) {
-    return undefined;
-  }
+  const directives = hasRejectedExecDirective(params.directives)
+    ? {
+        ...params.directives,
+        execHost: undefined,
+        execMode: undefined,
+        execSecurity: undefined,
+        execAsk: undefined,
+        execNode: undefined,
+      }
+    : params.directives;
   const host =
-    params.directives.execHost ??
+    directives.execHost ??
     (params.sessionEntry?.execHost as ReplyExecOverrides["host"]) ??
     params.agentExecDefaults?.host;
   const basePolicy = materializeExecPolicy(params.agentExecDefaults);
@@ -32,12 +40,12 @@ export function resolveReplyExecOverrides(params: {
     ask: params.sessionEntry?.execAsk as ExecAsk | undefined,
   });
   const policy = applyExecPolicyLayer(sessionPolicy, {
-    mode: params.directives.execMode,
-    security: params.directives.execSecurity,
-    ask: params.directives.execAsk,
+    mode: directives.execMode,
+    security: directives.execSecurity,
+    ask: directives.execAsk,
   });
   const node =
-    params.directives.execNode ?? params.sessionEntry?.execNode ?? params.agentExecDefaults?.node;
+    directives.execNode ?? params.sessionEntry?.execNode ?? params.agentExecDefaults?.node;
   const mode = policy.mode;
   const security = mode ? undefined : policy.security;
   const ask = mode ? undefined : policy.ask;

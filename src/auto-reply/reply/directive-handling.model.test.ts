@@ -1968,6 +1968,39 @@ describe("persistInlineDirectives internal exec scope gate", () => {
     expect(sessionEntry.execAsk).toBe("on-miss");
   });
 
+  it("skips rejected mixed exec mode and legacy policy directives", async () => {
+    const sessionEntry = await persistInternalOperatorWriteDirective(
+      "/exec mode=full security=deny ask=always",
+      {
+        sessionEntry: createSessionEntry({
+          execSecurity: "allowlist",
+          execAsk: "off",
+        }),
+        gatewayClientScopes: ["operator.admin"],
+      },
+    );
+
+    expect(sessionEntry.execMode).toBeUndefined();
+    expect(sessionEntry.execSecurity).toBe("allowlist");
+    expect(sessionEntry.execAsk).toBe("off");
+  });
+
+  it("skips exec persistence when any exec option is invalid", async () => {
+    const sessionEntry = await persistInternalOperatorWriteDirective("/exec host=other mode=full", {
+      sessionEntry: createSessionEntry({
+        execHost: "gateway",
+        execSecurity: "allowlist",
+        execAsk: "off",
+      }),
+      gatewayClientScopes: ["operator.admin"],
+    });
+
+    expect(sessionEntry.execHost).toBe("gateway");
+    expect(sessionEntry.execMode).toBeUndefined();
+    expect(sessionEntry.execSecurity).toBe("allowlist");
+    expect(sessionEntry.execAsk).toBe("off");
+  });
+
   it("treats internal provider context as authoritative over external surface metadata", async () => {
     const sessionEntry = await persistInternalOperatorWriteDirective("/verbose full", {
       messageProvider: "webchat",

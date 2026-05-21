@@ -44,6 +44,27 @@ function canPersistInternalDirective(params: {
 export const canPersistInternalExecDirective = canPersistInternalDirective;
 export const canPersistInternalVerboseDirective = canPersistInternalDirective;
 
+export function hasRejectedExecDirective(
+  directives: Pick<
+    InlineDirectives,
+    | "invalidExecHost"
+    | "invalidExecMode"
+    | "invalidExecSecurity"
+    | "invalidExecAsk"
+    | "invalidExecNode"
+    | "invalidExecPolicyCombination"
+  >,
+): boolean {
+  return (
+    directives.invalidExecHost ||
+    directives.invalidExecMode ||
+    directives.invalidExecSecurity ||
+    directives.invalidExecAsk ||
+    directives.invalidExecNode ||
+    directives.invalidExecPolicyCombination
+  );
+}
+
 export function applyExecDirectivePersistence(params: {
   sessionEntry: Pick<
     SessionEntry,
