@@ -26,6 +26,7 @@ import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import { parseExecApprovalResultText } from "./exec-approval-result.js";
 import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
 import { isMessagingTool, isMessagingToolSendAction } from "./pi-embedded-messaging.js";
+import type { MessagingToolSourceReplyPayload } from "./pi-embedded-messaging.types.js";
 import { mergeEmbeddedRunReplayState } from "./pi-embedded-runner/replay-state.js";
 import type {
   ToolCallSummary,
@@ -107,6 +108,123 @@ const toolStartData = new Map<string, ToolStartRecord>();
 
 function buildToolStartKey(runId: string, toolCallId: string): string {
   return `${runId}:${toolCallId}`;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasStringValue(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasExplicitMessageRoute(args: Record<string, unknown>): boolean {
+  if (
+    ["channel", "target", "to", "channelId", "provider"].some((key) => hasStringValue(args[key]))
+  ) {
+    return true;
+  }
+  return Array.isArray(args.targets) && args.targets.some((value) => hasStringValue(value));
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(value);
+    return isPlainRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function nestedDeliveryRecordMatches(
+  value: unknown,
+  predicate: (record: Record<string, unknown>) => boolean,
+  depth = 0,
+): boolean {
+  if (depth > 4 || value == null) {
+    return false;
+  }
+  if (typeof value === "string") {
+    const parsed = parseJsonRecord(value);
+    return parsed ? nestedDeliveryRecordMatches(parsed, predicate, depth + 1) : false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => nestedDeliveryRecordMatches(item, predicate, depth + 1));
+  }
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  return (
+    predicate(value) ||
+    ["details", "payload", "result", "results", "sendResult", "toolResult", "content"].some((key) =>
+      nestedDeliveryRecordMatches(value[key], predicate, depth + 1),
+    )
+  );
+}
+
+function toolResultHasInternalSourceReplyDelivery(result: unknown): boolean {
+  const hasInternalSink = nestedDeliveryRecordMatches(
+    result,
+    (record) => normalizeOptionalLowercaseString(record.sourceReplySink) === "internal-ui",
+  );
+  const isSent = nestedDeliveryRecordMatches(
+    result,
+    (record) => normalizeOptionalLowercaseString(record.deliveryStatus) === "sent",
+  );
+  const isDryRun = nestedDeliveryRecordMatches(
+    result,
+    (record) =>
+      record.dryRun === true ||
+      normalizeOptionalLowercaseString(record.deliveryStatus) === "dry_run",
+  );
+  return hasInternalSink && isSent && !isDryRun;
+}
+
+function buildSourceReplyPayloadFromMessageToolSend(params: {
+  args: Record<string, unknown>;
+  pendingText?: string;
+  mediaUrls: string[];
+}): MessagingToolSourceReplyPayload | undefined {
+  const text =
+    params.pendingText ??
+    readStringValue(params.args.text) ??
+    readStringValue(params.args.message) ??
+    readStringValue(params.args.content);
+  const payload: MessagingToolSourceReplyPayload = {};
+  if (text?.trim()) {
+    payload.text = text;
+  }
+  if (params.mediaUrls.length > 0) {
+    payload.mediaUrls = params.mediaUrls.slice();
+  }
+  const mediaUrl = readStringValue(params.args.mediaUrl) ?? readStringValue(params.args.media_url);
+  if (mediaUrl?.trim()) {
+    payload.mediaUrl = mediaUrl;
+  }
+  if (params.args.audioAsVoice === true) {
+    payload.audioAsVoice = true;
+  }
+  if (params.args.presentation !== undefined) {
+    payload.presentation = params.args
+      .presentation as MessagingToolSourceReplyPayload["presentation"];
+  }
+  if (params.args.interactive !== undefined) {
+    payload.interactive = params.args.interactive as MessagingToolSourceReplyPayload["interactive"];
+  }
+  if (params.args.channelData !== undefined) {
+    payload.channelData = params.args.channelData as MessagingToolSourceReplyPayload["channelData"];
+  }
+  const idempotencyKey = readStringValue(params.args.idempotencyKey);
+  if (idempotencyKey?.trim()) {
+    payload.idempotencyKey = idempotencyKey;
+  }
+  return payload.text ||
+    payload.mediaUrl ||
+    payload.mediaUrls?.length ||
+    payload.presentation ||
+    payload.interactive
+    ? payload
+    : undefined;
 }
 
 export function countActiveToolExecutions(runId: string): number {
@@ -1024,6 +1142,24 @@ export async function handleToolExecutionEnd(
     if (committedMediaUrls.length > 0) {
       ctx.state.messagingToolSentMediaUrls.push(...committedMediaUrls);
       ctx.trimMessagingToolSent();
+    }
+    if (
+      ctx.params.sourceReplyDeliveryMode === "message_tool_only" &&
+      toolName === "message" &&
+      isMessagingToolSendAction(toolName, startArgs) &&
+      startArgs.dryRun !== true &&
+      !hasExplicitMessageRoute(startArgs) &&
+      toolResultHasInternalSourceReplyDelivery(result)
+    ) {
+      const sourceReplyPayload = buildSourceReplyPayloadFromMessageToolSend({
+        args: startArgs,
+        pendingText,
+        mediaUrls: committedMediaUrls,
+      });
+      if (sourceReplyPayload) {
+        ctx.state.messagingToolSourceReplyPayloads.push(sourceReplyPayload);
+        ctx.trimMessagingToolSent();
+      }
     }
   }
 

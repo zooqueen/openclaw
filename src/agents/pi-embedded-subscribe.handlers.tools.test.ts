@@ -63,6 +63,7 @@ function createTestContext(): {
       messagingToolSentTextsNormalized: [],
       messagingToolSentMediaUrls: [],
       messagingToolSentTargets: [],
+      messagingToolSourceReplyPayloads: [],
       successfulCronAdds: 0,
       deterministicApprovalPromptSent: false,
       toolExecutionSinceLastBlockReply: false,
@@ -1214,6 +1215,93 @@ describe("messaging tool media URL tracking", () => {
       mediaUrls: ["file:///img.jpg"],
     });
     expect(ctx.state.pendingMessagingMediaUrls.has("tool-m2")).toBe(false);
+  });
+
+  it("records internal UI message-tool source replies for transcript mirroring", async () => {
+    const { ctx } = createTestContext();
+    ctx.params.sourceReplyDeliveryMode = "message_tool_only";
+
+    const startEvt: ToolExecutionStartEvent = {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-source-reply",
+      args: {
+        action: "send",
+        message: "hello from webchat",
+        mediaUrl: "file:///reply.png",
+        idempotencyKey: "reply-key",
+      },
+    };
+    await handleToolExecutionStart(ctx, startEvt);
+
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "sent",
+          sourceReplySink: "internal-ui",
+          dryRun: false,
+        },
+      },
+    });
+
+    expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([
+      {
+        text: "hello from webchat",
+        mediaUrl: "file:///reply.png",
+        mediaUrls: ["file:///reply.png"],
+        idempotencyKey: "reply-key",
+      },
+    ]);
+  });
+
+  it("does not record routed or dry-run source replies for transcript mirroring", async () => {
+    const { ctx } = createTestContext();
+    ctx.params.sourceReplyDeliveryMode = "message_tool_only";
+
+    await handleToolExecutionStart(ctx, {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-routed-source-reply",
+      args: { action: "send", to: "channel:123", message: "remote" },
+    });
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-routed-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "sent",
+          sourceReplySink: "internal-ui",
+        },
+      },
+    });
+
+    await handleToolExecutionStart(ctx, {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-dry-run-source-reply",
+      args: { action: "send", message: "preview", dryRun: true },
+    });
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-dry-run-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "dry_run",
+          sourceReplySink: "internal-ui",
+          dryRun: true,
+        },
+      },
+    });
+
+    expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([]);
   });
 
   it("commits mediaUrls from tool result payload", async () => {

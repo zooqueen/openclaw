@@ -22,6 +22,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - WhatsApp: update Baileys to `7.0.0-rc13` and drop the obsolete logger type patch.
+- WebChat: keep internal message-tool replies visible after history reload while keeping the internal-ui tool result compact. (#84268, #84773) Thanks @100yenadmin and @jason-allen-oneal.
 - Infra/json: retry transient `File changed during read` races while loading JSON state so config and state reads recover instead of failing the turn. (#84285)
 - Providers/Ollama: resolve configured Ollama Cloud `OLLAMA_API_KEY` markers to the real discovery key so cloud provider entries keep authenticated model catalog access. (#85037)
 - Discord: keep persistent component registry fallback warnings actionable by forwarding structured error and cause metadata through the runtime logger. Fixes #84185. (#84190) Thanks @100menotu001.

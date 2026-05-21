@@ -3189,9 +3189,8 @@ export async function runEmbeddedAttempt(
         prompt: string,
         options?: Parameters<typeof activeSession.prompt>[1],
       ): Promise<void> =>
-        withOwnedSessionTranscriptWrites(
-          ownedTranscriptWriteContext,
-          async () => abortable(trackPromptSettlePromise(activeSession.prompt(prompt, options))),
+        withOwnedSessionTranscriptWrites(ownedTranscriptWriteContext, async () =>
+          abortable(trackPromptSettlePromise(activeSession.prompt(prompt, options))),
         );
       const onBlockReply = params.onBlockReply
         ? bindOwnedSessionTranscriptWrites(ownedTranscriptWriteContext, params.onBlockReply)
@@ -3251,6 +3250,7 @@ export async function runEmbeddedAttempt(
         getMessagingToolSentTexts,
         getMessagingToolSentMediaUrls,
         getMessagingToolSentTargets,
+        getMessagingToolSourceReplyPayloads,
         getHeartbeatToolResponse,
         getPendingToolMediaReply,
         getVisibleBlockReplyCount,
@@ -4820,6 +4820,7 @@ export async function runEmbeddedAttempt(
         messagingToolSentTexts: getMessagingToolSentTexts(),
         messagingToolSentMediaUrls: getMessagingToolSentMediaUrls(),
         messagingToolSentTargets: getMessagingToolSentTargets(),
+        messagingToolSourceReplyPayloads: getMessagingToolSourceReplyPayloads(),
         heartbeatToolResponse,
         toolMediaUrls: pendingToolMediaReply?.mediaUrls,
         toolAudioAsVoice: pendingToolMediaReply?.audioAsVoice,
