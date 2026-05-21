@@ -4539,46 +4539,40 @@ describe("runAgentTurnWithFallback", () => {
     expect(result.payload.text).not.toContain("retried once");
   });
 
-  it("latches queued user message persistence across Codex app-server bridge retries", async () => {
-    vi.useFakeTimers();
-    try {
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(
-        async (params: {
-          onUserMessagePersisted?: (message: {
-            role: "user";
-            content: Array<{ type: "text"; text: string }>;
-          }) => void;
-        }) => {
-          params.onUserMessagePersisted?.({
-            role: "user",
-            content: [{ type: "text", text: "queued" }],
-          });
-          throw new Error("codex app-server client closed before turn completed");
-        },
-      );
-      state.runEmbeddedPiAgentMock.mockResolvedValueOnce({
-        payloads: [{ text: "Recovered response" }],
-        meta: {},
-      });
+  it("does not retry Codex app-server bridge failures after queued user message persistence", async () => {
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(
+      async (params: {
+        onUserMessagePersisted?: (message: {
+          role: "user";
+          content: Array<{ type: "text"; text: string }>;
+        }) => void;
+      }) => {
+        params.onUserMessagePersisted?.({
+          role: "user",
+          content: [{ type: "text", text: "queued" }],
+        });
+        throw new Error("codex app-server client closed before turn completed");
+      },
+    );
+    state.runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [{ text: "Recovered response" }],
+      meta: {},
+    });
 
-      const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
-      const runPromise = runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
-      await Promise.resolve();
-      await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(2_500);
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
 
-      const result = await runPromise;
-      expect(result.kind).toBe("success");
-      expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(2);
-      expectMockCallArgFields(state.runEmbeddedPiAgentMock, 0, "app-server first attempt", {
-        suppressNextUserMessagePersistence: false,
-      });
-      expectMockCallArgFields(state.runEmbeddedPiAgentMock, 1, "app-server retry attempt", {
-        suppressNextUserMessagePersistence: true,
-      });
-    } finally {
-      vi.useRealTimers();
+    expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+    expectMockCallArgFields(state.runEmbeddedPiAgentMock, 0, "app-server first attempt", {
+      suppressNextUserMessagePersistence: false,
+    });
+    expect(result.kind).toBe("final");
+    if (result.kind !== "final") {
+      throw new Error("expected final reply");
     }
+    expect(result.payload.text).toContain("Codex app-server connection closed");
+    expect(result.payload.text).toContain("Some output may already have been delivered");
+    expect(result.payload.text).not.toContain("retried once");
   });
 
   it("surfaces repeated Codex app-server bridge failures in group chats", async () => {

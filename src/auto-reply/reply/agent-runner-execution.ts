@@ -560,6 +560,7 @@ function hasCodexAppServerRetryBlockingOutput(params: {
   didObserveMessagingToolSideEffect: boolean;
   didObservePotentialToolSideEffect: boolean;
   didObserveUserVisibleOutput: boolean;
+  didPersistQueuedUserMessage: boolean;
   hasPendingMessagingToolSideEffect: boolean;
   hasPendingPotentialToolSideEffect: boolean;
   hasRepliedRef?: { value: boolean };
@@ -571,6 +572,7 @@ function hasCodexAppServerRetryBlockingOutput(params: {
     params.didObserveMessagingToolSideEffect ||
     params.didObservePotentialToolSideEffect ||
     params.didObserveUserVisibleOutput ||
+    params.didPersistQueuedUserMessage ||
     params.hasPendingMessagingToolSideEffect ||
     params.hasPendingPotentialToolSideEffect
   );
@@ -2558,6 +2560,7 @@ export async function runAgentTurnWithFallback(params: {
             didObserveMessagingToolSideEffect,
             didObservePotentialToolSideEffect,
             didObserveUserVisibleOutput,
+            didPersistQueuedUserMessage: queuedUserMessagePersistedAcrossFallback,
             hasPendingMessagingToolSideEffect:
               pendingMessagingToolSendCallIds.size > 0 || pendingMessagingToolItemIds.size > 0,
             hasPendingPotentialToolSideEffect:
