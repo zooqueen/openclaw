@@ -169,6 +169,33 @@ describe("exec security floor", () => {
     expect(buildExecSpec).not.toHaveBeenCalled();
   });
 
+  it("intersects normalized gateway auto mode with host approval deny defaults", async () => {
+    const openclawDir = path.join(tempRoot ?? os.tmpdir(), ".openclaw");
+    fs.mkdirSync(openclawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(openclawDir, "exec-approvals.json"),
+      `${JSON.stringify({ version: 1, defaults: { security: "deny", ask: "off" }, agents: {} })}\n`,
+    );
+    const autoReviewer = vi.fn<ExecAutoReviewer>(async () => ({
+      decision: "allow-once",
+      risk: "low",
+      rationale: "would otherwise run",
+    }));
+    const tool = createExecTool({
+      host: "gateway",
+      mode: "auto",
+      safeBins: [],
+      autoReviewer,
+    });
+
+    await expect(
+      tool.execute("call-auto-mode-host-deny", {
+        command: "echo blocked",
+      }),
+    ).rejects.toThrow(/security=deny|exec denied/i);
+    expect(autoReviewer).not.toHaveBeenCalled();
+  });
+
   it.each(["on-miss", "off"] as const)(
     "keeps auto review enabled when legacy ask=%s does not strengthen auto mode",
     async (ask) => {
