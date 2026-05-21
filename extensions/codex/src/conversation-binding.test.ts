@@ -803,4 +803,106 @@ describe("codex conversation binding", () => {
       excludeSlashTmp: false,
     });
   });
+
+  it("honors current session exec mode over stored bound-thread policy", async () => {
+    const sessionFile = path.join(tempDir, "session.jsonl");
+    const storePath = path.join(tempDir, "sessions.json");
+    await fs.writeFile(
+      storePath,
+      JSON.stringify({
+        main: {
+          sessionId: "session-1",
+          updatedAt: Date.now(),
+          execMode: "ask",
+        },
+      }),
+    );
+    await fs.writeFile(
+      `${sessionFile}.codex-app-server.json`,
+      JSON.stringify({
+        schemaVersion: 1,
+        threadId: "thread-1",
+        cwd: tempDir,
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+      }),
+    );
+    let notificationHandler: ((notification: unknown) => void) | undefined;
+    const turnStartParams: Record<string, unknown>[] = [];
+    sharedClientMocks.getSharedCodexAppServerClient.mockResolvedValue({
+      request: vi.fn(async (method: string, requestParams: Record<string, unknown>) => {
+        if (method === "turn/start") {
+          turnStartParams.push(requestParams);
+          setImmediate(() =>
+            notificationHandler?.({
+              method: "turn/completed",
+              params: {
+                threadId: "thread-1",
+                turn: {
+                  id: "turn-1",
+                  status: "completed",
+                  items: [{ type: "agentMessage", id: "item-1", text: "done" }],
+                },
+              },
+            }),
+          );
+          return { turn: { id: "turn-1" } };
+        }
+        throw new Error(`unexpected method: ${method}`);
+      }),
+      addNotificationHandler: vi.fn((handler: (notification: unknown) => void) => {
+        notificationHandler = handler;
+        return () => undefined;
+      }),
+      addRequestHandler: vi.fn(() => () => undefined),
+    });
+
+    const result = await handleCodexConversationInboundClaim(
+      {
+        content: "continue",
+        channel: "telegram",
+        isGroup: false,
+        commandAuthorized: true,
+        sessionKey: "main",
+      },
+      {
+        channelId: "telegram",
+        sessionKey: "main",
+        pluginBinding: {
+          bindingId: "binding-1",
+          pluginId: "codex",
+          pluginRoot: tempDir,
+          channel: "telegram",
+          accountId: "default",
+          conversationId: "5185575566",
+          boundAt: Date.now(),
+          data: {
+            kind: "codex-app-server-session",
+            version: 1,
+            sessionFile,
+            workspaceDir: tempDir,
+          },
+        },
+      },
+      {
+        timeoutMs: 50,
+        config: {
+          session: {
+            store: storePath,
+          },
+        } as never,
+      },
+    );
+
+    expect(result).toEqual({ handled: true, reply: { text: "done" } });
+    expect(turnStartParams[0]?.approvalPolicy).toBe("on-request");
+    expect(turnStartParams[0]?.approvalsReviewer).toBe("user");
+    expect(turnStartParams[0]?.sandboxPolicy).toEqual({
+      type: "workspaceWrite",
+      writableRoots: [tempDir],
+      networkAccess: false,
+      excludeTmpdirEnvVar: false,
+      excludeSlashTmp: false,
+    });
+  });
 });

@@ -17,6 +17,7 @@ import { coerceToolModelConfig } from "./tools/model-config.helpers.js";
 
 const DEFAULT_EXEC_REVIEWER_TIMEOUT_MS = 30_000;
 const EXEC_REVIEWER_MAX_TOKENS = 360;
+const EXEC_REVIEWER_TIMEOUT = Symbol("exec-reviewer-timeout");
 
 export type ExecReviewerConfig = {
   model?: AgentModelConfig;
@@ -175,6 +176,14 @@ function resolveReviewerTimeoutMs(config?: ExecReviewerConfig): number {
     : DEFAULT_EXEC_REVIEWER_TIMEOUT_MS;
 }
 
+function buildReviewerTimeoutDecision(timeoutMs: number): ExecAutoReviewDecision {
+  return {
+    decision: "ask-human",
+    risk: "unknown",
+    rationale: `exec reviewer timed out after ${timeoutMs}ms`,
+  };
+}
+
 export function createModelExecAutoReviewer(params: {
   cfg?: OpenClawConfig;
   agentId?: string;
@@ -194,52 +203,75 @@ export function createModelExecAutoReviewer(params: {
   const modelRef = resolveReviewerModelRef(params.reviewer);
   const timeoutMs = resolveReviewerTimeoutMs(params.reviewer);
   return async (input) => {
-    const prepared = await prepareModel({
-      cfg,
-      agentId,
-      modelRef,
-      allowMissingApiKeyModes: ["aws-sdk"],
-    });
-    if ("error" in prepared) {
-      return {
-        decision: "ask-human",
-        risk: "unknown",
-        rationale: `exec reviewer model unavailable: ${prepared.error}`,
-      };
-    }
-
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<typeof EXEC_REVIEWER_TIMEOUT>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(EXEC_REVIEWER_TIMEOUT);
+      }, timeoutMs);
+    });
     try {
-      const result = await complete({
-        model: prepared.model,
-        auth: prepared.auth,
-        cfg,
-        context: {
-          systemPrompt: EXEC_REVIEWER_SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: `Review this pending exec request:\n\n${stringifyInput(input)}`,
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        options: {
-          maxTokens: EXEC_REVIEWER_MAX_TOKENS,
-          temperature: 0,
-          signal: controller.signal,
-        },
-      });
+      const prepared = await Promise.race([
+        prepareModel({
+          cfg,
+          agentId,
+          modelRef,
+          allowMissingApiKeyModes: ["aws-sdk"],
+        }),
+        timeout,
+      ]);
+      if (prepared === EXEC_REVIEWER_TIMEOUT) {
+        return buildReviewerTimeoutDecision(timeoutMs);
+      }
+      if ("error" in prepared) {
+        return {
+          decision: "ask-human",
+          risk: "unknown",
+          rationale: `exec reviewer model unavailable: ${prepared.error}`,
+        };
+      }
+
+      const result = await Promise.race([
+        complete({
+          model: prepared.model,
+          auth: prepared.auth,
+          cfg,
+          context: {
+            systemPrompt: EXEC_REVIEWER_SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: `Review this pending exec request:\n\n${stringifyInput(input)}`,
+                timestamp: Date.now(),
+              },
+            ],
+          },
+          options: {
+            maxTokens: EXEC_REVIEWER_MAX_TOKENS,
+            temperature: 0,
+            signal: controller.signal,
+          },
+        }),
+        timeout,
+      ]);
+      if (result === EXEC_REVIEWER_TIMEOUT) {
+        return buildReviewerTimeoutDecision(timeoutMs);
+      }
       return parseExecAutoReviewResponse(extractTextContent(result));
     } catch (err) {
+      if (controller.signal.aborted) {
+        return buildReviewerTimeoutDecision(timeoutMs);
+      }
       return {
         decision: "ask-human",
         risk: "unknown",
         rationale: `exec reviewer failed: ${formatErrorMessage(err)}`,
       };
     } finally {
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
   };
 }

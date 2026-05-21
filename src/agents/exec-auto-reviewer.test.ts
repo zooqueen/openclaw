@@ -142,4 +142,39 @@ describe("createModelExecAutoReviewer", () => {
       rationale: "exec reviewer model unavailable: missing API key",
     });
   });
+
+  it("applies the reviewer timeout while preparing the model", async () => {
+    vi.useFakeTimers();
+    try {
+      const prepare = vi.fn(
+        () =>
+          new Promise<never>(() => {
+            // Keep model preparation pending until the reviewer timeout wins.
+          }),
+      );
+      const reviewer = createModelExecAutoReviewer({
+        cfg: {},
+        reviewer: { timeoutMs: 5_000 },
+        deps: {
+          prepareSimpleCompletionModelForAgent:
+            prepare as unknown as typeof import("./simple-completion-runtime.js").prepareSimpleCompletionModelForAgent,
+        },
+      });
+
+      let settled = false;
+      const result = reviewer(input).then((decision) => {
+        settled = true;
+        return decision;
+      });
+      await vi.advanceTimersByTimeAsync(5_001);
+
+      expect(settled).toBe(true);
+      await expect(result).resolves.toMatchObject({
+        decision: "ask-human",
+        rationale: "exec reviewer timed out after 5000ms",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

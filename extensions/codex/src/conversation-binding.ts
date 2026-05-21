@@ -6,6 +6,11 @@ import type {
   PluginHookInboundClaimEvent,
 } from "openclaw/plugin-sdk/plugin-entry";
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-payload";
+import {
+  loadSessionStore,
+  resolveSessionStoreEntry,
+  resolveStorePath,
+} from "openclaw/plugin-sdk/session-store-runtime";
 import { resolveCodexAppServerAuthProfileIdForAgent } from "./app-server/auth-bridge.js";
 import { CODEX_CONTROL_METHODS } from "./app-server/capabilities.js";
 import {
@@ -423,12 +428,13 @@ async function runBoundTurn(params: {
   sessionKey?: string;
   timeoutMs?: number;
 }): Promise<BoundTurnResult> {
+  const execPolicy = resolveConversationExecPolicy({
+    config: params.config,
+    sessionKey: params.sessionKey,
+  });
   const runtime = resolveCodexAppServerRuntimeOptions({
     pluginConfig: params.pluginConfig,
-    execPolicy: resolveConversationExecPolicy({
-      config: params.config,
-      sessionKey: params.sessionKey,
-    }),
+    execPolicy,
   });
   const agentLookup = buildAgentLookup({ agentDir: params.data.agentDir });
   const binding = await readCodexAppServerBinding(params.data.sessionFile, agentLookup);
@@ -493,10 +499,12 @@ async function runBoundTurn(params: {
           event: params.event,
         }),
         cwd: binding.cwd || params.data.workspaceDir,
-        approvalPolicy: binding.approvalPolicy ?? runtime.approvalPolicy,
+        approvalPolicy: execPolicy?.touched
+          ? runtime.approvalPolicy
+          : (binding.approvalPolicy ?? runtime.approvalPolicy),
         approvalsReviewer: runtime.approvalsReviewer,
         sandboxPolicy: codexSandboxPolicyForTurn(
-          binding.sandbox ?? runtime.sandbox,
+          execPolicy?.touched ? runtime.sandbox : (binding.sandbox ?? runtime.sandbox),
           binding.cwd || params.data.workspaceDir,
         ),
         ...(binding.model ? { model: binding.model } : {}),
@@ -582,7 +590,36 @@ function resolveConversationExecPolicy(params: {
   return resolveOpenClawExecPolicyForCodexAppServer({
     config: params.config,
     agentId,
+    execOverrides: readSessionExecOverrides({
+      config: params.config,
+      agentId,
+      sessionKey: params.sessionKey,
+    }),
   });
+}
+
+function readSessionExecOverrides(params: {
+  config?: CodexConversationConfig;
+  agentId?: string;
+  sessionKey?: string;
+}): { mode?: string; security?: string; ask?: string } | undefined {
+  const sessionKey = params.sessionKey?.trim();
+  if (!params.config || !sessionKey) {
+    return undefined;
+  }
+  const storePath = resolveStorePath(params.config.session?.store, { agentId: params.agentId });
+  const entry = resolveSessionStoreEntry({
+    store: loadSessionStore(storePath, { skipCache: true }),
+    sessionKey,
+  }).existing;
+  if (!entry?.execMode && !entry?.execSecurity && !entry?.execAsk) {
+    return undefined;
+  }
+  return {
+    mode: entry.execMode,
+    security: entry.execSecurity,
+    ask: entry.execAsk,
+  };
 }
 
 function isCodexThreadNotFoundError(error: unknown): boolean {
