@@ -49,9 +49,9 @@ describe("normalizeConfiguredProviderCatalogModelId", () => {
     ).toBe("latest");
   });
 
-  it("normalizes nested retired Google Gemini ids in proxy-prefixed rows", () => {
+  it("keeps nested retired Google Gemini ids unchanged for non-Google providers", () => {
     expect(
       normalizeConfiguredProviderCatalogModelId("kilocode", "kilocode/google/gemini-3-pro-preview"),
-    ).toBe("kilocode/google/gemini-3.1-pro-preview");
+    ).toBe("kilocode/google/gemini-3-pro-preview");
   });
 });

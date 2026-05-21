@@ -38,7 +38,7 @@ describe("resolveConfiguredEntries", () => {
     expect(entries[1]?.tags).toEqual(new Set(["fallback#1", "configured"]));
   });
 
-  it("normalizes retired nested Gemini ids in configured provider rows", () => {
+  it("keeps nested Gemini ids unchanged for configured non-Google provider rows", () => {
     const { entries } = resolveConfiguredEntries({
       agents: {
         defaults: {
@@ -69,7 +69,7 @@ describe("resolveConfiguredEntries", () => {
       },
     });
 
-    expect(entries.map((entry) => entry.key)).toEqual(["kilocode/google/gemini-3.1-pro-preview"]);
+    expect(entries.map((entry) => entry.key)).toEqual(["kilocode/google/gemini-3-pro-preview"]);
     expect(entries[0]?.aliases).toEqual(["Kilo Gemini"]);
     expect(entries[0]?.tags).toEqual(new Set(["default", "configured"]));
   });
