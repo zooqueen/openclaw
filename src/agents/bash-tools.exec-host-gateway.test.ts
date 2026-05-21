@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { ExecApprovalFollowupTarget } from "./bash-tools.exec-host-shared.js";
 import type { ExecApprovalFollowupFactory } from "./bash-tools.exec-types.js";
@@ -639,6 +642,35 @@ EOF`,
         host: "gateway",
       }),
     );
+  });
+
+  it("keeps mutable script operands on explicit approval in auto-review mode", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-gateway-auto-script-"));
+    try {
+      const scriptPath = path.join(tmp, "script.js");
+      fs.writeFileSync(scriptPath, 'console.log("reviewed");\n');
+      evaluateShellAllowlistMock.mockReturnValue({
+        allowlistMatches: [],
+        analysisOk: true,
+        allowlistSatisfied: false,
+        segments: [{ resolution: null, argv: ["node", scriptPath] }],
+        segmentAllowlistEntries: [],
+      });
+      hasDurableExecApprovalMock.mockReturnValue(false);
+      requiresExecApprovalMock.mockReturnValue(true);
+
+      const result = await runGatewayAllowlist({
+        command: `node ${scriptPath}`,
+        ask: "on-miss",
+        autoReview: true,
+      });
+
+      expect(defaultExecAutoReviewerMock).not.toHaveBeenCalled();
+      expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+      expect(result.pendingResult?.details.status).toBe("approval-pending");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("shows reviewer rationale when auto-review defers to human approval", async () => {

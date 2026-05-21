@@ -17,7 +17,7 @@ import {
 } from "../infra/exec-approvals.js";
 import { defaultExecAutoReviewer, type ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
-import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
+import { resolveMutableFileOperandSnapshotSync } from "../node-host/invoke-system-run-plan.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
 import {
   buildExecApprovalRequesterContext,
@@ -211,6 +211,21 @@ function commandRequiresSecurityAuditSuppressionApproval(params: {
     return false;
   }
   return textMentionsSecurityAuditSuppressions(params.command);
+}
+
+function commandRequiresMutableScriptApproval(params: {
+  command: string;
+  cwd: string;
+  segments: Array<{ argv: string[]; raw?: string }>;
+}): boolean {
+  return params.segments.some((segment) => {
+    const snapshot = resolveMutableFileOperandSnapshotSync({
+      argv: segment.argv,
+      cwd: params.cwd,
+      shellCommand: segment.raw ?? params.command,
+    });
+    return snapshot.ok && snapshot.snapshot !== null;
+  });
 }
 
 function formatOutcomeExitLabel(outcome: { exitCode: number | null; timedOut: boolean }): string {
@@ -485,6 +500,11 @@ export async function processGatewayAllowlist(
       env: params.env,
       segments: allowlistEval.segments,
     }) && !(hostSecurity === "full" && hostAsk === "off");
+  const requiresMutableScriptApproval = commandRequiresMutableScriptApproval({
+    command: params.command,
+    cwd: params.workdir,
+    segments: allowlistEval.segments,
+  });
   const requiresAsk =
     requiresExecApproval({
       ask: hostAsk,
@@ -520,7 +540,8 @@ export async function processGatewayAllowlist(
       !requiresAllowlistPlanApproval &&
       !requiresHeredocApproval &&
       !requiresInlineEvalApproval &&
-      !requiresSecurityAuditSuppressionApproval;
+      !requiresSecurityAuditSuppressionApproval &&
+      !requiresMutableScriptApproval;
     if (canAutoReviewApprovalMiss) {
       const reviewer = params.autoReviewer ?? defaultExecAutoReviewer;
       const [autoReviewSegment] = allowlistEval.segments;
