@@ -2040,7 +2040,8 @@ export async function runAgentTurnWithFallback(params: {
                       phase === "start" &&
                       name &&
                       toolCallId &&
-                      buildToolMutationState(name, toolArgs).mutatingAction
+                      (evt.data.sideEffecting === true ||
+                        buildToolMutationState(name, toolArgs).mutatingAction)
                     ) {
                       pendingPotentialToolSideEffectCallIds.add(toolCallId);
                     }
@@ -2086,6 +2087,9 @@ export async function runAgentTurnWithFallback(params: {
                     const name = readStringValue(evt.data.name);
                     const toolCallId =
                       readStringValue(evt.data.toolCallId) ?? readStringValue(evt.data.itemId);
+                    const isPotentialToolSideEffectItem =
+                      evt.data.sideEffecting === true ||
+                      (name ? buildToolMutationState(name, undefined).mutatingAction : false);
                     if (name && toolCallId && isMessagingTool(name)) {
                       if (phase === "start") {
                         pendingMessagingToolItemIds.add(toolCallId);
@@ -2103,11 +2107,7 @@ export async function runAgentTurnWithFallback(params: {
                         }
                       }
                     }
-                    if (
-                      name &&
-                      toolCallId &&
-                      buildToolMutationState(name, undefined).mutatingAction
-                    ) {
+                    if (toolCallId && isPotentialToolSideEffectItem) {
                       if (phase === "start") {
                         pendingPotentialToolSideEffectItemIds.add(toolCallId);
                       }
@@ -2120,6 +2120,8 @@ export async function runAgentTurnWithFallback(params: {
                           didObservePotentialToolSideEffect = true;
                         }
                       }
+                    } else if (phase === "end" && toolCallId) {
+                      pendingPotentialToolSideEffectItemIds.delete(toolCallId);
                     }
                   }
                   const suppressItemChannelProgress =

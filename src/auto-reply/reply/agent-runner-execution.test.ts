@@ -4399,6 +4399,80 @@ describe("runAgentTurnWithFallback", () => {
     expect(result.payload.text).not.toContain("retried once");
   });
 
+  it("does not retry Codex app-server bridge failures after a side-effecting MCP tool completes", async () => {
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: EmbeddedAgentParams) => {
+      await params.onAgentEvent?.({
+        stream: "item",
+        data: {
+          itemId: "mcp-1",
+          toolCallId: "mcp-1",
+          kind: "tool",
+          title: "MCP tool",
+          name: "github.create_issue",
+          phase: "start",
+          status: "running",
+          suppressChannelProgress: true,
+          sideEffecting: true,
+        },
+      });
+      await params.onAgentEvent?.({
+        stream: "item",
+        data: {
+          itemId: "mcp-1",
+          toolCallId: "mcp-1",
+          kind: "tool",
+          title: "MCP tool",
+          name: "github.create_issue",
+          phase: "end",
+          status: "completed",
+          suppressChannelProgress: true,
+          sideEffecting: true,
+        },
+      });
+      throw new Error("codex app-server client closed before turn completed");
+    });
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+    expect(result.kind).toBe("final");
+    if (result.kind !== "final") {
+      throw new Error("expected final reply");
+    }
+    expect(result.payload.text).toContain("Codex app-server connection closed");
+    expect(result.payload.text).toContain("Some output may already have been delivered");
+    expect(result.payload.text).not.toContain("retried once");
+  });
+
+  it("does not retry Codex app-server bridge failures while a side-effecting MCP tool is in flight", async () => {
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: EmbeddedAgentParams) => {
+      await params.onAgentEvent?.({
+        stream: "tool",
+        data: {
+          phase: "start",
+          name: "github.create_issue",
+          toolCallId: "mcp-1",
+          args: { title: "check replay safety" },
+          sideEffecting: true,
+        },
+      });
+      throw new Error("codex app-server client closed before turn completed");
+    });
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+    expect(result.kind).toBe("final");
+    if (result.kind !== "final") {
+      throw new Error("expected final reply");
+    }
+    expect(result.payload.text).toContain("Codex app-server connection closed");
+    expect(result.payload.text).toContain("Some output may already have been delivered");
+    expect(result.payload.text).not.toContain("retried once");
+  });
+
   it("does not retry Codex app-server bridge failures while a mutating tool is in flight", async () => {
     state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: EmbeddedAgentParams) => {
       await params.onAgentEvent?.({
