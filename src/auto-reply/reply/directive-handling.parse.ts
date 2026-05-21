@@ -60,6 +60,7 @@ export type InlineDirectives = {
   invalidExecSecurity: boolean;
   invalidExecAsk: boolean;
   invalidExecNode: boolean;
+  invalidExecPolicyCombination: boolean;
   hasStatusDirective: boolean;
   hasModelDirective: boolean;
   rawModelDirective?: string;
@@ -147,6 +148,7 @@ export function parseInlineDirectives(
     invalidSecurity: invalidExecSecurity,
     invalidAsk: invalidExecAsk,
     invalidNode: invalidExecNode,
+    invalidPolicyCombination: invalidExecPolicyCombination,
     hasDirective: hasExecDirective,
   } = extractExecDirective(elevatedCleaned);
   const allowStatusDirective = options?.allowStatusDirective !== false;
@@ -216,6 +218,7 @@ export function parseInlineDirectives(
     invalidExecSecurity,
     invalidExecAsk,
     invalidExecNode,
+    invalidExecPolicyCombination,
     hasStatusDirective,
     hasModelDirective,
     rawModelDirective: rawModel,

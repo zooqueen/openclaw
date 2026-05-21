@@ -46,7 +46,7 @@ describe("reply exec overrides", () => {
 
     expect(
       resolveReplyExecOverrides({
-        directives: parseInlineDirectives("/exec host=auto mode=full security=full"),
+        directives: parseInlineDirectives("/exec host=auto mode=full"),
         sessionEntry,
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
@@ -174,7 +174,7 @@ describe("reply exec overrides", () => {
     });
   });
 
-  it("drops legacy policy fields when an inline exec mode is present", () => {
+  it("does not apply mixed inline exec mode and legacy policy fields", () => {
     expect(
       resolveReplyExecOverrides({
         directives: parseInlineDirectives("/exec mode=full security=deny ask=always"),
@@ -184,12 +184,6 @@ describe("reply exec overrides", () => {
         }),
         agentExecDefaults: AGENT_EXEC_DEFAULTS,
       }),
-    ).toEqual({
-      host: "node",
-      mode: "full",
-      security: undefined,
-      ask: undefined,
-      node: "worker-alpha",
-    });
+    ).toBeUndefined();
   });
 });

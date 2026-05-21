@@ -28,6 +28,7 @@ type ExecDirectiveParse = {
   invalidSecurity: boolean;
   invalidAsk: boolean;
   invalidNode: boolean;
+  invalidPolicyCombination: boolean;
 };
 
 function normalizeExecSecurity(value?: string): ExecSecurity | undefined {
@@ -187,6 +188,8 @@ function parseExecDirectiveArgs(raw: string): Omit<
     invalidSecurity,
     invalidAsk,
     invalidNode,
+    invalidPolicyCombination:
+      execMode !== undefined && (execSecurity !== undefined || execAsk !== undefined),
   };
 }
 
@@ -201,6 +204,7 @@ export function extractExecDirective(body?: string): ExecDirectiveParse {
       invalidSecurity: false,
       invalidAsk: false,
       invalidNode: false,
+      invalidPolicyCombination: false,
     };
   }
   const re = /(?:^|\s)\/exec(?=$|\s|:)/i;
@@ -215,6 +219,7 @@ export function extractExecDirective(body?: string): ExecDirectiveParse {
       invalidSecurity: false,
       invalidAsk: false,
       invalidNode: false,
+      invalidPolicyCombination: false,
     };
   }
   const start = match.index + match[0].indexOf("/exec");
@@ -241,5 +246,6 @@ export function extractExecDirective(body?: string): ExecDirectiveParse {
     invalidSecurity: parsed.invalidSecurity,
     invalidAsk: parsed.invalidAsk,
     invalidNode: parsed.invalidNode,
+    invalidPolicyCombination: parsed.invalidPolicyCombination,
   };
 }

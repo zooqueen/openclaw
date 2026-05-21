@@ -18,6 +18,7 @@ const CLEARED_EXEC_FIELDS = {
   invalidExecSecurity: false,
   invalidExecAsk: false,
   invalidExecNode: false,
+  invalidExecPolicyCombination: false,
 } satisfies Partial<InlineDirectives>;
 
 export function clearInlineDirectives(cleaned: string): InlineDirectives {

@@ -183,6 +183,15 @@ describe("directive parsing", () => {
     expect(res.cleaned).toBe("");
   });
 
+  it("rejects mixing exec mode with legacy security or ask policy", () => {
+    const res = extractExecDirective("/exec mode=full security=deny ask=always");
+    expect(res.hasDirective).toBe(true);
+    expect(res.execMode).toBe("full");
+    expect(res.execSecurity).toBe("deny");
+    expect(res.execAsk).toBe("always");
+    expect(res.invalidPolicyCombination).toBe(true);
+  });
+
   it("captures invalid exec host values", () => {
     const res = extractExecDirective("/exec host=spaceship");
     expect(res.hasDirective).toBe(true);

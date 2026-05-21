@@ -1403,7 +1403,7 @@ export function createExecTool(
       });
       const host: ExecHost = target.effectiveHost;
 
-      const approvalDefaults = loadExecApprovals().defaults;
+      const approvalDefaults = host === "sandbox" ? undefined : loadExecApprovals().defaults;
       const explicitSecurity = defaults?.security ?? approvalDefaults?.security;
       const configuredSecurity = explicitSecurity ?? (host === "sandbox" ? "deny" : "full");
       const modePolicy = resolveExecModePolicy({

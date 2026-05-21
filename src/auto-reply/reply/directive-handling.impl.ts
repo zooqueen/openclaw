@@ -287,6 +287,11 @@ export async function handleDirectiveOnly(
         text: "Exec node requires a value.",
       };
     }
+    if (directives.invalidExecPolicyCombination) {
+      return {
+        text: "Use either exec mode or legacy security/ask, not both.",
+      };
+    }
     if (!directives.hasExecOptions) {
       const execDefaults = resolveExecDefaults({
         cfg: params.cfg,

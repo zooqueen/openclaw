@@ -111,6 +111,38 @@ describe("exec security floor", () => {
     ).rejects.toThrow(/exec denied/i);
   });
 
+  it("does not let host approval defaults deny implicit sandbox execution", async () => {
+    const openclawDir = path.join(tempRoot ?? os.tmpdir(), ".openclaw");
+    fs.mkdirSync(openclawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(openclawDir, "exec-approvals.json"),
+      `${JSON.stringify({ version: 1, defaults: { security: "deny", ask: "off" }, agents: {} })}\n`,
+    );
+    const buildExecSpec = vi.fn(async () => ({
+      argv: ["/bin/sh", "-lc", "printf sandbox-ok"],
+      env: process.env,
+      stdinMode: "pipe-closed" as const,
+    }));
+    const tool = createExecTool({
+      host: "auto",
+      sandbox: {
+        containerName: "sandbox-host-approval-defaults-test",
+        workspaceDir: tempRoot ?? "/tmp",
+        containerWorkdir: "/workspace",
+        buildExecSpec,
+      },
+    });
+
+    const result = await tool.execute("call-sandbox-host-defaults", {
+      command: "echo sandbox-ok",
+    });
+
+    expect(buildExecSpec).toHaveBeenCalledTimes(1);
+    expect(result.content[0]?.type).toBe("text");
+    const text = (result.content[0] as { text?: string }).text ?? "";
+    expect(text).toContain("sandbox-ok");
+  });
+
   it("honors configured deny mode before implicit sandbox execution", async () => {
     const buildExecSpec = vi.fn(async () => ({
       argv: ["/bin/sh", "-lc", "printf leaked"],

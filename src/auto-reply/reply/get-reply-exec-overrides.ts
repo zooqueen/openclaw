@@ -18,6 +18,9 @@ export function resolveReplyExecOverrides(params: {
   sessionEntry?: SessionEntry;
   agentExecDefaults?: ReplyExecOverrides;
 }): ReplyExecOverrides | undefined {
+  if (params.directives.invalidExecPolicyCombination) {
+    return undefined;
+  }
   const host =
     params.directives.execHost ??
     (params.sessionEntry?.execHost as ReplyExecOverrides["host"]) ??

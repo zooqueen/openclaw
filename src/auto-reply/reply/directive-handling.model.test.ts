@@ -1902,7 +1902,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
     expect(sessionEntry.execAsk).toBe("always");
   });
 
-  it("does not acknowledge legacy exec fields ignored by a normalized mode directive", async () => {
+  it("rejects mixed exec mode and legacy policy directives", async () => {
     const directives = parseInlineDirectives("/exec mode=auto security=deny ask=always");
     const sessionEntry = createSessionEntry();
     const sessionStore = { [sessionKey]: sessionEntry };
@@ -1916,10 +1916,8 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       }),
     );
 
-    expect(result?.text).toContain("Exec defaults set (mode=auto).");
-    expect(result?.text).not.toContain("security=deny");
-    expect(result?.text).not.toContain("ask=always");
-    expect(sessionEntry.execMode).toBe("auto");
+    expect(result?.text).toContain("Use either exec mode or legacy security/ask, not both.");
+    expect(sessionEntry.execMode).toBeUndefined();
     expect(sessionEntry.execSecurity).toBeUndefined();
     expect(sessionEntry.execAsk).toBeUndefined();
   });
