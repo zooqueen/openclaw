@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import { captureEnv } from "../test-utils/env.js";
 import { resetProcessRegistryForTests } from "./bash-process-registry.js";
 import { createExecTool } from "./bash-tools.exec.js";
@@ -167,4 +168,38 @@ describe("exec security floor", () => {
     ).rejects.toThrow(/security=deny|exec denied/i);
     expect(buildExecSpec).not.toHaveBeenCalled();
   });
+
+  it.each(["on-miss", "off"] as const)(
+    "keeps auto review enabled when legacy ask=%s does not strengthen auto mode",
+    async (ask) => {
+      const autoReviewer = vi.fn<ExecAutoReviewer>(async () => ({
+        decision: "deny",
+        risk: "high",
+        rationale: "test reviewer denial",
+      }));
+      const tool = createExecTool({
+        host: "gateway",
+        mode: "auto",
+        safeBins: [],
+        autoReviewer,
+      });
+
+      const result = await tool.execute(`call-auto-review-${ask}`, {
+        command: "pwd",
+        ask,
+      });
+
+      expect(autoReviewer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "pwd",
+          host: "gateway",
+          reason: "approval-required",
+        }),
+      );
+      expect(result.content[0]?.type).toBe("text");
+      expect((result.content[0] as { text?: string }).text ?? "").toContain(
+        "exec auto-review denied command: test reviewer denial",
+      );
+    },
+  );
 });

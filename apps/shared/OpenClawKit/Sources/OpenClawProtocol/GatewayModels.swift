@@ -2171,6 +2171,7 @@ public struct SessionsPatchParams: Codable, Sendable {
     public let responseusage: AnyCodable?
     public let elevatedlevel: AnyCodable?
     public let exechost: AnyCodable?
+    public let execmode: AnyCodable?
     public let execsecurity: AnyCodable?
     public let execask: AnyCodable?
     public let execnode: AnyCodable?
@@ -2196,6 +2197,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         responseusage: AnyCodable?,
         elevatedlevel: AnyCodable?,
         exechost: AnyCodable?,
+        execmode: AnyCodable?,
         execsecurity: AnyCodable?,
         execask: AnyCodable?,
         execnode: AnyCodable?,
@@ -2220,6 +2222,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         self.responseusage = responseusage
         self.elevatedlevel = elevatedlevel
         self.exechost = exechost
+        self.execmode = execmode
         self.execsecurity = execsecurity
         self.execask = execask
         self.execnode = execnode
@@ -2246,6 +2249,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         case responseusage = "responseUsage"
         case elevatedlevel = "elevatedLevel"
         case exechost = "execHost"
+        case execmode = "execMode"
         case execsecurity = "execSecurity"
         case execask = "execAsk"
         case execnode = "execNode"
@@ -5768,6 +5772,7 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
     public let turnsourceto: AnyCodable?
     public let turnsourceaccountid: AnyCodable?
     public let turnsourcethreadid: AnyCodable?
+    public let requiredeliveryroute: Bool?
     public let timeoutms: Int?
     public let twophase: Bool?
 
@@ -5791,6 +5796,7 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
         turnsourceto: AnyCodable?,
         turnsourceaccountid: AnyCodable?,
         turnsourcethreadid: AnyCodable?,
+        requiredeliveryroute: Bool?,
         timeoutms: Int?,
         twophase: Bool?)
     {
@@ -5813,6 +5819,7 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
         self.turnsourceto = turnsourceto
         self.turnsourceaccountid = turnsourceaccountid
         self.turnsourcethreadid = turnsourcethreadid
+        self.requiredeliveryroute = requiredeliveryroute
         self.timeoutms = timeoutms
         self.twophase = twophase
     }
@@ -5837,6 +5844,7 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
         case turnsourceto = "turnSourceTo"
         case turnsourceaccountid = "turnSourceAccountId"
         case turnsourcethreadid = "turnSourceThreadId"
+        case requiredeliveryroute = "requireDeliveryRoute"
         case timeoutms = "timeoutMs"
         case twophase = "twoPhase"
     }

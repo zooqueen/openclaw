@@ -1422,10 +1422,10 @@ export function createExecTool(
       const requestedAsk = normalizeExecAsk(params.ask);
       const bypassApprovals = elevatedRequested && elevatedMode === "full";
       let ask = maxAsk(modePolicy.ask, requestedAsk ?? modePolicy.ask);
-      const autoReview = modePolicy.autoReview && !requestedAsk && !bypassApprovals;
       if (bypassApprovals) {
         ask = "off";
       }
+      const autoReview = modePolicy.autoReview && ask === modePolicy.ask && !bypassApprovals;
 
       const sandbox = host === "sandbox" ? defaults?.sandbox : undefined;
       if (target.selectedTarget === "sandbox" && !sandbox) {
