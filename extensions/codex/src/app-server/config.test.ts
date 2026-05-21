@@ -738,21 +738,32 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     });
   });
 
-  it.each(["deny", "allowlist", "ask"] as const)(
-    "maps normalized OpenClaw %s exec mode away from Codex yolo",
+  it.each(["deny", "allowlist"] as const)(
+    "blocks Codex app-server local execution for normalized OpenClaw %s exec mode",
     (execMode) => {
-      const runtime = resolveRuntimeForTest({
-        pluginConfig: {},
-        execMode,
-      });
-
-      expectRuntimePolicy(runtime, {
-        approvalPolicy: "on-request",
-        sandbox: "workspace-write",
-        approvalsReviewer: "user",
-      });
+      expect(() =>
+        resolveRuntimeForTest({
+          pluginConfig: {},
+          execMode,
+        }),
+      ).toThrow(
+        `Codex app-server local execution is not available when tools.exec.mode=${execMode}`,
+      );
     },
   );
+
+  it("maps normalized OpenClaw ask exec mode away from Codex yolo", () => {
+    const runtime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "ask",
+    });
+
+    expectRuntimePolicy(runtime, {
+      approvalPolicy: "on-request",
+      sandbox: "workspace-write",
+      approvalsReviewer: "user",
+    });
+  });
 
   it("keeps normalized OpenClaw full exec mode on default Codex yolo", () => {
     const runtime = resolveRuntimeForTest({

@@ -396,6 +396,7 @@ export function resolveCodexAppServerRuntimeOptions(
   const clearEnv = normalizeStringList(config.clearEnv);
   const authToken = readNonEmptyString(config.authToken);
   const url = readNonEmptyString(config.url);
+  assertCodexAppServerAllowedForOpenClawExecMode(params.execMode);
   const explicitPolicyMode =
     resolvePolicyMode(config.mode) ?? resolvePolicyMode(env.OPENCLAW_CODEX_APP_SERVER_MODE);
   const normalizedPolicyMode = resolveCodexPolicyModeForOpenClawExecMode(params.execMode);
@@ -1049,6 +1050,14 @@ function resolveCodexPolicyModeForOpenClawExecMode(
   return "guardian";
 }
 
+function assertCodexAppServerAllowedForOpenClawExecMode(mode: OpenClawExecMode | undefined): void {
+  if (mode === "deny" || mode === "allowlist") {
+    throw new Error(
+      `Codex app-server local execution is not available when tools.exec.mode=${mode}`,
+    );
+  }
+}
+
 function createDefaultOpenClawExecPolicy(): OpenClawExecPolicy {
   return {
     security: "full",
@@ -1086,7 +1095,9 @@ function applyOpenClawExecPolicyLayer(
   };
 }
 
-function resolveOpenClawExecPolicyForMode(mode: OpenClawExecMode): Omit<OpenClawExecPolicy, "touched"> {
+function resolveOpenClawExecPolicyForMode(
+  mode: OpenClawExecMode,
+): Omit<OpenClawExecPolicy, "touched"> {
   switch (mode) {
     case "deny":
       return { mode, security: "deny", ask: "off" };
