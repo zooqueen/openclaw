@@ -469,6 +469,57 @@ describe("executeNodeHostCommand", () => {
     expect(runParams.runId).toEqual(expect.any(String));
   });
 
+  it("does not send first-segment argv for compound node auto-review commands", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    parsePreparedSystemRunPayloadMock.mockReturnValue({
+      plan: {
+        ...preparedPlan,
+        argv: ["/bin/sh", "-lc", "pwd; rm -rf dist"],
+        commandText: '/bin/sh -lc "pwd; rm -rf dist"',
+        commandPreview: "pwd; rm -rf dist",
+        mutableFileOperand: null,
+      },
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [
+        { resolution: null, argv: ["pwd"] },
+        { resolution: null, argv: ["rm", "-rf", "dist"] },
+      ],
+      segmentAllowlistEntries: [],
+    });
+
+    const result = await executeNodeHostCommand({
+      command: "pwd; rm -rf dist",
+      workdir: "/tmp/work",
+      env: {},
+      security: "allowlist",
+      ask: "on-miss",
+      autoReview: true,
+      defaultTimeoutSec: 30,
+      approvalRunningNoticeMs: 0,
+      warnings: [],
+      agentId: "requested-agent",
+      sessionKey: "requested-session",
+    });
+
+    expect(defaultExecAutoReviewerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "pwd; rm -rf dist",
+        argv: undefined,
+        host: "node",
+      }),
+    );
+    expect(result.details?.status).toBe("completed");
+  });
+
   it("does not consult human approval registration for node auto-review allows", async () => {
     resolveExecHostApprovalContextMock.mockReturnValue({
       approvals: { allowlist: [], file: { version: 1, agents: {} } },

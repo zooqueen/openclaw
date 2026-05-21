@@ -523,9 +523,16 @@ export async function processGatewayAllowlist(
       !requiresSecurityAuditSuppressionApproval;
     if (canAutoReviewApprovalMiss) {
       const reviewer = params.autoReviewer ?? defaultExecAutoReviewer;
+      const [autoReviewSegment] = allowlistEval.segments;
+      const autoReviewArgv =
+        allowlistEval.segments.length === 1 &&
+        (autoReviewSegment?.raw === undefined ||
+          autoReviewSegment.raw.trim() === params.command.trim())
+          ? autoReviewSegment.argv
+          : undefined;
       const decision = await reviewer({
         command: params.command,
-        argv: allowlistEval.segments[0]?.argv,
+        argv: autoReviewArgv,
         cwd: params.workdir,
         envKeys: Object.keys(params.requestedEnv ?? {}).toSorted(),
         host: "gateway",

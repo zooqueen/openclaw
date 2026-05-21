@@ -612,6 +612,35 @@ EOF`,
     expect(warnings).toEqual(["Exec auto-review allowed once (risk=low): allowed"]);
   });
 
+  it("does not send first-segment argv for compound auto-review commands", async () => {
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [
+        { resolution: null, argv: ["pwd"] },
+        { resolution: null, argv: ["rm", "-rf", "dist"] },
+      ],
+      segmentAllowlistEntries: [],
+    });
+    hasDurableExecApprovalMock.mockReturnValue(false);
+    requiresExecApprovalMock.mockReturnValue(true);
+
+    await runGatewayAllowlist({
+      command: "pwd; rm -rf dist",
+      ask: "on-miss",
+      autoReview: true,
+    });
+
+    expect(defaultExecAutoReviewerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "pwd; rm -rf dist",
+        argv: undefined,
+        host: "gateway",
+      }),
+    );
+  });
+
   it("shows reviewer rationale when auto-review defers to human approval", async () => {
     const warnings: string[] = [];
     defaultExecAutoReviewerMock.mockResolvedValueOnce({

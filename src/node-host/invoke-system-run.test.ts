@@ -676,6 +676,49 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     }
   });
 
+  it.runIf(process.platform !== "win32")(
+    "does not send first-segment argv for compound system.run auto-review commands",
+    async () => {
+      const tmp = createFixtureDir("openclaw-system-run-compound-auto-review-");
+      setRuntimeConfigSnapshot({
+        tools: {
+          exec: {
+            mode: "auto",
+          },
+        },
+      });
+      try {
+        const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+          decision: "allow-once",
+          rationale: "reviewed full compound command text",
+          risk: "low",
+        }));
+        const runCommand = vi.fn(async () => createLocalRunResult("auto-reviewed"));
+        await runSystemInvoke({
+          preferMacAppExecHost: false,
+          command: ["/bin/sh", "-c", "pwd; rm -rf dist"],
+          cwd: tmp,
+          runCommand,
+          resolveExecSecurity: resolveProductionExecSecurity,
+          resolveExecAsk: resolveProductionExecAsk,
+          autoReviewer,
+        });
+
+        expect(autoReviewer).toHaveBeenCalledTimes(1);
+        expect(autoReviewer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            command: '/bin/sh -c "pwd; rm -rf dist"',
+            argv: undefined,
+            host: "node",
+            reason: "approval-required",
+          }),
+        );
+      } finally {
+        clearRuntimeConfigSnapshot();
+      }
+    },
+  );
+
   it("intersects normalized auto mode with looser node approvals", async () => {
     const tmp = createFixtureDir("openclaw-system-run-auto-approval-intersection-");
     const executablePath = createTempExecutable({ dir: tmp, name: "read-info" });

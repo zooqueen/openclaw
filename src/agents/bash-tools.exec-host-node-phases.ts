@@ -369,6 +369,10 @@ export async function analyzeNodeApprovalRequirement(params: {
     durableApprovalSatisfied,
     inlineEvalHit,
     autoReviewArgv:
-      baseAllowlistEval.segments.length === 1 ? baseAllowlistEval.segments[0]?.argv : undefined,
+      baseAllowlistEval.segments.length === 1 &&
+      (baseAllowlistEval.segments[0]?.raw === undefined ||
+        baseAllowlistEval.segments[0].raw.trim() === params.request.command.trim())
+        ? baseAllowlistEval.segments[0].argv
+        : undefined,
   };
 }
