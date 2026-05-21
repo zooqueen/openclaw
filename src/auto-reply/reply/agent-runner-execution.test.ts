@@ -4300,7 +4300,7 @@ describe("runAgentTurnWithFallback", () => {
   it("does not retry Codex app-server bridge failures after tool result delivery", async () => {
     const onToolResult = vi.fn();
     state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: EmbeddedAgentParams) => {
-      params.onToolResult?.({ text: "visible tool output" });
+      await params.onToolResult?.({ text: "visible tool output" });
       throw new Error("codex app-server client closed before turn completed");
     });
 
