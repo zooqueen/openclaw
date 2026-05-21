@@ -765,10 +765,45 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     });
   });
 
+  it("keeps user approvals for ask mode with explicit legacy guardian mode", () => {
+    const configRuntime = resolveRuntimeForTest({
+      pluginConfig: {
+        appServer: {
+          mode: "guardian",
+        },
+      },
+      execMode: "ask",
+      env: {},
+    });
+    const envRuntime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "ask",
+      env: { OPENCLAW_CODEX_APP_SERVER_MODE: "guardian" },
+    });
+
+    expectRuntimePolicy(configRuntime, {
+      approvalPolicy: "on-request",
+      sandbox: "workspace-write",
+      approvalsReviewer: "user",
+    });
+    expectRuntimePolicy(envRuntime, {
+      approvalPolicy: "on-request",
+      sandbox: "workspace-write",
+      approvalsReviewer: "user",
+    });
+  });
+
   it("fails closed when normalized OpenClaw ask mode cannot use user approvals", () => {
     expect(() =>
       resolveRuntimeForTest({
         pluginConfig: {},
+        execMode: "ask",
+        requirementsToml: 'allowed_approvals_reviewers = ["auto_review"]\n',
+      }),
+    ).toThrow("tools.exec.mode=ask requires Codex app-server user approvals");
+    expect(() =>
+      resolveRuntimeForTest({
+        pluginConfig: { appServer: { mode: "guardian" } },
         execMode: "ask",
         requirementsToml: 'allowed_approvals_reviewers = ["auto_review"]\n',
       }),

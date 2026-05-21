@@ -402,19 +402,20 @@ export function resolveCodexAppServerRuntimeOptions(
   const normalizedPolicyMode = resolveCodexPolicyModeForOpenClawExecMode(params.execMode);
   const forceUserReviewer =
     params.execMode !== undefined && params.execMode !== "auto" && params.execMode !== "full";
-  const defaultPolicy = explicitPolicyMode
-    ? undefined
-    : resolveDefaultCodexAppServerPolicy({
-        transport,
-        env,
-        forceGuardian: normalizedPolicyMode === "guardian",
-        forceUserReviewer,
-        requirementsToml: params.requirementsToml,
-        requirementsPath: params.requirementsPath,
-        readRequirementsFile: params.readRequirementsFile,
-        platform: params.platform,
-        hostName: params.hostName,
-      });
+  const defaultPolicy =
+    explicitPolicyMode && !forceUserReviewer
+      ? undefined
+      : resolveDefaultCodexAppServerPolicy({
+          transport,
+          env,
+          forceGuardian: normalizedPolicyMode === "guardian",
+          forceUserReviewer,
+          requirementsToml: params.requirementsToml,
+          requirementsPath: params.requirementsPath,
+          readRequirementsFile: params.readRequirementsFile,
+          platform: params.platform,
+          hostName: params.hostName,
+        });
   const policyMode = explicitPolicyMode ?? normalizedPolicyMode ?? defaultPolicy?.mode ?? "yolo";
   const serviceTier = normalizeCodexServiceTier(config.serviceTier);
   if (transport === "websocket" && !url) {
