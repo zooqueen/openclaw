@@ -3,7 +3,8 @@ import {
   resolvePreferredServerChatModelValue,
 } from "../chat-model-ref.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
-import { normalizeAgentId, resolveAgentIdFromSessionKey } from "../session-key.ts";
+import { t } from "../../i18n/index.ts";
+import { deriveAgentId, normalizeAgentId, resolveAgentIdFromSessionKey } from "../session-key.ts";
 import type {
   AgentsCreateResult,
   AgentsListResult,
@@ -26,6 +27,11 @@ export type AgentCreateDraft = {
   model: string;
   emoji: string;
   avatar: string;
+};
+
+export type AgentCreateValidationError = {
+  key: string;
+  vars?: Record<string, string>;
 };
 
 export type AgentsState = {
@@ -113,20 +119,23 @@ export function createDefaultAgentCreateDraft(
 export function validateAgentCreateDraft(
   draft: AgentCreateDraft,
   agentsList?: AgentsListResult | null,
-): string | null {
+): AgentCreateValidationError | null {
   const name = draft.name.trim();
   if (!name) {
-    return "Agent name is required.";
+    return { key: "agents.create.errors.nameRequired" };
   }
-  const agentId = normalizeAgentId(name);
+  const agentId = deriveAgentId(name);
+  if (!agentId) {
+    return { key: "agents.create.errors.invalidName" };
+  }
   if (agentId === "main") {
-    return '"main" is reserved.';
+    return { key: "agents.create.errors.mainReserved" };
   }
   if (agentsList?.agents.some((entry) => normalizeAgentId(entry.id) === agentId)) {
-    return `Agent "${agentId}" already exists.`;
+    return { key: "agents.create.errors.duplicate", vars: { id: agentId } };
   }
   if (!draft.workspace.trim()) {
-    return "Workspace path is required.";
+    return { key: "agents.create.errors.workspaceRequired" };
   }
   return null;
 }
@@ -140,7 +149,7 @@ export async function createAgentFromDraft(
   }
   const validationError = validateAgentCreateDraft(draft, state.agentsList);
   if (validationError) {
-    throw new Error(validationError);
+    throw new Error(t(validationError.key, validationError.vars ?? {}));
   }
   const payload: {
     name: string;

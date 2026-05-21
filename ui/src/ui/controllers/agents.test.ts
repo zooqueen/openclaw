@@ -6,6 +6,7 @@ import {
   loadToolsCatalog,
   loadToolsEffective,
   saveAgentsConfig,
+  validateAgentCreateDraft,
 } from "./agents.ts";
 import type { AgentsConfigSaveState, AgentsState } from "./agents.ts";
 
@@ -294,6 +295,18 @@ describe("createAgentFromDraft", () => {
       }),
     ).rejects.toThrow('Agent "ops-agent" already exists.');
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("rejects names that do not produce a valid id", () => {
+    expect(
+      validateAgentCreateDraft({
+        name: "!!!",
+        workspace: "/tmp/workspace-ops-agent",
+        model: "",
+        emoji: "",
+        avatar: "",
+      }),
+    ).toEqual({ key: "agents.create.errors.invalidName" });
   });
 
   it("derives new workspaces next to the default workspace", () => {

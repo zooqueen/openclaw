@@ -459,6 +459,33 @@ describe("renderAgents", () => {
     submit?.click();
     expect(onCreateSubmit).not.toHaveBeenCalled();
   });
+
+  it("hides normalized id preview when name does not derive an id", async () => {
+    const container = document.createElement("div");
+    render(
+      renderAgents(
+        createProps({
+          create: {
+            open: true,
+            draft: {
+              name: "!!!",
+              workspace: "/tmp/workspace-agent",
+              model: "",
+              emoji: "",
+              avatar: "",
+            },
+            submitting: false,
+            error: null,
+          },
+        }),
+      ),
+      container,
+    );
+    await Promise.resolve();
+
+    expect(container.textContent).not.toContain("ID:");
+    expect(container.textContent).toContain("Agent name must contain at least one valid ID character.");
+  });
 });
 
 describe("renderAgentFiles", () => {

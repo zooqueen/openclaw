@@ -3,7 +3,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { t } from "../../i18n/index.ts";
 import { type AgentCreateDraft, validateAgentCreateDraft } from "../controllers/agents.ts";
 import { icons } from "../icons.ts";
-import { normalizeAgentId } from "../session-key.ts";
+import { deriveAgentId } from "../session-key.ts";
 import type {
   AgentIdentityResult,
   AgentsFilesListResult,
@@ -384,11 +384,12 @@ function renderAgentCreateDialog(props: AgentsProps) {
     return nothing;
   }
   const draft = props.create.draft;
-  const normalizedId = normalizeAgentId(draft.name);
+  const normalizedId = deriveAgentId(draft.name);
   const validationError = props.config.dirty
-    ? t("agents.create.pendingConfigError")
+    ? { key: "agents.create.pendingConfigError" }
     : validateAgentCreateDraft(draft, props.agentsList);
   const disableSubmit = Boolean(validationError || props.create.submitting);
+  const validationText = validationError ? t(validationError.key, validationError.vars ?? {}) : null;
   const modelOptions = buildCatalogModelOptions(props.modelCatalog);
 
   return html`
@@ -410,7 +411,9 @@ function renderAgentCreateDialog(props: AgentsProps) {
         <div class="agent-create-header">
           <div>
             <h2 id="agent-create-title">${t("agents.create.title")}</h2>
-            <div class="muted">${t("agents.create.normalizedId", { id: normalizedId })}</div>
+            ${normalizedId
+              ? html`<div class="muted">${t("agents.create.normalizedId", { id: normalizedId })}</div>`
+              : nothing}
           </div>
           <button
             type="button"
@@ -505,8 +508,8 @@ function renderAgentCreateDialog(props: AgentsProps) {
         </div>
         ${props.create.error
           ? html`<div class="callout danger">${props.create.error}</div>`
-          : validationError
-            ? html`<div class="callout info">${validationError}</div>`
+          : validationText
+            ? html`<div class="callout info">${validationText}</div>`
             : nothing}
         <div class="agent-create-actions">
           <button

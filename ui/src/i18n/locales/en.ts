@@ -260,6 +260,13 @@ export const en: TranslationMap = {
       avatar: "Avatar",
       submit: "Create Agent",
       pendingConfigError: "Save or reload pending agent changes before creating a new agent.",
+      errors: {
+        nameRequired: "Agent name is required.",
+        invalidName: "Agent name must contain at least one valid ID character.",
+        mainReserved: '"main" is reserved.',
+        duplicate: 'Agent "{id}" already exists.',
+        workspaceRequired: "Workspace path is required.",
+      },
     },
     tabs: {
       overview: "Overview",

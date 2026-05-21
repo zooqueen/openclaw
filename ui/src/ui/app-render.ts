@@ -1683,10 +1683,10 @@ export function renderApp(state: AppViewState) {
     try {
       const created = await createAgentFromDraft(state, state.agentCreateDraft);
       resetAgentSelectionPanelState();
+      await loadConfig(state, { discardPendingChanges: true });
       state.agentCreateOpen = false;
       state.agentCreateWorkspaceTouched = false;
       state.agentCreateDraft = createDefaultAgentCreateDraft(state.agentsList);
-      await loadConfig(state, { discardPendingChanges: true });
       void loadAgentIdentity(state, created.agentId);
       loadAgentPanelDataForSelectedAgent(created.agentId);
       refreshAgentsPanelSupplementalData(state.agentsPanel);
