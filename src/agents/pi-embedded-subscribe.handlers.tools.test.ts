@@ -1282,9 +1282,6 @@ describe("messaging tool media URL tracking", () => {
         details: {
           deliveryStatus: "sent",
           sourceReplySink: "internal-ui",
-          sourceReplyMediaUrl: "/workspace/reply.png",
-          sourceReplyMediaUrls: ["/workspace/reply.png"],
-          sourceReplyAudioAsVoice: true,
         },
       },
     });
@@ -1321,6 +1318,9 @@ describe("messaging tool media URL tracking", () => {
         details: {
           deliveryStatus: "sent",
           sourceReplySink: "internal-ui",
+          sourceReplyMediaUrl: "/workspace/reply.png",
+          sourceReplyMediaUrls: ["/workspace/reply.png"],
+          sourceReplyAudioAsVoice: true,
         },
       },
     });
