@@ -19,6 +19,9 @@ type LockOptions = {
 
 type SessionEventProcessor = {
   _processAgentEvent?: (event: unknown) => Promise<void>;
+  _handleAgentEvent?: (event: unknown) => Promise<void>;
+  _disconnectFromAgent?: () => void;
+  _reconnectToAgent?: () => void;
   _extensionRunner?: {
     hasHandlers?: (eventType: string) => boolean;
   };
@@ -187,6 +190,13 @@ function sameSessionFileFingerprint(
   );
 }
 
+function sameSessionFileIdentity(
+  left: SessionFileFingerprint | undefined,
+  right: SessionFileFingerprint,
+): boolean {
+  return Boolean(left?.exists && right.exists && left.dev === right.dev && left.ino === right.ino);
+}
+
 async function changeLooksLikeOwnedPromptOutput(params: {
   sessionFile: string;
   previous: SessionFileFingerprint | undefined;
@@ -195,6 +205,7 @@ async function changeLooksLikeOwnedPromptOutput(params: {
   if (
     !params.previous?.exists ||
     !params.current.exists ||
+    !sameSessionFileIdentity(params.previous, params.current) ||
     params.current.size < params.previous.size
   ) {
     return false;
@@ -312,9 +323,20 @@ export function installSessionEventWriteLock(params: {
   session: unknown;
   withSessionWriteLock: <T>(run: () => Promise<T> | T) => Promise<T>;
 }): void {
-  installAwaitableSessionEventQueue(params.session);
   const session = params.session as SessionEventProcessor;
-  const original = session["_processAgentEvent"];
+  const handlerKey =
+    typeof session["_processAgentEvent"] === "function"
+      ? "_processAgentEvent"
+      : typeof session["_handleAgentEvent"] === "function"
+        ? "_handleAgentEvent"
+        : undefined;
+  if (!handlerKey) {
+    return;
+  }
+  if (handlerKey === "_processAgentEvent") {
+    installAwaitableSessionEventQueue(params.session);
+  }
+  const original = session[handlerKey];
   if (
     typeof original !== "function" ||
     session["__openclawSessionEventWriteLockInstalled"] === true
@@ -322,15 +344,18 @@ export function installSessionEventWriteLock(params: {
     return;
   }
   session["__openclawSessionEventWriteLockInstalled"] = true;
-  session["_processAgentEvent"] = async function lockedProcessAgentEvent(
-    this: unknown,
-    event: unknown,
-  ) {
+  if (handlerKey === "_handleAgentEvent") {
+    session["_disconnectFromAgent"]?.();
+  }
+  session[handlerKey] = async function lockedProcessAgentEvent(this: unknown, event: unknown) {
     if (!eventMayReachTranscriptWriters(session, event)) {
       return await original.call(this, event);
     }
     return await params.withSessionWriteLock(async () => await original.call(this, event));
   };
+  if (handlerKey === "_handleAgentEvent") {
+    session["_reconnectToAgent"]?.();
+  }
 }
 
 export function installSessionExternalHookWriteLock(params: {
