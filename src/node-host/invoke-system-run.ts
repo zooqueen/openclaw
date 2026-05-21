@@ -9,6 +9,8 @@ import { detectPolicyInlineEval } from "../infra/command-analysis/policy.js";
 import {
   addDurableCommandApproval,
   hasDurableExecApproval,
+  maxAsk,
+  minSecurity,
   persistAllowAlwaysPatterns,
   recordAllowlistMatchesUse,
   resolveApprovalAuditTrustPath,
@@ -453,8 +455,8 @@ async function evaluateSystemRunPolicyPhase(
     security: configuredSecurity,
     ask: configuredAsk,
   });
-  const security = approvals.agent.security;
-  const ask = approvals.agent.ask;
+  const security = minSecurity(configuredSecurity, approvals.agent.security);
+  const ask = maxAsk(configuredAsk, approvals.agent.ask);
   const autoAllowSkills = approvals.agent.autoAllowSkills;
   const { safeBins, safeBinProfiles, trustedSafeBinDirs } = resolveExecSafeBinRuntimePolicy({
     global: cfg.tools?.exec,

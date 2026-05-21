@@ -676,6 +676,95 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     }
   });
 
+  it("intersects normalized auto mode with looser node approvals", async () => {
+    const tmp = createFixtureDir("openclaw-system-run-auto-approval-intersection-");
+    const executablePath = createTempExecutable({ dir: tmp, name: "read-info" });
+    setRuntimeConfigSnapshot({
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+    });
+    try {
+      await withTempApprovalsHome({
+        approvals: {
+          version: 1,
+          defaults: {
+            security: "full",
+            ask: "off",
+            askFallback: "full",
+          },
+          agents: {},
+        },
+        run: async () => {
+          const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+            decision: "allow-once",
+            rationale: "node script reads fixture metadata only",
+            risk: "low",
+          }));
+          const runCommand = vi.fn(async () => createLocalRunResult("auto-reviewed"));
+          const invoke = await runSystemInvoke({
+            preferMacAppExecHost: false,
+            command: [executablePath],
+            cwd: tmp,
+            runCommand,
+            resolveExecSecurity: resolveProductionExecSecurity,
+            resolveExecAsk: resolveProductionExecAsk,
+            autoReviewer,
+          });
+
+          expect(autoReviewer).toHaveBeenCalledTimes(1);
+          expect(runCommand).toHaveBeenCalledTimes(1);
+          expectInvokeOk(invoke.sendInvokeResult, { payloadContains: "auto-reviewed" });
+        },
+      });
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
+
+  it("intersects normalized deny mode with looser node approvals", async () => {
+    setRuntimeConfigSnapshot({
+      tools: {
+        exec: {
+          mode: "deny",
+        },
+      },
+    });
+    try {
+      await withTempApprovalsHome({
+        approvals: {
+          version: 1,
+          defaults: {
+            security: "full",
+            ask: "off",
+            askFallback: "full",
+          },
+          agents: {},
+        },
+        run: async () => {
+          const runCommand = vi.fn(async () => createLocalRunResult("should-not-run"));
+          const invoke = await runSystemInvoke({
+            preferMacAppExecHost: false,
+            command: ["echo", "blocked"],
+            runCommand,
+            resolveExecSecurity: resolveProductionExecSecurity,
+            resolveExecAsk: resolveProductionExecAsk,
+          });
+
+          expect(runCommand).not.toHaveBeenCalled();
+          expectInvokeErrorMessage(invoke.sendInvokeResult, {
+            message: "SYSTEM_RUN_DISABLED: security=deny",
+            exact: true,
+          });
+        },
+      });
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
+
   it("requires mutable script binding for auto-reviewed system.run commands", async () => {
     const tmp = createFixtureDir("openclaw-system-run-auto-script-binding-");
     const scriptPath = path.join(tmp, "read-info.js");
