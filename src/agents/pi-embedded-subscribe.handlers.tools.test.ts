@@ -1282,6 +1282,9 @@ describe("messaging tool media URL tracking", () => {
         details: {
           deliveryStatus: "sent",
           sourceReplySink: "internal-ui",
+          sourceReplyMediaUrl: "/workspace/reply.png",
+          sourceReplyMediaUrls: ["/workspace/reply.png"],
+          sourceReplyAudioAsVoice: true,
         },
       },
     });
@@ -1325,8 +1328,8 @@ describe("messaging tool media URL tracking", () => {
     expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([
       {
         text: "hello",
-        mediaUrl: "/tmp/reply.png",
-        mediaUrls: ["/tmp/reply.png"],
+        mediaUrl: "/workspace/reply.png",
+        mediaUrls: ["/workspace/reply.png"],
         audioAsVoice: true,
       },
     ]);

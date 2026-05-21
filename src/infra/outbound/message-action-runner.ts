@@ -731,7 +731,12 @@ async function handleInternalSourceReplySendAction(
     to: "current-run",
     handledBy: "internal-source",
     payload,
-    toolResult: buildInternalSourceReplyToolResult(payload),
+    toolResult: buildInternalSourceReplyToolResult({
+      ...payload,
+      ...(sourceReply.mediaUrl ? { sourceReplyMediaUrl: sourceReply.mediaUrl } : {}),
+      ...(sourceReply.mediaUrls?.length ? { sourceReplyMediaUrls: sourceReply.mediaUrls } : {}),
+      ...(sourceReply.asVoice ? { sourceReplyAudioAsVoice: true } : {}),
+    }),
     dryRun,
   };
 }
@@ -743,6 +748,9 @@ function buildInternalSourceReplyToolResult(payload: {
   target: string;
   sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   sourceReplySink?: "internal-ui";
+  sourceReplyMediaUrl?: string;
+  sourceReplyMediaUrls?: string[];
+  sourceReplyAudioAsVoice?: boolean;
   dryRun: boolean;
 }): AgentToolResult<{
   status: string;
@@ -751,6 +759,9 @@ function buildInternalSourceReplyToolResult(payload: {
   target: string;
   sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   sourceReplySink?: "internal-ui";
+  sourceReplyMediaUrl?: string;
+  sourceReplyMediaUrls?: string[];
+  sourceReplyAudioAsVoice?: boolean;
   dryRun: boolean;
 }> {
   const action = payload.dryRun ? "Prepared" : "Sent";
@@ -771,6 +782,11 @@ function buildInternalSourceReplyToolResult(payload: {
         ? { sourceReplyDeliveryMode: payload.sourceReplyDeliveryMode }
         : {}),
       ...(payload.sourceReplySink ? { sourceReplySink: payload.sourceReplySink } : {}),
+      ...(payload.sourceReplyMediaUrl ? { sourceReplyMediaUrl: payload.sourceReplyMediaUrl } : {}),
+      ...(payload.sourceReplyMediaUrls?.length
+        ? { sourceReplyMediaUrls: payload.sourceReplyMediaUrls }
+        : {}),
+      ...(payload.sourceReplyAudioAsVoice ? { sourceReplyAudioAsVoice: true } : {}),
       dryRun: payload.dryRun,
     },
   };

@@ -185,10 +185,70 @@ function toolResultHasInternalSourceReplyDelivery(result: unknown): boolean {
   return hasInternalSink && isSent && !isDryRun;
 }
 
+function collectInternalSourceReplyMetadata(result: unknown): {
+  mediaUrl?: string;
+  mediaUrls: string[];
+  audioAsVoice?: boolean;
+} {
+  const mediaUrls: string[] = [];
+  const seen = new Set<string>();
+  let mediaUrl: string | undefined;
+  let audioAsVoice = false;
+  const pushMedia = (value: unknown) => {
+    const raw = readStringValue(value);
+    if (!raw?.trim() || seen.has(raw)) {
+      return;
+    }
+    seen.add(raw);
+    mediaUrls.push(raw);
+    mediaUrl ??= raw;
+  };
+  const visit = (value: unknown, depth = 0): void => {
+    if (depth > 4 || value == null) {
+      return;
+    }
+    if (typeof value === "string") {
+      const parsed = parseJsonRecord(value);
+      if (parsed) {
+        visit(parsed, depth + 1);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (!isPlainRecord(value)) {
+      return;
+    }
+    pushMedia(value.sourceReplyMediaUrl);
+    if (Array.isArray(value.sourceReplyMediaUrls)) {
+      value.sourceReplyMediaUrls.forEach(pushMedia);
+    }
+    if (value.sourceReplyAudioAsVoice === true) {
+      audioAsVoice = true;
+    }
+    for (const key of ["details", "payload", "result", "results", "sendResult", "toolResult"]) {
+      visit(value[key], depth + 1);
+    }
+  };
+  visit(result);
+  return {
+    ...(mediaUrl ? { mediaUrl } : {}),
+    mediaUrls,
+    ...(audioAsVoice ? { audioAsVoice: true } : {}),
+  };
+}
+
 function buildSourceReplyPayloadFromMessageToolSend(params: {
   args: Record<string, unknown>;
   pendingText?: string;
   mediaUrls: string[];
+  resultSourceReply?: {
+    mediaUrl?: string;
+    mediaUrls: string[];
+    audioAsVoice?: boolean;
+  };
 }): MessagingToolSourceReplyPayload | undefined {
   const args = sanitizeMessageToolSendArgs(params.args);
   const pendingText = params.pendingText ? sanitizeMessageToolText(params.pendingText) : undefined;
@@ -205,20 +265,32 @@ function buildSourceReplyPayloadFromMessageToolSend(params: {
   if (text?.trim()) {
     payload.text = text;
   }
-  const mediaUrls = [
-    ...(params.mediaUrls.length > 0 ? params.mediaUrls : []),
-    ...(parsedText?.mediaUrl ? [parsedText.mediaUrl] : []),
-    ...(parsedText?.mediaUrls ?? []),
-  ];
+  const hasResultSourceReplyMedia =
+    Boolean(params.resultSourceReply?.mediaUrl) ||
+    (params.resultSourceReply?.mediaUrls.length ?? 0) > 0;
+  const mediaUrls = hasResultSourceReplyMedia
+    ? (params.resultSourceReply?.mediaUrls ?? [])
+    : [
+        ...(params.mediaUrls.length > 0 ? params.mediaUrls : []),
+        ...(parsedText?.mediaUrl ? [parsedText.mediaUrl] : []),
+        ...(parsedText?.mediaUrls ?? []),
+      ];
   const mediaUrl =
-    readStringValue(args.mediaUrl) ?? readStringValue(args.media_url) ?? parsedText?.mediaUrl;
+    params.resultSourceReply?.mediaUrl ??
+    readStringValue(args.mediaUrl) ??
+    readStringValue(args.media_url) ??
+    parsedText?.mediaUrl;
   if (mediaUrls.length > 0) {
     payload.mediaUrls = Array.from(new Set(mediaUrls));
   }
   if (mediaUrl?.trim()) {
     payload.mediaUrl = mediaUrl;
   }
-  if (args.audioAsVoice === true || parsedText?.audioAsVoice === true) {
+  if (
+    params.resultSourceReply?.audioAsVoice === true ||
+    args.audioAsVoice === true ||
+    parsedText?.audioAsVoice === true
+  ) {
     payload.audioAsVoice = true;
   }
   if (args.presentation !== undefined) {
@@ -1171,6 +1243,7 @@ export async function handleToolExecutionEnd(
         args: startArgs,
         pendingText,
         mediaUrls: committedMediaUrls,
+        resultSourceReply: collectInternalSourceReplyMetadata(result),
       });
       if (sourceReplyPayload) {
         ctx.state.messagingToolSourceReplyPayloads.push(sourceReplyPayload);

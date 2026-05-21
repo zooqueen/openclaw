@@ -93,6 +93,7 @@ describe("runMessageAction send validation", () => {
       action: "send",
       params: {
         message: "hello from codex",
+        mediaUrl: "file:///reply.png",
       },
       toolContext: {
         currentChannelProvider: "webchat",
@@ -113,6 +114,8 @@ describe("runMessageAction send validation", () => {
         sourceReplySink: "internal-ui",
         sourceReply: {
           text: "hello from codex",
+          mediaUrl: "file:///reply.png",
+          mediaUrls: ["file:///reply.png"],
         },
       },
     });
@@ -132,6 +135,8 @@ describe("runMessageAction send validation", () => {
       target: "current-run",
       sourceReplyDeliveryMode: "message_tool_only",
       sourceReplySink: "internal-ui",
+      sourceReplyMediaUrl: "file:///reply.png",
+      sourceReplyMediaUrls: ["file:///reply.png"],
       dryRun: false,
     });
     expect(JSON.stringify(result.toolResult)).not.toContain("hello from codex");
