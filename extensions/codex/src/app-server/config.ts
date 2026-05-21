@@ -405,6 +405,8 @@ export function resolveCodexAppServerRuntimeOptions(
   assertCodexAppServerAllowedForOpenClawExecMode(execMode);
   const explicitPolicyMode =
     resolvePolicyMode(config.mode) ?? resolvePolicyMode(env.OPENCLAW_CODEX_APP_SERVER_MODE);
+  const configuredSandbox =
+    resolveSandbox(config.sandbox) ?? resolveSandbox(env.OPENCLAW_CODEX_APP_SERVER_SANDBOX);
   const normalizedPolicyMode = resolveCodexPolicyModeForOpenClawExecMode(execMode);
   const forceUserReviewer = execMode !== undefined && execMode !== "auto" && execMode !== "full";
   const forceDangerFullAccessSandbox =
@@ -431,7 +433,10 @@ export function resolveCodexAppServerRuntimeOptions(
           approvalPolicy: defaultPolicy?.approvalPolicy ?? "on-request",
           sandbox: forceDangerFullAccessSandbox
             ? "danger-full-access"
-            : (defaultPolicy?.sandbox ?? "workspace-write"),
+            : selectForcedUserApprovalSandbox({
+                configuredSandbox,
+                defaultSandbox: defaultPolicy?.sandbox,
+              }),
           approvalsReviewer: defaultPolicy?.approvalsReviewer ?? "user",
         }
       : undefined;
@@ -476,8 +481,7 @@ export function resolveCodexAppServerRuntimeOptions(
       (policyMode === "guardian" ? "on-request" : "never"),
     sandbox:
       forcedPolicy?.sandbox ??
-      resolveSandbox(config.sandbox) ??
-      resolveSandbox(env.OPENCLAW_CODEX_APP_SERVER_SANDBOX) ??
+      configuredSandbox ??
       defaultPolicy?.sandbox ??
       (policyMode === "guardian" ? "workspace-write" : "danger-full-access"),
     approvalsReviewer:
@@ -977,6 +981,16 @@ function selectUserApprovalsReviewer(
     return "user";
   }
   throw new Error("tools.exec.mode=ask requires Codex app-server user approvals");
+}
+
+function selectForcedUserApprovalSandbox(params: {
+  configuredSandbox?: CodexAppServerSandboxMode;
+  defaultSandbox?: CodexAppServerSandboxMode;
+}): CodexAppServerSandboxMode {
+  if (params.configuredSandbox === "read-only" || params.defaultSandbox === "read-only") {
+    return "read-only";
+  }
+  return params.defaultSandbox ?? "workspace-write";
 }
 
 function selectGuardianSandbox(
