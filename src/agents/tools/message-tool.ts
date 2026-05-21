@@ -28,7 +28,6 @@ import {
   parseThreadSessionSuffix,
 } from "../../routing/session-key.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
-import { stripReasoningTagsFromText } from "../../shared/text/reasoning-tags.js";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { listAllChannelSupportedActions, listChannelSupportedActions } from "../channel-tools.js";
@@ -36,6 +35,7 @@ import { channelTargetSchema, channelTargetsSchema, stringEnum } from "../schema
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import { resolveGatewayOptions } from "./gateway.js";
+import { sanitizeMessageToolSendArgs } from "./message-tool-sanitize.js";
 
 const AllMessageActions = CHANNEL_MESSAGE_ACTION_NAMES;
 const MESSAGE_TOOL_THREAD_READ_HINT =
@@ -54,95 +54,12 @@ function actionNeedsExplicitTarget(action: ChannelMessageActionName): boolean {
   return EXPLICIT_TARGET_ACTIONS.has(action);
 }
 
-function stripFormattedReasoningMessage(text: string): string {
-  const stripped = stripReasoningTagsFromText(text);
-  const lines = stripped.split(/\r?\n/u);
-  const prefix = lines[0]?.trim();
-  if (prefix !== "Reasoning:" && !/^Thinking\.{0,3}$/u.test(prefix ?? "")) {
-    return stripped;
-  }
-  if (/^Thinking\.{0,3}$/u.test(prefix ?? "")) {
-    const firstBodyLine = lines.slice(1).find((line) => line.trim());
-    const trimmedBodyLine = firstBodyLine?.trim() ?? "";
-    if (
-      !trimmedBodyLine ||
-      !(
-        trimmedBodyLine.startsWith("_") &&
-        trimmedBodyLine.endsWith("_") &&
-        trimmedBodyLine.length >= 2
-      )
-    ) {
-      return stripped;
-    }
-  }
-
-  let index = 1;
-  while (index < lines.length) {
-    const trimmed = lines[index]?.trim() ?? "";
-    if (!trimmed || (trimmed.startsWith("_") && trimmed.endsWith("_") && trimmed.length >= 2)) {
-      index += 1;
-      continue;
-    }
-    break;
-  }
-  return lines.slice(index).join("\n").trim();
-}
-
 function normalizeToolCallIdForIdempotencyKey(toolCallId: unknown): string | undefined {
   const value = normalizeOptionalString(toolCallId);
   if (!value) {
     return undefined;
   }
   return value.replace(/[^A-Za-z0-9._:-]+/gu, "_");
-}
-
-function sanitizePresentationTextFields(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-  const presentation = { ...(value as Record<string, unknown>) };
-  if (typeof presentation.title === "string") {
-    presentation.title = stripFormattedReasoningMessage(presentation.title);
-  }
-  if (Array.isArray(presentation.blocks)) {
-    presentation.blocks = presentation.blocks.map((block) => {
-      if (!block || typeof block !== "object" || Array.isArray(block)) {
-        return block;
-      }
-      const sanitizedBlock = { ...(block as Record<string, unknown>) };
-      for (const field of ["text", "placeholder"]) {
-        if (typeof sanitizedBlock[field] === "string") {
-          sanitizedBlock[field] = stripFormattedReasoningMessage(sanitizedBlock[field]);
-        }
-      }
-      if (Array.isArray(sanitizedBlock.buttons)) {
-        sanitizedBlock.buttons = sanitizedBlock.buttons.map((button) => {
-          if (!button || typeof button !== "object" || Array.isArray(button)) {
-            return button;
-          }
-          const sanitizedButton = { ...(button as Record<string, unknown>) };
-          if (typeof sanitizedButton.label === "string") {
-            sanitizedButton.label = stripFormattedReasoningMessage(sanitizedButton.label);
-          }
-          return sanitizedButton;
-        });
-      }
-      if (Array.isArray(sanitizedBlock.options)) {
-        sanitizedBlock.options = sanitizedBlock.options.map((option) => {
-          if (!option || typeof option !== "object" || Array.isArray(option)) {
-            return option;
-          }
-          const sanitizedOption = { ...(option as Record<string, unknown>) };
-          if (typeof sanitizedOption.label === "string") {
-            sanitizedOption.label = stripFormattedReasoningMessage(sanitizedOption.label);
-          }
-          return sanitizedOption;
-        });
-      }
-      return sanitizedBlock;
-    });
-  }
-  return presentation;
 }
 
 function buildRoutingSchema() {
@@ -953,17 +870,9 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         err.name = "AbortError";
         throw err;
       }
-      // Shallow-copy so we don't mutate the original event args (used for logging/dedup).
-      const params = { ...(args as Record<string, unknown>) };
-
       // Strip reasoning tags from text fields — models may include <think>…</think>
       // in tool arguments, and the messaging tool send path has no other tag filtering.
-      for (const field of ["text", "content", "message", "caption"]) {
-        if (typeof params[field] === "string") {
-          params[field] = stripFormattedReasoningMessage(params[field]);
-        }
-      }
-      params.presentation = sanitizePresentationTextFields(params.presentation);
+      const params = sanitizeMessageToolSendArgs(args as Record<string, unknown>);
 
       const action = readStringParam(params, "action", {
         required: true,

@@ -1332,6 +1332,61 @@ describe("messaging tool media URL tracking", () => {
     ]);
   });
 
+  it("sanitizes internal UI source reply mirrors like live message sends", async () => {
+    const { ctx } = createTestContext();
+    ctx.params.sourceReplyDeliveryMode = "message_tool_only";
+
+    await handleToolExecutionStart(ctx, {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-sanitized-source-reply",
+      args: {
+        action: "send",
+        message: "<think>hidden chain</think>visible reply",
+        presentation: {
+          title: "<think>hidden title</think>Visible title",
+          blocks: [
+            { type: "text", text: "<think>hidden block</think>Visible block" },
+            {
+              type: "buttons",
+              buttons: [{ label: "<think>hidden label</think>Visible label", value: "ok" }],
+            },
+          ],
+        },
+      },
+    });
+
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-sanitized-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "sent",
+          sourceReplySink: "internal-ui",
+        },
+      },
+    });
+
+    expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([
+      {
+        text: "visible reply",
+        presentation: {
+          title: "Visible title",
+          blocks: [
+            { type: "text", text: "Visible block" },
+            {
+              type: "buttons",
+              buttons: [{ label: "Visible label", value: "ok" }],
+            },
+          ],
+        },
+      },
+    ]);
+    expect(JSON.stringify(ctx.state.messagingToolSourceReplyPayloads)).not.toContain("hidden");
+  });
+
   it("does not record routed or dry-run source replies for transcript mirroring", async () => {
     const { ctx } = createTestContext();
     ctx.params.sourceReplyDeliveryMode = "message_tool_only";

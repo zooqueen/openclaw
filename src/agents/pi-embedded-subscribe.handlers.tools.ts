@@ -49,6 +49,10 @@ import {
 import { inferToolMetaFromArgs } from "./pi-embedded-utils.js";
 import { buildToolMutationState, isSameToolMutationAction } from "./tool-mutation.js";
 import { normalizeToolName } from "./tool-policy.js";
+import {
+  sanitizeMessageToolSendArgs,
+  sanitizeMessageToolText,
+} from "./tools/message-tool-sanitize.js";
 
 type ExecApprovalReplyModule = typeof import("../infra/exec-approval-reply.js");
 type HookRunnerGlobalModule = typeof import("../plugins/hook-runner-global.js");
@@ -186,12 +190,14 @@ function buildSourceReplyPayloadFromMessageToolSend(params: {
   pendingText?: string;
   mediaUrls: string[];
 }): MessagingToolSourceReplyPayload | undefined {
+  const args = sanitizeMessageToolSendArgs(params.args);
+  const pendingText = params.pendingText ? sanitizeMessageToolText(params.pendingText) : undefined;
   const rawText =
-    params.pendingText ??
-    readStringValue(params.args.text) ??
-    readStringValue(params.args.message) ??
-    readStringValue(params.args.content) ??
-    readStringValue(params.args.caption);
+    pendingText ??
+    readStringValue(args.text) ??
+    readStringValue(args.message) ??
+    readStringValue(args.content) ??
+    readStringValue(args.caption);
   const parsedText =
     rawText === undefined ? undefined : parseReplyDirectives(rawText.replaceAll("\\n", "\n"));
   const text = parsedText?.text ?? rawText;
@@ -205,29 +211,26 @@ function buildSourceReplyPayloadFromMessageToolSend(params: {
     ...(parsedText?.mediaUrls ?? []),
   ];
   const mediaUrl =
-    readStringValue(params.args.mediaUrl) ??
-    readStringValue(params.args.media_url) ??
-    parsedText?.mediaUrl;
+    readStringValue(args.mediaUrl) ?? readStringValue(args.media_url) ?? parsedText?.mediaUrl;
   if (mediaUrls.length > 0) {
     payload.mediaUrls = Array.from(new Set(mediaUrls));
   }
   if (mediaUrl?.trim()) {
     payload.mediaUrl = mediaUrl;
   }
-  if (params.args.audioAsVoice === true || parsedText?.audioAsVoice === true) {
+  if (args.audioAsVoice === true || parsedText?.audioAsVoice === true) {
     payload.audioAsVoice = true;
   }
-  if (params.args.presentation !== undefined) {
-    payload.presentation = params.args
-      .presentation as MessagingToolSourceReplyPayload["presentation"];
+  if (args.presentation !== undefined) {
+    payload.presentation = args.presentation as MessagingToolSourceReplyPayload["presentation"];
   }
-  if (params.args.interactive !== undefined) {
-    payload.interactive = params.args.interactive as MessagingToolSourceReplyPayload["interactive"];
+  if (args.interactive !== undefined) {
+    payload.interactive = args.interactive as MessagingToolSourceReplyPayload["interactive"];
   }
-  if (params.args.channelData !== undefined) {
-    payload.channelData = params.args.channelData as MessagingToolSourceReplyPayload["channelData"];
+  if (args.channelData !== undefined) {
+    payload.channelData = args.channelData as MessagingToolSourceReplyPayload["channelData"];
   }
-  const idempotencyKey = readStringValue(params.args.idempotencyKey);
+  const idempotencyKey = readStringValue(args.idempotencyKey);
   if (idempotencyKey?.trim()) {
     payload.idempotencyKey = idempotencyKey;
   }
