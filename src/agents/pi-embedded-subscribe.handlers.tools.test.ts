@@ -1391,6 +1391,59 @@ describe("messaging tool media URL tracking", () => {
     expect(JSON.stringify(ctx.state.messagingToolSourceReplyPayloads)).not.toContain("hidden");
   });
 
+  it("synthesizes durable text for structured-only internal UI source reply mirrors", async () => {
+    const { ctx } = createTestContext();
+    ctx.params.sourceReplyDeliveryMode = "message_tool_only";
+
+    await handleToolExecutionStart(ctx, {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-structured-source-reply",
+      args: {
+        action: "send",
+        presentation: {
+          title: "Deploy ready",
+          blocks: [
+            { type: "text", text: "Pick a lane" },
+            {
+              type: "buttons",
+              buttons: [{ label: "Approve", value: "approve" }],
+            },
+          ],
+        },
+      },
+    });
+
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-structured-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "sent",
+          sourceReplySink: "internal-ui",
+        },
+      },
+    });
+
+    expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([
+      {
+        text: "Deploy ready\nPick a lane\nApprove",
+        presentation: {
+          title: "Deploy ready",
+          blocks: [
+            { type: "text", text: "Pick a lane" },
+            {
+              type: "buttons",
+              buttons: [{ label: "Approve", value: "approve" }],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it("does not record routed or dry-run source replies for transcript mirroring", async () => {
     const { ctx } = createTestContext();
     ctx.params.sourceReplyDeliveryMode = "message_tool_only";

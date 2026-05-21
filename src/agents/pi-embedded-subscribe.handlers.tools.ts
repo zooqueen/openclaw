@@ -240,6 +240,56 @@ function collectInternalSourceReplyMetadata(result: unknown): {
   };
 }
 
+function collectStructuredReplyTextParts(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  const parts: string[] = [];
+  const pushText = (text: unknown) => {
+    const value = readStringValue(text)?.trim();
+    if (value) {
+      parts.push(value);
+    }
+  };
+  pushText(record.title);
+  if (!Array.isArray(record.blocks)) {
+    return parts;
+  }
+  for (const block of record.blocks) {
+    if (!block || typeof block !== "object" || Array.isArray(block)) {
+      continue;
+    }
+    const blockRecord = block as Record<string, unknown>;
+    pushText(blockRecord.text);
+    pushText(blockRecord.placeholder);
+    if (Array.isArray(blockRecord.buttons)) {
+      for (const button of blockRecord.buttons) {
+        if (button && typeof button === "object" && !Array.isArray(button)) {
+          pushText((button as Record<string, unknown>).label);
+        }
+      }
+    }
+    if (Array.isArray(blockRecord.options)) {
+      for (const option of blockRecord.options) {
+        if (option && typeof option === "object" && !Array.isArray(option)) {
+          pushText((option as Record<string, unknown>).label);
+        }
+      }
+    }
+  }
+  return parts;
+}
+
+function synthesizeStructuredSourceReplyText(args: Record<string, unknown>): string | undefined {
+  const parts = [
+    ...collectStructuredReplyTextParts(args.presentation),
+    ...collectStructuredReplyTextParts(args.interactive),
+  ];
+  const uniqueParts = Array.from(new Set(parts));
+  return uniqueParts.length > 0 ? uniqueParts.join("\n") : undefined;
+}
+
 function buildSourceReplyPayloadFromMessageToolSend(params: {
   args: Record<string, unknown>;
   pendingText?: string;
@@ -299,6 +349,9 @@ function buildSourceReplyPayloadFromMessageToolSend(params: {
   }
   if (args.interactive !== undefined) {
     payload.interactive = args.interactive as MessagingToolSourceReplyPayload["interactive"];
+  }
+  if (!payload.text && (payload.presentation || payload.interactive)) {
+    payload.text = synthesizeStructuredSourceReplyText(args);
   }
   if (args.channelData !== undefined) {
     payload.channelData = args.channelData as MessagingToolSourceReplyPayload["channelData"];
