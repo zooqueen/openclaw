@@ -501,6 +501,51 @@ describe("runCodexAppServerSideQuestion", () => {
     expect(forkParams?.approvalsReviewer).toBe("user");
   });
 
+  it("applies session exec mode policy when forking side threads", async () => {
+    const client = createFakeClient();
+    getSharedCodexAppServerClientMock.mockResolvedValue(client);
+    readCodexAppServerBindingMock.mockResolvedValueOnce({
+      schemaVersion: 1,
+      threadId: "parent-thread",
+      sessionFile: "/tmp/session-1.jsonl",
+      cwd: "/tmp/workspace",
+      authProfileId: "openai-codex:work",
+      model: "gpt-5.5",
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    });
+
+    await runCodexAppServerSideQuestion(
+      sideParams({
+        sessionKey: "agent:main:session-1",
+        cfg: {
+          tools: {
+            exec: {
+              mode: "full",
+            },
+          },
+        } as never,
+        sessionEntry: {
+          sessionId: "session-1",
+          sessionFile: "/tmp/session-1.jsonl",
+          updatedAt: 1,
+          execMode: "ask",
+        },
+      }),
+    );
+
+    const forkParams = mockCall(client.request)[1] as Record<string, unknown> | undefined;
+    expect(forkParams?.approvalPolicy).toBe("on-request");
+    expect(forkParams?.sandbox).toBe("workspace-write");
+    expect(forkParams?.approvalsReviewer).toBe("user");
+    const [toolOptions] = mockCall(createOpenClawCodingToolsMock);
+    expect(toolOptions).toMatchObject({
+      exec: {
+        mode: "ask",
+      },
+    });
+  });
+
   it("installs native hook relay config for opted-in side threads", async () => {
     const client = createFakeClient();
     let relayIdDuringFork: string | undefined;

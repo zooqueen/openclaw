@@ -83,6 +83,17 @@ const CODEX_SIDE_NATIVE_HOOK_RELAY_TTL_GRACE_MS = 5 * 60_000;
 const CODEX_SIDE_NATIVE_HOOK_RELAY_STARTUP_REQUEST_COUNT = 3;
 const CODEX_SIDE_NATIVE_HOOK_RELAY_EVENTS_WITH_APP_SERVER_APPROVALS =
   CODEX_NATIVE_HOOK_RELAY_EVENTS.filter((event) => event !== "permission_request");
+type SideExecTarget = "auto" | "sandbox" | "gateway" | "node";
+type SideExecMode = "deny" | "allowlist" | "ask" | "auto" | "full";
+type SideExecSecurity = "deny" | "allowlist" | "full";
+type SideExecAsk = "off" | "on-miss" | "always";
+type SideSessionExecOverrides = {
+  host?: SideExecTarget;
+  mode?: SideExecMode;
+  security?: SideExecSecurity;
+  ask?: SideExecAsk;
+  node?: string;
+};
 const SIDE_BOUNDARY_PROMPT = `Side conversation boundary.
 
 Everything before this boundary is inherited history from the parent thread. It is reference context only. It is not your current task.
@@ -107,6 +118,55 @@ External tools may be available according to this thread's current permissions. 
 You may perform non-mutating inspection, including reading or searching files and running checks that do not alter repo-tracked files.
 
 Do not modify files, source, git state, permissions, configuration, workspace state, or external state unless the user explicitly requests that mutation in this side conversation. Do not request escalated permissions or broader sandbox access unless the user explicitly requests a mutation that requires it. If the user explicitly requests a mutation, keep it minimal, local to the request, and avoid disrupting the main thread.`;
+
+function readSideExecTarget(value: string | undefined): SideExecTarget | undefined {
+  return value === "auto" || value === "sandbox" || value === "gateway" || value === "node"
+    ? value
+    : undefined;
+}
+
+function readSideExecMode(value: string | undefined): SideExecMode | undefined {
+  return value === "deny" ||
+    value === "allowlist" ||
+    value === "ask" ||
+    value === "auto" ||
+    value === "full"
+    ? value
+    : undefined;
+}
+
+function readSideExecSecurity(value: string | undefined): SideExecSecurity | undefined {
+  return value === "deny" || value === "allowlist" || value === "full" ? value : undefined;
+}
+
+function readSideExecAsk(value: string | undefined): SideExecAsk | undefined {
+  return value === "off" || value === "on-miss" || value === "always" ? value : undefined;
+}
+
+function readSideExecNode(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function resolveSideSessionExecOverrides(
+  sessionEntry: AgentHarnessSideQuestionParams["sessionEntry"],
+): SideSessionExecOverrides | undefined {
+  const host = readSideExecTarget(sessionEntry.execHost);
+  const mode = readSideExecMode(sessionEntry.execMode);
+  const security = readSideExecSecurity(sessionEntry.execSecurity);
+  const ask = readSideExecAsk(sessionEntry.execAsk);
+  const node = readSideExecNode(sessionEntry.execNode);
+  if (!host && !mode && !security && !ask && !node) {
+    return undefined;
+  }
+  return {
+    ...(host ? { host } : {}),
+    ...(mode ? { mode } : {}),
+    ...(security ? { security } : {}),
+    ...(ask ? { ask } : {}),
+    ...(node ? { node } : {}),
+  };
+}
 
 export async function runCodexAppServerSideQuestion(
   params: AgentHarnessSideQuestionParams,
@@ -151,6 +211,7 @@ export async function runCodexAppServerSideQuestion(
     execPolicy: resolveOpenClawExecPolicyForCodexAppServer({
       config: params.cfg,
       agentId: sessionAgentId,
+      execOverrides: resolveSideSessionExecOverrides(params.sessionEntry),
     }),
   });
   const authProfileId = params.authProfileId ?? binding.authProfileId;
@@ -498,6 +559,7 @@ function buildSideRunAttemptParams(
     workspaceDir: options.cwd,
     authProfileId: options.authProfileId,
     authProfileIdSource: params.authProfileIdSource,
+    execOverrides: resolveSideSessionExecOverrides(params.sessionEntry),
     thinkLevel: params.resolvedThinkLevel ?? "off",
     resolvedReasoningLevel: params.resolvedReasoningLevel,
     authStorage: undefined as never,
@@ -566,6 +628,7 @@ async function createCodexSideToolBridge(input: {
       modelAuthMode: resolveModelAuthMode(runtimeModel.provider, input.params.cfg, undefined, {
         workspaceDir: input.cwd,
       }),
+      exec: resolveSideSessionExecOverrides(input.params.sessionEntry),
       ...(input.params.messageProvider || input.params.messageChannel
         ? { messageProvider: input.params.messageProvider ?? input.params.messageChannel }
         : {}),
