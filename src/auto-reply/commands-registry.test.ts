@@ -638,6 +638,20 @@ describe("commands registry args", () => {
     ).toBeNull();
   });
 
+  it("advertises normalized exec mode options", () => {
+    const exec = requireChatCommand("exec");
+
+    expect(exec.args?.map((arg) => arg.name)).toEqual(["mode", "host", "security", "ask", "node"]);
+    expect(requireCommandArg(exec, "mode").choices).toEqual([
+      "deny",
+      "allowlist",
+      "ask",
+      "auto",
+      "full",
+    ]);
+    expect(requireCommandArg(exec, "host").choices).toEqual(["auto", "sandbox", "gateway", "node"]);
+  });
+
   it("does not show menus when arg already provided", () => {
     const command = createUsageModeCommand();
 

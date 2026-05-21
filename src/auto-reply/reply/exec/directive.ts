@@ -103,6 +103,14 @@ function parseExecDirectiveArgs(raw: string): Omit<
     }
     const parsed = splitToken(token);
     if (!parsed) {
+      const mode = normalizeExecMode(token) ?? undefined;
+      if (mode) {
+        rawExecMode = token;
+        execMode = mode;
+        hasExecOptions = true;
+        consumed = i;
+        continue;
+      }
       break;
     }
     const { key, value } = parsed;

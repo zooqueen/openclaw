@@ -15,10 +15,7 @@ import {
   resolveApprovalAuditTrustPath,
   requiresExecApproval,
 } from "../infra/exec-approvals.js";
-import {
-  defaultExecAutoReviewer,
-  type ExecAutoReviewer,
-} from "../infra/exec-auto-review.js";
+import { defaultExecAutoReviewer, type ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
 import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
@@ -545,6 +542,9 @@ export async function processGatewayAllowlist(
         },
       });
       if (decision.decision === "allow-once") {
+        params.warnings.push(
+          `Exec auto-review allowed once (risk=${decision.risk}): ${decision.rationale}`,
+        );
         recordMatchedAllowlistUse(
           resolveApprovalAuditTrustPath(
             allowlistEval.segments[0]?.resolution ?? null,
@@ -558,15 +558,21 @@ export async function processGatewayAllowlist(
       }
       if (decision.decision === "deny") {
         return {
-          pendingResult: failedTextResult(`exec auto-review denied command: ${decision.rationale}`, {
-            status: "failed",
-            exitCode: null,
-            durationMs: 0,
-            aggregated: "",
-            cwd: params.workdir,
-          }),
+          pendingResult: failedTextResult(
+            `exec auto-review denied command: ${decision.rationale}`,
+            {
+              status: "failed",
+              exitCode: null,
+              durationMs: 0,
+              aggregated: "",
+              cwd: params.workdir,
+            },
+          ),
         };
       }
+      params.warnings.push(
+        `Exec auto-review deferred to human approval (risk=${decision.risk}): ${decision.rationale}`,
+      );
     }
 
     const requestArgs = buildDefaultExecApprovalRequestArgs({

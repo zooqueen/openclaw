@@ -88,6 +88,13 @@ describe("parseSlashCommand", () => {
     expectParsedSlash("/tools verbose", { name: "tools" }, "verbose");
   });
 
+  it("includes exec mode in the shared slash menu args", () => {
+    expectRecordFields(requireCommandByName("exec"), "exec command", {
+      args: "[mode] [host] [security] [ask] [node]",
+      argOptions: ["deny", "allowlist", "ask", "auto", "full"],
+    });
+  });
+
   it("parses slash aliases through the shared registry", () => {
     const exportCommand = requireCommandByKey("export-session");
     expectRecordFields(exportCommand, "export-session command", {

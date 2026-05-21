@@ -589,6 +589,7 @@ EOF`,
   });
 
   it("auto-reviews simple read-only approval misses without prompting", async () => {
+    const warnings: string[] = [];
     evaluateShellAllowlistMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
@@ -603,10 +604,43 @@ EOF`,
       command: "pwd",
       ask: "on-miss",
       autoReview: true,
+      warnings,
     });
 
     expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
     expect(result).toEqual({ execCommandOverride: undefined, allowWithoutEnforcedCommand: true });
+    expect(warnings).toEqual(["Exec auto-review allowed once (risk=low): allowed"]);
+  });
+
+  it("shows reviewer rationale when auto-review defers to human approval", async () => {
+    const warnings: string[] = [];
+    defaultExecAutoReviewerMock.mockResolvedValueOnce({
+      decision: "ask-human",
+      risk: "unknown",
+      rationale: "command intent is unclear",
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [{ resolution: null, argv: ["./script"] }],
+      segmentAllowlistEntries: [],
+    });
+    hasDurableExecApprovalMock.mockReturnValue(false);
+    requiresExecApprovalMock.mockReturnValue(true);
+
+    const result = await runGatewayAllowlist({
+      command: "./script",
+      ask: "on-miss",
+      autoReview: true,
+      warnings,
+    });
+
+    expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+    expect(result.pendingResult?.details.status).toBe("approval-pending");
+    expect(warnings).toEqual([
+      "Exec auto-review deferred to human approval (risk=unknown): command intent is unclear",
+    ]);
   });
 
   it("returns a failed result when auto-review denies an approval miss", async () => {
@@ -637,6 +671,58 @@ EOF`,
     expect(firstContent?.type).toBe("text");
     expect(firstContent?.type === "text" ? firstContent.text : "").toContain(
       "exec auto-review denied command: command mutates files",
+    );
+  });
+
+  it("does not run ssh-keygen when auto-review denies SSH key generation", async () => {
+    defaultExecAutoReviewerMock.mockResolvedValueOnce({
+      decision: "deny",
+      risk: "high",
+      rationale: "command creates SSH key material",
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [
+        {
+          resolution: null,
+          argv: [
+            "ssh-keygen",
+            "-t",
+            "ed25519",
+            "-N",
+            "",
+            "-f",
+            "~/.ssh/openclaw-pr70543-guard-test",
+          ],
+        },
+      ],
+      segmentAllowlistEntries: [],
+    });
+    hasDurableExecApprovalMock.mockReturnValue(false);
+    requiresExecApprovalMock.mockReturnValue(true);
+
+    const result = await runGatewayAllowlist({
+      command: "ssh-keygen -t ed25519 -N '' -f ~/.ssh/openclaw-pr70543-guard-test",
+      ask: "on-miss",
+      autoReview: true,
+    });
+
+    expect(defaultExecAutoReviewerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        argv: ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", "~/.ssh/openclaw-pr70543-guard-test"],
+        host: "gateway",
+        reason: "approval-required",
+      }),
+    );
+    expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
+    expect(runExecProcessMock).not.toHaveBeenCalled();
+    expect(result.pendingResult?.details.status).toBe("failed");
+    const firstContent = result.pendingResult?.content[0];
+    expect(firstContent?.type).toBe("text");
+    expect(firstContent?.type === "text" ? firstContent.text : "").toContain(
+      "exec auto-review denied command: command creates SSH key material",
     );
   });
 

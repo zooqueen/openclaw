@@ -22,6 +22,7 @@ import {
   type ExecSecurity,
   type SkillBinTrustEntry,
 } from "../infra/exec-approvals.js";
+import type { ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { ExecHostRequest, ExecHostResponse, ExecHostRunResult } from "../infra/exec-host.js";
 import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
 import {
@@ -146,10 +147,7 @@ function hasLegacyExecPolicyOverride(exec?: ExecToolConfig): boolean {
   return exec?.security !== undefined || exec?.ask !== undefined;
 }
 
-function applyExecPolicyLayer(
-  base: LayeredExecPolicy,
-  layer?: ExecToolConfig,
-): LayeredExecPolicy {
+function applyExecPolicyLayer(base: LayeredExecPolicy, layer?: ExecToolConfig): LayeredExecPolicy {
   if (!layer) {
     return base;
   }
@@ -207,6 +205,24 @@ function resolveAgentExecConfig(
   return entry?.tools?.exec;
 }
 
+async function resolveSystemRunAutoReviewer(params: {
+  opts: HandleSystemRunInvokeOptions;
+  cfg: OpenClawConfig;
+  agentId: string | undefined;
+  agentExec: ExecToolConfig | undefined;
+  globalExec: ExecToolConfig | undefined;
+}): Promise<ExecAutoReviewer> {
+  if (params.opts.autoReviewer) {
+    return params.opts.autoReviewer;
+  }
+  const { createModelExecAutoReviewer } = await import("../agents/exec-auto-reviewer.js");
+  return createModelExecAutoReviewer({
+    cfg: params.cfg,
+    agentId: params.agentId,
+    reviewer: params.agentExec?.reviewer ?? params.globalExec?.reviewer,
+  });
+}
+
 export type HandleSystemRunInvokeOptions = {
   client: GatewayClient;
   params: SystemRunParams;
@@ -233,6 +249,7 @@ export type HandleSystemRunInvokeOptions = {
   sendExecFinishedEvent: (params: ExecFinishedEventParams) => Promise<void>;
   preferMacAppExecHost: boolean;
   getRuntimeConfig?: () => OpenClawConfig;
+  autoReviewer?: ExecAutoReviewer;
 };
 
 async function loadSystemRunConfig(opts: HandleSystemRunInvokeOptions): Promise<OpenClawConfig> {
@@ -483,13 +500,14 @@ async function evaluateSystemRunPolicyPhase(
   const inlineEvalExecutableTrusted =
     inlineEvalHit !== null &&
     segmentAllowlistEntries.some((entry) => entry?.source === "allow-always");
-  const policy = evaluateSystemRunPolicy({
+  let approvalDecision = parsed.approvalDecision;
+  let policy = evaluateSystemRunPolicy({
     security,
     ask,
     analysisOk,
     allowlistSatisfied,
     durableApprovalSatisfied: durableApprovalSatisfied || inlineEvalExecutableTrusted,
-    approvalDecision: parsed.approvalDecision,
+    approvalDecision,
     approved: parsed.approved,
     isWindows,
     cmdInvocation,
@@ -497,6 +515,7 @@ async function evaluateSystemRunPolicyPhase(
     // Env sanitization uses broader shell-wrapper detection in parse phase.
     shellWrapperInvocation: parsed.shellPayload !== null,
   });
+  let autoReviewDeferredMessage: string | undefined;
   analysisOk = policy.analysisOk;
   allowlistSatisfied = policy.allowlistSatisfied;
   const strictInlineEvalRequiresApproval =
@@ -514,9 +533,68 @@ async function evaluateSystemRunPolicyPhase(
   }
 
   if (!policy.allowed) {
+    const canAutoReviewApprovalMiss =
+      modePolicy.autoReview &&
+      ask !== "always" &&
+      inlineEvalHit === null &&
+      policy.eventReason !== "security=deny";
+    if (canAutoReviewApprovalMiss) {
+      const reviewer = await resolveSystemRunAutoReviewer({
+        opts,
+        cfg,
+        agentId: parsed.agentId,
+        agentExec,
+        globalExec,
+      });
+      const decision = await reviewer({
+        command: parsed.commandText,
+        argv: segments[0]?.argv ?? parsed.argv,
+        cwd: parsed.cwd,
+        envKeys: Object.keys(parsed.envOverrides ?? {}).toSorted(),
+        host: "node",
+        reason: policy.eventReason === "allowlist-miss" ? "allowlist-miss" : "approval-required",
+        analysis: {
+          parsed: analysisOk,
+          allowlistMatched: allowlistSatisfied,
+          durableApprovalMatched: durableApprovalSatisfied,
+          inlineEval: false,
+          shellWrapper: parsed.shellWrapperInvocation,
+        },
+        agent: {
+          id: parsed.agentId,
+          sessionKey: parsed.sessionKey,
+        },
+      });
+      if (decision.decision === "allow-once") {
+        approvalDecision = "allow-once";
+        policy = evaluateSystemRunPolicy({
+          security,
+          ask,
+          analysisOk,
+          allowlistSatisfied,
+          durableApprovalSatisfied: durableApprovalSatisfied || inlineEvalExecutableTrusted,
+          approvalDecision,
+          approved: true,
+          isWindows,
+          cmdInvocation,
+          shellWrapperInvocation: parsed.shellPayload !== null,
+        });
+      } else if (decision.decision === "deny") {
+        await sendSystemRunDenied(opts, parsed.execution, {
+          reason: policy.eventReason,
+          message: `SYSTEM_RUN_DENIED: exec auto-review denied command: ${decision.rationale}`,
+        });
+        return null;
+      } else {
+        autoReviewDeferredMessage = `${policy.errorMessage} (exec auto-review deferred to human approval: ${decision.rationale})`;
+      }
+    }
+  }
+
+  if (!policy.allowed) {
     await sendSystemRunDenied(opts, parsed.execution, {
       reason: policy.eventReason,
-      message: policy.errorMessage,
+      message: autoReviewDeferredMessage ?? policy.errorMessage,
     });
     return null;
   }
@@ -567,6 +645,7 @@ async function evaluateSystemRunPolicyPhase(
   }
   return {
     ...parsed,
+    approvalDecision,
     argv: hardenedPaths.argv,
     cwd: hardenedPaths.cwd,
     approvals,
@@ -606,13 +685,14 @@ async function executeSystemRunPhase(
     });
     return;
   }
-  const expectedMutableFileOperand = phase.approvalPlan
-    ? resolveMutableFileOperandSnapshotSync({
-        argv: phase.argv,
-        cwd: phase.cwd,
-        shellCommand: phase.shellPayload,
-      })
-    : null;
+  const expectedMutableFileOperand =
+    phase.approvalPlan || phase.approvalDecision === "allow-once"
+      ? resolveMutableFileOperandSnapshotSync({
+          argv: phase.argv,
+          cwd: phase.cwd,
+          shellCommand: phase.shellPayload,
+        })
+      : null;
   if (expectedMutableFileOperand && !expectedMutableFileOperand.ok) {
     logWarn(`security: system.run approval script binding blocked (runId=${phase.runId})`);
     await sendSystemRunDenied(opts, phase.execution, {

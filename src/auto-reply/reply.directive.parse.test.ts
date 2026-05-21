@@ -176,6 +176,13 @@ describe("directive parsing", () => {
     expect(res.cleaned).toBe("please now");
   });
 
+  it("treats bare exec auto as normalized auto mode", () => {
+    const res = extractExecDirective("/exec auto");
+    expect(res.hasDirective).toBe(true);
+    expect(res.execMode).toBe("auto");
+    expect(res.cleaned).toBe("");
+  });
+
   it("captures invalid exec host values", () => {
     const res = extractExecDirective("/exec host=spaceship");
     expect(res.hasDirective).toBe(true);

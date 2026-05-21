@@ -133,10 +133,14 @@ const formatQueueArgs: CommandArgsFormatter = (values) => {
 
 const formatExecArgs: CommandArgsFormatter = (values) => {
   const host = normalizeArgValue(values.host);
+  const mode = normalizeArgValue(values.mode);
   const security = normalizeArgValue(values.security);
   const ask = normalizeArgValue(values.ask);
   const node = normalizeArgValue(values.node);
   const parts: string[] = [];
+  if (mode) {
+    parts.push(`mode=${mode}`);
+  }
   if (host) {
     parts.push(`host=${host}`);
   }

@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createModelExecAutoReviewer,
-  parseExecAutoReviewResponse,
-} from "./exec-auto-reviewer.js";
+import { createModelExecAutoReviewer, parseExecAutoReviewResponse } from "./exec-auto-reviewer.js";
 
 const input = {
   command: "git status",
@@ -120,6 +117,9 @@ describe("createModelExecAutoReviewer", () => {
     );
     expect(complete).toHaveBeenCalledWith(
       expect.objectContaining({
+        context: expect.objectContaining({
+          systemPrompt: expect.stringContaining("SSH key material"),
+        }),
         options: expect.objectContaining({
           temperature: 0,
         }),

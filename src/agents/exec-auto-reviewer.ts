@@ -1,5 +1,6 @@
 import type { AgentModelConfig } from "../config/types.agents-shared.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { formatErrorMessage } from "../infra/errors.js";
 import {
   defaultExecAutoReviewer,
   type ExecAutoReviewDecision,
@@ -7,7 +8,6 @@ import {
   type ExecAutoReviewer,
   type ExecAutoReviewRisk,
 } from "../infra/exec-auto-review.js";
-import { formatErrorMessage } from "../infra/errors.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
 import {
   completeWithPreparedSimpleCompletionModel,
@@ -35,7 +35,7 @@ const EXEC_REVIEWER_SYSTEM_PROMPT = [
   "",
   "Decision rules:",
   '- Use "allow-once" only when the command is clearly low-risk for this single execution.',
-  '- Use "deny" when the command is destructive, credential-seeking, privilege-escalating, exfiltrating, or tries to bypass policy.',
+  '- Use "deny" when the command is destructive, credential-seeking, creates or modifies SSH key material, privilege-escalating, exfiltrating, or tries to bypass policy.',
   '- Use "ask-human" when intent, path safety, command parsing, or side effects are unclear.',
   "- Never return allow-always. Durable approvals are human-only.",
   "- Treat inline eval, shell wrappers, compound shell syntax, network access, package publish, chmod/chown, rm/mv, sudo, ssh/scp/rsync, and secret paths as high scrutiny.",
@@ -155,7 +155,9 @@ export function parseExecAutoReviewResponse(text: string): ExecAutoReviewDecisio
   };
 }
 
-function extractTextContent(result: Awaited<ReturnType<typeof completeWithPreparedSimpleCompletionModel>>) {
+function extractTextContent(
+  result: Awaited<ReturnType<typeof completeWithPreparedSimpleCompletionModel>>,
+) {
   return result.content
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
     .map((block) => block.text)
@@ -187,7 +189,8 @@ export function createModelExecAutoReviewer(params: {
   const prepareModel =
     params.deps?.prepareSimpleCompletionModelForAgent ?? prepareSimpleCompletionModelForAgent;
   const complete =
-    params.deps?.completeWithPreparedSimpleCompletionModel ?? completeWithPreparedSimpleCompletionModel;
+    params.deps?.completeWithPreparedSimpleCompletionModel ??
+    completeWithPreparedSimpleCompletionModel;
   const modelRef = resolveReviewerModelRef(params.reviewer);
   const timeoutMs = resolveReviewerTimeoutMs(params.reviewer);
   return async (input) => {

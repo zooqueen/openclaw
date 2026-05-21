@@ -837,10 +837,16 @@ export function buildBuiltinChatCommands(
       tier: "power",
       args: [
         {
-          name: "host",
-          description: "sandbox, gateway, or node",
+          name: "mode",
+          description: "deny, allowlist, ask, auto, or full",
           type: "string",
-          choices: ["sandbox", "gateway", "node"],
+          choices: ["deny", "allowlist", "ask", "auto", "full"],
+        },
+        {
+          name: "host",
+          description: "auto, sandbox, gateway, or node",
+          type: "string",
+          choices: ["auto", "sandbox", "gateway", "node"],
         },
         {
           name: "security",

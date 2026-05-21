@@ -24,6 +24,7 @@ import {
   resolveExecApprovalsPath,
   saveExecApprovals,
 } from "../infra/exec-approvals.js";
+import type { ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { ExecHostResponse } from "../infra/exec-host.js";
 import { buildSystemRunApprovalPlan } from "./invoke-system-run-plan.js";
 import { handleSystemRunInvoke } from "./invoke-system-run.js";
@@ -460,6 +461,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     sanitizeEnv?: HandleSystemRunInvokeOptions["sanitizeEnv"];
     resolveExecSecurity?: HandleSystemRunInvokeOptions["resolveExecSecurity"];
     resolveExecAsk?: HandleSystemRunInvokeOptions["resolveExecAsk"];
+    autoReviewer?: ExecAutoReviewer;
   }): Promise<{
     runCommand: MockedRunCommand;
     runViaMacAppExecHost: MockedRunViaMacAppExecHost;
@@ -528,6 +530,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
       sendExecFinishedEvent,
       preferMacAppExecHost: params.preferMacAppExecHost,
       getRuntimeConfig: () => getRuntimeConfigSnapshot() ?? {},
+      autoReviewer: params.autoReviewer,
     });
 
     return {
@@ -619,6 +622,134 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
         "console.log('mode-ok')",
       ]);
       expectInvokeOk(invoke.sendInvokeResult, { payloadContains: "mode-ok" });
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
+
+  it("uses auto reviewer for system.run approval misses when exec mode is auto", async () => {
+    const tmp = createFixtureDir("openclaw-system-run-auto-review-");
+    const executablePath = createTempExecutable({ dir: tmp, name: "read-info" });
+    setRuntimeConfigSnapshot({
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+    });
+    try {
+      const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+        decision: "allow-once",
+        rationale: "node script reads fixture metadata only",
+        risk: "low",
+      }));
+      const runCommand = vi.fn(async () => createLocalRunResult("auto-reviewed"));
+      const invoke = await runSystemInvoke({
+        preferMacAppExecHost: false,
+        command: [executablePath],
+        cwd: tmp,
+        runCommand,
+        resolveExecSecurity: resolveProductionExecSecurity,
+        resolveExecAsk: resolveProductionExecAsk,
+        autoReviewer,
+      });
+
+      expect(autoReviewer).toHaveBeenCalledTimes(1);
+      expect(autoReviewer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: executablePath,
+          argv: [executablePath],
+          cwd: tmp,
+          host: "node",
+          reason: "approval-required",
+          analysis: expect.objectContaining({
+            parsed: true,
+            allowlistMatched: false,
+            inlineEval: false,
+          }),
+        }),
+      );
+      expect(runCommand).toHaveBeenCalledTimes(1);
+      expectInvokeOk(invoke.sendInvokeResult, { payloadContains: "auto-reviewed" });
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
+
+  it("requires mutable script binding for auto-reviewed system.run commands", async () => {
+    const tmp = createFixtureDir("openclaw-system-run-auto-script-binding-");
+    const scriptPath = path.join(tmp, "read-info.js");
+    fs.writeFileSync(scriptPath, 'console.log("auto-reviewed");\n');
+    setRuntimeConfigSnapshot({
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+    });
+    try {
+      const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+        decision: "allow-once",
+        rationale: "node script reads fixture metadata only",
+        risk: "low",
+      }));
+      const runCommand = vi.fn(async () => createLocalRunResult("should-not-run"));
+      const invoke = await runSystemInvoke({
+        preferMacAppExecHost: false,
+        command: [process.execPath, scriptPath],
+        cwd: tmp,
+        runCommand,
+        resolveExecSecurity: resolveProductionExecSecurity,
+        resolveExecAsk: resolveProductionExecAsk,
+        autoReviewer,
+      });
+
+      expect(autoReviewer).toHaveBeenCalledTimes(1);
+      expect(runCommand).not.toHaveBeenCalled();
+      expectInvokeErrorMessage(invoke.sendInvokeResult, {
+        message: "SYSTEM_RUN_DENIED: approval missing script operand binding",
+        exact: true,
+      });
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
+
+  it("shows auto reviewer rationale when system.run auto mode defers", async () => {
+    const tmp = createFixtureDir("openclaw-system-run-auto-defer-");
+    const scriptPath = path.join(tmp, "unclear.js");
+    fs.writeFileSync(scriptPath, 'console.log("unclear");\n');
+    setRuntimeConfigSnapshot({
+      tools: {
+        exec: {
+          mode: "auto",
+        },
+      },
+    });
+    try {
+      const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+        decision: "ask-human",
+        rationale: "script intent is unclear",
+        risk: "unknown",
+      }));
+      const runCommand = vi.fn(async () => createLocalRunResult("should-not-run"));
+      const invoke = await runSystemInvoke({
+        preferMacAppExecHost: false,
+        command: [process.execPath, scriptPath],
+        cwd: tmp,
+        runCommand,
+        resolveExecSecurity: resolveProductionExecSecurity,
+        resolveExecAsk: resolveProductionExecAsk,
+        autoReviewer,
+      });
+
+      expect(autoReviewer).toHaveBeenCalledTimes(1);
+      expect(runCommand).not.toHaveBeenCalled();
+      expectInvokeErrorMessage(invoke.sendInvokeResult, {
+        message:
+          "SYSTEM_RUN_DENIED: approval required (exec auto-review deferred to human approval: script intent is unclear)",
+        exact: true,
+      });
     } finally {
       clearRuntimeConfigSnapshot();
     }

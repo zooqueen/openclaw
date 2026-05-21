@@ -46,4 +46,17 @@ describe("COMMAND_ARG_FORMATTERS", () => {
       }),
     ).toBe("fifo debounce:10 cap:2 drop:Symbol(tail)");
   });
+
+  it("formats exec args including normalized mode", () => {
+    expect(formatArgs("exec", {})).toBeUndefined();
+    expect(
+      formatArgs("exec", {
+        host: " auto ",
+        mode: "ask",
+        security: "allowlist",
+        ask: "on-miss",
+        node: "mac-mini",
+      }),
+    ).toBe("mode=ask host=auto security=allowlist ask=on-miss node=mac-mini");
+  });
 });
