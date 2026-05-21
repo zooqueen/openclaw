@@ -3,6 +3,7 @@ import {
   HEARTBEAT_RESPONSE_TOOL_NAME,
   normalizeHeartbeatToolResponse,
 } from "../auto-reply/heartbeat-tool-response.js";
+import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
 import type {
   AgentApprovalEventData,
   AgentCommandOutputEventData,
@@ -185,24 +186,35 @@ function buildSourceReplyPayloadFromMessageToolSend(params: {
   pendingText?: string;
   mediaUrls: string[];
 }): MessagingToolSourceReplyPayload | undefined {
-  const text =
+  const rawText =
     params.pendingText ??
     readStringValue(params.args.text) ??
     readStringValue(params.args.message) ??
     readStringValue(params.args.content) ??
     readStringValue(params.args.caption);
+  const parsedText =
+    rawText === undefined ? undefined : parseReplyDirectives(rawText.replaceAll("\\n", "\n"));
+  const text = parsedText?.text ?? rawText;
   const payload: MessagingToolSourceReplyPayload = {};
   if (text?.trim()) {
     payload.text = text;
   }
-  if (params.mediaUrls.length > 0) {
-    payload.mediaUrls = params.mediaUrls.slice();
+  const mediaUrls = [
+    ...(params.mediaUrls.length > 0 ? params.mediaUrls : []),
+    ...(parsedText?.mediaUrl ? [parsedText.mediaUrl] : []),
+    ...(parsedText?.mediaUrls ?? []),
+  ];
+  const mediaUrl =
+    readStringValue(params.args.mediaUrl) ??
+    readStringValue(params.args.media_url) ??
+    parsedText?.mediaUrl;
+  if (mediaUrls.length > 0) {
+    payload.mediaUrls = Array.from(new Set(mediaUrls));
   }
-  const mediaUrl = readStringValue(params.args.mediaUrl) ?? readStringValue(params.args.media_url);
   if (mediaUrl?.trim()) {
     payload.mediaUrl = mediaUrl;
   }
-  if (params.args.audioAsVoice === true) {
+  if (params.args.audioAsVoice === true || parsedText?.audioAsVoice === true) {
     payload.audioAsVoice = true;
   }
   if (params.args.presentation !== undefined) {

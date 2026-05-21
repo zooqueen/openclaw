@@ -1295,6 +1295,43 @@ describe("messaging tool media URL tracking", () => {
     ]);
   });
 
+  it("normalizes reply directives before recording source reply mirrors", async () => {
+    const { ctx } = createTestContext();
+    ctx.params.sourceReplyDeliveryMode = "message_tool_only";
+
+    await handleToolExecutionStart(ctx, {
+      type: "tool_execution_start",
+      toolName: "message",
+      toolCallId: "tool-directive-source-reply",
+      args: {
+        action: "send",
+        message: "hello\\nMEDIA: /tmp/reply.png\\n[[audio_as_voice]]",
+      },
+    });
+
+    await handleToolExecutionEnd(ctx, {
+      type: "tool_execution_end",
+      toolName: "message",
+      toolCallId: "tool-directive-source-reply",
+      isError: false,
+      result: {
+        details: {
+          deliveryStatus: "sent",
+          sourceReplySink: "internal-ui",
+        },
+      },
+    });
+
+    expect(ctx.state.messagingToolSourceReplyPayloads).toEqual([
+      {
+        text: "hello",
+        mediaUrl: "/tmp/reply.png",
+        mediaUrls: ["/tmp/reply.png"],
+        audioAsVoice: true,
+      },
+    ]);
+  });
+
   it("does not record routed or dry-run source replies for transcript mirroring", async () => {
     const { ctx } = createTestContext();
     ctx.params.sourceReplyDeliveryMode = "message_tool_only";
