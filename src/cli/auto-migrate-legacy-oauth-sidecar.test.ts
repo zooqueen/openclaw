@@ -14,9 +14,6 @@ const DECLINE_MARKER_FILENAME = "legacy-oauth-sidecar-migration-declined";
 
 const states: OpenClawTestState[] = [];
 
-// Tests assert behavior under an interactive macOS shell; clear CI-runner env
-// signals that would otherwise short-circuit the auto-migrate skip rules
-// (`CI=true` on GitHub Actions, embedded read-only auth store, etc.).
 const INTERACTIVE_SHELL_ENV: Record<string, string | undefined> = {
   CI: undefined,
   OPENCLAW_NON_INTERACTIVE: undefined,
@@ -266,9 +263,47 @@ describe("maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli", () => {
       prompter: { confirm },
     });
     expect(confirm).not.toHaveBeenCalled();
-    // Migration must not run as a side effect of the JSON command either.
     expect(fs.existsSync(sidecarPath)).toBe(true);
     expect(fs.existsSync(declineMarkerPath(state))).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "--non-interactive on agents add",
+      argv: ["node", "openclaw", "agents", "add", "--workspace", "/tmp/wp", "--non-interactive"],
+    },
+    {
+      name: "--non-interactive on reset",
+      argv: ["node", "openclaw", "reset", "--scope", "config", "--yes", "--non-interactive"],
+    },
+    {
+      name: "--non-interactive on setup",
+      argv: ["node", "openclaw", "setup", "--non-interactive"],
+    },
+  ])("does not prompt for argv-level --non-interactive invocations: $name", async ({ argv }) => {
+    const { state, sidecarPath } = await makeStateWithLegacyOauthRef("seed");
+    const confirm = vi.fn();
+    await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
+      argv,
+      env: state.env,
+      isInteractiveTty: () => true,
+      prompter: { confirm },
+    });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    expect(fs.existsSync(declineMarkerPath(state))).toBe(false);
+  });
+
+  it("still prompts when --non-interactive appears after a `--` argv terminator", async () => {
+    const { state } = await makeStateWithLegacyOauthRef("seed");
+    const confirm = vi.fn(async () => false);
+    await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
+      argv: ["node", "openclaw", "status", "--", "--non-interactive"],
+      env: state.env,
+      isInteractiveTty: () => true,
+      prompter: { confirm },
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
   });
 
   it("still prompts when --json appears after a `--` argv terminator", async () => {
@@ -317,8 +352,6 @@ describe("maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli", () => {
     expect(fs.existsSync(sidecarPath)).toBe(true);
     expect(fs.existsSync(declineMarkerPath(state))).toBe(false);
 
-    // A subsequent run also does not prompt; doctor remains the explicit path
-    // for cleaning up unreferenced sidecars.
     const confirmAgain = vi.fn();
     await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
       argv: ["node", "openclaw", "status"],

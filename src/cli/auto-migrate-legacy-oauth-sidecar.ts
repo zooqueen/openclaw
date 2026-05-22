@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveOAuthDir, resolveStateDir } from "../config/paths.js";
 import { resolveCliArgvInvocation } from "./argv-invocation.js";
+import { hasFlag } from "./argv.js";
 import { hasJsonOutputFlag } from "./json-output-mode.js";
 
 const COOL_OFF_FILENAME = "legacy-oauth-sidecar-migration-declined";
@@ -57,11 +58,7 @@ function shouldSkip(params: {
   if (invocation.primary && SKIPPED_PRIMARIES.has(invocation.primary)) {
     return true;
   }
-  // `runCli` invokes this hook before `tryRouteCli` enables `suppressDoctorStdout`
-  // for `--json` commands, so doctor notes / clack prompt frames would otherwise
-  // land in the JSON payload on stdout. Skip and let the user run
-  // `openclaw doctor --fix` (or any non-JSON command) to trigger the migration.
-  if (hasJsonOutputFlag(params.argv)) {
+  if (hasJsonOutputFlag(params.argv) || hasFlag(params.argv, "--non-interactive")) {
     return true;
   }
   if (!hasSidecarFiles(env)) {
@@ -72,9 +69,7 @@ function shouldSkip(params: {
     if (params.now - stat.mtimeMs < COOL_OFF_TTL_MS) {
       return true;
     }
-  } catch {
-    // No marker; nothing to skip on.
-  }
+  } catch {}
   return false;
 }
 
@@ -135,10 +130,7 @@ export async function maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli(params:
     } else if (result.changes.length > 0) {
       fs.rmSync(markerPath, { force: true });
     }
-  } catch {
-    // Auto-migration must never block the user's actual command. Doctor remains
-    // the explicit fallback.
-  }
+  } catch {}
 }
 
 function defaultIsInteractiveTty(): boolean {
