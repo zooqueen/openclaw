@@ -14,6 +14,16 @@ const DECLINE_MARKER_FILENAME = "legacy-oauth-sidecar-migration-declined";
 
 const states: OpenClawTestState[] = [];
 
+// Tests assert behavior under an interactive macOS shell; clear CI-runner env
+// signals that would otherwise short-circuit the auto-migrate skip rules
+// (`CI=true` on GitHub Actions, embedded read-only auth store, etc.).
+const INTERACTIVE_SHELL_ENV: Record<string, string | undefined> = {
+  CI: undefined,
+  OPENCLAW_NON_INTERACTIVE: undefined,
+  OPENCLAW_AUTH_STORE_READONLY: undefined,
+  OPENCLAW_AUTO_MIGRATE_LEGACY_OAUTH_SIDECAR: undefined,
+};
+
 function setPlatform(value: NodeJS.Platform): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value, configurable: true });
@@ -38,6 +48,7 @@ async function makeStateWithLegacyOauthRef(seed: string): Promise<{
     layout: "state-only",
     prefix: "openclaw-auto-migrate-sidecar-",
     env: {
+      ...INTERACTIVE_SHELL_ENV,
       OPENCLAW_AGENT_DIR: undefined,
       OPENCLAW_AUTH_PROFILE_SECRET_KEY: seed,
     },
@@ -107,6 +118,7 @@ async function makeStateWithUnreferencedSidecar(seed: string): Promise<{
     layout: "state-only",
     prefix: "openclaw-auto-migrate-unreferenced-sidecar-",
     env: {
+      ...INTERACTIVE_SHELL_ENV,
       OPENCLAW_AGENT_DIR: undefined,
       OPENCLAW_AUTH_PROFILE_SECRET_KEY: seed,
     },

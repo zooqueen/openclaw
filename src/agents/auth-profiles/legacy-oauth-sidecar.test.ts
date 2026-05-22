@@ -77,7 +77,7 @@ describe("loadLegacyOAuthSidecarMaterial keychain-only headless warning", () => 
     loggingState.rawConsole = {
       log: vi.fn(),
       info: vi.fn(),
-      warn: warnSpy,
+      warn: warnSpy as unknown as typeof console.warn,
       error: vi.fn(),
     };
   });
