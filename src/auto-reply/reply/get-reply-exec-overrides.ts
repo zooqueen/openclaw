@@ -17,6 +17,7 @@ export type ReplyExecOverrides = Pick<
 export function resolveReplyExecOverrides(params: {
   directives: InlineDirectives;
   sessionEntry?: SessionEntry;
+  globalExecDefaults?: ReplyExecOverrides;
   agentExecDefaults?: ReplyExecOverrides;
 }): ReplyExecOverrides | undefined {
   const directives = hasRejectedExecDirective(params.directives)
@@ -32,9 +33,14 @@ export function resolveReplyExecOverrides(params: {
   const host =
     directives.execHost ??
     (params.sessionEntry?.execHost as ReplyExecOverrides["host"]) ??
-    params.agentExecDefaults?.host;
-  const basePolicy = materializeExecPolicy(params.agentExecDefaults);
-  const sessionPolicy = applyExecPolicyLayer(basePolicy, {
+    params.agentExecDefaults?.host ??
+    params.globalExecDefaults?.host;
+  const globalPolicy = materializeExecPolicy(params.globalExecDefaults);
+  const agentPolicy = applyExecPolicyLayer(
+    globalPolicy,
+    materializeExecPolicy(params.agentExecDefaults),
+  );
+  const sessionPolicy = applyExecPolicyLayer(agentPolicy, {
     mode: params.sessionEntry?.execMode as ExecMode | undefined,
     security: params.sessionEntry?.execSecurity as ExecSecurity | undefined,
     ask: params.sessionEntry?.execAsk as ExecAsk | undefined,
@@ -45,7 +51,10 @@ export function resolveReplyExecOverrides(params: {
     ask: directives.execAsk,
   });
   const node =
-    directives.execNode ?? params.sessionEntry?.execNode ?? params.agentExecDefaults?.node;
+    directives.execNode ??
+    params.sessionEntry?.execNode ??
+    params.agentExecDefaults?.node ??
+    params.globalExecDefaults?.node;
   const mode = policy.mode;
   const security = mode ? undefined : policy.security;
   const ask = mode ? undefined : policy.ask;

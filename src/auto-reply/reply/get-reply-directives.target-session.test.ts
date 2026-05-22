@@ -174,6 +174,7 @@ async function resolveHelloWithModelDefaults(params: {
   body?: string;
   sessionEntry?: SessionEntry;
   agentCfg?: { reasoningDefault?: "off" | "on" | "stream" };
+  cfg?: Parameters<typeof resolveReplyDirectives>[0]["cfg"];
   commandAuthorized?: boolean;
   provider?: string;
   model?: string;
@@ -198,7 +199,7 @@ async function resolveHelloWithModelDefaults(params: {
       CommandBody: params.body ?? "hello",
       ...params.ctx,
     }),
-    cfg: {},
+    cfg: params.cfg ?? {},
     agentId: "main",
     agentDir: "/tmp/main-agent",
     workspaceDir: "/tmp",
@@ -377,6 +378,23 @@ describe("resolveReplyDirectives", () => {
     expect((execOverrideInput.directives as { hasExecDirective?: boolean }).hasExecDirective).toBe(
       false,
     );
+  });
+
+  it("passes global exec defaults into reply exec override resolution", async () => {
+    await resolveHelloWithModelDefaults({
+      defaultThinking: "off",
+      defaultReasoning: "on",
+      cfg: {
+        tools: {
+          exec: {
+            mode: "deny",
+          },
+        },
+      } as never,
+    });
+
+    const execOverrideInput = mockCallInput(mocks.resolveReplyExecOverrides);
+    expect(execOverrideInput.globalExecDefaults).toEqual({ mode: "deny" });
   });
 
   it("prefers the target session entry from sessionStore for directive state", async () => {

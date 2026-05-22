@@ -17,6 +17,10 @@ const AGENT_MODE_DEFAULTS = {
   ask: undefined,
   node: "worker-alpha",
 } as const satisfies ReplyExecOverrides;
+const GLOBAL_EXEC_DEFAULTS = {
+  host: "gateway",
+  mode: "deny",
+} as const satisfies ReplyExecOverrides;
 
 function createSessionEntry(overrides?: Partial<SessionEntry>): SessionEntry {
   return {
@@ -27,6 +31,44 @@ function createSessionEntry(overrides?: Partial<SessionEntry>): SessionEntry {
 }
 
 describe("reply exec overrides", () => {
+  it("uses global exec defaults when narrower scopes are unset", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("run a command"),
+        sessionEntry: createSessionEntry(),
+        globalExecDefaults: GLOBAL_EXEC_DEFAULTS,
+      }),
+    ).toEqual({
+      host: "gateway",
+      mode: "deny",
+      security: undefined,
+      ask: undefined,
+      node: undefined,
+    });
+  });
+
+  it("lets agent, session, and inline exec settings override global defaults", () => {
+    expect(
+      resolveReplyExecOverrides({
+        directives: parseInlineDirectives("/exec host=node ask=always"),
+        sessionEntry: createSessionEntry({
+          execSecurity: "allowlist",
+        }),
+        globalExecDefaults: GLOBAL_EXEC_DEFAULTS,
+        agentExecDefaults: {
+          node: "worker-alpha",
+          security: "full",
+        },
+      }),
+    ).toEqual({
+      host: "node",
+      mode: undefined,
+      security: "allowlist",
+      ask: "always",
+      node: "worker-alpha",
+    });
+  });
+
   it("uses per-agent exec defaults when session and message are unset", () => {
     expect(
       resolveReplyExecOverrides({

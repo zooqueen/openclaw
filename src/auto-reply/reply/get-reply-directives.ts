@@ -646,6 +646,7 @@ export async function resolveReplyDirectives(params: {
   const execOverrides = resolveReplyExecOverrides({
     directives,
     sessionEntry: targetSessionEntry,
+    globalExecDefaults: cfg.tools?.exec,
     agentExecDefaults: agentEntry?.tools?.exec,
   });
 
