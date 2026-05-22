@@ -14,7 +14,7 @@ const agentRuntimeMocks = vi.hoisted(() => ({
   resolveAuthProfileOrder: vi.fn(),
   resolveDefaultAgentDir: vi.fn(() => "/agent"),
   resolvePersistedAuthProfileOwnerAgentDir: vi.fn(),
-  resolveProviderIdForAuth: vi.fn((provider: string) => provider),
+  resolveProviderIdForAuth: vi.fn((provider: string, _lookup?: { config?: unknown }) => provider),
   resolveSessionAgentIds: vi.fn(() => ({ defaultAgentId: "main", sessionAgentId: "main" })),
   saveAuthProfileStore: vi.fn(),
 }));
@@ -64,7 +64,9 @@ describe("codex conversation binding", () => {
     });
     agentRuntimeMocks.resolveAuthProfileOrder.mockReturnValue([]);
     agentRuntimeMocks.resolveDefaultAgentDir.mockReturnValue("/agent");
-    agentRuntimeMocks.resolveProviderIdForAuth.mockImplementation((provider: string) => provider);
+    agentRuntimeMocks.resolveProviderIdForAuth.mockImplementation(
+      (provider: string, _lookup?: { config?: unknown }) => provider,
+    );
     agentRuntimeMocks.resolveSessionAgentIds.mockReturnValue({
       defaultAgentId: "main",
       sessionAgentId: "main",
@@ -498,16 +500,26 @@ describe("codex conversation binding", () => {
 
   it("recreates a missing bound thread and preserves auth plus turn overrides", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
+    const config = {
+      auth: {
+        order: {
+          "openai-codex": ["work"],
+        },
+      },
+    };
     agentRuntimeMocks.ensureAuthProfileStore.mockReturnValue({
       version: 1,
       profiles: {
         work: {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "configured-codex",
           access: "access-token",
         },
       },
     });
+    agentRuntimeMocks.resolveProviderIdForAuth.mockImplementation((provider: string, lookup) =>
+      lookup?.config === config && provider === "configured-codex" ? "openai-codex" : provider,
+    );
     await fs.writeFile(
       `${sessionFile}.codex-app-server.json`,
       JSON.stringify({
@@ -595,7 +607,7 @@ describe("codex conversation binding", () => {
           },
         },
       },
-      { timeoutMs: 500 },
+      { timeoutMs: 500, config: config as never },
     );
 
     expect(result).toEqual({ handled: true, reply: { text: "Recovered" } });
@@ -608,6 +620,12 @@ describe("codex conversation binding", () => {
       authProfileId?: unknown;
     };
     expect(sharedClientParams?.authProfileId).toBe("work");
+    expect(
+      sharedClientMocks.getSharedCodexAppServerClient.mock.calls.map(
+        ([params]) => (params as { config?: unknown }).config,
+      ),
+    ).toEqual([config, config, config]);
+    expect(agentRuntimeMocks.resolveDefaultAgentDir).not.toHaveBeenCalledWith({});
     expect(requests[1]?.params.model).toBe("gpt-5.4-mini");
     expect(requests[1]?.params.approvalPolicy).toBe("on-request");
     expect(requests[1]?.params.sandbox).toBe("workspace-write");

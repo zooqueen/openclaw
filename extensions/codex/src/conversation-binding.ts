@@ -441,7 +441,7 @@ async function runBoundTurn(params: {
     execPolicy,
   });
   assertNativeConversationApprovalPolicySupported({ execPolicy, runtime });
-  const agentLookup = buildAgentLookup({ agentDir: params.data.agentDir });
+  const agentLookup = buildAgentLookup({ agentDir: params.data.agentDir, config: params.config });
   const binding = await readCodexAppServerBinding(params.data.sessionFile, agentLookup);
   const threadId = binding?.threadId;
   if (!threadId) {
@@ -571,7 +571,7 @@ async function runBoundTurnWithMissingThreadRecovery(params: {
     if (!isCodexThreadNotFoundError(error)) {
       throw error;
     }
-    const agentLookup = buildAgentLookup({ agentDir: params.data.agentDir });
+    const agentLookup = buildAgentLookup({ agentDir: params.data.agentDir, config: params.config });
     const binding = await readCodexAppServerBinding(params.data.sessionFile, agentLookup);
     await startCodexConversationThread({
       pluginConfig: params.pluginConfig,
