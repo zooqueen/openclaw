@@ -244,9 +244,11 @@ desktop inspection. It can create, report, stop, or reset a shared Crabbox
 desktop lease for an open PR, then upsert a status comment with the authenticated
 portal URL and useful follow-up commands. Linux leases can use AWS, Azure, or
 Hetzner. macOS leases use AWS EC2 Mac capacity with On-Demand market because EC2
-Mac runs on Dedicated Host backed capacity. The workflow checks the requested PR
-head before creating a lease and verifies the fresh remote checkout resolved to
-that exact commit before posting the lease as ready.
+Mac runs on Dedicated Host backed capacity. Lease TTL is capped below the
+workflow timeout so the GitHub-hosted WebVNC bridge can stay alive until the
+lease expires. The workflow checks the requested PR head before creating a lease
+and verifies the fresh remote checkout resolved to that exact commit before
+posting the lease as ready.
 
 `Mantis Telegram Live` wraps the existing Telegram live QA lane in the same PR
 evidence pipeline. It checks out the trusted candidate ref in a separate

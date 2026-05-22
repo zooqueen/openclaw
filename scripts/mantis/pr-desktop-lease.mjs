@@ -4,8 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DEFAULT_TTL_MINUTES = { linux: 90, mac: 60 };
-const MAX_TTL_MINUTES = { linux: 240, mac: 120 };
+const MAX_TTL_MINUTES = { linux: 100, mac: 100 };
 const IDLE_TIMEOUT_MINUTES = 30;
+const KEEPALIVE_POLL_MS = Number(process.env.MANTIS_PR_DESKTOP_LEASE_KEEPALIVE_POLL_MS || "60000");
 const TRUSTED_LEASE_COMMENT_AUTHORS = new Set(["github-actions[bot]"]);
 const payload = readPayload();
 const repo = required("target_repo");
@@ -65,7 +66,10 @@ async function main() {
     return;
   }
 
-  if (action === "lease") return lease(headSha);
+  if (action === "lease") {
+    await lease(headSha);
+    return;
+  }
 
   const active = findLatestActiveLease();
   if (!active?.lease_id) {
@@ -168,7 +172,7 @@ async function main() {
   });
 }
 
-function lease(headSha) {
+async function lease(headSha) {
   const existing = findLatestActiveLease();
   if (existing?.lease_id) {
     postComment({ ...existing, status: "already_active", provider: existing.provider || provider });
@@ -223,7 +227,7 @@ function lease(headSha) {
       "--id",
       leaseID,
     ]);
-    const webvncStatus = runCrabbox([
+    runCrabbox([
       "webvnc",
       "status",
       "--provider",
@@ -236,11 +240,12 @@ function lease(headSha) {
     const ready = {
       ...baseState,
       status: "ready",
-      webvnc_url: extractWebvncURL(webvncStatus.stdout) || portalURL(leaseID),
+      portal_url: portalURL(leaseID),
       expires_at: new Date(Date.now() + ttlMinutes * 60_000).toISOString(),
     };
     writeSummary(ready);
     postComment(ready);
+    await keepWorkflowAliveForLease(ready);
   } catch (error) {
     const failure = {
       status: "failed",
@@ -251,10 +256,22 @@ function lease(headSha) {
       lease_id: leaseID || null,
       failed_step: leaseID ? "setup" : "warmup",
       failure_excerpt: redactSensitiveText(error instanceof Error ? error.message : String(error)),
-      webvnc_url: leaseID ? portalURL(leaseID) : null,
+      portal_url: leaseID ? portalURL(leaseID) : null,
     };
     writeSummary(failure);
     postComment(failure);
+  }
+}
+
+async function keepWorkflowAliveForLease(state) {
+  if (process.env.GITHUB_ACTIONS !== "true" || !state.lease_id) return;
+  const deadline = Date.now() + ttlMinutes * 60_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(KEEPALIVE_POLL_MS, deadline - Date.now())),
+    );
+    if (Date.now() >= deadline) break;
+    if (!isActiveInspection(inspectLease(state.lease_id, state.provider || provider))) return;
   }
 }
 
@@ -304,7 +321,7 @@ function postComment(state) {
 
 function renderComment(state) {
   const status = String(state.status || "ready");
-  const webvncURL = sanitizeWebvncURL(state.webvnc_url || "");
+  const portal = state.portal_url || (state.lease_id ? portalURL(state.lease_id) : "");
   if (status === "ready") {
     return [
       marker(state),
@@ -314,7 +331,8 @@ function renderComment(state) {
       "",
       summaryLines(state).join("\n"),
       "",
-      `WebVNC: ${webvncURL || "unavailable"}`,
+      `Portal: ${portal || "unavailable"}`,
+      "WebVNC credentials are intentionally not posted in PR comments.",
       "",
       usefulCommands(state),
     ].join("\n");
@@ -328,7 +346,10 @@ function renderComment(state) {
       "",
       summaryLines(state).join("\n"),
       "",
-      `WebVNC: ${webvncURL || "unavailable"}`,
+      `Portal: ${portal || "unavailable"}`,
+      "WebVNC credentials are intentionally not posted in PR comments.",
+      "",
+      usefulCommands(state),
     ].join("\n");
   }
   if (status === "stopped") {
@@ -341,7 +362,10 @@ function renderComment(state) {
       `- Lease: \`${state.lease_id || "unknown"}\``,
       `- Platform: \`${state.platform || "linux"}\``,
       `- Provider: \`${state.provider || "aws"}\``,
-    ].join("\n");
+      state.lease_id ? `Portal: ${portalURL(state.lease_id)}` : null,
+    ]
+      .filter((line) => line !== null)
+      .join("\n");
   }
   if (status === "reset") {
     return [
@@ -354,7 +378,8 @@ function renderComment(state) {
       `- Platform: \`${state.platform || "linux"}\``,
       `- Provider: \`${state.provider || "aws"}\``,
       "",
-      `WebVNC: ${webvncURL || "unavailable"}`,
+      `Portal: ${portal || "unavailable"}`,
+      "WebVNC credentials are intentionally not posted in PR comments.",
     ].join("\n");
   }
   return [
@@ -370,8 +395,8 @@ function renderComment(state) {
     state.lease_id ? `- Lease: \`${state.lease_id}\`` : null,
     `- Failed step: \`${state.failed_step || "unknown"}\``,
     `- Result: ${state.lease_id ? "lease kept for manual inspection" : "no lease was created"}`,
-    webvncURL ? "" : null,
-    webvncURL ? `WebVNC: ${webvncURL}` : null,
+    portal ? "" : null,
+    portal ? `Portal: ${portal}` : null,
     "",
     "Failure excerpt:",
     "```text",
@@ -423,7 +448,9 @@ function findLatestLease() {
     lease_id: leaseID,
     platform,
     provider: body.match(/- Provider: `([^`]+)`/)?.[1] || provider,
-    webvnc_url: sanitizeWebvncURL(body.match(/WebVNC: (https:\/\/\S+)/)?.[1] || ""),
+    portal_url:
+      body.match(/Portal: (https:\/\/\S+)/)?.[1] ||
+      sanitizeWebvncURL(body.match(/WebVNC: (https:\/\/\S+)/)?.[1] || ""),
     expires_at: body.match(/- Expires: `([^`]+)`/)?.[1] || "",
     status: body.includes("Stopped the Mantis Crabbox") ? "stopped" : "ready",
   };
@@ -434,8 +461,10 @@ function findLatestTrustedLeaseComment() {
     "api",
     `repos/${repo}/issues/${prNumber}/comments?per_page=100`,
     "--paginate",
+    "--slurp",
   ]);
-  for (const comment of comments.reverse()) {
+  const flattenedComments = Array.isArray(comments?.[0]) ? comments.flat() : comments;
+  for (const comment of flattenedComments.reverse()) {
     if (!isTrustedLeaseComment(comment)) continue;
     const body = String(comment.body || "");
     if (!body.includes(marker({ repo, pr_number: prNumber, platform }))) continue;
@@ -571,14 +600,8 @@ function extractLeaseID(text) {
   return String(text || "").match(/\bcbx_[A-Za-z0-9_-]+\b/)?.[0] || "";
 }
 
-function extractWebvncURL(text) {
-  return sanitizeWebvncURL(
-    String(text || "").match(/https:\/\/\S+\/portal\/leases\/\S+\/vnc\S*/)?.[0] || "",
-  );
-}
-
 function portalURL(leaseID) {
-  return `${process.env.CRABBOX_COORDINATOR || "https://crabbox.openclaw.ai"}/portal/leases/${encodeURIComponent(leaseID)}/vnc`;
+  return `${process.env.CRABBOX_COORDINATOR || "https://crabbox.openclaw.ai"}/portal/leases/${encodeURIComponent(leaseID)}`;
 }
 
 function targetForPlatform(value) {

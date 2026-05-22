@@ -34,9 +34,32 @@ function parseCalls(callsPath: string): Array<{ args: string[]; tool: string }> 
     .map((line) => JSON.parse(line) as { args: string[]; tool: string });
 }
 
+function normalizeComment(comment: Record<string, unknown> | string, index: number) {
+  return typeof comment === "string"
+    ? { body: comment, id: index + 1, user: { login: "github-actions[bot]" } }
+    : comment;
+}
+
+function normalizeCommentsPayload(
+  comments:
+    | Array<Record<string, unknown> | string>
+    | Array<Array<Record<string, unknown> | string>>,
+) {
+  if (Array.isArray(comments[0])) {
+    return (comments as Array<Array<Record<string, unknown> | string>>).map((page, pageIndex) =>
+      page.map((comment, commentIndex) =>
+        normalizeComment(comment, pageIndex * 100 + commentIndex),
+      ),
+    );
+  }
+  return (comments as Array<Record<string, unknown> | string>).map(normalizeComment);
+}
+
 function runLeaseScript(
   payload: Record<string, string>,
-  comments: Array<Record<string, unknown> | string> = [],
+  comments:
+    | Array<Record<string, unknown> | string>
+    | Array<Array<Record<string, unknown> | string>> = [],
 ) {
   const dir = makeTempDir();
   const binDir = path.join(dir, "bin");
@@ -109,14 +132,9 @@ process.exit(0);
       CRABBOX_COORDINATOR: "https://crabbox.example.test",
       GITHUB_EVENT_PATH: eventPath,
       GITHUB_REPOSITORY: "openclaw/openclaw",
+      GITHUB_ACTIONS: "",
       PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}`,
-      PR_COMMENTS: JSON.stringify(
-        comments.map((comment, index) =>
-          typeof comment === "string"
-            ? { body: comment, id: index + 1, user: { login: "github-actions[bot]" } }
-            : comment,
-        ),
-      ),
+      PR_COMMENTS: JSON.stringify(normalizeCommentsPayload(comments)),
       PR_HEAD_SHA: currentHead,
     },
   });
@@ -217,6 +235,38 @@ describe("scripts/mantis/pr-desktop-lease", () => {
     expect(commentBody).toContain("Mantis Crabbox desktop lease ready for PR testing.");
     expect(commentBody).toContain("- Platform: `mac`");
     expect(commentBody).toContain("- Provider: `aws`");
+    expect(commentBody).toContain("Portal: https://crabbox.example.test/portal/leases/cbx_test123");
+    expect(commentBody).toContain("WebVNC credentials are intentionally not posted");
+    expect(commentBody).not.toContain("/vnc#password=");
+  });
+
+  it("finds trusted lease comments from paginated gh slurp output", () => {
+    const activeComment = [
+      "<!-- mantis-pr-desktop-lease:openclaw/openclaw:85136:linux -->",
+      "- Platform: `linux`",
+      "- Provider: `azure`",
+      "- Lease: `cbx_active`",
+      "- Expires: `2999-01-01T00:00:00.000Z`",
+      "Portal: https://crabbox.example.test/portal/leases/cbx_active",
+    ].join("\n");
+
+    const { calls, result } = runLeaseScript(
+      {
+        action: "status",
+        item_number: "85136",
+        platform: "linux",
+        provider: "aws",
+        target_repo: "openclaw/openclaw",
+      },
+      [[], [activeComment]],
+    );
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(calls).toContainEqual({
+      tool: "crabbox",
+      args: ["inspect", "--provider", "azure", "--target", "linux", "--id", "cbx_active", "--json"],
+    });
   });
 
   it("rejects provider and platform combinations that Crabbox cannot broker", () => {
