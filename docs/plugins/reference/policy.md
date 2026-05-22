@@ -34,5 +34,4 @@ can record for audit.
 
 ## Related docs
 
-- [Policy CLI](/cli/policy)
-- [Doctor lint mode](/cli/doctor#lint-mode)
+- [policy](/cli/policy)
