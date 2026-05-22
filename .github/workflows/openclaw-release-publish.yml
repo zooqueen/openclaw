@@ -360,7 +360,6 @@ jobs:
         uses: ./.github/actions/setup-node-env
         with:
           install-bun: "false"
-          cache-key-suffix: release-publish
 
       - name: Dispatch publish workflows
         env:

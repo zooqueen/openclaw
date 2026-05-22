@@ -356,12 +356,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup pnpm + cache store
+      - name: Setup pnpm
         uses: ./workflow/.github/actions/setup-pnpm-store-cache
         with:
-          node-version: ${{ env.NODE_VERSION }}
           package-manager-file: ${{ inputs.candidate_artifact_name == '' && 'source/package.json' || 'workflow/package.json' }}
           lockfile-path: ${{ inputs.candidate_artifact_name == '' && 'source/pnpm-lock.yaml' || 'workflow/pnpm-lock.yaml' }}
+          use-actions-cache: ${{ inputs.candidate_artifact_name == '' && 'true' || 'false' }}
 
       - name: Ensure pnpm store cache directory exists
         run: mkdir -p "$(pnpm store path --silent)"
@@ -543,12 +543,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup pnpm + cache store
+      - name: Setup pnpm
         uses: ./workflow/.github/actions/setup-pnpm-store-cache
         with:
-          node-version: ${{ env.NODE_VERSION }}
           package-manager-file: workflow/package.json
           lockfile-path: workflow/pnpm-lock.yaml
+          use-actions-cache: "false"
 
       - name: Download candidate artifact
         uses: actions/download-artifact@v8

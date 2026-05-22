@@ -82,6 +82,15 @@ describe("package acceptance workflow", () => {
     expect(packageJson.packageManager).toMatch(/^pnpm@\d+\.\d+\.\d+\+sha512\.[a-f0-9]+$/u);
     expect(setupPnpmAction).toContain("uses: pnpm/action-setup@");
     expect(setupPnpmAction).toContain("package_json_file: ${{ inputs.package-manager-file }}");
+    expect(setupPnpmAction).toContain("cache: ${{ inputs.use-actions-cache }}");
+    expect(setupPnpmAction).toContain("cache_dependency_path: ${{ inputs.lockfile-path }}");
+    expect(setupPnpmAction).not.toContain("actions/cache");
+    expect(setupPnpmAction).not.toContain("shasum");
+    expect(setupPnpmAction).not.toContain("PNPM_VERSION_INPUT");
+    expect(setupPnpmAction).not.toContain("version: ${{ inputs.pnpm-version }}");
+
+    const setupNodeAction = readFileSync(".github/actions/setup-node-env/action.yml", "utf8");
+    expect(setupNodeAction).toContain("use-actions-cache: ${{ inputs.install-deps }}");
 
     for (const workflowPath of workflowPaths()) {
       const workflowText = readFileSync(workflowPath, "utf8");
