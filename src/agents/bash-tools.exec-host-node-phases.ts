@@ -18,6 +18,7 @@ import { buildNodeShellCommand } from "../infra/node-shell.js";
 import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-context.js";
 import { formatExecCommand, resolveSystemRunCommandRequest } from "../infra/system-run-command.js";
 import { normalizeNullableString } from "../shared/string-coerce.js";
+import { commandRequiresSecurityAuditSuppressionApproval } from "./bash-tools.exec-approval-guards.js";
 import type { ExecuteNodeHostCommandParams } from "./bash-tools.exec-host-node.types.js";
 import { renderExecOutputText } from "./bash-tools.exec-output.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
@@ -48,6 +49,7 @@ type NodeApprovalAnalysis = {
   allowlistSatisfied: boolean;
   durableApprovalSatisfied: boolean;
   inlineEvalHit: InterpreterInlineEvalHit | null;
+  requiresSecurityAuditSuppressionApproval: boolean;
   autoReviewArgv?: string[];
 };
 
@@ -316,6 +318,13 @@ export async function analyzeNodeApprovalRequirement(params: {
     params.request.strictInlineEval === true
       ? detectPolicyInlineEval(baseAllowlistEval.segments)
       : null;
+  const requiresSecurityAuditSuppressionApproval =
+    commandRequiresSecurityAuditSuppressionApproval({
+      command: params.request.command,
+      cwd: params.request.workdir,
+      env: params.request.env,
+      segments: baseAllowlistEval.segments,
+    }) && !(params.hostSecurity === "full" && params.hostAsk === "off");
   if (inlineEvalHit) {
     params.request.warnings.push(
       `Warning: strict inline-eval mode requires explicit approval for ${describeInterpreterInlineEval(
@@ -368,6 +377,7 @@ export async function analyzeNodeApprovalRequirement(params: {
     allowlistSatisfied,
     durableApprovalSatisfied,
     inlineEvalHit,
+    requiresSecurityAuditSuppressionApproval,
     autoReviewArgv:
       baseAllowlistEval.segments.length === 1 &&
       (baseAllowlistEval.segments[0]?.raw === undefined ||

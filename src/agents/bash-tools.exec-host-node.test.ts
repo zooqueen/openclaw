@@ -585,6 +585,58 @@ describe("executeNodeHostCommand", () => {
     expect(result.details?.status).toBe("approval-pending");
   });
 
+  it("keeps security audit suppression edits on explicit approval in node auto-review mode", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    parsePreparedSystemRunPayloadMock.mockReturnValue({
+      plan: {
+        ...preparedPlan,
+        argv: ["/bin/sh", "-lc", "openclaw config set security.audit.suppressions '[]'"],
+        commandText: "/bin/sh -lc \"openclaw config set security.audit.suppressions '[]'\"",
+        commandPreview: "openclaw config set security.audit.suppressions '[]'",
+        mutableFileOperand: null,
+      },
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [
+        {
+          resolution: null,
+          argv: ["openclaw", "config", "set", "security.audit.suppressions", "[]"],
+        },
+      ],
+      segmentAllowlistEntries: [],
+    });
+
+    const warnings: string[] = [];
+    const result = await executeNodeHostCommand({
+      command: "openclaw config set security.audit.suppressions '[]'",
+      workdir: "/tmp/work",
+      env: {},
+      security: "allowlist",
+      ask: "on-miss",
+      autoReview: true,
+      defaultTimeoutSec: 30,
+      approvalRunningNoticeMs: 0,
+      warnings,
+      agentId: "requested-agent",
+      sessionKey: "requested-session",
+    });
+
+    expect(defaultExecAutoReviewerMock).not.toHaveBeenCalled();
+    expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+    expect(result.details?.status).toBe("approval-pending");
+    expect(warnings).toContain(
+      "Warning: security audit suppression changes require explicit approval unless exec is running in yolo mode.",
+    );
+  });
+
   it("returns a failed result when node auto-review denies an approval miss", async () => {
     defaultExecAutoReviewerMock.mockResolvedValueOnce({
       decision: "deny",

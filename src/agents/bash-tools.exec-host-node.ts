@@ -68,6 +68,7 @@ export async function executeNodeHostCommand(
     allowlistSatisfied,
     durableApprovalSatisfied,
     inlineEvalHit,
+    requiresSecurityAuditSuppressionApproval,
     autoReviewArgv,
   } = approvalAnalysis;
   const requiresAsk =
@@ -77,13 +78,25 @@ export async function executeNodeHostCommand(
       analysisOk,
       allowlistSatisfied,
       durableApprovalSatisfied,
-    }) || inlineEvalHit !== null;
+    }) ||
+    inlineEvalHit !== null ||
+    requiresSecurityAuditSuppressionApproval;
+  if (requiresSecurityAuditSuppressionApproval) {
+    params.warnings.push(
+      "Warning: security audit suppression changes require explicit approval unless exec is running in yolo mode.",
+    );
+  }
 
   let inlineApprovedByAsk = false;
   let inlineApprovalDecision: "allow-once" | "allow-always" | null = null;
   let inlineApprovalId: string | undefined;
   if (requiresAsk) {
-    if (params.autoReview === true && hostAsk !== "always" && inlineEvalHit === null) {
+    if (
+      params.autoReview === true &&
+      hostAsk !== "always" &&
+      inlineEvalHit === null &&
+      !requiresSecurityAuditSuppressionApproval
+    ) {
       const reviewer = params.autoReviewer ?? defaultExecAutoReviewer;
       const decision = await reviewer({
         command: params.command,
