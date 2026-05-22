@@ -975,16 +975,16 @@ function selectGuardianApprovalPolicy(
   if (allowedApprovalPolicies === undefined || allowedApprovalPolicies.has("on-request")) {
     return "on-request";
   }
+  if (execModeRequiringPromptingApprovals) {
+    throw new Error(
+      `tools.exec.mode=${execModeRequiringPromptingApprovals} requires Codex app-server prompting approvals`,
+    );
+  }
   if (allowedApprovalPolicies.has("on-failure")) {
     return "on-failure";
   }
   if (allowedApprovalPolicies.has("untrusted")) {
     return "untrusted";
-  }
-  if (execModeRequiringPromptingApprovals) {
-    throw new Error(
-      `tools.exec.mode=${execModeRequiringPromptingApprovals} requires Codex app-server prompting approvals`,
-    );
   }
   if (allowedApprovalPolicies.has("never")) {
     return "never";

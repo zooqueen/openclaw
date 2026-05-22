@@ -939,14 +939,23 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     ).toThrow("tools.exec.mode=ask requires Codex app-server user approvals");
   });
 
-  it.each(["auto", "ask"] as const)(
-    "fails closed when normalized OpenClaw %s mode cannot use prompting approvals",
-    (execMode) => {
+  it.each([
+    { execMode: "auto", policies: ["never"] },
+    { execMode: "auto", policies: ["on-failure"] },
+    { execMode: "auto", policies: ["untrusted"] },
+    { execMode: "ask", policies: ["never"] },
+    { execMode: "ask", policies: ["on-failure"] },
+    { execMode: "ask", policies: ["untrusted"] },
+  ] as const)(
+    "fails closed when normalized OpenClaw $execMode mode can only use $policies approvals",
+    ({ execMode, policies }) => {
       expect(() =>
         resolveRuntimeForTest({
           pluginConfig: {},
           execMode,
-          requirementsToml: 'allowed_approval_policies = ["never"]\n',
+          requirementsToml: `allowed_approval_policies = [${policies
+            .map((policy) => `"${policy}"`)
+            .join(", ")}]\n`,
         }),
       ).toThrow(`tools.exec.mode=${execMode} requires Codex app-server prompting approvals`);
     },
@@ -965,34 +974,26 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     });
   });
 
-  it("honors Codex requirements when normalized OpenClaw auto mode selects guardian", () => {
-    const runtime = resolveRuntimeForTest({
-      pluginConfig: {},
-      execMode: "auto",
-      requirementsToml:
-        'allowed_sandbox_modes = ["read-only"]\nallowed_approval_policies = ["on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
-    });
-
-    expectRuntimePolicy(runtime, {
-      approvalPolicy: "on-failure",
-      sandbox: "read-only",
-      approvalsReviewer: "user",
-    });
+  it("fails closed when normalized OpenClaw auto mode can only use on-failure approvals", () => {
+    expect(() =>
+      resolveRuntimeForTest({
+        pluginConfig: {},
+        execMode: "auto",
+        requirementsToml:
+          'allowed_sandbox_modes = ["read-only"]\nallowed_approval_policies = ["on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
+      }),
+    ).toThrow("tools.exec.mode=auto requires Codex app-server prompting approvals");
   });
 
-  it("uses allowed guardian fields when normalized OpenClaw auto mode forces guardian over allowed yolo", () => {
-    const runtime = resolveRuntimeForTest({
-      pluginConfig: {},
-      execMode: "auto",
-      requirementsToml:
-        'allowed_sandbox_modes = ["danger-full-access", "read-only"]\nallowed_approval_policies = ["never", "on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
-    });
-
-    expectRuntimePolicy(runtime, {
-      approvalPolicy: "on-failure",
-      sandbox: "read-only",
-      approvalsReviewer: "user",
-    });
+  it("fails closed when normalized OpenClaw auto mode cannot force prompting over yolo", () => {
+    expect(() =>
+      resolveRuntimeForTest({
+        pluginConfig: {},
+        execMode: "auto",
+        requirementsToml:
+          'allowed_sandbox_modes = ["danger-full-access", "read-only"]\nallowed_approval_policies = ["never", "on-failure"]\nallowed_approvals_reviewers = ["user"]\n',
+      }),
+    ).toThrow("tools.exec.mode=auto requires Codex app-server prompting approvals");
   });
 
   it("keeps normalized OpenClaw auto mode when legacy app-server yolo was schema-defaulted", () => {
