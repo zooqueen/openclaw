@@ -39,8 +39,7 @@ Manual dispatch inputs:
 - `provider`: `aws`, `azure`, or `hetzner`. macOS requires AWS.
 
 The repository dispatch event name is `clawsweeper_crabbox_pr_lease`. That name
-is part of the maintainer automation contract; it does not make the workflow a
-Mantis QA scenario.
+is part of the maintainer automation contract.
 
 ## Secrets
 
@@ -52,8 +51,7 @@ The workflow prefers generic Crabbox secrets:
 - `CRABBOX_ACCESS_CLIENT_SECRET`
 
 `OPENCLAW_QA_CRABBOX_COORDINATOR` and `OPENCLAW_QA_CRABBOX_COORDINATOR_TOKEN`
-are also accepted for shared QA environments. Older Mantis-prefixed coordinator
-secrets are accepted only as a compatibility fallback during migration.
+are also accepted for shared QA environments.
 
 ## First Run Proof
 
