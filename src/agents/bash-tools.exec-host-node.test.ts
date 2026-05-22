@@ -466,7 +466,9 @@ describe("executeNodeHostCommand", () => {
     const runParams = requireRunParams(requireGatewayCommand("system.run"));
     expect(runParams.approved).toBe(true);
     expect(runParams.approvalDecision).toBe("allow-once");
-    expect(runParams.runId).toBe(requireRegisteredApprovalRequest().approvalId);
+    const approvalRequest = requireRegisteredApprovalRequest();
+    expect(approvalRequest.requireDeliveryRoute).toBe(false);
+    expect(runParams.runId).toBe(approvalRequest.approvalId);
     expect(callGatewayToolMock.mock.calls).toContainEqual([
       "exec.approval.resolve",
       expect.objectContaining({ timeoutMs: expect.any(Number) }),

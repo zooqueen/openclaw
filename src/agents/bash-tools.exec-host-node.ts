@@ -87,7 +87,10 @@ export async function executeNodeHostCommand(
       "Warning: security audit suppression changes require explicit approval unless exec is running in yolo mode.",
     );
   }
-  const registerNodeApproval = async (approvalId: string) =>
+  const registerNodeApproval = async (
+    approvalId: string,
+    options: { requireDeliveryRoute?: boolean } = {},
+  ) =>
     await registerExecApprovalRequestForHostOrThrow({
       approvalId,
       systemRunPlan: prepared.plan,
@@ -102,6 +105,9 @@ export async function executeNodeHostCommand(
         agentId: prepared.agentId,
         sessionKey: prepared.sessionKey,
       }),
+      ...(options.requireDeliveryRoute !== undefined
+        ? { requireDeliveryRoute: options.requireDeliveryRoute }
+        : {}),
       ...buildExecApprovalTurnSourceContext(params),
     });
 
@@ -137,7 +143,7 @@ export async function executeNodeHostCommand(
       });
       if (decision.decision === "allow-once") {
         const approvalId = crypto.randomUUID();
-        await registerNodeApproval(approvalId);
+        await registerNodeApproval(approvalId, { requireDeliveryRoute: false });
         await callGatewayTool(
           "exec.approval.resolve",
           { timeoutMs: DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS },
