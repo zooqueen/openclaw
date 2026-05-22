@@ -487,6 +487,35 @@ describe("config schema", () => {
     expect(config.agents?.list?.[0]?.tools?.exec?.reviewer?.model).toBe("openai/gpt-5.5");
   });
 
+  it("rejects mixed normalized and legacy exec policy config", () => {
+    expect(
+      ToolsSchema.safeParse({
+        exec: {
+          mode: "auto",
+          ask: "always",
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      OpenClawSchema.safeParse({
+        agents: {
+          list: [
+            {
+              id: "main",
+              tools: {
+                exec: {
+                  mode: "full",
+                  security: "deny",
+                },
+              },
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts experimental tool flags in the runtime zod schema", () => {
     const parsed = ToolsSchema.parse({
       experimental: {

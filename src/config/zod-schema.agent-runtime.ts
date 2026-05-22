@@ -587,15 +587,34 @@ const ToolExecBaseShape = {
   applyPatch: ToolExecApplyPatchSchema,
 } as const;
 
+function addExecPolicyModeConflictIssue(
+  value: { mode?: unknown; security?: unknown; ask?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.mode === undefined || (value.security === undefined && value.ask === undefined)) {
+    return;
+  }
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["mode"],
+    message: "tools.exec.mode cannot be combined with tools.exec.security or tools.exec.ask",
+  });
+}
+
 const AgentToolExecSchema = z
   .object({
     ...ToolExecBaseShape,
     approvalRunningNoticeMs: z.number().int().nonnegative().optional(),
   })
   .strict()
+  .superRefine(addExecPolicyModeConflictIssue)
   .optional();
 
-const ToolExecSchema = z.object(ToolExecBaseShape).strict().optional();
+const ToolExecSchema = z
+  .object(ToolExecBaseShape)
+  .strict()
+  .superRefine(addExecPolicyModeConflictIssue)
+  .optional();
 
 const ToolFsSchema = z
   .object({
