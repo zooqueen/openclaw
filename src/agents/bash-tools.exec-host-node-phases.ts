@@ -20,6 +20,7 @@ import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-cont
 import { formatExecCommand, resolveSystemRunCommandRequest } from "../infra/system-run-command.js";
 import { normalizeNullableString } from "../shared/string-coerce.js";
 import type { ExecuteNodeHostCommandParams } from "./bash-tools.exec-host-node.types.js";
+import { commandRequiresMutableScriptApproval } from "./bash-tools.exec-mutable-script-guard.js";
 import { renderExecOutputText } from "./bash-tools.exec-output.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import { callGatewayTool } from "./tools/gateway.js";
@@ -50,6 +51,7 @@ type NodeApprovalAnalysis = {
   durableApprovalSatisfied: boolean;
   inlineEvalHit: InterpreterInlineEvalHit | null;
   requiresSecurityAuditSuppressionApproval: boolean;
+  requiresMutableScriptApproval: boolean;
   autoReviewArgv?: string[];
 };
 
@@ -325,6 +327,13 @@ export async function analyzeNodeApprovalRequirement(params: {
       env: params.request.env,
       segments: baseAllowlistEval.segments,
     }) && !(params.hostSecurity === "full" && params.hostAsk === "off");
+  const requiresMutableScriptApproval =
+    params.prepared.plan.mutableFileOperand != null ||
+    commandRequiresMutableScriptApproval({
+      command: params.request.command,
+      cwd: params.prepared.cwd ?? params.request.workdir,
+      segments: baseAllowlistEval.segments,
+    });
   if (inlineEvalHit) {
     params.request.warnings.push(
       `Warning: strict inline-eval mode requires explicit approval for ${describeInterpreterInlineEval(
@@ -378,6 +387,7 @@ export async function analyzeNodeApprovalRequirement(params: {
     durableApprovalSatisfied,
     inlineEvalHit,
     requiresSecurityAuditSuppressionApproval,
+    requiresMutableScriptApproval,
     autoReviewArgv:
       baseAllowlistEval.segments.length === 1 &&
       (baseAllowlistEval.segments[0]?.raw === undefined ||

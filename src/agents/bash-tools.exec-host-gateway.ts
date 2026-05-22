@@ -17,8 +17,6 @@ import {
 } from "../infra/exec-approvals.js";
 import { defaultExecAutoReviewer, type ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
-import { extractShellWrapperInlineCommand } from "../infra/exec-wrapper-resolution.js";
-import { resolveMutableFileOperandSnapshotSync } from "../node-host/invoke-system-run-plan.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
 import {
   buildExecApprovalRequesterContext,
@@ -38,6 +36,7 @@ import {
   sendExecApprovalFollowupResult,
   shouldResolveExecApprovalUnavailableInline,
 } from "./bash-tools.exec-host-shared.js";
+import { commandRequiresMutableScriptApproval } from "./bash-tools.exec-mutable-script-guard.js";
 import {
   DEFAULT_NOTIFY_TAIL_CHARS,
   createApprovalSlug,
@@ -107,23 +106,6 @@ function hasGatewayAllowlistMiss(params: {
     (!params.analysisOk || !params.allowlistSatisfied) &&
     !params.durableApprovalSatisfied
   );
-}
-
-function commandRequiresMutableScriptApproval(params: {
-  command: string;
-  cwd: string;
-  segments: Array<{ argv: string[]; raw?: string }>;
-}): boolean {
-  return params.segments.some((segment) => {
-    const shellCommand =
-      extractShellWrapperInlineCommand(segment.argv) ?? segment.raw ?? params.command;
-    const snapshot = resolveMutableFileOperandSnapshotSync({
-      argv: segment.argv,
-      cwd: params.cwd,
-      shellCommand,
-    });
-    return !snapshot.ok || snapshot.snapshot !== null;
-  });
 }
 
 function formatOutcomeExitLabel(outcome: { exitCode: number | null; timedOut: boolean }): string {

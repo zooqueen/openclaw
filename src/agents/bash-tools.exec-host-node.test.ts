@@ -578,6 +578,15 @@ describe("executeNodeHostCommand", () => {
       hostAsk: "on-miss",
       askFallback: "deny",
     });
+    parsePreparedSystemRunPayloadMock.mockReturnValue({
+      plan: {
+        ...preparedPlan,
+        argv: ["/bin/sh", "-lc", "pwd"],
+        commandText: "/bin/sh -lc pwd",
+        commandPreview: "pwd",
+        mutableFileOperand: null,
+      },
+    });
     evaluateShellAllowlistMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
@@ -603,6 +612,53 @@ describe("executeNodeHostCommand", () => {
     expect(registerExecApprovalRequestForHostOrThrowMock).toHaveBeenCalledTimes(1);
     expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
     expect(result.details?.status).toBe("completed");
+  });
+
+  it("keeps mutable script operands on explicit approval in node auto-review mode", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    parsePreparedSystemRunPayloadMock.mockReturnValue({
+      plan: {
+        ...preparedPlan,
+        argv: ["node", "/tmp/work/script.js"],
+        commandText: "node /tmp/work/script.js",
+        commandPreview: "node /tmp/work/script.js",
+        mutableFileOperand: {
+          argvIndex: 1,
+          path: "/tmp/work/script.js",
+          sha256: "abc123",
+        },
+      },
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: true,
+      allowlistSatisfied: false,
+      segments: [{ resolution: null, argv: ["node", "/tmp/work/script.js"] }],
+      segmentAllowlistEntries: [],
+    });
+
+    const result = await executeNodeHostCommand({
+      command: "node /tmp/work/script.js",
+      workdir: "/tmp/work",
+      env: {},
+      security: "allowlist",
+      ask: "on-miss",
+      autoReview: true,
+      defaultTimeoutSec: 30,
+      approvalRunningNoticeMs: 0,
+      warnings: [],
+      agentId: "requested-agent",
+      sessionKey: "requested-session",
+    });
+
+    expect(defaultExecAutoReviewerMock).not.toHaveBeenCalled();
+    expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+    expect(result.details?.status).toBe("approval-pending");
   });
 
   it("keeps strict inline-eval node commands on explicit approval", async () => {

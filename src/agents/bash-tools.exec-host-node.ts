@@ -70,6 +70,7 @@ export async function executeNodeHostCommand(
     durableApprovalSatisfied,
     inlineEvalHit,
     requiresSecurityAuditSuppressionApproval,
+    requiresMutableScriptApproval,
     autoReviewArgv,
   } = approvalAnalysis;
   const requiresAsk =
@@ -120,7 +121,8 @@ export async function executeNodeHostCommand(
       hostAsk !== "always" &&
       analysisOk &&
       inlineEvalHit === null &&
-      !requiresSecurityAuditSuppressionApproval
+      !requiresSecurityAuditSuppressionApproval &&
+      !requiresMutableScriptApproval
     ) {
       const reviewer = params.autoReviewer ?? defaultExecAutoReviewer;
       const decision = await reviewer({
