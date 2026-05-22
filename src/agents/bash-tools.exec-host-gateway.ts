@@ -4,7 +4,6 @@ import { detectPolicyInlineEval } from "../infra/command-analysis/policy.js";
 import { commandRequiresSecurityAuditSuppressionApproval } from "../infra/exec-approval-guards.js";
 import {
   addDurableCommandApproval,
-  analyzeShellCommand,
   type ExecAsk,
   resolveExecApprovalAllowedDecisions,
   type ExecSecurity,
