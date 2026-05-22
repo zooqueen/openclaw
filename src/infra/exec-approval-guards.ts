@@ -1,9 +1,4 @@
-import { analyzeShellCommand } from "../infra/exec-approvals.js";
-
-export type ExecCommandGuardSegment = {
-  argv: string[];
-  raw?: string;
-};
+import { analyzeShellCommand, type ExecCommandSegment } from "./exec-approvals-analysis.js";
 
 function normalizeCommandName(value: string | undefined): string {
   return (value ?? "").split(/[\\/]/).pop()?.toLowerCase() ?? "";
@@ -67,7 +62,7 @@ export function commandRequiresSecurityAuditSuppressionApproval(params: {
   command: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  segments: ExecCommandGuardSegment[];
+  segments: ExecCommandSegment[];
 }): boolean {
   let sawSegmentMention = false;
   for (const segment of params.segments) {

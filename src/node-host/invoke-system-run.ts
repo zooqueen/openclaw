@@ -6,6 +6,7 @@ import {
   type InterpreterInlineEvalHit,
 } from "../infra/command-analysis/inline-eval.js";
 import { detectPolicyInlineEval } from "../infra/command-analysis/policy.js";
+import { commandRequiresSecurityAuditSuppressionApproval } from "../infra/exec-approval-guards.js";
 import {
   addDurableCommandApproval,
   hasDurableExecApproval,
@@ -534,11 +535,24 @@ async function evaluateSystemRunPolicyPhase(
     return null;
   }
 
+  const securityAuditSuppressionRequiresApproval =
+    commandRequiresSecurityAuditSuppressionApproval({
+      command: parsed.commandText,
+      cwd: parsed.cwd,
+      env: parsed.env,
+      segments,
+    }) && !(security === "full" && ask === "off");
+  if (securityAuditSuppressionRequiresApproval && !policy.approvedByAsk && !policy.allowed) {
+    autoReviewDeferredMessage =
+      "SYSTEM_RUN_DENIED: approval required (security audit suppression changes require explicit approval unless exec is running in yolo mode)";
+  }
+
   if (!policy.allowed) {
     const canAutoReviewApprovalMiss =
       modePolicy.autoReview &&
       ask !== "always" &&
       inlineEvalHit === null &&
+      !securityAuditSuppressionRequiresApproval &&
       policy.eventReason !== "security=deny";
     if (canAutoReviewApprovalMiss) {
       const reviewer = await resolveSystemRunAutoReviewer({

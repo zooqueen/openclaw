@@ -1,6 +1,7 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { describeInterpreterInlineEval } from "../infra/command-analysis/inline-eval.js";
 import { detectPolicyInlineEval } from "../infra/command-analysis/policy.js";
+import { commandRequiresSecurityAuditSuppressionApproval } from "../infra/exec-approval-guards.js";
 import {
   addDurableCommandApproval,
   analyzeShellCommand,
@@ -20,7 +21,6 @@ import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
 import { extractShellWrapperInlineCommand } from "../infra/exec-wrapper-resolution.js";
 import { resolveMutableFileOperandSnapshotSync } from "../node-host/invoke-system-run-plan.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
-import { commandRequiresSecurityAuditSuppressionApproval } from "./bash-tools.exec-approval-guards.js";
 import {
   buildExecApprovalRequesterContext,
   buildExecApprovalTurnSourceContext,

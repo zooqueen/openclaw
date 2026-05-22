@@ -5,6 +5,7 @@ import {
   type InterpreterInlineEvalHit,
 } from "../infra/command-analysis/inline-eval.js";
 import { detectPolicyInlineEval } from "../infra/command-analysis/policy.js";
+import { commandRequiresSecurityAuditSuppressionApproval } from "../infra/exec-approval-guards.js";
 import {
   type ExecApprovalsFile,
   type ExecAsk,
@@ -18,7 +19,6 @@ import { buildNodeShellCommand } from "../infra/node-shell.js";
 import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-context.js";
 import { formatExecCommand, resolveSystemRunCommandRequest } from "../infra/system-run-command.js";
 import { normalizeNullableString } from "../shared/string-coerce.js";
-import { commandRequiresSecurityAuditSuppressionApproval } from "./bash-tools.exec-approval-guards.js";
 import type { ExecuteNodeHostCommandParams } from "./bash-tools.exec-host-node.types.js";
 import { renderExecOutputText } from "./bash-tools.exec-output.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
