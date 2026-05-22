@@ -762,6 +762,41 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     });
   });
 
+  it("preserves explicit read-only app-server sandbox for auto mode", () => {
+    const configRuntime = resolveRuntimeForTest({
+      pluginConfig: {
+        appServer: {
+          mode: "yolo",
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          approvalsReviewer: "user",
+        },
+      },
+      execMode: "auto",
+      env: {},
+    });
+    const envRuntime = resolveRuntimeForTest({
+      pluginConfig: {},
+      execMode: "auto",
+      env: {
+        OPENCLAW_CODEX_APP_SERVER_MODE: "yolo",
+        OPENCLAW_CODEX_APP_SERVER_APPROVAL_POLICY: "never",
+        OPENCLAW_CODEX_APP_SERVER_SANDBOX: "read-only",
+      },
+    });
+
+    expectRuntimePolicy(configRuntime, {
+      approvalPolicy: "on-request",
+      sandbox: "read-only",
+      approvalsReviewer: "auto_review",
+    });
+    expectRuntimePolicy(envRuntime, {
+      approvalPolicy: "on-request",
+      sandbox: "read-only",
+      approvalsReviewer: "auto_review",
+    });
+  });
+
   it.each(["deny", "allowlist"] as const)(
     "blocks Codex app-server local execution for normalized OpenClaw %s exec mode",
     (execMode) => {

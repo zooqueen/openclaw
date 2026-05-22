@@ -440,12 +440,10 @@ export function resolveCodexAppServerRuntimeOptions(
         approvalPolicy: defaultPolicy?.approvalPolicy ?? "on-request",
         sandbox: forceDangerFullAccessSandbox
           ? selectForcedDangerFullAccessSandbox(defaultPolicy)
-          : forceUserReviewer
-            ? selectForcedUserApprovalSandbox({
-                configuredSandbox,
-                defaultSandbox: defaultPolicy?.sandbox,
-              })
-            : (defaultPolicy?.sandbox ?? "workspace-write"),
+          : selectForcedPromptingSandbox({
+              configuredSandbox,
+              defaultSandbox: defaultPolicy?.sandbox,
+            }),
         approvalsReviewer:
           defaultPolicy?.approvalsReviewer ?? (forceUserReviewer ? "user" : "auto_review"),
       }
@@ -1010,7 +1008,7 @@ function selectUserApprovalsReviewer(
   throw new Error("tools.exec.mode=ask requires Codex app-server user approvals");
 }
 
-function selectForcedUserApprovalSandbox(params: {
+function selectForcedPromptingSandbox(params: {
   configuredSandbox?: CodexAppServerSandboxMode;
   defaultSandbox?: CodexAppServerSandboxMode;
 }): CodexAppServerSandboxMode {
