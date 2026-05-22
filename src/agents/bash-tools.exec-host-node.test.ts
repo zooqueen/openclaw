@@ -469,6 +469,49 @@ describe("executeNodeHostCommand", () => {
     expect(runParams.runId).toEqual(expect.any(String));
   });
 
+  it("keeps unparsable node commands on explicit approval in auto-review mode", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    parsePreparedSystemRunPayloadMock.mockReturnValue({
+      plan: {
+        ...preparedPlan,
+        argv: ["/bin/sh", "-lc", "cat <<EOF\n$SECRET\nEOF"],
+        commandText: "/bin/sh -lc 'cat <<EOF\n$SECRET\nEOF'",
+        commandPreview: "cat <<EOF\n$SECRET\nEOF",
+        mutableFileOperand: null,
+      },
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: false,
+      allowlistSatisfied: false,
+      segments: [],
+      segmentAllowlistEntries: [],
+    });
+
+    const result = await executeNodeHostCommand({
+      command: "cat <<EOF\n$SECRET\nEOF",
+      workdir: "/tmp/work",
+      env: {},
+      security: "allowlist",
+      ask: "on-miss",
+      autoReview: true,
+      defaultTimeoutSec: 30,
+      approvalRunningNoticeMs: 0,
+      warnings: [],
+      agentId: "requested-agent",
+      sessionKey: "requested-session",
+    });
+
+    expect(defaultExecAutoReviewerMock).not.toHaveBeenCalled();
+    expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+    expect(result.details?.status).toBe("approval-pending");
+  });
+
   it("does not send first-segment argv for compound node auto-review commands", async () => {
     resolveExecHostApprovalContextMock.mockReturnValue({
       approvals: { allowlist: [], file: { version: 1, agents: {} } },

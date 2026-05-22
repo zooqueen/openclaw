@@ -436,6 +436,7 @@ export async function processGatewayAllowlist(
     const canAutoReviewApprovalMiss =
       params.autoReview === true &&
       hostAsk !== "always" &&
+      analysisOk &&
       !requiresAllowlistPlanApproval &&
       !requiresHeredocApproval &&
       !requiresInlineEvalApproval &&

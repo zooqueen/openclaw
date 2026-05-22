@@ -715,6 +715,46 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
   });
 
   it.runIf(process.platform !== "win32")(
+    "requires explicit approval when system.run auto mode cannot parse the shell command",
+    async () => {
+      const tmp = createFixtureDir("openclaw-system-run-auto-unparsed-");
+      setRuntimeConfigSnapshot({
+        tools: {
+          exec: {
+            mode: "auto",
+          },
+        },
+      });
+      try {
+        const autoReviewer = vi.fn<ExecAutoReviewer>(() => ({
+          decision: "allow-once",
+          rationale: "small read",
+          risk: "low",
+        }));
+        const runCommand = vi.fn(async () => createLocalRunResult("should-not-run"));
+        const invoke = await runSystemInvoke({
+          preferMacAppExecHost: false,
+          command: ["/bin/sh", "-c", "cat <<EOF\n$SECRET\nEOF"],
+          cwd: tmp,
+          runCommand,
+          resolveExecSecurity: resolveProductionExecSecurity,
+          resolveExecAsk: resolveProductionExecAsk,
+          autoReviewer,
+        });
+
+        expect(autoReviewer).not.toHaveBeenCalled();
+        expect(runCommand).not.toHaveBeenCalled();
+        expectInvokeErrorMessage(invoke.sendInvokeResult, {
+          message: "SYSTEM_RUN_DENIED: approval required",
+          exact: true,
+        });
+      } finally {
+        clearRuntimeConfigSnapshot();
+      }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
     "does not send first-segment argv for compound system.run auto-review commands",
     async () => {
       const tmp = createFixtureDir("openclaw-system-run-compound-auto-review-");

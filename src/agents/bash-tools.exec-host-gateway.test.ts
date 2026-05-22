@@ -615,6 +615,34 @@ EOF`,
     expect(warnings).toEqual(["Exec auto-review allowed once (risk=low): allowed"]);
   });
 
+  it("keeps unparsable gateway commands on explicit approval in auto-review mode", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    evaluateShellAllowlistMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: false,
+      allowlistSatisfied: false,
+      segments: [],
+      segmentAllowlistEntries: [],
+    });
+    requiresExecApprovalMock.mockReturnValue(true);
+
+    const result = await runGatewayAllowlist({
+      command: "cat <<EOF\n$SECRET\nEOF",
+      security: "allowlist",
+      ask: "on-miss",
+      autoReview: true,
+    });
+
+    expect(defaultExecAutoReviewerMock).not.toHaveBeenCalled();
+    expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);
+    expect(result.pendingResult?.details.status).toBe("approval-pending");
+  });
+
   it("does not send first-segment argv for compound auto-review commands", async () => {
     evaluateShellAllowlistMock.mockReturnValue({
       allowlistMatches: [],

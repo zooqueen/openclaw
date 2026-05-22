@@ -94,6 +94,7 @@ export async function executeNodeHostCommand(
     if (
       params.autoReview === true &&
       hostAsk !== "always" &&
+      analysisOk &&
       inlineEvalHit === null &&
       !requiresSecurityAuditSuppressionApproval
     ) {

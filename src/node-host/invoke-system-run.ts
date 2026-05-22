@@ -551,6 +551,7 @@ async function evaluateSystemRunPolicyPhase(
     const canAutoReviewApprovalMiss =
       modePolicy.autoReview &&
       ask !== "always" &&
+      analysisOk &&
       inlineEvalHit === null &&
       !securityAuditSuppressionRequiresApproval &&
       policy.eventReason !== "security=deny";
