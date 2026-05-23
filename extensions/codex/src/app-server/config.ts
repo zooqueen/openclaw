@@ -699,7 +699,10 @@ function resolveDefaultCodexAppServerPolicy(params: {
       ),
       approvalsReviewer: params.forceUserReviewer
         ? selectUserApprovalsReviewer(undefined)
-        : selectGuardianApprovalsReviewer(undefined),
+        : selectGuardianApprovalsReviewer(
+            undefined,
+            params.execModeRequiringPromptingApprovals === "auto" ? "auto" : undefined,
+          ),
       sandbox: selectGuardianSandbox(undefined),
     };
   }
@@ -727,7 +730,10 @@ function resolveDefaultCodexAppServerPolicy(params: {
     ),
     approvalsReviewer: params.forceUserReviewer
       ? selectUserApprovalsReviewer(allowedApprovalsReviewers)
-      : selectGuardianApprovalsReviewer(allowedApprovalsReviewers),
+      : selectGuardianApprovalsReviewer(
+          allowedApprovalsReviewers,
+          params.execModeRequiringPromptingApprovals === "auto" ? "auto" : undefined,
+        ),
     sandbox: selectGuardianSandbox(allowedSandboxModes),
   };
 }
@@ -998,12 +1004,18 @@ function selectGuardianApprovalPolicy(
 
 function selectGuardianApprovalsReviewer(
   allowedApprovalsReviewers: Set<CodexAppServerApprovalsReviewer> | undefined,
+  execModeRequiringAutoReviewer?: Extract<OpenClawExecMode, "auto">,
 ): CodexAppServerApprovalsReviewer {
   if (allowedApprovalsReviewers === undefined || allowedApprovalsReviewers.has("auto_review")) {
     return "auto_review";
   }
   if (allowedApprovalsReviewers.has("guardian_subagent")) {
     return "guardian_subagent";
+  }
+  if (execModeRequiringAutoReviewer) {
+    throw new Error(
+      `tools.exec.mode=${execModeRequiringAutoReviewer} requires Codex app-server auto approvals`,
+    );
   }
   if (allowedApprovalsReviewers.has("user")) {
     return "user";

@@ -12,6 +12,10 @@ import { createMockPluginRegistry } from "openclaw/plugin-sdk/plugin-test-runtim
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodexServerNotification, JsonObject, RpcRequest } from "./protocol.js";
 
+const sideQuestionMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  resolveSandboxContext: vi.fn(),
+}));
 const readCodexAppServerBindingMock = vi.fn();
 const isCodexAppServerNativeAuthProfileMock = vi.fn();
 const getSharedCodexAppServerClientMock = vi.fn();
@@ -19,6 +23,29 @@ const refreshCodexAppServerAuthTokensMock = vi.fn();
 const createOpenClawCodingToolsMock = vi.fn();
 const toolExecuteMock = vi.fn();
 const handleCodexAppServerApprovalRequestMock = vi.fn();
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    readFileSync: ((...args: Parameters<typeof actual.readFileSync>) => {
+      const implementation = sideQuestionMocks.readFileSync.getMockImplementation();
+      const path = args[0];
+      const isCodexRequirementsPath =
+        typeof path === "string" &&
+        (path.endsWith("/codex/requirements.toml") ||
+          path.endsWith("\\OpenAI\\Codex\\requirements.toml"));
+      return implementation && isCodexRequirementsPath
+        ? implementation(...args)
+        : actual.readFileSync(...args);
+    }) as typeof actual.readFileSync,
+  };
+});
+
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
+  resolveSandboxContext: (...args: unknown[]) => sideQuestionMocks.resolveSandboxContext(...args),
+}));
 
 vi.mock("./session-binding.js", () => ({
   clearCodexAppServerBinding: vi.fn(),
@@ -315,12 +342,18 @@ describe("runCodexAppServerSideQuestion", () => {
   beforeEach(() => {
     nativeHookRelayTesting.clearNativeHookRelaysForTests();
     readCodexAppServerBindingMock.mockReset();
+    sideQuestionMocks.readFileSync.mockReset();
+    sideQuestionMocks.resolveSandboxContext.mockReset();
     isCodexAppServerNativeAuthProfileMock.mockReset();
     getSharedCodexAppServerClientMock.mockReset();
     refreshCodexAppServerAuthTokensMock.mockReset();
     createOpenClawCodingToolsMock.mockReset();
     toolExecuteMock.mockReset();
     handleCodexAppServerApprovalRequestMock.mockReset();
+    sideQuestionMocks.readFileSync.mockImplementation(() => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+    sideQuestionMocks.resolveSandboxContext.mockResolvedValue(null);
 
     toolExecuteMock.mockResolvedValue({
       content: [{ type: "text", text: "tool output" }],
@@ -580,6 +613,52 @@ describe("runCodexAppServerSideQuestion", () => {
         },
       }),
     );
+
+    const forkParams = mockCall(client.request)[1] as Record<string, unknown> | undefined;
+    expect(forkParams?.approvalPolicy).toBe("on-request");
+    expect(forkParams?.sandbox).toBe("workspace-write");
+    expect(forkParams?.approvalsReviewer).toBe("user");
+  });
+
+  it("keeps sandbox-clamped side-thread policy for legacy full exec with ask", async () => {
+    const client = createFakeClient();
+    getSharedCodexAppServerClientMock.mockResolvedValue(client);
+    sideQuestionMocks.readFileSync.mockImplementation(
+      () => 'allowed_sandbox_modes = ["read-only", "workspace-write"]\n',
+    );
+    sideQuestionMocks.resolveSandboxContext.mockResolvedValue({
+      enabled: true,
+      workspaceAccess: "rw",
+      workspaceDir: "/tmp/sandbox",
+    });
+    readCodexAppServerBindingMock.mockResolvedValueOnce({
+      schemaVersion: 1,
+      threadId: "parent-thread",
+      sessionFile: "/tmp/session-1.jsonl",
+      cwd: "/tmp/workspace",
+      authProfileId: "openai-codex:work",
+      model: "gpt-5.5",
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    });
+
+    await expect(
+      runCodexAppServerSideQuestion(
+        sideParams({
+          sessionKey: "agent:main:session-1",
+          cfg: {
+            tools: {
+              exec: {
+                security: "full",
+                ask: "on-miss",
+              },
+            },
+          } as never,
+        }),
+      ),
+    ).resolves.toEqual({ text: "Side answer." });
 
     const forkParams = mockCall(client.request)[1] as Record<string, unknown> | undefined;
     expect(forkParams?.approvalPolicy).toBe("on-request");

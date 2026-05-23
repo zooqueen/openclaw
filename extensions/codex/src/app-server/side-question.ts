@@ -95,6 +95,7 @@ type SideSessionExecOverrides = {
   ask?: SideExecAsk;
   node?: string;
 };
+type SideSandboxContext = Awaited<ReturnType<typeof resolveSandboxContext>>;
 const SIDE_BOUNDARY_PROMPT = `Side conversation boundary.
 
 Everything before this boundary is inherited history from the parent thread. It is reference context only. It is not your current task.
@@ -213,9 +214,20 @@ export async function runCodexAppServerSideQuestion(
     execOverrides: resolveSideSessionExecOverrides(params.sessionEntry),
     approvals: loadExecApprovals(),
   });
+  const cwd = binding.cwd || params.workspaceDir || process.cwd();
+  const sandboxSessionKey = params.sessionKey?.trim() || params.sessionId || sessionAgentId;
+  const sandboxForPolicy =
+    execPolicy.touched && execPolicy.security === "full" && execPolicy.ask !== "off"
+      ? await resolveSandboxContext({
+          config: params.cfg,
+          sessionKey: sandboxSessionKey,
+          workspaceDir: cwd,
+        })
+      : undefined;
   const appServer = resolveCodexAppServerRuntimeOptions({
     pluginConfig,
     execPolicy,
+    openClawSandboxActive: sandboxForPolicy?.enabled === true,
   });
   const authProfileId = params.authProfileId ?? binding.authProfileId;
   const client = await getSharedCodexAppServerClient({
@@ -243,13 +255,14 @@ export async function runCodexAppServerSideQuestion(
   let nativeHookRelay: NativeHookRelayRegistrationHandle | undefined;
 
   try {
-    const cwd = binding.cwd || params.workspaceDir || process.cwd();
     const sideRunParams = buildSideRunAttemptParams(params, { cwd, authProfileId });
     const toolBridge = await createCodexSideToolBridge({
       params,
       cwd,
       pluginConfig,
       sessionAgentId,
+      sandbox: sandboxForPolicy,
+      sandboxSessionKey,
       signal: runAbortController.signal,
     });
     removeRequestHandler = client.addRequestHandler(async (request) => {
@@ -588,6 +601,8 @@ async function createCodexSideToolBridge(input: {
   cwd: string;
   pluginConfig: ReturnType<typeof readCodexPluginConfig>;
   sessionAgentId: string;
+  sandbox?: SideSandboxContext;
+  sandboxSessionKey: string;
   signal: AbortSignal;
 }): Promise<CodexDynamicToolBridge> {
   const runtimeModel =
@@ -597,13 +612,15 @@ async function createCodexSideToolBridge(input: {
   if (supportsModelTools(runtimeModel)) {
     const createOpenClawCodingTools = (await import("openclaw/plugin-sdk/agent-harness"))
       .createOpenClawCodingTools;
-    const sandboxSessionKey =
-      input.params.sessionKey?.trim() || input.params.sessionId || input.sessionAgentId;
-    const sandbox = await resolveSandboxContext({
-      config: input.params.cfg,
-      sessionKey: sandboxSessionKey,
-      workspaceDir: input.cwd,
-    });
+    const sandboxSessionKey = input.sandboxSessionKey;
+    const sandbox =
+      input.sandbox === undefined
+        ? await resolveSandboxContext({
+            config: input.params.cfg,
+            sessionKey: sandboxSessionKey,
+            workspaceDir: input.cwd,
+          })
+        : input.sandbox;
     const allTools = createOpenClawCodingTools({
       agentId: input.sessionAgentId,
       sessionKey: sandboxSessionKey,

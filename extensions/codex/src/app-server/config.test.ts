@@ -996,6 +996,17 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     ).toThrow("tools.exec.mode=auto requires Codex app-server prompting approvals");
   });
 
+  it("fails closed when normalized OpenClaw auto mode cannot use an auto reviewer", () => {
+    expect(() =>
+      resolveRuntimeForTest({
+        pluginConfig: {},
+        execMode: "auto",
+        requirementsToml:
+          'allowed_approval_policies = ["on-request"]\nallowed_approvals_reviewers = ["user"]\n',
+      }),
+    ).toThrow("tools.exec.mode=auto requires Codex app-server auto approvals");
+  });
+
   it("keeps normalized OpenClaw auto mode when legacy app-server yolo was schema-defaulted", () => {
     const runtime = resolveRuntimeForTest({
       pluginConfig: {
