@@ -17,6 +17,20 @@ import type { HealthCheck, HealthFinding } from "./health-checks.js";
 
 const BROWSER_CLAWD_PROFILE_RESIDUE_CHECK_ID = "core/doctor/browser-clawd-profile-residue";
 const FINAL_CONFIG_VALIDATION_CHECK_ID = "core/doctor/final-config-validation";
+const SHELL_COMPLETION_CHECK_ID = "core/doctor/shell-completion";
+
+type CoreDoctorRuntimeContext = {
+  readonly doctor?: {
+    readonly options?: {
+      readonly nonInteractive?: boolean;
+    };
+    readonly confirm?: (params: { message: string; initialValue?: boolean }) => Promise<boolean>;
+  };
+};
+
+function coreDoctorRuntimeContext<T extends object>(ctx: T): T & CoreDoctorRuntimeContext {
+  return ctx as T & CoreDoctorRuntimeContext;
+}
 
 export type CoreHealthCheckDeps = {
   readonly detectUnavailableSkills: (cfg: OpenClawConfig) => Promise<readonly SkillStatusEntry[]>;
@@ -493,6 +507,27 @@ const legacyWhatsAppCrontabCheck: HealthCheck = {
   },
 };
 
+const shellCompletionCheck: HealthCheck = {
+  id: SHELL_COMPLETION_CHECK_ID,
+  kind: "core",
+  description: "Shell completion profile and cache are ready.",
+  source: "doctor",
+  async detect(ctx) {
+    const { detectShellCompletionHealth } = await import("../commands/doctor-completion.js");
+    return detectShellCompletionHealth(coreDoctorRuntimeContext(ctx).doctor?.options);
+  },
+  async repair(ctx) {
+    const { repairShellCompletionHealth } = await import("../commands/doctor-completion.js");
+    const runtimeCtx = coreDoctorRuntimeContext(ctx);
+    return repairShellCompletionHealth({
+      options: runtimeCtx.doctor?.options,
+      deps: {
+        confirm: runtimeCtx.doctor?.confirm,
+      },
+    });
+  },
+};
+
 const gatewayPlatformNotesCheck: HealthCheck = {
   id: "core/doctor/gateway-services/platform-notes",
   kind: "core",
@@ -742,6 +777,7 @@ function createConvertedWorkflowChecks(deps: CoreHealthCheckDeps): readonly Heal
     gatewayAuthCheck,
     legacyStateCheck,
     legacyWhatsAppCrontabCheck,
+    shellCompletionCheck,
     gatewayPlatformNotesCheck,
     createSecurityCheck(deps),
     browserCheck,
