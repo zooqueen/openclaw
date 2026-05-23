@@ -14,7 +14,7 @@ import {
   recordDevLlmTraceStarted,
   resetDevLlmTracesForTest,
   resolveDevLlmTraceConfig,
-} from "./llm-dev-tracing.js";
+} from "../infra/llm-dev-tracing.js";
 import { wrapStreamFnWithDiagnosticModelCallEvents } from "./pi-embedded-runner/run/attempt.model-diagnostic-events.js";
 
 const ENV_KEYS = [

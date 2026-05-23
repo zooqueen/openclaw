@@ -49,6 +49,13 @@ function formatDuration(value?: number): string {
   return `${(value / 1000).toFixed(2)} s`;
 }
 
+function formatOptionalDuration(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+  return formatDuration(value);
+}
+
 function formatCount(value: number | undefined, singular: string, plural = `${singular}s`): string {
   const count = value ?? 0;
   return `${count} ${count === 1 ? singular : plural}`;
@@ -409,7 +416,6 @@ function renderTraceRows(
               </span>
               <span class="trace-meta mono">${entry.callId}</span>
               <span class="trace-row-facts">
-                <span>${formatDuration(entry.durationMs)}</span>
                 <span>${formatCount(entry.toolCount, "tool")}</span>
               </span>
             </span>
@@ -553,7 +559,7 @@ function renderTraceDetail(trace: LlmTraceDetail | null, capability: TraceCapabi
       </div>
       <div class="traces-detail-meta">
         <span><strong>${formatDuration(trace.durationMs)}</strong> duration</span>
-        <span><strong>${formatDuration(trace.timeToFirstByteMs)}</strong> TTFB</span>
+        <span><strong>${formatOptionalDuration(trace.timeToFirstByteMs)}</strong> TTFB</span>
         <span
           ><strong>${trace.toolCount ?? 0}</strong> ${trace.toolCount === 1
             ? "tool"

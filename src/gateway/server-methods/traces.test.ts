@@ -4,7 +4,7 @@ import {
   recordDevLlmTraceRequestPayload,
   recordDevLlmTraceStarted,
   resetDevLlmTracesForTest,
-} from "../../agents/llm-dev-tracing.js";
+} from "../../infra/llm-dev-tracing.js";
 import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../protocol/client-info.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import { tracesHandlers } from "./traces.js";

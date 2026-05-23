@@ -16,6 +16,13 @@ import {
   formatDiagnosticTraceparent,
   type DiagnosticTraceContext,
 } from "../../../infra/diagnostic-trace-context.js";
+import {
+  recordDevLlmTraceCompleted,
+  recordDevLlmTraceError,
+  recordDevLlmTraceRequestPayload,
+  recordDevLlmTraceResponseChunk,
+  recordDevLlmTraceStarted,
+} from "../../../infra/llm-dev-tracing.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import type {
   PluginHookAgentContext,
@@ -23,13 +30,6 @@ import type {
   PluginHookModelCallEndedEvent,
   PluginHookModelCallStartedEvent,
 } from "../../../plugins/hook-types.js";
-import {
-  recordDevLlmTraceCompleted,
-  recordDevLlmTraceError,
-  recordDevLlmTraceRequestPayload,
-  recordDevLlmTraceResponseChunk,
-  recordDevLlmTraceStarted,
-} from "../../llm-dev-tracing.js";
 
 export { diagnosticErrorCategory };
 

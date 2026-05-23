@@ -128,7 +128,7 @@ describeControlUiE2e("Control UI traces mocked Gateway E2E", () => {
 
       const rowText = await page.locator('[data-traces-row="run-trace:model:1"]').textContent();
       expect(rowText).toContain("openai/gpt-5.5");
-      expect(rowText).toContain("312 ms");
+      expect(rowText).not.toContain("312 ms");
       expect(rowText).toContain("1 tool");
       expect(rowText).not.toContain("2.0 KB");
 

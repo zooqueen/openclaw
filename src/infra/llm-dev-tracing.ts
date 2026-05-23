@@ -1,6 +1,6 @@
 import { isSourceCheckoutInstallRoot } from "../entry.compile-cache.js";
-import type { DiagnosticTraceContext } from "../infra/diagnostic-trace-context.js";
-import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
+import type { DiagnosticTraceContext } from "./diagnostic-trace-context.js";
+import { resolveOpenClawPackageRootSync } from "./openclaw-root.js";
 
 export type DevLlmTraceStatus = "running" | "completed" | "error";
 

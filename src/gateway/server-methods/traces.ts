@@ -2,7 +2,7 @@ import {
   getDevLlmTrace,
   listDevLlmTraces,
   resolveDevLlmTraceConfig,
-} from "../../agents/llm-dev-tracing.js";
+} from "../../infra/llm-dev-tracing.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
 

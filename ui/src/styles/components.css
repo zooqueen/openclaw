@@ -6610,7 +6610,7 @@ details[open] > .ov-expandable-toggle::after {
 /* Development traces */
 .traces-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
   gap: 12px;
   margin-top: 14px;
 }
@@ -6632,7 +6632,7 @@ details[open] > .ov-expandable-toggle::after {
   color: var(--text);
   cursor: pointer;
   display: block;
-  min-height: 68px;
+  min-height: 60px;
   padding: 10px;
   text-align: left;
   width: 100%;
