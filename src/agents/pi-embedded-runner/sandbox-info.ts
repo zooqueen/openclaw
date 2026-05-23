@@ -2,17 +2,19 @@ import type { ExecElevatedDefaults, ExecToolDefaults } from "../bash-tools.js";
 import type { resolveSandboxContext } from "../sandbox.js";
 import type { EmbeddedFullAccessBlockedReason, EmbeddedSandboxInfo } from "./types.js";
 
-type EmbeddedFullAccessExecPolicy = Pick<ExecToolDefaults, "mode" | "security">;
-type EmbeddedFullAccessHostPolicy = Pick<ExecToolDefaults, "security">;
+type EmbeddedFullAccessExecPolicy = Pick<ExecToolDefaults, "mode" | "security" | "ask">;
+type EmbeddedFullAccessHostPolicy = Pick<ExecToolDefaults, "security" | "ask">;
 
 function execPolicyBlocksFullAccess(params: {
   execPolicy?: EmbeddedFullAccessExecPolicy;
   hostPolicy?: EmbeddedFullAccessHostPolicy;
 }): boolean {
   return (
-    params.execPolicy?.mode === "deny" ||
-    params.execPolicy?.security === "deny" ||
-    params.hostPolicy?.security === "deny"
+    (params.execPolicy?.mode !== undefined && params.execPolicy.mode !== "full") ||
+    (params.execPolicy?.security !== undefined && params.execPolicy.security !== "full") ||
+    (params.execPolicy?.ask !== undefined && params.execPolicy.ask !== "off") ||
+    (params.hostPolicy?.security !== undefined && params.hostPolicy.security !== "full") ||
+    (params.hostPolicy?.ask !== undefined && params.hostPolicy.ask !== "off")
   );
 }
 

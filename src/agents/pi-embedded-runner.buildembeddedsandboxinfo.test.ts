@@ -156,6 +156,46 @@ describe("buildEmbeddedSandboxInfo", () => {
       fullAccessBlockedReason: "host-policy",
     });
   });
+
+  it("marks full access unavailable when host approval floors still require review", () => {
+    const sandbox = createSandboxContext();
+
+    expect(
+      buildEmbeddedSandboxInfo(
+        sandbox,
+        {
+          enabled: true,
+          allowed: true,
+          defaultLevel: "full",
+        },
+        { mode: "full", security: "full", ask: "off" },
+        { security: "allowlist", ask: "off" },
+      )?.elevated,
+    ).toEqual({
+      allowed: true,
+      defaultLevel: "full",
+      fullAccessAvailable: false,
+      fullAccessBlockedReason: "host-policy",
+    });
+
+    expect(
+      buildEmbeddedSandboxInfo(
+        sandbox,
+        {
+          enabled: true,
+          allowed: true,
+          defaultLevel: "full",
+        },
+        { mode: "full", security: "full", ask: "off" },
+        { security: "full", ask: "on-miss" },
+      )?.elevated,
+    ).toEqual({
+      allowed: true,
+      defaultLevel: "full",
+      fullAccessAvailable: false,
+      fullAccessBlockedReason: "host-policy",
+    });
+  });
 });
 
 describe("resolveEmbeddedFullAccessState", () => {

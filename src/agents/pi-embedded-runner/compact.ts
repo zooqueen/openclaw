@@ -18,7 +18,7 @@ import {
   type CapturedCompactionCheckpointSnapshot,
 } from "../../gateway/session-compaction-checkpoints.js";
 import { formatErrorMessage } from "../../infra/errors.js";
-import { loadExecApprovals } from "../../infra/exec-approvals.js";
+import { loadExecApprovals, resolveExecApprovalsFromFile } from "../../infra/exec-approvals.js";
 import { getMachineDisplayName } from "../../infra/machine-name.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { listRegisteredPluginAgentPromptGuidance } from "../../plugins/command-registry-state.js";
@@ -880,11 +880,19 @@ async function compactEmbeddedPiSessionDirectOnce(
         }),
       }),
     };
+    const execApprovals = resolveExecApprovalsFromFile({
+      file: loadExecApprovals(),
+      agentId: sessionAgentId,
+      overrides: {
+        security: params.execOverrides?.security,
+        ask: params.execOverrides?.ask,
+      },
+    });
     const sandboxInfo = buildEmbeddedSandboxInfo(
       sandbox,
       params.bashElevated,
       params.execOverrides,
-      loadExecApprovals().defaults,
+      execApprovals.agent,
     );
     const reasoningTagHint = isReasoningTagProvider(provider, {
       config: params.config,
