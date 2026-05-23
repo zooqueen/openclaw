@@ -141,6 +141,9 @@ describe("doctor health contributions", () => {
     mocks.listHealthChecks.mockReturnValue([
       { id: "core/doctor/shell-completion" },
       { id: "core/doctor/ui-protocol-freshness" },
+      { id: "core/doctor/sandbox/registry-files" },
+      { id: "core/doctor/sandbox/images" },
+      { id: "core/doctor/sandbox-scope" },
       { id: "core/doctor/unrelated" },
     ]);
     mocks.resolveAgentWorkspaceDir.mockReset();
@@ -283,6 +286,13 @@ describe("doctor health contributions", () => {
     );
   });
 
+  it("runs sandbox after legacy cron and before gateway services", () => {
+    const ids = resolveDoctorHealthContributions().map((entry) => entry.id);
+
+    expect(ids.indexOf("doctor:sandbox")).toBeGreaterThan(ids.indexOf("doctor:legacy-cron"));
+    expect(ids.indexOf("doctor:sandbox")).toBeLessThan(ids.indexOf("doctor:gateway-services"));
+  });
+
   it("keeps positional repairs out of the broad structured repair pass", async () => {
     const contribution = requireDoctorContribution("doctor:structured-health-repairs");
     const ctx = {
@@ -306,6 +316,71 @@ describe("doctor health contributions", () => {
       {
         checks: [{ id: "core/doctor/unrelated" }],
       },
+    );
+  });
+
+  it("runs sandbox registry and image repairs at the sandbox contribution position", async () => {
+    mocks.runDoctorHealthRepairs.mockResolvedValueOnce({
+      config: { agents: { defaults: { sandbox: { mode: "all" } } } },
+      findings: [
+        {
+          checkId: "core/doctor/sandbox/registry-files",
+          severity: "warning",
+          message: "Legacy sandbox registry file detected.",
+        },
+        {
+          checkId: "core/doctor/sandbox/images",
+          severity: "warning",
+          message: "Sandbox base image missing.",
+        },
+      ],
+      remainingFindings: [],
+      changes: ["Migrated sandbox registry.", "Checked sandbox base image default-image."],
+      warnings: [],
+      diffs: [],
+      effects: [],
+      checksRun: 2,
+      checksRepaired: 2,
+      checksValidated: 2,
+    });
+    const contribution = requireDoctorContribution("doctor:sandbox");
+    const ctx = {
+      cfg: {},
+      configResult: { cfg: {} },
+      sourceConfigValid: true,
+      prompter: buildDoctorPrompter(true),
+      runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
+      options: { dryRun: true, diff: true },
+      cfgForPersistence: {},
+      configPath: "/tmp/fake-openclaw.json",
+      env: {},
+    } as Parameters<(typeof contribution)["run"]>[0];
+
+    await contribution.run(ctx);
+
+    expect(ctx.cfg).toEqual({ agents: { defaults: { sandbox: { mode: "all" } } } });
+    expect(mocks.runDoctorHealthRepairs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg: {},
+        configPath: "/tmp/fake-openclaw.json",
+        doctor: expect.objectContaining({
+          confirmRuntimeRepair: expect.any(Function),
+          confirm: expect.any(Function),
+          note: expect.any(Function),
+        }),
+      }),
+      {
+        checks: [
+          { id: "core/doctor/sandbox/registry-files" },
+          { id: "core/doctor/sandbox/images" },
+        ],
+        dryRun: true,
+        diff: true,
+      },
+    );
+    expect(mocks.note).toHaveBeenCalledWith(
+      "Migrated sandbox registry.\nChecked sandbox base image default-image.",
+      "Doctor changes",
     );
   });
 

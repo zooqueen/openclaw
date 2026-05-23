@@ -7,6 +7,8 @@ import {
   type LegacyClawdBrowserProfileResidue,
 } from "../commands/doctor-browser.js";
 import { hasConfiguredCommandOwners } from "../commands/doctor-command-owner.js";
+import type { DoctorPrompter } from "../commands/doctor-prompter.js";
+import type { SandboxImageIssue } from "../commands/doctor-sandbox.js";
 import { disableUnavailableSkillsInConfig } from "../commands/doctor-skills-core.js";
 import type { ConfigValidationIssue, OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
@@ -19,6 +21,9 @@ const BROWSER_CLAWD_PROFILE_RESIDUE_CHECK_ID = "core/doctor/browser-clawd-profil
 const FINAL_CONFIG_VALIDATION_CHECK_ID = "core/doctor/final-config-validation";
 const SHELL_COMPLETION_CHECK_ID = "core/doctor/shell-completion";
 const UI_PROTOCOL_FRESHNESS_CHECK_ID = "core/doctor/ui-protocol-freshness";
+const SANDBOX_REGISTRY_FILES_CHECK_ID = "core/doctor/sandbox/registry-files";
+const SANDBOX_IMAGES_CHECK_ID = "core/doctor/sandbox/images";
+const SANDBOX_SCOPE_CHECK_ID = "core/doctor/sandbox-scope";
 
 type CoreDoctorRuntimeContext = {
   readonly doctor?: {
@@ -26,6 +31,10 @@ type CoreDoctorRuntimeContext = {
       readonly nonInteractive?: boolean;
     };
     readonly confirm?: (params: { message: string; initialValue?: boolean }) => Promise<boolean>;
+    readonly confirmRuntimeRepair?: (
+      params: Parameters<DoctorPrompter["confirmRuntimeRepair"]>[0],
+    ) => Promise<boolean>;
+    readonly note?: (message: unknown, title?: string) => void | Promise<void>;
     readonly confirmAutoFix?: (params: {
       message: string;
       initialValue?: boolean;
@@ -589,6 +598,261 @@ const uiProtocolFreshnessCheck: HealthCheck = {
   },
 };
 
+function sandboxRegistryDryRunChanges(
+  issues: readonly {
+    kind: string;
+    registryPath: string;
+    valid: boolean;
+    entries: number;
+  }[],
+): string[] {
+  return issues.map((issue) => {
+    if (!issue.valid) {
+      return `Would quarantine invalid legacy sandbox ${issue.kind} registry ${issue.registryPath}.`;
+    }
+    if (issue.entries === 0) {
+      return `Would remove empty legacy sandbox ${issue.kind} registry ${issue.registryPath}.`;
+    }
+    return `Would migrate legacy sandbox ${issue.kind} registry ${issue.registryPath} into sharded registry files.`;
+  });
+}
+
+function sandboxRegistryEffects(
+  issues: readonly {
+    kind: string;
+    registryPath: string;
+    valid: boolean;
+    entries: number;
+  }[],
+  dryRun: boolean,
+) {
+  const actionPrefix = dryRun ? "would-" : "";
+  return issues.map((issue) => ({
+    kind: "state" as const,
+    action: `${actionPrefix}${
+      !issue.valid
+        ? "quarantine-legacy-sandbox-registry"
+        : issue.entries === 0
+          ? "remove-empty-legacy-sandbox-registry"
+          : "migrate-legacy-sandbox-registry"
+    }`,
+    target: issue.registryPath,
+    dryRunSafe: true,
+  }));
+}
+
+function filterSandboxIssuesForPaths<T extends { path?: string; registryPath?: string }>(
+  issues: readonly T[],
+  paths: readonly (string | undefined)[] | undefined,
+): T[] {
+  const scopedPaths = new Set(paths?.filter((path): path is string => Boolean(path)) ?? []);
+  if (scopedPaths.size === 0) {
+    return [...issues];
+  }
+  return issues.filter((issue) => {
+    const path = issue.path ?? issue.registryPath;
+    return path !== undefined && scopedPaths.has(path);
+  });
+}
+
+const sandboxRegistryFilesCheck: HealthCheck = {
+  id: SANDBOX_REGISTRY_FILES_CHECK_ID,
+  kind: "core",
+  description: "Legacy monolithic sandbox registry files have been migrated to shards.",
+  source: "doctor",
+  async detect(_ctx, scope) {
+    const { detectSandboxRegistryFileIssues } = await import("../commands/doctor-sandbox.js");
+    const issues = filterSandboxIssuesForPaths(
+      await detectSandboxRegistryFileIssues(),
+      scope?.paths,
+    );
+    return issues.map(
+      (issue): HealthFinding => ({
+        checkId: SANDBOX_REGISTRY_FILES_CHECK_ID,
+        severity: "warning",
+        message: `Legacy sandbox ${issue.kind} registry file detected.`,
+        path: issue.registryPath,
+        fixHint: "Run `openclaw doctor --fix` to migrate it to sharded registry files.",
+      }),
+    );
+  },
+  async repair(ctx, findings) {
+    const { detectSandboxRegistryFileIssues, formatLegacySandboxRegistryMigrationLine } =
+      await import("../commands/doctor-sandbox.js");
+    const issues = filterSandboxIssuesForPaths(
+      await detectSandboxRegistryFileIssues(),
+      findings.map((finding) => finding.path),
+    );
+    if (issues.length === 0) {
+      return {
+        status: "skipped",
+        reason: "legacy sandbox registry files no longer exist",
+        changes: [],
+      };
+    }
+    if (ctx.dryRun === true) {
+      return {
+        changes: sandboxRegistryDryRunChanges(issues),
+        effects: sandboxRegistryEffects(issues, true),
+      };
+    }
+    const { migrateLegacySandboxRegistryFiles } = await import("../agents/sandbox/registry.js");
+    const changes = (
+      await migrateLegacySandboxRegistryFiles({
+        registryPaths: issues.map((issue) => issue.registryPath),
+      })
+    )
+      .filter((result) => result.status !== "missing")
+      .map(formatLegacySandboxRegistryMigrationLine)
+      .filter((line) => line.length > 0);
+    return {
+      changes,
+      effects: sandboxRegistryEffects(issues, false),
+    };
+  },
+};
+
+function sandboxImageIssueEffect(issue: SandboxImageIssue, dryRun: boolean) {
+  const actionPrefix = dryRun ? "would-" : "";
+  if (issue.kind === "missing-image" && issue.buildScript) {
+    return {
+      kind: "process" as const,
+      action: `${actionPrefix}build-sandbox-${issue.imageKind}-image`,
+      target: issue.image,
+      dryRunSafe: false,
+    };
+  }
+  return {
+    kind: "other" as const,
+    action: `${actionPrefix}inspect-sandbox-images`,
+    target: issue.path,
+    dryRunSafe: true,
+  };
+}
+
+function sandboxImageDryRunChange(issue: SandboxImageIssue): string {
+  if (issue.kind === "missing-image" && issue.buildScript) {
+    return `Would build or pull missing sandbox ${issue.imageKind} image ${issue.image} with ${issue.buildScript}.`;
+  }
+  return `Would leave sandbox image issue for operator action: ${issue.message}`;
+}
+
+function sandboxImageOperatorWarning(
+  issue: Pick<SandboxImageIssue, "message" | "fixHint">,
+): string {
+  return issue.fixHint ? `${issue.message} ${issue.fixHint}` : issue.message;
+}
+
+type RepairableSandboxImageIssue = Extract<SandboxImageIssue, { kind: "missing-image" }> & {
+  buildScript: string;
+};
+
+function isRepairableSandboxImageIssue(
+  issue: SandboxImageIssue,
+): issue is RepairableSandboxImageIssue {
+  return issue.kind === "missing-image" && typeof issue.buildScript === "string";
+}
+
+const sandboxImagesCheck: HealthCheck = {
+  id: SANDBOX_IMAGES_CHECK_ID,
+  kind: "core",
+  description: "Sandbox Docker daemon and configured sandbox images are ready.",
+  source: "doctor",
+  async detect(ctx, scope) {
+    const { detectSandboxImageIssues } = await import("../commands/doctor-sandbox.js");
+    const issues = filterSandboxIssuesForPaths(
+      await detectSandboxImageIssues(ctx.cfg),
+      scope?.paths,
+    );
+    return issues.map(
+      (issue): HealthFinding => ({
+        checkId: SANDBOX_IMAGES_CHECK_ID,
+        severity: "warning",
+        message: issue.message,
+        path: issue.path,
+        fixHint: issue.fixHint,
+      }),
+    );
+  },
+  async repair(ctx, findings) {
+    const { detectSandboxImageIssues, repairSandboxImages } =
+      await import("../commands/doctor-sandbox.js");
+    const issues = filterSandboxIssuesForPaths(
+      await detectSandboxImageIssues(ctx.cfg),
+      findings.map((finding) => finding.path),
+    );
+    if (issues.length === 0) {
+      return {
+        status: "skipped",
+        reason: "sandbox image issues no longer exist",
+        changes: [],
+      };
+    }
+    const effects = issues.map((issue) => sandboxImageIssueEffect(issue, ctx.dryRun === true));
+    if (ctx.dryRun === true) {
+      return {
+        changes: issues.map(sandboxImageDryRunChange),
+        effects,
+      };
+    }
+    const repairableIssues = issues.filter(isRepairableSandboxImageIssue);
+    const nonRepairableWarnings = issues
+      .filter((issue) => !isRepairableSandboxImageIssue(issue))
+      .map(sandboxImageOperatorWarning);
+    if (repairableIssues.length === 0) {
+      return {
+        status: "skipped",
+        reason: "sandbox image issue needs operator action",
+        changes: [],
+        warnings: nonRepairableWarnings,
+        effects,
+      };
+    }
+    const runtimeCtx = coreDoctorRuntimeContext(ctx);
+    const repaired = await repairSandboxImages({
+      cfg: ctx.cfg,
+      runtime: ctx.runtime,
+      prompter: {
+        confirmRuntimeRepair: async (params) =>
+          runtimeCtx.doctor?.confirmRuntimeRepair?.(params) ??
+          runtimeCtx.doctor?.confirm?.(params) ??
+          false,
+        note: async (message, title) => {
+          await runtimeCtx.doctor?.note?.(message, title);
+        },
+      },
+      issues: repairableIssues,
+    });
+    return {
+      status: repaired.status,
+      reason: repaired.reason,
+      config: repaired.config,
+      changes: repaired.changes,
+      warnings: [...nonRepairableWarnings, ...repaired.warnings],
+      effects,
+    };
+  },
+};
+
+const sandboxScopeCheck: HealthCheck = {
+  id: SANDBOX_SCOPE_CHECK_ID,
+  kind: "core",
+  description: "Per-agent sandbox overrides are not hidden by shared sandbox scope.",
+  source: "doctor",
+  async detect(ctx) {
+    const { collectSandboxScopeWarnings } = await import("../commands/doctor-sandbox.js");
+    return collectSandboxScopeWarnings(ctx.cfg).map(
+      (warning): HealthFinding => ({
+        checkId: SANDBOX_SCOPE_CHECK_ID,
+        severity: "warning",
+        message: warning.message,
+        path: warning.path,
+        fixHint: warning.fixHint,
+      }),
+    );
+  },
+};
+
 const gatewayPlatformNotesCheck: HealthCheck = {
   id: "core/doctor/gateway-services/platform-notes",
   kind: "core",
@@ -840,6 +1104,9 @@ function createConvertedWorkflowChecks(deps: CoreHealthCheckDeps): readonly Heal
     legacyWhatsAppCrontabCheck,
     shellCompletionCheck,
     uiProtocolFreshnessCheck,
+    sandboxRegistryFilesCheck,
+    sandboxImagesCheck,
+    sandboxScopeCheck,
     gatewayPlatformNotesCheck,
     createSecurityCheck(deps),
     browserCheck,

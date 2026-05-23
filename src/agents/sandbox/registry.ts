@@ -307,11 +307,15 @@ export async function inspectLegacySandboxRegistryFiles(): Promise<
   return inspections;
 }
 
-export async function migrateLegacySandboxRegistryFiles(): Promise<
-  LegacySandboxRegistryMigrationResult[]
-> {
+export async function migrateLegacySandboxRegistryFiles(options?: {
+  registryPaths?: readonly string[];
+}): Promise<LegacySandboxRegistryMigrationResult[]> {
+  const selectedPaths = new Set(options?.registryPaths ?? []);
   const results: LegacySandboxRegistryMigrationResult[] = [];
   for (const target of legacyRegistryTargets()) {
+    if (selectedPaths.size > 0 && !selectedPaths.has(target.registryPath)) {
+      continue;
+    }
     results.push(await migrateMonolithicIfNeeded(target));
   }
   return results;

@@ -53,6 +53,9 @@ type DoctorHealthContribution = FlowContribution & {
 const POSITIONAL_STRUCTURED_REPAIR_CHECK_IDS = new Set([
   "core/doctor/shell-completion",
   "core/doctor/ui-protocol-freshness",
+  "core/doctor/sandbox/registry-files",
+  "core/doctor/sandbox/images",
+  "core/doctor/sandbox-scope",
 ]);
 
 function isUpdateDoctorRun(env: NodeJS.ProcessEnv | Record<string, string | undefined>): boolean {
@@ -490,6 +493,60 @@ async function runLegacyCronHealth(ctx: DoctorHealthFlowContext): Promise<void> 
 }
 
 async function runSandboxHealth(ctx: DoctorHealthFlowContext): Promise<void> {
+  if (ctx.prompter.shouldRepair) {
+    const { registerCoreHealthChecks } = await import("./doctor-core-checks.js");
+    const { listHealthChecks } = await import("./health-check-registry.js");
+    const { runDoctorHealthRepairs } = await import("./doctor-repair-flow.js");
+    const { note } = await import("../terminal/note.js");
+    registerCoreHealthChecks();
+    const sandboxCheckIds = new Set([
+      "core/doctor/sandbox/registry-files",
+      "core/doctor/sandbox/images",
+    ]);
+    const checks = listHealthChecks().filter((check) => sandboxCheckIds.has(check.id));
+    const doctorOptions = ctx.options as DoctorOptions & {
+      readonly dryRun?: boolean;
+      readonly diff?: boolean;
+    };
+    const result = await runDoctorHealthRepairs(
+      {
+        mode: "fix",
+        runtime: ctx.runtime,
+        cfg: ctx.cfg,
+        configPath: ctx.configPath,
+        doctor: {
+          confirmRuntimeRepair: (params: Parameters<DoctorPrompter["confirmRuntimeRepair"]>[0]) =>
+            ctx.prompter.confirmRuntimeRepair(params),
+          confirm: (params: Parameters<DoctorPrompter["confirm"]>[0]) =>
+            ctx.prompter.confirm(params),
+          note,
+        },
+      } as Parameters<typeof runDoctorHealthRepairs>[0] & {
+        doctor: {
+          confirmRuntimeRepair: (
+            params: Parameters<DoctorPrompter["confirmRuntimeRepair"]>[0],
+          ) => Promise<boolean>;
+          confirm: (params: Parameters<DoctorPrompter["confirm"]>[0]) => Promise<boolean>;
+          note: typeof note;
+        };
+      },
+      {
+        checks,
+        dryRun: doctorOptions.dryRun === true,
+        diff: doctorOptions.diff === true,
+      },
+    );
+    ctx.cfg = result.config;
+    if (result.changes.length > 0) {
+      note(result.changes.join("\n"), "Doctor changes");
+    }
+    if (result.warnings.length > 0) {
+      note(result.warnings.join("\n"), "Doctor warnings");
+    }
+    const { noteSandboxScopeWarnings } = await import("../commands/doctor-sandbox.js");
+    noteSandboxScopeWarnings(ctx.cfg);
+    return;
+  }
   const { maybeRepairSandboxImages, maybeRepairSandboxRegistryFiles, noteSandboxScopeWarnings } =
     await import("../commands/doctor-sandbox.js");
   await maybeRepairSandboxRegistryFiles(ctx.prompter);
@@ -949,6 +1006,11 @@ export function resolveDoctorHealthContributions(): DoctorHealthContribution[] {
     createDoctorHealthContribution({
       id: "doctor:sandbox",
       label: "Sandbox",
+      healthCheckIds: [
+        "core/doctor/sandbox/registry-files",
+        "core/doctor/sandbox/images",
+        "core/doctor/sandbox-scope",
+      ],
       run: runSandboxHealth,
     }),
     createDoctorHealthContribution({
