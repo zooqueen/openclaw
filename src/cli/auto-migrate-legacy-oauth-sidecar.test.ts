@@ -310,6 +310,45 @@ describe("maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli", () => {
     expect(confirm).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    {
+      name: "reset --yes",
+      argv: ["node", "openclaw", "reset", "--scope", "config", "--yes"],
+    },
+    {
+      name: "uninstall --yes",
+      argv: ["node", "openclaw", "uninstall", "--yes"],
+    },
+    {
+      name: "migrate apply --yes",
+      argv: ["node", "openclaw", "migrate", "apply", "codex", "--yes"],
+    },
+  ])("does not prompt for --yes no-confirmation invocations: $name", async ({ argv }) => {
+    const { state, sidecarPath } = await makeStateWithLegacyOauthRef("seed");
+    const confirm = vi.fn();
+    await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
+      argv,
+      env: state.env,
+      isInteractiveTty: () => true,
+      prompter: { confirm },
+    });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    expect(fs.existsSync(declineMarkerPath(state))).toBe(false);
+  });
+
+  it("still prompts when --yes appears after a `--` argv terminator", async () => {
+    const { state } = await makeStateWithLegacyOauthRef("seed");
+    const confirm = vi.fn(async () => false);
+    await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
+      argv: ["node", "openclaw", "status", "--", "--yes"],
+      env: state.env,
+      isInteractiveTty: () => true,
+      prompter: { confirm },
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
   it("still prompts when --non-interactive appears after a `--` argv terminator", async () => {
     const { state } = await makeStateWithLegacyOauthRef("seed");
     const confirm = vi.fn(async () => false);

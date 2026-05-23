@@ -58,7 +58,11 @@ function shouldSkip(params: {
   if (invocation.primary && SKIPPED_PRIMARIES.has(invocation.primary)) {
     return true;
   }
-  if (hasJsonOutputFlag(params.argv) || hasFlag(params.argv, "--non-interactive")) {
+  if (
+    hasJsonOutputFlag(params.argv) ||
+    hasFlag(params.argv, "--non-interactive") ||
+    hasFlag(params.argv, "--yes")
+  ) {
     return true;
   }
   if (!hasSidecarFiles(env)) {
