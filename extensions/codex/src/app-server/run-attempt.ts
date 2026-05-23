@@ -945,15 +945,6 @@ export async function runCodexAppServerAttempt(
     config: params.config,
     agentId: params.agentId,
   });
-  const configuredAppServer = resolveCodexAppServerRuntimeOptions({
-    pluginConfig,
-    execPolicy: resolveOpenClawExecPolicyForCodexAppServer({
-      execOverrides: params.execOverrides,
-      approvals: loadExecApprovals(),
-      config: params.config,
-      agentId: sessionAgentId,
-    }),
-  });
   const resolvedWorkspace = resolveUserPath(params.workspaceDir);
   await fs.mkdir(resolvedWorkspace, { recursive: true });
   const sandboxSessionKey =
@@ -963,6 +954,16 @@ export async function runCodexAppServerAttempt(
     config: params.config,
     sessionKey: sandboxSessionKey,
     workspaceDir: resolvedWorkspace,
+  });
+  const configuredAppServer = resolveCodexAppServerRuntimeOptions({
+    pluginConfig,
+    execPolicy: resolveOpenClawExecPolicyForCodexAppServer({
+      execOverrides: params.execOverrides,
+      approvals: loadExecApprovals(),
+      config: params.config,
+      agentId: sessionAgentId,
+    }),
+    openClawSandboxActive: sandbox?.enabled === true,
   });
   const effectiveWorkspace = sandbox?.enabled
     ? sandbox.workspaceAccess === "rw"

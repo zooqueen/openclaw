@@ -1152,6 +1152,30 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
     ).toThrow("legacy full exec security with ask requires Codex app-server danger-full-access");
   });
 
+  it("clamps legacy full exec with ask when an OpenClaw sandbox is active", () => {
+    const config = {
+      tools: {
+        exec: {
+          security: "full",
+          ask: "on-miss",
+        },
+      },
+    };
+
+    expectRuntimePolicy(
+      resolveRuntimeForTest({
+        execPolicy: resolveOpenClawExecPolicyForCodexAppServer({ config }),
+        openClawSandboxActive: true,
+        requirementsToml: 'allowed_sandbox_modes = ["read-only", "workspace-write"]\n',
+      }),
+      {
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        approvalsReviewer: "user",
+      },
+    );
+  });
+
   it("applies host exec approval security floors before starting Codex app-server", () => {
     const execPolicy = resolveOpenClawExecPolicyForCodexAppServer({
       config: {

@@ -386,6 +386,7 @@ export function resolveCodexAppServerRuntimeOptions(
     readRequirementsFile?: (path: string) => string | undefined;
     platform?: NodeJS.Platform;
     hostName?: string;
+    openClawSandboxActive?: boolean;
   } = {},
 ): CodexAppServerRuntimeOptions {
   const env = params.env ?? process.env;
@@ -447,7 +448,10 @@ export function resolveCodexAppServerRuntimeOptions(
     ? {
         approvalPolicy: defaultPolicy?.approvalPolicy ?? "on-request",
         sandbox: forceDangerFullAccessSandbox
-          ? selectForcedDangerFullAccessSandbox(defaultPolicy)
+          ? selectForcedDangerFullAccessSandbox({
+              defaultPolicy,
+              openClawSandboxActive: params.openClawSandboxActive === true,
+            })
           : selectForcedPromptingSandbox({
               configuredSandbox,
               defaultSandbox: defaultPolicy?.sandbox,
@@ -1026,10 +1030,14 @@ function selectForcedPromptingSandbox(params: {
   return params.defaultSandbox ?? "workspace-write";
 }
 
-function selectForcedDangerFullAccessSandbox(
-  defaultPolicy: CodexAppServerDefaultPolicy | undefined,
-): CodexAppServerSandboxMode {
-  if (defaultPolicy?.dangerFullAccessAllowed === false) {
+function selectForcedDangerFullAccessSandbox(params: {
+  defaultPolicy: CodexAppServerDefaultPolicy | undefined;
+  openClawSandboxActive: boolean;
+}): CodexAppServerSandboxMode {
+  if (params.defaultPolicy?.dangerFullAccessAllowed === false) {
+    if (params.openClawSandboxActive) {
+      return params.defaultPolicy.sandbox ?? "workspace-write";
+    }
     throw new Error(
       "legacy full exec security with ask requires Codex app-server danger-full-access",
     );
