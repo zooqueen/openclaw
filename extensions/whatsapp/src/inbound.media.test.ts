@@ -66,6 +66,49 @@ function createInMemoryKeyedStore<T>() {
 const readAllowFromStoreMock = vi.fn().mockResolvedValue([]);
 const upsertPairingRequestMock = vi.fn().mockResolvedValue({ code: "PAIRCODE", created: true });
 const saveMediaStreamSpy = vi.fn();
+const pluginRuntimeMocks = vi.hoisted(() => {
+  type StoreEntry = { key: string; value: unknown; createdAt: number };
+  const stores = new Map<string, Map<string, StoreEntry>>();
+
+  const openKeyedStore = vi.fn((options: { namespace: string }) => {
+    let store = stores.get(options.namespace);
+    if (!store) {
+      store = new Map();
+      stores.set(options.namespace, store);
+    }
+    return {
+      register: async (key: string, value: unknown) => {
+        store.set(key, { key, value, createdAt: Date.now() });
+      },
+      registerIfAbsent: async (key: string, value: unknown) => {
+        if (store.has(key)) {
+          return false;
+        }
+        store.set(key, { key, value, createdAt: Date.now() });
+        return true;
+      },
+      lookup: async (key: string) => store.get(key)?.value,
+      consume: async (key: string) => {
+        const value = store.get(key)?.value;
+        store.delete(key);
+        return value;
+      },
+      delete: async (key: string) => store.delete(key),
+      entries: async () => Array.from(store.values()),
+      clear: async () => {
+        store.clear();
+      },
+    };
+  });
+
+  return {
+    openKeyedStore,
+    reset: () => {
+      stores.clear();
+      openKeyedStore.mockClear();
+    },
+  };
+});
 let currentMockSocket:
   | {
       ev: import("node:events").EventEmitter;
@@ -126,6 +169,15 @@ vi.mock("openclaw/plugin-sdk/channel-pairing", async () => {
     },
   };
 });
+
+vi.mock("./runtime.js", () => ({
+  getWhatsAppRuntime: () => ({
+    state: {
+      openKeyedStore: pluginRuntimeMocks.openKeyedStore,
+    },
+  }),
+  setWhatsAppRuntime: vi.fn(),
+}));
 
 vi.mock("openclaw/plugin-sdk/media-store", async () => {
   const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/media-store")>(
@@ -244,6 +296,7 @@ describe("web inbound media saves with extension", () => {
     vi.useRealTimers();
     currentMockSocket = undefined;
     saveMediaStreamSpy.mockClear();
+    pluginRuntimeMocks.reset();
     resetWebInboundDedupe();
   });
 
