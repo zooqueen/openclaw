@@ -192,6 +192,21 @@ function createCodexRuntimePlanFixture(): NonNullable<EmbeddedRunAttemptParams["
   } as unknown as NonNullable<EmbeddedRunAttemptParams["runtimePlan"]>;
 }
 
+function createCodexSandboxTestConfig(): EmbeddedRunAttemptParams["config"] {
+  return {
+    agents: {
+      defaults: {
+        sandbox: {
+          mode: "all",
+          backend: "codex-test-sandbox",
+          scope: "session",
+          prune: { idleHours: 0, maxAgeDays: 0 },
+        },
+      },
+    },
+  } as EmbeddedRunAttemptParams["config"];
+}
+
 function threadStartResult(threadId = "thread-1") {
   return {
     thread: {
@@ -1065,17 +1080,7 @@ describe("runCodexAppServerAttempt", () => {
       const params = createParams(sessionFile, workspaceDir);
       params.disableTools = false;
       params.runtimePlan = createCodexRuntimePlanFixture();
-      params.config = {
-        agents: {
-          defaults: {
-            sandbox: {
-              mode: "all",
-              backend: "codex-test-sandbox",
-              scope: "session",
-            },
-          },
-        },
-      } as never;
+      params.config = createCodexSandboxTestConfig();
       const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
 
       const run = runCodexAppServerAttempt(params, {
@@ -1130,17 +1135,7 @@ describe("runCodexAppServerAttempt", () => {
       const params = createParams(sessionFile, workspaceDir);
       params.disableTools = false;
       params.runtimePlan = createCodexRuntimePlanFixture();
-      params.config = {
-        agents: {
-          defaults: {
-            sandbox: {
-              mode: "all",
-              backend: "codex-test-sandbox",
-              scope: "session",
-            },
-          },
-        },
-      } as never;
+      params.config = createCodexSandboxTestConfig();
       const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
 
       const run = runCodexAppServerAttempt(params, {
