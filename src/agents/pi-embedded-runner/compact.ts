@@ -18,6 +18,7 @@ import {
   type CapturedCompactionCheckpointSnapshot,
 } from "../../gateway/session-compaction-checkpoints.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { loadExecApprovals } from "../../infra/exec-approvals.js";
 import { getMachineDisplayName } from "../../infra/machine-name.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { listRegisteredPluginAgentPromptGuidance } from "../../plugins/command-registry-state.js";
@@ -883,6 +884,7 @@ async function compactEmbeddedPiSessionDirectOnce(
       sandbox,
       params.bashElevated,
       params.execOverrides,
+      loadExecApprovals().defaults,
     );
     const reasoningTagHint = isReasoningTagProvider(provider, {
       config: params.config,

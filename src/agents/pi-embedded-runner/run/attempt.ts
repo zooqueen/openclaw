@@ -33,6 +33,7 @@ import {
 } from "../../../infra/diagnostic-trace-context.js";
 import { isEmbeddedMode } from "../../../infra/embedded-mode.js";
 import { formatErrorMessage } from "../../../infra/errors.js";
+import { loadExecApprovals } from "../../../infra/exec-approvals.js";
 import { resolveHeartbeatSummaryForAgent } from "../../../infra/heartbeat-summary.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
@@ -1880,6 +1881,7 @@ export async function runEmbeddedAttempt(
       sandbox,
       params.bashElevated,
       params.execOverrides,
+      loadExecApprovals().defaults,
     );
     const reasoningTagHint = isReasoningTagProvider(params.provider, {
       config: params.config,

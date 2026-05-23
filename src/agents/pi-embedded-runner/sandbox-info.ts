@@ -3,19 +3,28 @@ import type { resolveSandboxContext } from "../sandbox.js";
 import type { EmbeddedFullAccessBlockedReason, EmbeddedSandboxInfo } from "./types.js";
 
 type EmbeddedFullAccessExecPolicy = Pick<ExecToolDefaults, "mode" | "security">;
+type EmbeddedFullAccessHostPolicy = Pick<ExecToolDefaults, "security">;
 
-function execPolicyBlocksFullAccess(execPolicy?: EmbeddedFullAccessExecPolicy): boolean {
-  return execPolicy?.mode === "deny" || execPolicy?.security === "deny";
+function execPolicyBlocksFullAccess(params: {
+  execPolicy?: EmbeddedFullAccessExecPolicy;
+  hostPolicy?: EmbeddedFullAccessHostPolicy;
+}): boolean {
+  return (
+    params.execPolicy?.mode === "deny" ||
+    params.execPolicy?.security === "deny" ||
+    params.hostPolicy?.security === "deny"
+  );
 }
 
 export function resolveEmbeddedFullAccessState(params: {
   execElevated?: ExecElevatedDefaults;
   execPolicy?: EmbeddedFullAccessExecPolicy;
+  hostPolicy?: EmbeddedFullAccessHostPolicy;
 }): {
   available: boolean;
   blockedReason?: EmbeddedFullAccessBlockedReason;
 } {
-  if (execPolicyBlocksFullAccess(params.execPolicy)) {
+  if (execPolicyBlocksFullAccess(params)) {
     return {
       available: false,
       blockedReason: "host-policy",
@@ -43,6 +52,7 @@ export function buildEmbeddedSandboxInfo(
   sandbox?: Awaited<ReturnType<typeof resolveSandboxContext>>,
   execElevated?: ExecElevatedDefaults,
   execPolicy?: EmbeddedFullAccessExecPolicy,
+  hostPolicy?: EmbeddedFullAccessHostPolicy,
 ): EmbeddedSandboxInfo | undefined {
   if (!sandbox?.enabled) {
     return undefined;
@@ -52,6 +62,7 @@ export function buildEmbeddedSandboxInfo(
   const fullAccess = resolveEmbeddedFullAccessState({
     execElevated,
     execPolicy,
+    hostPolicy,
   });
   return {
     enabled: true,
