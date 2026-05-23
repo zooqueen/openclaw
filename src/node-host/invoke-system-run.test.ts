@@ -993,6 +993,47 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     });
   });
 
+  it.runIf(process.platform !== "win32")(
+    "requires mutable script binding for allowlisted shell-wrapped system.run commands",
+    async () => {
+      const tmp = createFixtureDir("openclaw-system-run-shell-script-binding-");
+      const scriptPath = path.join(tmp, "read-info.js");
+      fs.writeFileSync(scriptPath, 'console.log("shell wrapped");\n');
+
+      await withTempApprovalsHome({
+        approvals: createAllowlistOnMissApprovals({
+          agents: {
+            main: {
+              allowlist: [
+                { pattern: fs.realpathSync(process.execPath) },
+                { pattern: fs.realpathSync(scriptPath) },
+              ],
+            },
+          },
+        }),
+        run: async () => {
+          const runCommand = vi.fn(async () => createLocalRunResult("should-not-run"));
+          const invoke = await runSystemInvoke({
+            preferMacAppExecHost: false,
+            command: ["/bin/sh", "-lc", `${process.execPath} ./read-info.js`],
+            rawCommand: `/bin/sh -lc "${process.execPath} ./read-info.js"`,
+            cwd: tmp,
+            runCommand,
+            security: "allowlist",
+            ask: "on-miss",
+          });
+
+          expect(runCommand).not.toHaveBeenCalled();
+          expectInvokeErrorMessage(invoke.sendInvokeResult, {
+            message:
+              "SYSTEM_RUN_DENIED: approval cannot safely bind this interpreter/runtime command",
+            exact: true,
+          });
+        },
+      });
+    },
+  );
+
   it("shows auto reviewer rationale when system.run auto mode defers", async () => {
     const tmp = createFixtureDir("openclaw-system-run-auto-defer-");
     const scriptPath = path.join(tmp, "unclear.js");
@@ -2081,7 +2122,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
   });
 
   it.runIf(process.platform !== "win32")(
-    "auto-runs allowlisted inner scripts through transport shell wrappers",
+    "requires mutable script binding for allowlisted inner scripts through transport shell wrappers",
     async () => {
       const tempDir = createFixtureDir("openclaw-shell-wrapper-inner-");
       const scriptsDir = path.join(tempDir, "scripts");
@@ -2109,9 +2150,11 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
             runCommand: vi.fn(async () => createLocalRunResult("shell-wrapper-inner-ok")),
           });
 
-          expect(invoke.runCommand).toHaveBeenCalledTimes(1);
-          expectInvokeOk(invoke.sendInvokeResult, {
-            payloadContains: "shell-wrapper-inner-ok",
+          expect(invoke.runCommand).not.toHaveBeenCalled();
+          expectInvokeErrorMessage(invoke.sendInvokeResult, {
+            message:
+              "SYSTEM_RUN_DENIED: approval cannot safely bind this interpreter/runtime command",
+            exact: true,
           });
         },
       });

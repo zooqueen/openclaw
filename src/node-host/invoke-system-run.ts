@@ -717,7 +717,6 @@ async function executeSystemRunPhase(
     return;
   }
   const requiresUnplannedMutableFileApproval =
-    phase.shellPayload === null &&
     phase.inlineEvalHit === null &&
     !phase.policy.approvedByAsk &&
     !phase.durableApprovalSatisfied &&
