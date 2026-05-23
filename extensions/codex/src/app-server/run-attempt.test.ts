@@ -1290,6 +1290,7 @@ describe("runCodexAppServerAttempt", () => {
       params.disableTools = false;
       params.runtimePlan = createCodexRuntimePlanFixture();
       params.config = createCodexSandboxTestConfig();
+      params.timeoutMs = 60_000;
       const nativeToolSurfaceEnabled = testing.shouldEnableCodexAppServerNativeToolSurface(
         params,
         sandbox as never,
