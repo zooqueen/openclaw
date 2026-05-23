@@ -1,9 +1,16 @@
+import type { SessionEntry } from "../../config/sessions.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { ExecElevatedDefaults, ExecToolDefaults } from "../bash-tools.js";
+import { resolveExecDefaults } from "../exec-defaults.js";
 import type { resolveSandboxContext } from "../sandbox.js";
 import type { EmbeddedFullAccessBlockedReason, EmbeddedSandboxInfo } from "./types.js";
 
 type EmbeddedFullAccessExecPolicy = Pick<ExecToolDefaults, "mode" | "security" | "ask">;
 type EmbeddedFullAccessHostPolicy = Pick<ExecToolDefaults, "security" | "ask">;
+type EmbeddedSandboxInfoExecOverrides = Pick<
+  ExecToolDefaults,
+  "host" | "mode" | "security" | "ask" | "node"
+>;
 
 function execPolicyBlocksFullAccess(params: {
   execPolicy?: EmbeddedFullAccessExecPolicy;
@@ -48,6 +55,50 @@ export function resolveEmbeddedFullAccessState(params: {
     };
   }
   return { available: true };
+}
+
+function buildSessionEntryForExecOverrides(
+  execOverrides?: EmbeddedSandboxInfoExecOverrides,
+): SessionEntry | undefined {
+  if (
+    execOverrides?.host === undefined &&
+    execOverrides?.mode === undefined &&
+    execOverrides?.security === undefined &&
+    execOverrides?.ask === undefined &&
+    execOverrides?.node === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId: "embedded-sandbox-info",
+    updatedAt: 0,
+    ...(execOverrides.host !== undefined ? { execHost: execOverrides.host } : {}),
+    ...(execOverrides.mode !== undefined ? { execMode: execOverrides.mode } : {}),
+    ...(execOverrides.security !== undefined ? { execSecurity: execOverrides.security } : {}),
+    ...(execOverrides.ask !== undefined ? { execAsk: execOverrides.ask } : {}),
+    ...(execOverrides.node !== undefined ? { execNode: execOverrides.node } : {}),
+  };
+}
+
+export function resolveEmbeddedSandboxInfoExecPolicy(params: {
+  config?: OpenClawConfig;
+  agentId?: string;
+  sessionKey?: string;
+  sandboxAvailable?: boolean;
+  execOverrides?: EmbeddedSandboxInfoExecOverrides;
+}): EmbeddedFullAccessExecPolicy {
+  const defaults = resolveExecDefaults({
+    cfg: params.config,
+    agentId: params.agentId,
+    sessionKey: params.sessionKey,
+    sandboxAvailable: params.sandboxAvailable,
+    sessionEntry: buildSessionEntryForExecOverrides(params.execOverrides),
+  });
+  return {
+    mode: defaults.mode,
+    security: defaults.security,
+    ask: defaults.ask,
+  };
 }
 
 export function buildEmbeddedSandboxInfo(

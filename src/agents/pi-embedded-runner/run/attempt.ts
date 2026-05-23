@@ -33,7 +33,6 @@ import {
 } from "../../../infra/diagnostic-trace-context.js";
 import { isEmbeddedMode } from "../../../infra/embedded-mode.js";
 import { formatErrorMessage } from "../../../infra/errors.js";
-import { loadExecApprovals, resolveExecApprovalsFromFile } from "../../../infra/exec-approvals.js";
 import { resolveHeartbeatSummaryForAgent } from "../../../infra/heartbeat-summary.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
@@ -250,7 +249,7 @@ import {
   setActiveEmbeddedRun,
   updateActiveEmbeddedRunSnapshot,
 } from "../runs.js";
-import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
+import { buildEmbeddedSandboxInfo, resolveEmbeddedSandboxInfoExecPolicy } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
 import { resolveEmbeddedRunSkillEntries } from "../skills-runtime.js";
@@ -1877,19 +1876,17 @@ export async function runEmbeddedAttempt(
             accountId: params.agentAccountId,
           })
         : undefined;
-    const execApprovals = resolveExecApprovalsFromFile({
-      file: loadExecApprovals(),
+    const sandboxInfoExecPolicy = resolveEmbeddedSandboxInfoExecPolicy({
+      config: params.config,
       agentId: sessionAgentId,
-      overrides: {
-        security: params.execOverrides?.security,
-        ask: params.execOverrides?.ask,
-      },
+      sessionKey: params.sessionKey,
+      sandboxAvailable: sandbox?.enabled === true,
+      execOverrides: params.execOverrides,
     });
     const sandboxInfo = buildEmbeddedSandboxInfo(
       sandbox,
       params.bashElevated,
-      params.execOverrides,
-      execApprovals.agent,
+      sandboxInfoExecPolicy,
     );
     const reasoningTagHint = isReasoningTagProvider(params.provider, {
       config: params.config,

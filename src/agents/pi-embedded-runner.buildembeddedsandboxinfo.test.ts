@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as execApprovals from "../infra/exec-approvals.js";
 import { buildEmbeddedSandboxInfo } from "./pi-embedded-runner.js";
-import { resolveEmbeddedFullAccessState } from "./pi-embedded-runner/sandbox-info.js";
+import {
+  resolveEmbeddedFullAccessState,
+  resolveEmbeddedSandboxInfoExecPolicy,
+} from "./pi-embedded-runner/sandbox-info.js";
 import type { SandboxContext } from "./sandbox.js";
 
 function createSandboxContext(overrides?: Partial<SandboxContext>): SandboxContext {
@@ -41,6 +45,14 @@ function createSandboxContext(overrides?: Partial<SandboxContext>): SandboxConte
 }
 
 describe("buildEmbeddedSandboxInfo", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(execApprovals, "loadExecApprovals").mockReturnValue({
+      version: 1,
+      agents: {},
+    });
+  });
+
   it("returns undefined when sandbox is missing", () => {
     expect(buildEmbeddedSandboxInfo()).toBeUndefined();
   });
@@ -126,6 +138,38 @@ describe("buildEmbeddedSandboxInfo", () => {
           defaultLevel: "full",
         },
         { mode: "deny" },
+      )?.elevated,
+    ).toEqual({
+      allowed: true,
+      defaultLevel: "full",
+      fullAccessAvailable: false,
+      fullAccessBlockedReason: "host-policy",
+    });
+  });
+
+  it("uses config exec mode when building prompt full-access state", () => {
+    const sandbox = createSandboxContext();
+    const execPolicy = resolveEmbeddedSandboxInfoExecPolicy({
+      config: {
+        tools: {
+          exec: {
+            mode: "auto",
+          },
+        },
+      },
+      agentId: "main",
+      sandboxAvailable: true,
+    });
+
+    expect(
+      buildEmbeddedSandboxInfo(
+        sandbox,
+        {
+          enabled: true,
+          allowed: true,
+          defaultLevel: "full",
+        },
+        execPolicy,
       )?.elevated,
     ).toEqual({
       allowed: true,
