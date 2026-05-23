@@ -575,10 +575,16 @@ function renderTraceDetail(trace: LlmTraceDetail | null, capability: TraceCapabi
             Raw prompt and tool payload capture is disabled.
           </div>`}
       <div class="traces-detail-content">
-        <section class="trace-panel trace-panel-primary">
-          <div class="traces-section-title">Prompt messages</div>
+        <details
+          class="trace-panel trace-panel-primary trace-collapsible-panel"
+          data-traces-prompt-panel
+        >
+          <summary class="traces-section-title">
+            <span>Prompt messages</span>
+            <span class="trace-section-meta">${formatCount(trace.inputItemCount, "input")}</span>
+          </summary>
           ${renderMessages(trace)}
-        </section>
+        </details>
         <section class="trace-panel">
           <div class="traces-section-title">Tools</div>
           ${renderTools(trace)}

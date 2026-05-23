@@ -132,6 +132,14 @@ describeControlUiE2e("Control UI traces mocked Gateway E2E", () => {
       expect(rowText).toContain("1 tool");
       expect(rowText).not.toContain("2.0 KB");
 
+      const promptPanel = page.locator("[data-traces-prompt-panel]");
+      const promptSummary = promptPanel.locator(":scope > summary.traces-section-title");
+      expect(await promptPanel.getAttribute("open")).toBeNull();
+      expect(await page.locator("[data-traces-request-payload]").isVisible()).toBe(false);
+      await promptSummary.click();
+      expect(await promptPanel.getAttribute("open")).toBe("");
+      expect(await page.locator("[data-traces-request-payload]").isVisible()).toBe(true);
+
       const promptText = await page.locator("[data-traces-request-payload]").textContent();
       const toolCallText = await page
         .locator(".trace-message.role-tool-call .trace-message-content")

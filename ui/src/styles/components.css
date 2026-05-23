@@ -6766,6 +6766,49 @@ details[open] > .ov-expandable-toggle::after {
   grid-column: 1 / -1;
 }
 
+.trace-collapsible-panel > summary.traces-section-title {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  list-style: none;
+  margin-bottom: 0;
+  padding: 9px 10px;
+}
+
+.trace-collapsible-panel > summary.traces-section-title::-webkit-details-marker {
+  display: none;
+}
+
+.trace-collapsible-panel > summary.traces-section-title::after {
+  color: var(--muted);
+  content: ">";
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+}
+
+.trace-collapsible-panel[open] > summary.traces-section-title {
+  margin-bottom: 8px;
+}
+
+.trace-collapsible-panel[open] > summary.traces-section-title::after {
+  transform: rotate(90deg);
+}
+
+.trace-section-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: auto;
+  text-transform: none;
+}
+
 .traces-section-title {
   color: var(--muted);
   font-size: 12px;
