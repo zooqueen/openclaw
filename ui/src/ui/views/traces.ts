@@ -1,4 +1,5 @@
 import { html, nothing } from "lit";
+import { keyed } from "lit/directives/keyed.js";
 import type { LlmTraceDetail, LlmTraceSummary, TraceCapability } from "../controllers/traces.ts";
 import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
 
@@ -575,17 +576,21 @@ function renderTraceDetail(trace: LlmTraceDetail | null, capability: TraceCapabi
             Raw prompt and tool payload capture is disabled.
           </div>`}
       <div class="traces-detail-content">
-        <details
-          class="trace-panel trace-panel-primary trace-collapsible-panel"
-          data-traces-prompt-panel
-        >
-          <summary class="traces-section-title">
-            <span>Prompt messages</span>
-            <span class="trace-section-meta">${formatCount(trace.inputItemCount, "input")}</span>
-            <span class="trace-section-toggle" aria-hidden="true"></span>
-          </summary>
-          ${renderMessages(trace)}
-        </details>
+        ${keyed(
+          trace.id,
+          html`<details
+            class="trace-panel trace-panel-primary trace-collapsible-panel"
+            data-traces-prompt-panel
+            open
+          >
+            <summary class="traces-section-title">
+              <span>Prompt messages</span>
+              <span class="trace-section-meta">${formatCount(trace.inputItemCount, "input")}</span>
+              <span class="trace-section-toggle" aria-hidden="true"></span>
+            </summary>
+            ${renderMessages(trace)}
+          </details>`,
+        )}
         <section class="trace-panel">
           <div class="traces-section-title">Tools</div>
           ${renderTools(trace)}
