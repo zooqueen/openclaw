@@ -321,8 +321,7 @@ describe("exec approval followup", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        content:
-          "Automatic session resume failed, so sending the status directly.\n\nCommand did not run: approval timed out.",
+        content: "Command did not run: approval timed out.",
         idempotencyKey: "exec-approval-followup:req-denied-resume-failed-nested",
       }),
     );
