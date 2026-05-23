@@ -348,6 +348,7 @@ async function compactCodexNativeThread(
     execPolicy: resolveOpenClawExecPolicyForCodexAppServer({
       config: params.config,
       agentId: sessionAgentId,
+      execOverrides: params.execOverrides,
       approvals: loadExecApprovals(),
     }),
   });

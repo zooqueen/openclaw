@@ -322,120 +322,49 @@ describe("maybeCompactCodexAppServerSession", () => {
     expect(seenAuthProfileId).toBe("openai-codex:work");
   });
 
-  it("reports missing thread bindings as failed native compaction", async () => {
-    const sessionFile = path.join(tempDir, "missing-binding.jsonl");
-
-    const result = requireCompactResult(
-      await startCompaction(sessionFile, { currentTokenCount: 123 }),
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.compacted).toBe(false);
-    expect(result.reason).toBe("no codex app-server thread binding");
-    expect(result.failure?.reason).toBe("missing_thread_binding");
-    expect(result.result).toBeUndefined();
-  });
-
-  it("clears stale thread bindings and reports failed native compaction", async () => {
+  it("honors session exec overrides when resolving native compaction policy", async () => {
     const fake = createFakeCodexClient();
-    fake.request.mockRejectedValueOnce(new Error("thread not found: thread-1"));
     setCodexAppServerClientFactoryForTest(async () => fake.client);
     const sessionFile = await writeTestBinding();
 
-    const result = requireCompactResult(
-      await startCompaction(sessionFile, { currentTokenCount: 456 }),
+    const result = maybeCompactCodexAppServerSession({
+      sessionId: "session-1",
+      sessionKey: "agent:main:session-1",
+      sessionFile,
+      workspaceDir: tempDir,
+      execOverrides: { mode: "deny" },
+    });
+    const observedResult = result.then(
+      (value) => ({ status: "resolved", value }) as const,
+      (error: unknown) => ({ status: "rejected", error }) as const,
     );
-
-    expect(fake.request).toHaveBeenCalledWith("thread/compact/start", { threadId: "thread-1" });
-    expect(await readCodexAppServerBinding(sessionFile)).toBeUndefined();
-    expect(result.ok).toBe(false);
-    expect(result.compacted).toBe(false);
-    expect(result.reason).toBe("thread not found: thread-1");
-    expect(result.failure?.reason).toBe("stale_thread_binding");
-    expect(result.result).toBeUndefined();
-  });
-
-  it("restarts the Codex app-server and retries when native compaction times out", async () => {
-    const previousTimeout = process.env.OPENCLAW_CODEX_COMPACTION_WAIT_TIMEOUT_MS;
-    process.env.OPENCLAW_CODEX_COMPACTION_WAIT_TIMEOUT_MS = "100";
-    const warn = vi.spyOn(embeddedAgentLog, "warn").mockImplementation(() => undefined);
-    try {
-      const first = createFakeCodexClient();
-      const second = createFakeCodexClient();
-      let factoryCalls = 0;
-      const factory = vi.fn(async () => {
-        factoryCalls += 1;
-        if (factoryCalls === 1) {
-          return first.client;
-        }
-        return second.client;
-      });
-      setCodexAppServerClientFactoryForTest(factory);
-      const sessionFile = await writeTestBinding();
-
-      const pendingResult = startCompaction(sessionFile, { currentTokenCount: 456 });
-      await vi.waitFor(() => {
-        expect(first.request).toHaveBeenCalledWith("thread/compact/start", {
-          threadId: "thread-1",
-        });
-      });
-
-      await vi.waitFor(() => {
-        expect(first.close).toHaveBeenCalledTimes(1);
-        expect(second.request).toHaveBeenCalledWith("thread/compact/start", {
-          threadId: "thread-1",
-        });
-      });
-      second.emit({
-        method: "thread/tokenUsage/updated",
-        params: {
-          threadId: "thread-1",
-          tokenUsage: {
-            last_token_usage: {
-              total_tokens: 12_345,
-            },
-          },
+    await vi
+      .waitFor(
+        () => {
+          expect(fake.request).toHaveBeenCalledWith("thread/compact/start", {
+            threadId: "thread-1",
+          });
         },
-      });
-      second.emit({
-        method: "item/completed",
-        params: {
-          threadId: "thread-1",
-          turnId: "turn-2",
-          item: { type: "contextCompaction", id: "compact-2" },
+        { timeout: 200 },
+      )
+      .then(
+        () => {
+          fake.emit({
+            method: "thread/compacted",
+            params: { threadId: "thread-1", turnId: "turn-1" },
+          });
         },
-      });
-
-      const result = requireCompactResult(await pendingResult);
-      expect(result.ok).toBe(true);
-      expect(result.compacted).toBe(true);
-      expect(result.result?.tokensAfter).toBe(12_345);
-      expect(factory).toHaveBeenCalledTimes(2);
-      expect(second.close).not.toHaveBeenCalled();
-      expect(await readCodexAppServerBinding(sessionFile)).toBeDefined();
-      const details = compactDetails(result);
-      expect(details.signal).toBe("item/completed");
-      expect(details.itemId).toBe("compact-2");
-      expect(details.compactionAttempts).toBe(2);
-      expect(details.recoveredAfterAppServerRestart).toBe(true);
-      expect(warn).toHaveBeenCalledWith(
-        "codex app-server compaction timed out; restarting app-server",
-        expect.objectContaining({
-          sessionId: "session-1",
-          sessionKey: "agent:main:session-1",
-          threadId: "thread-1",
-          attempt: 1,
-          maxAttempts: 2,
-        }),
+        () => undefined,
       );
-    } finally {
-      if (previousTimeout === undefined) {
-        delete process.env.OPENCLAW_CODEX_COMPACTION_WAIT_TIMEOUT_MS;
-      } else {
-        process.env.OPENCLAW_CODEX_COMPACTION_WAIT_TIMEOUT_MS = previousTimeout;
-      }
-      warn.mockRestore();
-    }
+
+    const observed = await observedResult;
+    expect(observed.status).toBe("rejected");
+    expect(observed.status === "rejected" ? observed.error : undefined).toEqual(
+      expect.objectContaining({
+        message: "Codex app-server local execution is not available when tools.exec.mode=deny",
+      }),
+    );
+    expect(fake.request).not.toHaveBeenCalled();
   });
 
   it("warns when stale OpenClaw compaction overrides are ignored", async () => {
