@@ -86,6 +86,14 @@ function roleClassName(role: string): string {
   return token ? `role-${token}` : "role-unknown";
 }
 
+function roleLabel(role: string): string {
+  return role
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function stringifyReadable(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -99,12 +107,82 @@ function stringifyReadable(value: unknown): string {
   return formatJson(value);
 }
 
+function contentPartKind(part: Record<string, unknown>): string {
+  return normalizeLowercaseStringOrEmpty(part.type).replace(/[^a-z0-9]+/g, "");
+}
+
+function contentPartName(part: Record<string, unknown>): string {
+  const nestedFunction = isRecord(part.function) ? part.function : null;
+  const nameCandidate = part.name ?? part.toolName ?? part.tool_name ?? nestedFunction?.name;
+  const callIdCandidate =
+    part.id ??
+    part.call_id ??
+    part.toolCallId ??
+    part.tool_call_id ??
+    part.toolUseId ??
+    part.tool_use_id;
+  const name =
+    typeof nameCandidate === "string" && nameCandidate.trim() ? nameCandidate.trim() : "";
+  const callId =
+    typeof callIdCandidate === "string" && callIdCandidate.trim() ? callIdCandidate.trim() : "";
+  if (name && callId && name !== callId) {
+    return `${name} (${callId})`;
+  }
+  return name || callId || "tool";
+}
+
+function formatStructuredArgument(value: unknown): string {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return formatJson(value);
+}
+
+function toolCallPartText(part: Record<string, unknown>): string | null {
+  const kind = contentPartKind(part);
+  const nestedFunction = isRecord(part.function) ? part.function : null;
+  const isToolCall =
+    kind === "toolcall" ||
+    kind === "tooluse" ||
+    kind === "functioncall" ||
+    (typeof part.name === "string" &&
+      (part.arguments !== undefined || part.args !== undefined || part.input !== undefined));
+  if (!isToolCall) {
+    return null;
+  }
+  const args =
+    part.arguments ?? part.args ?? part.input ?? part.parameters ?? nestedFunction?.arguments;
+  return `${contentPartName(part)}(\n${formatStructuredArgument(args ?? {})}\n)`;
+}
+
+function toolResultPartText(part: Record<string, unknown>): string | null {
+  const kind = contentPartKind(part);
+  if (kind !== "toolresult" && kind !== "functionresult") {
+    return null;
+  }
+  const output = part.text ?? part.output ?? part.result ?? part.content;
+  const content = formatMessageContent(output);
+  return `Tool result: ${contentPartName(part)}${content ? `\n${content}` : ""}`;
+}
+
 function contentPartText(part: unknown): string | null {
   if (typeof part === "string") {
     return part;
   }
   if (!isRecord(part)) {
     return null;
+  }
+  const toolCallText = toolCallPartText(part);
+  if (toolCallText) {
+    return toolCallText;
+  }
+  const toolResultText = toolResultPartText(part);
+  if (toolResultText) {
+    return toolResultText;
   }
   if (typeof part.text === "string") {
     return part.text;
@@ -160,6 +238,20 @@ type ReadableMessage = {
   raw: unknown;
 };
 
+function messageName(value: Record<string, unknown>): string | undefined {
+  const nameCandidate = value.name ?? value.toolName ?? value.tool_name;
+  const callIdCandidate =
+    value.call_id ?? value.toolCallId ?? value.tool_call_id ?? value.toolUseId ?? value.tool_use_id;
+  const name =
+    typeof nameCandidate === "string" && nameCandidate.trim() ? nameCandidate.trim() : "";
+  const callId =
+    typeof callIdCandidate === "string" && callIdCandidate.trim() ? callIdCandidate.trim() : "";
+  if (name && callId && name !== callId) {
+    return `${name} (${callId})`;
+  }
+  return name || callId || undefined;
+}
+
 function normalizeMessage(value: unknown, fallbackRole: string): ReadableMessage | null {
   if (!isRecord(value)) {
     const content = stringifyReadable(value);
@@ -188,15 +280,12 @@ function normalizeMessage(value: unknown, fallbackRole: string): ReadableMessage
       value.arguments ??
       value,
   );
+  const name = messageName(value);
   return {
     content,
     raw: value,
     role,
-    ...(typeof value.name === "string" && value.name
-      ? { name: value.name }
-      : typeof value.call_id === "string" && value.call_id
-        ? { name: value.call_id }
-        : {}),
+    ...(name ? { name } : {}),
   };
 }
 
@@ -227,6 +316,16 @@ function requestMessages(trace: LlmTraceDetail | null): ReadableMessage[] {
     normalizedMessages.push(normalized);
   }
   return normalizedMessages;
+}
+
+function requestHistoryMessages(trace: LlmTraceDetail | null): ReadableMessage[] {
+  const payload = trace?.requestPayload;
+  if (!isRecord(payload) || !Array.isArray(payload.historyMessages)) {
+    return [];
+  }
+  return payload.historyMessages
+    .map((message, index) => normalizeMessage(message, `history ${index + 1}`))
+    .filter((message): message is ReadableMessage => Boolean(message));
 }
 
 function requestInputs(trace: LlmTraceDetail | null): unknown {
@@ -300,6 +399,7 @@ function requestParams(trace: LlmTraceDetail | null): unknown {
     return undefined;
   }
   const {
+    historyMessages: _historyMessages,
     input: _input,
     instructions: _instructions,
     messages: _messages,
@@ -435,22 +535,50 @@ function renderMessages(trace: LlmTraceDetail | null) {
   }
   return html`
     <div class="trace-message-list" data-traces-request-payload>
-      ${messages.map(
-        (message) => html`
-          <article class="trace-message ${roleClassName(message.role)}">
-            <div class="trace-message-header">
-              <span>${message.role}${message.name ? `: ${message.name}` : ""}</span>
-            </div>
-            <pre class="trace-message-content">${message.content}</pre>
-            <details class="trace-raw-disclosure">
-              <summary>Raw message</summary>
-              <pre class="mono traces-json compact">${formatJson(message.raw)}</pre>
-            </details>
-          </article>
-        `,
-      )}
+      ${renderReadableMessages(messages)}
     </div>
   `;
+}
+
+function renderReadableMessages(messages: ReadableMessage[]) {
+  return messages.map(
+    (message) => html`
+      <article class="trace-message ${roleClassName(message.role)}">
+        <div class="trace-message-header">
+          <span>${roleLabel(message.role)}${message.name ? `: ${message.name}` : ""}</span>
+        </div>
+        <pre class="trace-message-content">${message.content}</pre>
+        <details class="trace-raw-disclosure">
+          <summary>Raw message</summary>
+          <pre class="mono traces-json compact">${formatJson(message.raw)}</pre>
+        </details>
+      </article>
+    `,
+  );
+}
+
+function renderHistoryMessages(trace: LlmTraceDetail | null) {
+  const messages = requestHistoryMessages(trace);
+  if (messages.length === 0) {
+    return nothing;
+  }
+  return keyed(
+    `${trace?.id ?? "trace"}:history-messages`,
+    html`<details
+      class="trace-panel trace-panel-primary trace-collapsible-panel"
+      data-traces-history-panel
+      open
+    >
+      <summary class="traces-section-title">
+        <span>History messages</span>
+        <span class="trace-section-meta">${formatCount(messages.length, "message")}</span>
+        <span class="trace-section-toggle" aria-hidden="true"></span>
+      </summary>
+      <div class="trace-message-list" data-traces-history-messages>
+        ${renderReadableMessages(messages)}
+      </div>
+    </details>`,
+  );
 }
 
 function renderToolArguments(tool: ReadableTool) {
@@ -591,6 +719,7 @@ function renderTraceDetail(trace: LlmTraceDetail | null, capability: TraceCapabi
             ${renderMessages(trace)}
           </details>`,
         )}
+        ${renderHistoryMessages(trace)}
         <section class="trace-panel">
           <div class="traces-section-title">Tools</div>
           ${renderTools(trace)}

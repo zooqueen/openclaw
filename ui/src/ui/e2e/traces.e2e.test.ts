@@ -68,6 +68,39 @@ describeControlUiE2e("Control UI traces mocked Gateway E2E", () => {
           type: "function_call_output",
         },
       ],
+      historyMessages: [
+        {
+          content: "Earlier user question before the current prompt",
+          role: "user",
+          sourceChannel: "webchat",
+          timestamp: 1779504220316,
+        },
+        {
+          api: "openai-codex-responses",
+          content: [{ text: "Earlier assistant answer from history", type: "text" }],
+          model: "gpt-5.5",
+          provider: "openai-codex",
+          role: "assistant",
+          usage: { cacheRead: 10624, input: 14293, output: 21 },
+        },
+        {
+          content: [
+            {
+              arguments: { limit: 5 },
+              name: "sessions_list",
+              toolUseId: "call_history_sessions",
+              type: "toolcall",
+            },
+          ],
+          role: "assistant",
+        },
+        {
+          content: "main session",
+          role: "toolResult",
+          toolCallId: "call_history_sessions",
+          toolName: "sessions_list",
+        },
+      ],
       model: "gpt-5.5",
       reasoning: { effort: "medium" },
       tools: [
@@ -147,6 +180,7 @@ describeControlUiE2e("Control UI traces mocked Gateway E2E", () => {
       const toolCallText = await page
         .locator(".trace-message.role-tool-call .trace-message-content")
         .textContent();
+      const historyText = await page.locator("[data-traces-history-messages]").textContent();
       const toolsText = await page.locator("[data-traces-tools]").textContent();
       const paramsText = await page.locator(".trace-param-list").textContent();
       const responseText = await page.locator(".trace-message-content.response").textContent();
@@ -157,6 +191,13 @@ describeControlUiE2e("Control UI traces mocked Gateway E2E", () => {
       expect(promptText).toContain("shell_exec(");
       expect(promptText).toContain('"cmd": "echo trace"');
       expect(toolCallText).not.toContain('"{\\"cmd\\":');
+      expect(historyText).toContain("Earlier user question before the current prompt");
+      expect(historyText).toContain("Earlier assistant answer from history");
+      expect(historyText).toContain("sessions_list (call_history_sessions)(");
+      expect(historyText).toContain('"limit": 5');
+      expect(historyText).toContain("tool result: sessions_list (call_history_sessions)");
+      expect(historyText).toContain("main session");
+      expect(paramsText).not.toContain("historyMessages");
       expect(toolsText).toContain("shell_exec");
       expect(toolsText).toContain("cmd");
       expect(toolsText).toContain("string, required");
