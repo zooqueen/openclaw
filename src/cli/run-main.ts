@@ -591,6 +591,16 @@ export async function runCli(argv: string[] = process.argv) {
       }
     }
 
+    if (!isHelpOrVersionInvocation) {
+      const { maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli } = await startupTrace.measure(
+        "auto-migrate-legacy-oauth-sidecar-import",
+        () => import("./auto-migrate-legacy-oauth-sidecar.js"),
+      );
+      await startupTrace.measure("auto-migrate-legacy-oauth-sidecar", () =>
+        maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({ argv: normalizedArgv }),
+      );
+    }
+
     const shouldRunBareRootCrestodian = shouldStartCrestodianForBareRoot(normalizedArgv);
     const shouldRunModernOnboardCrestodian = shouldStartCrestodianForModernOnboard(normalizedArgv);
     if (shouldRunBareRootCrestodian || shouldRunModernOnboardCrestodian) {
@@ -663,16 +673,6 @@ export async function runCli(argv: string[] = process.argv) {
       (await tryRunGatewayRunFastPath(normalizedArgv, startupTrace))
     ) {
       return;
-    }
-
-    if (!isHelpOrVersionInvocation) {
-      const { maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli } = await startupTrace.measure(
-        "auto-migrate-legacy-oauth-sidecar-import",
-        () => import("./auto-migrate-legacy-oauth-sidecar.js"),
-      );
-      await startupTrace.measure("auto-migrate-legacy-oauth-sidecar", () =>
-        maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({ argv: normalizedArgv }),
-      );
     }
 
     const { tryRouteCli } = await startupTrace.measure("route-import", () => import("./route.js"));

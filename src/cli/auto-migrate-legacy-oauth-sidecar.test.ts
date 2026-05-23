@@ -294,6 +294,22 @@ describe("maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli", () => {
     expect(fs.existsSync(declineMarkerPath(state))).toBe(false);
   });
 
+  it.each([
+    { name: "bare-root TUI launch", argv: ["node", "openclaw"] },
+    { name: "openclaw gateway foreground start", argv: ["node", "openclaw", "gateway"] },
+    { name: "openclaw gateway run foreground start", argv: ["node", "openclaw", "gateway", "run"] },
+  ])("prompts before the $name fast path", async ({ argv }) => {
+    const { state } = await makeStateWithLegacyOauthRef("seed");
+    const confirm = vi.fn(async () => false);
+    await maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli({
+      argv,
+      env: state.env,
+      isInteractiveTty: () => true,
+      prompter: { confirm },
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
   it("still prompts when --non-interactive appears after a `--` argv terminator", async () => {
     const { state } = await makeStateWithLegacyOauthRef("seed");
     const confirm = vi.fn(async () => false);
