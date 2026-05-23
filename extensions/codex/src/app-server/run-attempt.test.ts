@@ -200,6 +200,7 @@ function createCodexSandboxTestConfig(): EmbeddedRunAttemptParams["config"] {
           mode: "all",
           backend: "codex-test-sandbox",
           scope: "session",
+          workspaceAccess: "rw",
           prune: { idleHours: 0, maxAgeDays: 0 },
         },
       },
