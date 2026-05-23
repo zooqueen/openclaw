@@ -6784,21 +6784,8 @@ details[open] > .ov-expandable-toggle::after {
   display: none;
 }
 
-.trace-collapsible-panel > summary.traces-section-title::after {
-  color: var(--muted);
-  content: ">";
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform 0.15s ease;
-}
-
 .trace-collapsible-panel[open] > summary.traces-section-title {
   margin-bottom: 8px;
-}
-
-.trace-collapsible-panel[open] > summary.traces-section-title::after {
-  transform: rotate(90deg);
 }
 
 .trace-section-meta {
@@ -6807,6 +6794,30 @@ details[open] > .ov-expandable-toggle::after {
   font-weight: 600;
   margin-left: auto;
   text-transform: none;
+}
+
+.trace-section-chevron {
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 16px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+  width: 16px;
+}
+
+.trace-section-chevron svg {
+  fill: none;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+  width: 16px;
+}
+
+.trace-collapsible-panel[open] .trace-section-chevron {
+  transform: rotate(0deg);
 }
 
 .traces-section-title {
