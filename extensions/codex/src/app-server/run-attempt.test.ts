@@ -1230,9 +1230,10 @@ describe("runCodexAppServerAttempt", () => {
   });
 
   it("releases the sandbox exec-server when turn/start fails", async () => {
-    const restoreSandboxBackend = registerSandboxBackend("codex-test-sandbox", async () => ({
-      id: "codex-test-sandbox",
-      runtimeId: "codex-test-runtime",
+    const backendId = "codex-test-sandbox-turn-start";
+    const restoreSandboxBackend = registerSandboxBackend(backendId, async () => ({
+      id: backendId,
+      runtimeId: `${backendId}-runtime`,
       runtimeLabel: "Codex Test Sandbox",
       workdir: "/workspace",
       buildExecSpec: async () => ({
@@ -1262,7 +1263,7 @@ describe("runCodexAppServerAttempt", () => {
           defaults: {
             sandbox: {
               mode: "all",
-              backend: "codex-test-sandbox",
+              backend: backendId,
               scope: "session",
             },
           },
@@ -1280,6 +1281,8 @@ describe("runCodexAppServerAttempt", () => {
           pluginConfig: {
             appServer: {
               mode: "yolo",
+              requestTimeoutMs: 1_000,
+              turnCompletionIdleTimeoutMs: 1_000,
               experimental: { sandboxExecServer: true },
             },
           },
@@ -1305,9 +1308,10 @@ describe("runCodexAppServerAttempt", () => {
   });
 
   it("releases the sandbox exec-server when context-engine retry setup fails", async () => {
-    const restoreSandboxBackend = registerSandboxBackend("codex-test-sandbox", async () => ({
-      id: "codex-test-sandbox",
-      runtimeId: "codex-test-runtime",
+    const backendId = "codex-test-sandbox-context-retry";
+    const restoreSandboxBackend = registerSandboxBackend(backendId, async () => ({
+      id: backendId,
+      runtimeId: `${backendId}-runtime`,
       runtimeLabel: "Codex Test Sandbox",
       workdir: "/workspace",
       buildExecSpec: async () => ({
@@ -1342,7 +1346,7 @@ describe("runCodexAppServerAttempt", () => {
           defaults: {
             sandbox: {
               mode: "all",
-              backend: "codex-test-sandbox",
+              backend: backendId,
               scope: "session",
             },
           },
@@ -1366,6 +1370,8 @@ describe("runCodexAppServerAttempt", () => {
           pluginConfig: {
             appServer: {
               mode: "yolo",
+              requestTimeoutMs: 1_000,
+              turnCompletionIdleTimeoutMs: 1_000,
               experimental: { sandboxExecServer: true },
             },
           },
@@ -1391,9 +1397,10 @@ describe("runCodexAppServerAttempt", () => {
   });
 
   it("releases the sandbox exec-server when startup times out after environment registration", async () => {
-    const restoreSandboxBackend = registerSandboxBackend("codex-test-sandbox", async () => ({
-      id: "codex-test-sandbox",
-      runtimeId: "codex-test-runtime",
+    const backendId = "codex-test-sandbox-startup-timeout";
+    const restoreSandboxBackend = registerSandboxBackend(backendId, async () => ({
+      id: backendId,
+      runtimeId: `${backendId}-runtime`,
       runtimeLabel: "Codex Test Sandbox",
       workdir: "/workspace",
       buildExecSpec: async () => ({
@@ -1419,7 +1426,7 @@ describe("runCodexAppServerAttempt", () => {
           defaults: {
             sandbox: {
               mode: "all",
-              backend: "codex-test-sandbox",
+              backend: backendId,
               scope: "session",
             },
           },
