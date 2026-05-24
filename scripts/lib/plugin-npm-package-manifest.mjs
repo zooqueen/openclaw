@@ -294,7 +294,7 @@ function installMissingOptionalBundledDependencies(params) {
       {
         cwd: params.packageDir,
         env: process.env,
-        stdio: ["ignore", "ignore", "inherit"],
+        stdio: ["ignore", "inherit", "inherit"],
       },
     );
     if (result.error) {
@@ -373,12 +373,14 @@ function installPackageLocalBundledDependencies(params) {
     const result = spawnNpmSync(
       [
         "ci",
+        "--install-strategy=shallow",
         "--omit=dev",
         "--omit=peer",
         "--legacy-peer-deps",
         "--ignore-scripts",
         "--no-audit",
         "--no-fund",
+        "--workspaces=false",
         "--loglevel=error",
       ],
       {
