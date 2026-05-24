@@ -591,6 +591,9 @@ export async function runCli(argv: string[] = process.argv) {
       }
     }
 
+    // Must stay above bare-root Crestodian and the gateway fast paths — those
+    // return early, and the embedded runtimes they start cannot prompt for the
+    // macOS Keychain on their own.
     if (!isHelpOrVersionInvocation) {
       const { maybeAutoMigrateLegacyOAuthSidecarOnInteractiveCli } = await startupTrace.measure(
         "auto-migrate-legacy-oauth-sidecar-import",
