@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { resolveUpgradeSurvivorOpenClawCommand } from "../../scripts/e2e/lib/upgrade-survivor/config-recipe.mjs";
 
@@ -37,5 +38,13 @@ describe("upgrade survivor config recipe command resolution", () => {
       commandLabel: "openclaw config validate",
       shell: false,
     });
+  });
+
+  it("mounts the Windows command helper into the Docker harness", () => {
+    const harness = fs.readFileSync("scripts/lib/docker-e2e-package.sh", "utf8");
+
+    expect(harness).toContain(
+      "$ROOT_DIR/scripts/windows-cmd-helpers.mjs:/app/scripts/windows-cmd-helpers.mjs:ro",
+    );
   });
 });
