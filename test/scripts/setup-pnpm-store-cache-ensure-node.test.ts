@@ -97,17 +97,17 @@ describe("setup-pnpm-store-cache ensure-node", () => {
     try {
       const activeBin = join(root, "active", "bin");
       writeFakeNode(activeBin, "20.20.0");
-      const toolcacheBin = join(root, "__t", "node", "24.15.0", "x64", "bin");
-      const toolcacheNode = writeFakeNode(toolcacheBin, "24.15.0");
-      const result = runEnsureNode(root, "24.15.0", {
+      const toolcacheBin = join(root, "__t", "node", "24.99.99", "x64", "bin");
+      const toolcacheNode = writeFakeNode(toolcacheBin, "24.99.99");
+      const result = runEnsureNode(root, "24.99.99", {
         PATH: `${activeBin}:${process.env.PATH ?? ""}`,
         OPENCLAW_CONTAINER_TOOL_CACHE: join(root, "__t"),
         RUNNER_TOOL_CACHE: join(root, "hostedtoolcache"),
       });
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`Using Node 24.15.0 from ${toolcacheNode}`);
-      expect(result.stdout).toContain(`${toolcacheNode}\n24.15.0`);
+      expect(result.stdout).toContain(`Using Node 24.99.99 from ${toolcacheNode}`);
+      expect(result.stdout).toContain(`${toolcacheNode}\n24.99.99`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
