@@ -11,6 +11,14 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Memory: abort sync instead of silently degrading an existing semantic vector index to FTS-only when the configured embedding provider is temporarily unavailable. (#85704) Thanks @yaaboo-gif.
+- Config: retry suspicious config recovery after a failed backup restore instead of permanently accepting the same suspicious read signature. (#85787) Thanks @SebTardif.
+- Agents/commitments: serialize commitment store load-modify-save writes so concurrent heartbeat and CLI updates no longer lose dismissal, sent, or attempt state. (#81153) Thanks @ai-hpc.
+- Gateway/restart: clear the runtime config snapshot before in-process restarts so `config.patch` writes cannot be overwritten by stale pinned config. (#86350) Thanks @0668000837.
+- Update: exclude prerelease tags from the stable git update channel so stable installs do not resolve beta tags. (#86260) Thanks @palmer.e.steven.
+- Doctor: warn and continue when the cron job store is unreadable instead of aborting the remaining health checks. Fixes #86102. Thanks @1052326311.
+- Windows/config: skip POSIX login-shell env fallback on native Windows so startup no longer warns about missing `/bin/sh`. Fixes #84795. Thanks @JIRBOY.
+- Infra/fetch-timeout: clamp timeout timer delays so guarded fetches avoid invalid or overflowing timer values. (#85985) Thanks @esadomer.
 - Sessions/doctor: load large session stores without clone amplification during read-only doctor checks and reclaim stale `sessions.json.*.tmp` sidecars. Fixes #56827. Thanks @openperf.
 - Gateway: keep session-only Control UI tool-start mirrors flowing during diagnostic queue pressure instead of silently dropping non-terminal tool updates.
 - Agents/memory: return optional not-found context for missing date-only daily memory reads instead of logging benign first-run `ENOENT` failures. Fixes #82928. Thanks @galiniliev.
