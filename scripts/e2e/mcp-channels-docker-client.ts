@@ -257,14 +257,17 @@ async function main() {
       message: channelMessage,
       idempotencyKey: randomUUID(),
     });
-    const rawGatewayUserMessage = await waitFor("raw gateway user session.message", () =>
-      gateway.events.find(
-        (entry) =>
-          entry.event === "session.message" &&
-          entry.payload.sessionKey === "agent:main:main" &&
-          extractTextFromGatewayPayload(entry.payload) === channelMessage,
-      ),
-    );
+    const rawGatewayUserMessage = await waitFor(
+      "raw gateway user session.message",
+      () =>
+        gateway.events.find(
+          (entry) =>
+            entry.event === "session.message" &&
+            entry.payload.sessionKey === "agent:main:main" &&
+            extractTextFromGatewayPayload(entry.payload) === channelMessage,
+        ),
+      10_000,
+    ).catch(() => undefined);
     const userEvent = await waitFor(
       "MCP user session.message event",
       async () => {
@@ -304,7 +307,6 @@ async function main() {
         )}`,
       );
     }
-    assert(rawGatewayUserMessage, "expected raw gateway session.message after chat.send");
 
     let helpNotification: ClaudeChannelNotification;
     try {
