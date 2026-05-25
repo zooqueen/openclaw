@@ -24,7 +24,6 @@ minimumReleaseAgeExclude:
   - "@hono/node-server"
   - "@mariozechner/*"
   - "@aws-sdk/*"
-  - "@aws-sdk/client-bedrock-runtime"
   - "@copilotkit/aimock@1.27.0"
   - "@earendil-works/pi-tui"
   - "@google/genai@2.5.0"
