@@ -8,6 +8,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Discord: suppress a bot's previous reply body and referenced media from prompt context when a user replies to that bot message, while keeping reply metadata for routing. (#86238) Thanks @fuller-stack-dev.
 - Scripts: use `git grep` to prefilter tracked conflict-marker scans so changed checks avoid reading every repository file on clean runs.
 - Installer: install Node.js through `apk` on Alpine Linux instead of falling through to the NodeSource package-manager path.
 - Agents/perf: cache manifest-backed CLI provider descriptors and fallback provider resolution so model fallback retries avoid repeated bundled provider runtime scans while still invalidating across plugin reloads.
