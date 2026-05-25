@@ -2250,6 +2250,7 @@ jobs:
         env:
           OPENCLAW_LIVE_COMMAND: ${{ matrix.command }}
           OPENCLAW_LIVE_SUITE_ADVISORY: ${{ matrix.advisory }}
+        shell: bash
         run: |
           set +e
           bash .release-harness/scripts/ci-live-command-retry.sh
@@ -2468,6 +2469,7 @@ jobs:
         env:
           OPENCLAW_LIVE_COMMAND: ${{ matrix.command }}
           OPENCLAW_LIVE_SUITE_ADVISORY: ${{ matrix.advisory }}
+        shell: bash
         run: |
           set +e
           bash .release-harness/scripts/ci-live-command-retry.sh
@@ -2655,6 +2657,7 @@ jobs:
         if: contains(matrix.profiles, inputs.release_test_profile) && (inputs.live_suite_filter == '' || inputs.live_suite_filter == matrix.suite_id || (inputs.live_suite_filter == 'native-live-extensions-media-video' && startsWith(matrix.suite_id, 'native-live-extensions-media-video-')))
         env:
           OPENCLAW_LIVE_SUITE_ADVISORY: ${{ matrix.advisory }}
+        shell: bash
         run: |
           set +e
           ${{ matrix.command }}
