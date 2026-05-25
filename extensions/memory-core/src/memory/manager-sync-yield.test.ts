@@ -122,6 +122,8 @@ class SessionSyncYieldHarness extends MemoryManagerSyncOps {
 
   protected pruneEmbeddingCacheIfNeeded(): void {}
 
+  protected resetProviderInitializationForRetry(): void {}
+
   protected async indexFile(
     entry: MemoryIndexEntry,
     _options: { source: MemorySource; content?: string },
