@@ -868,7 +868,7 @@ export async function createEmbeddedAttemptSessionLockController(params: {
           await publishOwnedSessionFileFence(beforeWrite);
         }
       }
-      const { lock, owned, entry } = await acquireWriteLock();
+      const { owned, entry } = await acquireWriteLock();
       try {
         await assertSessionFileFence();
         const beforeWrite = await readSessionFileFingerprint(params.lockOptions.sessionFile);
