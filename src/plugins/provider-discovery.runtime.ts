@@ -82,7 +82,7 @@ function dedupeSorted(values: Iterable<string>): string[] {
 
 function modelDefinitionCostFromManifestRow(
   row: NormalizedModelCatalogRow,
-): ModelDefinitionConfig["cost"] | undefined {
+): ModelDefinitionConfig["cost"] {
   if (
     !row.cost ||
     row.cost.input === undefined ||
@@ -90,7 +90,12 @@ function modelDefinitionCostFromManifestRow(
     row.cost.cacheRead === undefined ||
     row.cost.cacheWrite === undefined
   ) {
-    return undefined;
+    return {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    };
   }
   return {
     input: row.cost.input,
@@ -105,7 +110,7 @@ function modelDefinitionFromManifestRow(
   row: NormalizedModelCatalogRow,
 ): ModelDefinitionConfig | undefined {
   const cost = modelDefinitionCostFromManifestRow(row);
-  if (!cost || !row.contextWindow || !row.maxTokens) {
+  if (!row.contextWindow || !row.maxTokens) {
     return undefined;
   }
   const input: ModelDefinitionConfig["input"] = row.input.filter(
