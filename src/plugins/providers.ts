@@ -234,9 +234,6 @@ export function resolveExternalAuthProfileCompatFallbackPluginIds(params: {
   declaredPluginIds?: ReadonlySet<string>;
   manifestRegistry?: PluginManifestRegistry;
 }): string[] {
-  // Deprecated compatibility fallback for provider plugins that still implement
-  // resolveExternalOAuthProfiles or omit contracts.externalAuthProviders. Remove
-  // this with the warning path in provider-runtime after the migration window.
   const declaredPluginIds =
     params.declaredPluginIds ?? new Set(resolveExternalAuthProfileProviderPluginIds(params));
   const registry = loadProviderRegistrySnapshot(params);
@@ -270,7 +267,6 @@ export function resolveDiscoveredProviderPluginIds(params: {
   const { registry, onlyPluginIdSet } = loadScopedProviderRegistry(params);
   const providerSurfacePluginIds = resolveProviderSurfacePluginIdSet({ ...params, registry });
   const shouldFilterUntrustedWorkspacePlugins = params.includeUntrustedWorkspacePlugins !== true;
-  const shouldFilterBundledByAllowlist = params.config?.plugins?.bundledDiscovery !== "compat";
   const normalizedConfig = normalizePluginsConfigWithRegistry(params.config?.plugins, registry, {
     manifestRegistry: params.manifestRegistry,
   });
@@ -286,7 +282,6 @@ export function resolveDiscoveredProviderPluginIds(params: {
     return isProviderPluginEligibleForSetupDiscovery({
       plugin,
       shouldFilterUntrustedWorkspacePlugins,
-      shouldFilterBundledByAllowlist,
       normalizedConfig,
       rootConfig: params.config,
     });
@@ -296,7 +291,6 @@ export function resolveDiscoveredProviderPluginIds(params: {
 function isProviderPluginEligibleForSetupDiscovery(params: {
   plugin: PluginRegistryRecord;
   shouldFilterUntrustedWorkspacePlugins: boolean;
-  shouldFilterBundledByAllowlist: boolean;
   normalizedConfig: NormalizedPluginsConfig;
   rootConfig?: PluginLoadOptions["config"];
 }): boolean {
@@ -304,8 +298,6 @@ function isProviderPluginEligibleForSetupDiscovery(params: {
     if (!params.shouldFilterUntrustedWorkspacePlugins) {
       return true;
     }
-  } else if (!params.shouldFilterBundledByAllowlist) {
-    return true;
   }
   if (
     !passesManifestOwnerBasePolicy({
@@ -335,14 +327,12 @@ export function resolveDiscoverableProviderOwnerPluginIds(params: {
   includeUntrustedWorkspacePlugins?: boolean;
 }): string[] {
   const shouldFilterUntrustedWorkspacePlugins = params.includeUntrustedWorkspacePlugins !== true;
-  const shouldFilterBundledByAllowlist = params.config?.plugins?.bundledDiscovery !== "compat";
   return resolveProviderOwnerPluginIds({
     ...params,
     isEligible: (plugin, normalizedConfig) =>
       isProviderPluginEligibleForSetupDiscovery({
         plugin,
         shouldFilterUntrustedWorkspacePlugins,
-        shouldFilterBundledByAllowlist,
         normalizedConfig,
         rootConfig: params.config,
       }),
