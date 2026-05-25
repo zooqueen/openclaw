@@ -11,6 +11,8 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Plugins/perf: cache plugin package realpaths, reuse derived metadata snapshots safely, and clear metadata memo caches at lifecycle boundaries so plugin discovery hot paths avoid repeated filesystem work without reusing incomplete snapshots. (#86517)
+- Release/Docker: skip duplicate UI builds in install smoke and Docker package lanes, and dedupe Docker E2E resource planning so release validation finishes faster.
 - Memory: abort sync instead of silently degrading an existing semantic vector index to FTS-only when the configured embedding provider is temporarily unavailable. (#85704) Thanks @yaaboo-gif.
 - Config: retry suspicious config recovery after a failed backup restore instead of permanently accepting the same suspicious read signature. (#85787) Thanks @SebTardif.
 - Agents/commitments: serialize commitment store load-modify-save writes so concurrent heartbeat and CLI updates no longer lose dismissal, sent, or attempt state. (#81153) Thanks @ai-hpc.
