@@ -44,6 +44,31 @@ function downloadRequest(
   return request as { filePathHint?: string; url?: string };
 }
 
+function startLatestScheduledTimersForDelay(
+  setTimeoutSpy: ReturnType<typeof vi.spyOn>,
+  delayMs: number,
+  count: number,
+): Promise<unknown>[] {
+  const matchingIndexes = setTimeoutSpy.mock.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call[1] === delayMs)
+    .map(({ index }) => index)
+    .slice(-count);
+  expect(matchingIndexes).toHaveLength(count);
+  return matchingIndexes.map((index) => {
+    clearTimeout(setTimeoutSpy.mock.results[index]?.value as ReturnType<typeof setTimeout>);
+    const timer = setTimeoutSpy.mock.calls[index]?.[0] as (() => unknown) | undefined;
+    expect(timer).toBeTypeOf("function");
+    return Promise.resolve(timer?.());
+  });
+}
+
+function spyOnManualTimers(): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(globalThis, "setTimeout").mockImplementation((() => {
+    return Symbol("telegram-test-timer") as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout);
+}
+
 describe("telegram inbound media", () => {
   // Parallel vitest shards can make this suite slower than the standalone run.
   const INBOUND_MEDIA_TEST_TIMEOUT_MS = process.platform === "win32" ? 120_000 : 90_000;
@@ -346,6 +371,7 @@ describe("telegram media groups", () => {
       const runtimeError = vi.fn();
       const { handler, replySpy } = await createBotHandlerWithOptions({ runtimeError });
       const fetchSpy = mockTelegramPngDownload();
+      const setTimeoutSpy = spyOnManualTimers();
 
       try {
         for (const scenario of [
@@ -419,17 +445,20 @@ describe("telegram media groups", () => {
           );
 
           expect(replySpy).not.toHaveBeenCalled();
-          await vi.waitFor(
-            () => {
-              expect(replySpy).toHaveBeenCalledTimes(scenario.expectedReplyCount);
-            },
-            { timeout: MEDIA_GROUP_WAIT_TIMEOUT_MS, interval: 2 },
+          await Promise.all(
+            startLatestScheduledTimersForDelay(
+              setTimeoutSpy,
+              TELEGRAM_TEST_TIMINGS.mediaGroupFlushMs,
+              scenario.expectedReplyCount,
+            ),
           );
+          expect(replySpy).toHaveBeenCalledTimes(scenario.expectedReplyCount);
 
           expect(runtimeError).not.toHaveBeenCalled();
           scenario.assert(replySpy);
         }
       } finally {
+        setTimeoutSpy.mockRestore();
         fetchSpy.mockRestore();
       }
     },
@@ -437,7 +466,7 @@ describe("telegram media groups", () => {
   );
 
   it(
-    "flushes same-id forum topic media groups in parallel",
+    "flushes same-id DM topic media groups independently",
     async () => {
       const originalLoadConfig = telegramBotDepsForTest.getRuntimeConfig;
       telegramBotDepsForTest.getRuntimeConfig = (() => ({
@@ -454,23 +483,13 @@ describe("telegram media groups", () => {
       const runtimeError = vi.fn();
       const { handler, replySpy } = await createBotHandlerWithOptions({ runtimeError });
       const fetchSpy = mockTelegramPngDownload();
-      let releaseFirstReply: (() => void) | undefined;
-      const firstReplyStarted = new Promise<void>((resolve) => {
-        replySpy.mockImplementationOnce(async (_ctx, opts?: { onReplyStart?: () => unknown }) => {
-          await opts?.onReplyStart?.();
-          resolve();
-          await new Promise<void>((release) => {
-            releaseFirstReply = release;
-          });
-          return undefined;
-        });
-      });
+      const setTimeoutSpy = spyOnManualTimers();
 
       try {
         await Promise.all([
           handler({
             message: {
-              chat: { id: -10042, type: "supergroup" as const, is_forum: true },
+              chat: { id: 42, type: "private" as const },
               from: { id: 777, is_bot: false, first_name: "Ada" },
               message_id: 31,
               message_thread_id: 101,
@@ -484,7 +503,7 @@ describe("telegram media groups", () => {
           }),
           handler({
             message: {
-              chat: { id: -10042, type: "supergroup" as const, is_forum: true },
+              chat: { id: 42, type: "private" as const },
               from: { id: 777, is_bot: false, first_name: "Ada" },
               message_id: 32,
               message_thread_id: 202,
@@ -498,14 +517,13 @@ describe("telegram media groups", () => {
           }),
         ]);
 
-        await firstReplyStarted;
-        expect(replySpy).toHaveBeenCalledTimes(1);
-        await vi.waitFor(
-          () => {
-            expect(replySpy).toHaveBeenCalledTimes(2);
-          },
-          { timeout: MEDIA_GROUP_WAIT_TIMEOUT_MS, interval: 2 },
+        const flushes = startLatestScheduledTimersForDelay(
+          setTimeoutSpy,
+          TELEGRAM_TEST_TIMINGS.mediaGroupFlushMs,
+          2,
         );
+        await Promise.all(flushes);
+        expect(replySpy).toHaveBeenCalledTimes(2);
 
         const firstPayload = replyPayload(replySpy, 0);
         const secondPayload = replyPayload(replySpy, 1);
@@ -519,7 +537,7 @@ describe("telegram media groups", () => {
         expect(secondPayload.MediaPaths).toHaveLength(1);
         expect(runtimeError).not.toHaveBeenCalled();
       } finally {
-        releaseFirstReply?.();
+        setTimeoutSpy.mockRestore();
         fetchSpy.mockRestore();
         telegramBotDepsForTest.getRuntimeConfig = originalLoadConfig;
       }

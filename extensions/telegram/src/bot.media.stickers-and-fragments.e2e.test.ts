@@ -39,6 +39,32 @@ async function flushScheduledTimerForDelay(
   await flushTimer?.();
 }
 
+function startLatestScheduledTimersForDelay(
+  setTimeoutSpy: ReturnType<typeof vi.spyOn>,
+  delayMs: number,
+  count: number,
+): Promise<unknown>[] {
+  const matchingIndexes = setTimeoutSpy.mock.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call[1] === delayMs)
+    .filter(({ call }) => String(call[0]).includes("runTextFragmentFlush"))
+    .map(({ index }) => index)
+    .slice(-count);
+  expect(matchingIndexes).toHaveLength(count);
+  return matchingIndexes.map((index) => {
+    clearTimeout(setTimeoutSpy.mock.results[index]?.value as ReturnType<typeof setTimeout>);
+    const timer = setTimeoutSpy.mock.calls[index]?.[0] as (() => unknown) | undefined;
+    expect(timer).toBeTypeOf("function");
+    return Promise.resolve(timer?.());
+  });
+}
+
+function spyOnManualTimers(): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(globalThis, "setTimeout").mockImplementation((() => {
+    return Symbol("telegram-test-timer") as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout);
+}
+
 describe("telegram stickers", () => {
   // Parallel Testbox shards can make these media-path e2e tests slower than standalone local runs.
   const STICKER_TEST_TIMEOUT_MS = process.platform === "win32" ? 120_000 : 90_000;
@@ -203,10 +229,6 @@ describe("telegram text fragments", () => {
   });
 
   const TEXT_FRAGMENT_TEST_TIMEOUT_MS = process.platform === "win32" ? 45_000 : 20_000;
-  const TEXT_FRAGMENT_PARALLEL_WAIT_TIMEOUT_MS = Math.max(
-    2_000,
-    TELEGRAM_TEST_TIMINGS.textFragmentGapMs * 10,
-  );
 
   it(
     "buffers near-limit text and processes sequential parts as one message",
@@ -214,7 +236,7 @@ describe("telegram text fragments", () => {
       const { handler, replySpy } = await createBotHandlerWithOptions({});
       const part1 = "A".repeat(4050);
       const part2 = "B".repeat(50);
-      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+      const setTimeoutSpy = spyOnManualTimers();
 
       try {
         await handler({
@@ -278,7 +300,7 @@ describe("telegram text fragments", () => {
 
       const runtimeError = vi.fn();
       const { handler, replySpy } = await createBotHandlerWithOptions({ runtimeError });
-      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+      const setTimeoutSpy = spyOnManualTimers();
       const part1 = "A".repeat(4050);
       const part2 = "B".repeat(50);
 
@@ -324,7 +346,7 @@ describe("telegram text fragments", () => {
   );
 
   it(
-    "flushes different forum topic fragments in parallel",
+    "flushes different DM topic fragments independently",
     async () => {
       const originalLoadConfig = telegramBotDepsForTest.getRuntimeConfig;
       telegramBotDepsForTest.getRuntimeConfig = (() => ({
@@ -340,22 +362,12 @@ describe("telegram text fragments", () => {
 
       const runtimeError = vi.fn();
       const { handler, replySpy } = await createBotHandlerWithOptions({ runtimeError });
-      let releaseFirstReply: (() => void) | undefined;
-      const firstReplyStarted = new Promise<void>((resolve) => {
-        replySpy.mockImplementationOnce(async (_ctx, opts?: { onReplyStart?: () => unknown }) => {
-          await opts?.onReplyStart?.();
-          resolve();
-          await new Promise<void>((release) => {
-            releaseFirstReply = release;
-          });
-          return undefined;
-        });
-      });
+      const setTimeoutSpy = spyOnManualTimers();
 
       try {
         await handler({
           message: {
-            chat: { id: -10042, type: "supergroup", is_forum: true },
+            chat: { id: 42, type: "private" },
             from: { id: 777, is_bot: false, first_name: "Ada" },
             message_id: 20,
             message_thread_id: 101,
@@ -368,7 +380,7 @@ describe("telegram text fragments", () => {
 
         await handler({
           message: {
-            chat: { id: -10042, type: "supergroup", is_forum: true },
+            chat: { id: 42, type: "private" },
             from: { id: 777, is_bot: false, first_name: "Ada" },
             message_id: 21,
             message_thread_id: 202,
@@ -379,14 +391,13 @@ describe("telegram text fragments", () => {
           getFile: async () => ({}),
         });
 
-        await firstReplyStarted;
-        expect(replySpy).toHaveBeenCalledTimes(1);
-        await vi.waitFor(
-          () => {
-            expect(replySpy).toHaveBeenCalledTimes(2);
-          },
-          { timeout: TEXT_FRAGMENT_PARALLEL_WAIT_TIMEOUT_MS, interval: 2 },
+        const flushes = startLatestScheduledTimersForDelay(
+          setTimeoutSpy,
+          TELEGRAM_TEST_TIMINGS.textFragmentGapMs,
+          2,
         );
+        await Promise.all(flushes);
+        expect(replySpy).toHaveBeenCalledTimes(2);
 
         const firstPayload = replySpy.mock.calls.at(0)?.[0] as { RawBody?: string };
         const secondPayload = replySpy.mock.calls.at(1)?.[0] as { RawBody?: string };
@@ -398,7 +409,7 @@ describe("telegram text fragments", () => {
         );
         expect(runtimeError).not.toHaveBeenCalled();
       } finally {
-        releaseFirstReply?.();
+        setTimeoutSpy.mockRestore();
         telegramBotDepsForTest.getRuntimeConfig = originalLoadConfig;
       }
     },

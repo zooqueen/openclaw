@@ -335,6 +335,15 @@ function formatChildResultData(resultText?: string | null): string {
   );
 }
 
+function resolveChildResultText(child: {
+  completion?: {
+    resultText?: string | null;
+  };
+  frozenResultText?: string | null;
+}): string | undefined {
+  return child.completion?.resultText ?? child.frozenResultText ?? undefined;
+}
+
 export function buildChildCompletionFindings(
   children: Array<{
     childSessionKey: string;
@@ -345,6 +354,7 @@ export function buildChildCompletionFindings(
     completion?: {
       resultText?: string | null;
     };
+    frozenResultText?: string | null;
     outcome?: SubagentRunOutcome;
   }>,
 ): string | undefined {
@@ -359,7 +369,7 @@ export function buildChildCompletionFindings(
 
   const sections: string[] = [];
   for (const [index, child] of sorted.entries()) {
-    const resultText = child.completion?.resultText?.trim();
+    const resultText = resolveChildResultText(child)?.trim();
     const outcome = describeSubagentOutcome(child.outcome);
     if (
       child.outcome?.status === "ok" &&
@@ -398,6 +408,7 @@ export function dedupeLatestChildCompletionRows(
     completion?: {
       resultText?: string | null;
     };
+    frozenResultText?: string | null;
     outcome?: SubagentRunOutcome;
   }>,
 ) {
@@ -423,6 +434,7 @@ export function filterCurrentDirectChildCompletionRows(
     completion?: {
       resultText?: string | null;
     };
+    frozenResultText?: string | null;
     outcome?: SubagentRunOutcome;
   }>,
   params: {
