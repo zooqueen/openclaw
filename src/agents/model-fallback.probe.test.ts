@@ -29,7 +29,12 @@ vi.mock("./provider-model-normalization.runtime.js", () => ({
 
 const emptyPluginMetadataSnapshot = vi.hoisted(() => ({
   configFingerprint: "model-fallback-probe-test-empty-plugin-metadata",
+  index: {
+    plugins: [],
+    diagnostics: [],
+  },
   plugins: [],
+  registryDiagnostics: [],
 }));
 
 vi.mock("../plugins/current-plugin-metadata-snapshot.js", () => ({
