@@ -252,25 +252,11 @@ async function main() {
     );
 
     const channelMessage = `hello from docker ${randomUUID()}`;
-    const userEvent = (await Promise.all([
-      callTool<{
-        structuredContent?: { event?: Record<string, unknown> };
-      }>({
-        name: "events_wait",
-        arguments: {
-          session_key: "agent:main:main",
-          after_cursor: assistantCursor,
-          timeout_ms: 10_000,
-        },
-      }),
-      gateway.request("chat.send", {
-        sessionKey: "agent:main:main",
-        message: channelMessage,
-        idempotencyKey: randomUUID(),
-      }),
-    ]).then(([result]) => result)) as {
-      structuredContent?: { event?: Record<string, unknown> };
-    };
+    await gateway.request("chat.send", {
+      sessionKey: "agent:main:main",
+      message: channelMessage,
+      idempotencyKey: randomUUID(),
+    });
     const rawGatewayUserMessage = await waitFor("raw gateway user session.message", () =>
       gateway.events.find(
         (entry) =>
@@ -279,12 +265,34 @@ async function main() {
           extractTextFromGatewayPayload(entry.payload) === channelMessage,
       ),
     );
-    if (userEvent.structuredContent?.event?.text !== channelMessage) {
+    const userEvent = await waitFor(
+      "MCP user session.message event",
+      async () => {
+        const polled = await callTool<{
+          structuredContent?: { events?: Array<Record<string, unknown>> };
+        }>({
+          name: "events_poll",
+          arguments: { session_key: "agent:main:main", after_cursor: assistantCursor, limit: 50 },
+        });
+        return (polled.structuredContent?.events ?? []).find(
+          (entry) => entry.text === channelMessage,
+        );
+      },
+      60_000,
+    ).catch(() => undefined);
+    if (userEvent?.text !== channelMessage) {
+      const polled = await callTool<{
+        structuredContent?: { events?: Array<Record<string, unknown>> };
+      }>({
+        name: "events_poll",
+        arguments: { session_key: "agent:main:main", after_cursor: assistantCursor, limit: 50 },
+      });
       throw new Error(
         `expected user event after chat.send: ${JSON.stringify(
           {
-            userEvent: userEvent.structuredContent?.event ?? null,
+            userEvent: userEvent ?? null,
             rawGatewayUserMessage: rawGatewayUserMessage ?? null,
+            mcpEventsAfterAssistant: polled.structuredContent?.events ?? [],
             recentGatewayEvents: gateway.events.slice(-10).map((entry) => ({
               event: entry.event,
               sessionKey: entry.payload.sessionKey,
