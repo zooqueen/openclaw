@@ -324,6 +324,14 @@ function hasProviderWildcardVisibility(params: {
   );
 }
 
+function hasRuntimeProviderCatalog(
+  provider: import("../plugins/types.js").ProviderPlugin,
+): boolean {
+  return (
+    typeof provider.catalog?.run === "function" || typeof provider.discovery?.run === "function"
+  );
+}
+
 async function resolvePluginImplicitProviders(
   ctx: ImplicitProviderContext,
   providers: import("../plugins/types.js").ProviderPlugin[],
@@ -371,27 +379,28 @@ async function resolvePluginImplicitProviders(
       };
     };
 
-    const result =
-      ctx.providerDiscoveryEntriesOnly === true && provider.staticCatalog
-        ? await runProviderStaticCatalog({
-            provider,
-            config: catalogConfig,
-            agentDir: ctx.agentDir,
-            workspaceDir: ctx.workspaceDir,
-            env: ctx.env,
-          })
-        : await runProviderCatalogWithTimeout({
-            provider,
-            config: catalogConfig,
-            agentDir: ctx.agentDir,
-            workspaceDir: ctx.workspaceDir,
-            env: ctx.env,
-            resolveProviderApiKey: resolveCatalogProviderApiKey,
-            resolveProviderAuth: (providerId, options) =>
-              ctx.resolveProviderAuth(providerId?.trim() || provider.id, options),
-            timeoutMs:
-              ctx.providerDiscoveryTimeoutMs ?? resolveLiveProviderCatalogTimeoutMs(ctx.env),
-          });
+    const useStaticCatalog =
+      Boolean(provider.staticCatalog) &&
+      (ctx.providerDiscoveryEntriesOnly === true || !hasRuntimeProviderCatalog(provider));
+    const result = useStaticCatalog
+      ? await runProviderStaticCatalog({
+          provider,
+          config: catalogConfig,
+          agentDir: ctx.agentDir,
+          workspaceDir: ctx.workspaceDir,
+          env: ctx.env,
+        })
+      : await runProviderCatalogWithTimeout({
+          provider,
+          config: catalogConfig,
+          agentDir: ctx.agentDir,
+          workspaceDir: ctx.workspaceDir,
+          env: ctx.env,
+          resolveProviderApiKey: resolveCatalogProviderApiKey,
+          resolveProviderAuth: (providerId, options) =>
+            ctx.resolveProviderAuth(providerId?.trim() || provider.id, options),
+          timeoutMs: ctx.providerDiscoveryTimeoutMs ?? resolveLiveProviderCatalogTimeoutMs(ctx.env),
+        });
     if (!result) {
       continue;
     }
