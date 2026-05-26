@@ -10,7 +10,7 @@ import {
 import { formatErrorMessage } from "../infra/errors.js";
 import { pathExists } from "../infra/fs-safe.js";
 import { withExtractedArchiveRoot } from "../infra/install-flow.js";
-import { tryReadJson, writeJson } from "../infra/json-files.js";
+import { readJsonIfExists, tryReadJson, writeJson } from "../infra/json-files.js";
 import {
   CLAWHUB_SKILL_ARCHIVE_ROOT_MARKERS,
   installExtractedSkillRoot,
@@ -103,6 +103,29 @@ type TrackedUpdateTarget =
       error: string;
     };
 
+export type ClawHubSkillVerificationResolutionSource = "installed" | "registry";
+export type ClawHubSkillVerificationSelector = "installed-version" | "version" | "tag" | "latest";
+
+export type ClawHubSkillVerificationTargetResult =
+  | {
+      ok: true;
+      slug: string;
+      baseUrl: string;
+      version: string | undefined;
+      tag: string | undefined;
+      resolution: {
+        source: ClawHubSkillVerificationResolutionSource;
+        selector: ClawHubSkillVerificationSelector;
+        registry: string;
+        skillDir: string | undefined;
+        installedVersion: string | undefined;
+      };
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
 export async function readClawHubSkillsLockfile(
   workspaceDir: string,
 ): Promise<ClawHubSkillsLockfile> {
@@ -134,6 +157,40 @@ async function writeClawHubSkillsLockfile(
   await writeJson(targetPath, lockfile, { trailingNewline: true });
 }
 
+function normalizeStoredRegistry(registry: string): string {
+  const trimmed = registry.trim();
+  return trimmed.replace(/\/+$/, "") || trimmed;
+}
+
+function normalizeOptionalSelector(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeClawHubSkillOrigin(
+  raw: Partial<ClawHubSkillOrigin> | null,
+): ClawHubSkillOrigin | null {
+  if (
+    raw?.version === 1 &&
+    typeof raw.registry === "string" &&
+    raw.registry.trim().length > 0 &&
+    typeof raw.slug === "string" &&
+    raw.slug.trim().length > 0 &&
+    typeof raw.installedVersion === "string" &&
+    raw.installedVersion.trim().length > 0 &&
+    typeof raw.installedAt === "number"
+  ) {
+    return {
+      version: 1,
+      registry: normalizeStoredRegistry(raw.registry),
+      slug: raw.slug,
+      installedVersion: raw.installedVersion,
+      installedAt: raw.installedAt,
+    };
+  }
+  return null;
+}
+
 async function readClawHubSkillOrigin(skillDir: string): Promise<ClawHubSkillOrigin | null> {
   const candidates = [
     path.join(skillDir, DOT_DIR, "origin.json"),
@@ -142,20 +199,52 @@ async function readClawHubSkillOrigin(skillDir: string): Promise<ClawHubSkillOri
   for (const candidate of candidates) {
     try {
       const raw = await tryReadJson<Partial<ClawHubSkillOrigin>>(candidate);
-      if (
-        raw?.version === 1 &&
-        typeof raw.registry === "string" &&
-        typeof raw.slug === "string" &&
-        typeof raw.installedVersion === "string" &&
-        typeof raw.installedAt === "number"
-      ) {
-        return raw as ClawHubSkillOrigin;
+      const origin = normalizeClawHubSkillOrigin(raw);
+      if (origin) {
+        return origin;
       }
     } catch {
       // ignore
     }
   }
   return null;
+}
+
+type StrictOriginReadResult =
+  | { kind: "found"; origin: ClawHubSkillOrigin; path: string }
+  | { kind: "missing" }
+  | { kind: "malformed"; path: string; error: string };
+
+async function readClawHubSkillOriginStrict(skillDir: string): Promise<StrictOriginReadResult> {
+  const candidates = [
+    path.join(skillDir, DOT_DIR, "origin.json"),
+    path.join(skillDir, LEGACY_DOT_DIR, "origin.json"),
+  ];
+  for (const candidate of candidates) {
+    let raw: Partial<ClawHubSkillOrigin> | null;
+    try {
+      raw = await readJsonIfExists<Partial<ClawHubSkillOrigin>>(candidate);
+    } catch (err) {
+      return {
+        kind: "malformed",
+        path: candidate,
+        error: formatErrorMessage(err),
+      };
+    }
+    if (!raw) {
+      continue;
+    }
+    const origin = normalizeClawHubSkillOrigin(raw);
+    if (origin) {
+      return { kind: "found", origin, path: candidate };
+    }
+    return {
+      kind: "malformed",
+      path: candidate,
+      error: "expected version 1 origin with registry, slug, installedVersion, and installedAt",
+    };
+  }
+  return { kind: "missing" };
 }
 
 async function writeClawHubSkillOrigin(
@@ -176,6 +265,74 @@ export async function searchSkillsFromClawHub(params: {
     limit: params.limit,
     baseUrl: params.baseUrl,
   });
+}
+
+export async function resolveClawHubSkillVerificationTarget(params: {
+  workspaceDir: string;
+  slug: string;
+  version?: string;
+  tag?: string;
+  baseUrl?: string;
+}): Promise<ClawHubSkillVerificationTargetResult> {
+  try {
+    const version = normalizeOptionalSelector(params.version);
+    const tag = normalizeOptionalSelector(params.tag);
+    if (version && tag) {
+      return { ok: false, error: "Use either --version or --tag." };
+    }
+
+    const trackedSlug = normalizeTrackedSkillSlug(params.slug);
+    const skillDir = resolveWorkspaceSkillInstallDir(params.workspaceDir, trackedSlug);
+    const originRead = await readClawHubSkillOriginStrict(skillDir);
+    if (originRead.kind === "malformed") {
+      return {
+        ok: false,
+        error: `Malformed ClawHub origin metadata at ${originRead.path}: ${originRead.error}`,
+      };
+    }
+
+    if (originRead.kind === "found") {
+      const selector: ClawHubSkillVerificationSelector = version
+        ? "version"
+        : tag
+          ? "tag"
+          : "installed-version";
+      return {
+        ok: true,
+        slug: originRead.origin.slug,
+        baseUrl: originRead.origin.registry,
+        version: version ?? (tag ? undefined : originRead.origin.installedVersion),
+        tag,
+        resolution: {
+          source: "installed",
+          selector,
+          registry: originRead.origin.registry,
+          skillDir,
+          installedVersion: originRead.origin.installedVersion,
+        },
+      };
+    }
+
+    const slug = validateRequestedSkillSlug(params.slug);
+    const registry = resolveClawHubBaseUrl(params.baseUrl);
+    const selector: ClawHubSkillVerificationSelector = version ? "version" : tag ? "tag" : "latest";
+    return {
+      ok: true,
+      slug,
+      baseUrl: registry,
+      version,
+      tag,
+      resolution: {
+        source: "registry",
+        selector,
+        registry,
+        skillDir: undefined,
+        installedVersion: undefined,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: formatErrorMessage(err) };
+  }
 }
 
 async function resolveInstallVersion(params: {
