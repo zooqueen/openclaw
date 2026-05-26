@@ -137,7 +137,9 @@ async function applyMidTurnPrecheckGuardToContext(
 
 function expectPiStyleTruncation(text: string): void {
   expect(text).toContain(CONTEXT_LIMIT_TRUNCATION_NOTICE);
-  expect(text).toMatch(/\[\.\.\. \d+ more characters truncated\]$/);
+  expect(text).toMatch(
+    /\[\.\.\. \d+ more characters truncated; raise agents\.defaults\.contextLimits\.toolResultMaxChars to keep more\]$/,
+  );
   expect(text).not.toContain("[compacted: tool output removed to free context]");
   expect(text).not.toContain("[compacted: tool output trimmed to free context]");
   expect(text).not.toContain("[truncated: output exceeded context limit]");
@@ -168,8 +170,10 @@ function recordMockArg(
 }
 
 describe("formatContextLimitTruncationNotice", () => {
-  it("formats pi-style truncation wording with a count", () => {
-    expect(formatContextLimitTruncationNotice(123)).toBe("[... 123 more characters truncated]");
+  it("formats pi-style truncation wording with a count and actionable config hint", () => {
+    expect(formatContextLimitTruncationNotice(123)).toBe(
+      "[... 123 more characters truncated; raise agents.defaults.contextLimits.toolResultMaxChars to keep more]",
+    );
   });
 });
 

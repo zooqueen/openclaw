@@ -533,6 +533,58 @@ async function runHooksModelHealth(ctx: DoctorHealthFlowContext): Promise<void> 
   }
 }
 
+async function runToolResultCapAdvisoryHealth(ctx: DoctorHealthFlowContext): Promise<void> {
+  const { DEFAULT_MODEL, DEFAULT_PROVIDER } = await import("../agents/defaults.js");
+  const { loadModelCatalog } = await import("../agents/model-catalog.js");
+  const { resolveConfiguredModelRef } = await import("../agents/model-selection.js");
+  const { findModelCatalogEntry } = await import("../agents/model-catalog-lookup.js");
+  const { resolveAgentContextLimits } = await import("../agents/agent-scope.js");
+  const { DEFAULT_MAX_LIVE_TOOL_RESULT_CHARS } =
+    await import("../agents/pi-embedded-runner/tool-result-truncation.js");
+  const { AGENT_CONTEXT_LIMITS_TOOL_RESULT_MAX_CHARS_SCHEMA_MAX } =
+    await import("../config/zod-schema.agent-runtime.js");
+  const { formatToolResultCapAdvice } = await import("./doctor-tool-result-cap-advice.js");
+  const { note } = await import("../terminal/note.js");
+
+  const configuredCap = resolveAgentContextLimits(ctx.cfg, null)?.toolResultMaxChars;
+
+  let primaryModelContextWindow: number | undefined;
+  let primaryModelKey: string | undefined;
+  try {
+    const ref = resolveConfiguredModelRef({
+      cfg: ctx.cfg,
+      defaultProvider: DEFAULT_PROVIDER,
+      defaultModel: DEFAULT_MODEL,
+    });
+    if (ref?.provider && ref.model) {
+      primaryModelKey = `${ref.provider}/${ref.model}`;
+      const catalog = await loadModelCatalog({ config: ctx.cfg });
+      const entry = findModelCatalogEntry(catalog, {
+        provider: ref.provider,
+        modelId: ref.model,
+      });
+      if (entry?.contextWindow && entry.contextWindow > 0) {
+        primaryModelContextWindow = entry.contextWindow;
+      }
+    }
+  } catch {
+    // Doctor must never throw on advisory probing; missing catalog/auth state
+    // simply means we cannot advise and should stay quiet.
+    return;
+  }
+
+  const lines = formatToolResultCapAdvice({
+    configuredCap,
+    defaultCap: DEFAULT_MAX_LIVE_TOOL_RESULT_CHARS,
+    schemaMaxCap: AGENT_CONTEXT_LIMITS_TOOL_RESULT_MAX_CHARS_SCHEMA_MAX,
+    primaryModelContextWindow,
+    primaryModelKey,
+  });
+  if (lines.length > 0) {
+    note(lines.join("\n"), "Tool result cap");
+  }
+}
+
 async function runSystemdLingerHealth(ctx: DoctorHealthFlowContext): Promise<void> {
   if (
     ctx.options.nonInteractive === true ||
@@ -875,6 +927,11 @@ export function resolveDoctorHealthContributions(): DoctorHealthContribution[] {
       label: "Hooks model",
       healthCheckIds: ["core/doctor/hooks-model"],
       run: runHooksModelHealth,
+    }),
+    createDoctorHealthContribution({
+      id: "doctor:tool-result-cap",
+      label: "Tool result cap",
+      run: runToolResultCapAdvisoryHealth,
     }),
     createDoctorHealthContribution({
       id: "doctor:systemd-linger",

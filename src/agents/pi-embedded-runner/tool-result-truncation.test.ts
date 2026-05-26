@@ -595,10 +595,16 @@ describe("truncateOversizedToolResultsInSession", () => {
     sm.appendMessage(makeToolResult(medium, "call_3"));
     const sessionFile = sm.getSessionFile()!;
 
+    // The cap must be larger than the actionable truncation marker text
+    // (~110 chars including the canonical config-path hint) times the number
+    // of tool results, otherwise the aggregate budget cannot fit even the
+    // markers. 1500 chars across 3 results keeps the "tiny explicit cap"
+    // semantics meaningful while leaving room for the marker overhead.
+    const tinyAggregateCap = 1500;
     const result = await truncateOversizedToolResultsInSession({
       sessionFile,
       contextWindowTokens: 128_000,
-      maxCharsOverride: 120,
+      maxCharsOverride: tinyAggregateCap,
     });
 
     expect(result.truncated).toBe(true);
@@ -611,7 +617,7 @@ describe("truncateOversizedToolResultsInSession", () => {
       0,
     );
 
-    expect(totalChars).toBeLessThanOrEqual(120);
+    expect(totalChars).toBeLessThanOrEqual(tinyAggregateCap);
     expect(
       toolResults.some((entry) =>
         entry.type === "message"

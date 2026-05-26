@@ -248,7 +248,13 @@ Shared defaults for bounded runtime context surfaces.
 - `memoryGetDefaultLines`: default `memory_get` line window when `lines` is
   omitted.
 - `toolResultMaxChars`: live tool-result cap used for persisted results and
-  overflow recovery.
+  overflow recovery. Defaults to `16000`, which is conservative for frontier
+  models with 100K+ context windows. The runtime additionally clamps the
+  effective per-result cap to roughly 30% of the model's context window, so
+  raising this above that share has no effect. Typical values for 200K-context
+  models are around `32000`–`64000`; the schema accepts up to `250000`.
+  `openclaw doctor` advises raising this when the primary model has a 100K+
+  context window but no override is set.
 - `postCompactionMaxChars`: AGENTS.md excerpt cap used during post-compaction
   refresh injection.
 

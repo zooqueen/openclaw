@@ -284,11 +284,24 @@ const SandboxPruneSchema = z
   .strict()
   .optional();
 
+/**
+ * Hard schema ceiling for `toolResultMaxChars`. The runtime additionally
+ * clamps the effective per-result cap to roughly 30% of the model's context
+ * window, so this is an input-sanity bound, not a recommended value.
+ * Exported so doctor advisories surface the same number the schema enforces.
+ */
+export const AGENT_CONTEXT_LIMITS_TOOL_RESULT_MAX_CHARS_SCHEMA_MAX = 250_000;
+
 export const AgentContextLimitsSchema = z
   .object({
     memoryGetMaxChars: z.number().int().min(1).max(250_000).optional(),
     memoryGetDefaultLines: z.number().int().min(1).max(5_000).optional(),
-    toolResultMaxChars: z.number().int().min(1).max(250_000).optional(),
+    toolResultMaxChars: z
+      .number()
+      .int()
+      .min(1)
+      .max(AGENT_CONTEXT_LIMITS_TOOL_RESULT_MAX_CHARS_SCHEMA_MAX)
+      .optional(),
     postCompactionMaxChars: z.number().int().min(1).max(50_000).optional(),
   })
   .strict()

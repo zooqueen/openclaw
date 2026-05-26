@@ -474,7 +474,7 @@ vi.mock("../tool-result-context-guard.js", async () => {
   return {
     ...actual,
     formatContextLimitTruncationNotice: (truncatedChars: number) =>
-      `[... ${Math.max(1, Math.floor(truncatedChars))} more characters truncated]`,
+      `[... ${Math.max(1, Math.floor(truncatedChars))} more characters truncated; raise agents.defaults.contextLimits.toolResultMaxChars to keep more]`,
     installToolResultContextGuard: (...args: unknown[]) =>
       (hoisted.installToolResultContextGuardMock as (...args: unknown[]) => unknown)(...args),
     installContextEngineLoopHook: (...args: unknown[]) =>
