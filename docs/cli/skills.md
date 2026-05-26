@@ -3,7 +3,7 @@ summary: "CLI reference for `openclaw skills` (search/install/update/verify/list
 read_when:
   - You want to see which skills are available and ready to run
   - You want to search ClawHub or install skills from ClawHub, Git, or local directories
-  - You want to verify a ClawHub skill's Skill Card trust envelope
+  - You want to verify a ClawHub skill with ClawHub
   - You want to debug missing binaries/env/config for skills
 title: "Skills"
 ---
@@ -11,7 +11,7 @@ title: "Skills"
 # `openclaw skills`
 
 Inspect local skills, search ClawHub, install skills from ClawHub/Git/local
-directories, verify ClawHub Skill Cards, and update ClawHub-tracked installs.
+directories, verify ClawHub skills, and update ClawHub-tracked installs.
 
 Related:
 

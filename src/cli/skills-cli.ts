@@ -343,7 +343,7 @@ export function registerSkillsCli(program: Command) {
 
   skills
     .command("verify")
-    .description("Verify a ClawHub skill with its Skill Card trust envelope")
+    .description("Verify a ClawHub skill with ClawHub")
     .argument("<slug>", "ClawHub skill slug")
     .option("--version <version>", "Verify a specific version")
     .option("--tag <tag>", "Verify a dist tag")

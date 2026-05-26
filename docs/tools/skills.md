@@ -138,7 +138,7 @@ separate `clawhub` CLI for publish/sync workflows. Full guide:
 | Update all workspace-installed skills  | `openclaw skills update --all`                         |
 | Update a single shared managed skill   | `openclaw skills update <skill-slug> --global`         |
 | Update all shared managed/local skills | `openclaw skills update --all --global`                |
-| Verify a ClawHub Skill Card            | `openclaw skills verify <skill-slug>`                  |
+| Verify a ClawHub skill                 | `openclaw skills verify <skill-slug>`                  |
 | Print the generated Skill Card         | `openclaw skills verify <skill-slug> --card`           |
 | Sync (scan + publish updates)          | `clawhub sync --all`                                   |
 
