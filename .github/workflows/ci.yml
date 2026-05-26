@@ -1506,17 +1506,15 @@ jobs:
           }
 
       - name: Setup Node.js
-        env:
-          REQUESTED_NODE_VERSION: "24.x"
-        run: |
-          set -euo pipefail
-          source .github/actions/setup-pnpm-store-cache/ensure-node.sh
-          openclaw_ensure_node "$REQUESTED_NODE_VERSION"
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          check-latest: false
 
       - name: Setup pnpm
         uses: ./.github/actions/setup-pnpm-store-cache
         with:
-          node-version: 24.x
+          node-version: 22.19.0
 
       - name: Runtime versions
         run: |
