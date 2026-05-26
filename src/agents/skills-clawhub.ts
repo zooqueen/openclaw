@@ -38,6 +38,7 @@ export type ClawHubSkillsLockfile = {
     {
       version: string;
       installedAt: number;
+      registry?: string;
     }
   >;
 };
@@ -292,6 +293,31 @@ export async function resolveClawHubSkillVerificationTarget(params: {
     }
 
     if (originRead.kind === "found") {
+      const lock = await readClawHubSkillsLockfile(params.workspaceDir);
+      const locked = lock.skills[trackedSlug];
+      if (!locked) {
+        return {
+          ok: false,
+          error: `Skill "${trackedSlug}" has ClawHub origin metadata but is not tracked by the workspace ClawHub lockfile. Reinstall it from ClawHub before verifying it as an installed ClawHub skill.`,
+        };
+      }
+      const originSlug = normalizeTrackedSkillSlug(originRead.origin.slug);
+      if (originSlug !== trackedSlug) {
+        return {
+          ok: false,
+          error: `Skill "${trackedSlug}" has ClawHub origin metadata for "${originRead.origin.slug}". Reinstall it from ClawHub before verifying it as an installed ClawHub skill.`,
+        };
+      }
+      if (
+        locked.version !== originRead.origin.installedVersion ||
+        locked.installedAt !== originRead.origin.installedAt
+      ) {
+        return {
+          ok: false,
+          error: `Skill "${trackedSlug}" ClawHub origin metadata does not match the workspace ClawHub lockfile. Reinstall it from ClawHub before verifying it as an installed ClawHub skill.`,
+        };
+      }
+      const registry = normalizeStoredRegistry(locked.registry ?? originRead.origin.registry);
       const selector: ClawHubSkillVerificationSelector = version
         ? "version"
         : tag
@@ -299,16 +325,16 @@ export async function resolveClawHubSkillVerificationTarget(params: {
           : "installed-version";
       return {
         ok: true,
-        slug: originRead.origin.slug,
-        baseUrl: originRead.origin.registry,
-        version: version ?? (tag ? undefined : originRead.origin.installedVersion),
+        slug: trackedSlug,
+        baseUrl: registry,
+        version: version ?? (tag ? undefined : locked.version),
         tag,
         resolution: {
           source: "installed",
           selector,
-          registry: originRead.origin.registry,
+          registry,
           skillDir,
-          installedVersion: originRead.origin.installedVersion,
+          installedVersion: locked.version,
         },
       };
     }
@@ -413,6 +439,7 @@ async function performClawHubSkillInstall(
       lock.skills[params.slug] = {
         version,
         installedAt,
+        registry: resolveClawHubBaseUrl(params.baseUrl),
       };
       await writeClawHubSkillsLockfile(params.workspaceDir, lock);
 

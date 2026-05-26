@@ -134,6 +134,25 @@ describe("skills verify CLI", () => {
       )}\n`,
       "utf8",
     );
+    await fs.mkdir(path.join(workspaceDir, ".clawhub"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceDir, ".clawhub", "lock.json"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          skills: {
+            agentreceipt: {
+              version: "1.2.3",
+              installedAt: 123,
+              registry: "https://private.example.com/clawhub",
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
   }
 
   it("does not reject an installed bundle just because ClawHub generated skill-card.md", async () => {
