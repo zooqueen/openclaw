@@ -22,6 +22,7 @@ type SessionsChatRunState = {
   chatRunId?: string | null;
   chatStream?: string | null;
   chatStreamStartedAt?: number | null;
+  chatRunStatus?: ChatRunUiStatus | null;
   requestUpdate?: () => void;
 };
 
@@ -147,6 +148,52 @@ function sessionPatchTargetsCurrentChatRun(
     return false;
   }
   return true;
+}
+
+function localTerminalChatRunPhaseForRow(
+  state: SessionsState,
+  row: GatewaySessionRow,
+): ChatRunUiStatus["phase"] | null {
+  if (state.chatRunId || !hasCurrentChatSession(state) || row.key !== state.sessionKey) {
+    return null;
+  }
+  const status = state.chatRunStatus;
+  if (!status || status.sessionKey !== state.sessionKey) {
+    return null;
+  }
+  return status.phase;
+}
+
+function rowHasStaleActiveRun(row: GatewaySessionRow): boolean {
+  return row.status === "running" || (row.status === undefined && row.hasActiveRun === true);
+}
+
+function normalizeStaleCurrentSessionRunRow(
+  state: SessionsState,
+  row: GatewaySessionRow,
+): GatewaySessionRow {
+  const phase = localTerminalChatRunPhaseForRow(state, row);
+  if (!phase || !rowHasStaleActiveRun(row)) {
+    return row;
+  }
+  return {
+    ...row,
+    hasActiveRun: false,
+    status: phase === "done" ? "done" : "killed",
+  };
+}
+
+function normalizeStaleCurrentSessionRunRows(
+  state: SessionsState,
+  result: SessionsListResult,
+): SessionsListResult {
+  let changed = false;
+  const sessions = result.sessions.map((row) => {
+    const next = normalizeStaleCurrentSessionRunRow(state, row);
+    changed ||= next !== row;
+    return next;
+  });
+  return changed ? { ...result, sessions } : result;
 }
 
 const SESSION_EVENT_ROW_FIELDS = [
@@ -458,7 +505,8 @@ export function applySessionsChangedEvent(
   if (nextRow.totalTokensFresh === false && !hasOwn(source, "totalTokens")) {
     delete nextRow.totalTokens;
   }
-  if (!state.sessionsShowArchived && isArchivedSessionRow(nextRow)) {
+  const patchedRow = normalizeStaleCurrentSessionRunRow(state, nextRow);
+  if (!state.sessionsShowArchived && isArchivedSessionRow(patchedRow)) {
     if (existingIndex < 0) {
       return { applied: false };
     }
@@ -473,8 +521,8 @@ export function applySessionsChangedEvent(
 
   const nextRows =
     existingIndex >= 0
-      ? previousRows.map((row, index) => (index === existingIndex ? nextRow : row))
-      : [nextRow, ...previousRows];
+      ? previousRows.map((row, index) => (index === existingIndex ? patchedRow : row))
+      : [patchedRow, ...previousRows];
   const sessions = nextRows.toSorted(compareSessionRowsByUpdatedAt);
   const eventTs = typeof payload.ts === "number" && Number.isFinite(payload.ts) ? payload.ts : null;
   const eventRunId =
@@ -493,7 +541,7 @@ export function applySessionsChangedEvent(
   const currentChatRunId = state.chatRunId ?? null;
   const currentChatSessionKey = hasCurrentSession ? state.sessionKey : null;
   const clearedChatRun =
-    nextRow.hasActiveRun !== true &&
+    patchedRow.hasActiveRun !== true &&
     hasCurrentSession &&
     sessionPatchTargetsCurrentChatRun(state, {
       changedSessionKey: key,
@@ -503,7 +551,7 @@ export function applySessionsChangedEvent(
       publishRunStatus: false,
     });
 
-  if (previousCheckpointSignature !== checkpointSummarySignature(nextRow)) {
+  if (previousCheckpointSignature !== checkpointSummarySignature(patchedRow)) {
     invalidateCheckpointCacheForKey(state, key);
   }
   return {
@@ -513,7 +561,7 @@ export function applySessionsChangedEvent(
     ...(clearedChatRun && currentChatSessionKey != null
       ? {
           clearedChatRunStatus: {
-            phase: nextRow.status === "done" ? "done" : "interrupted",
+            phase: patchedRow.status === "done" ? "done" : "interrupted",
             runId: currentChatRunId,
             sessionKey: currentChatSessionKey,
           },
@@ -680,10 +728,11 @@ async function loadSessionsOnce(
     const res = await client.request<SessionsListResult | undefined>("sessions.list", params);
     if (res) {
       const projected = projectSessionsResultForAvailability(res, { showArchived });
-      state.sessionsResult =
+      const loadedResult =
         overrides?.append === true && offset > 0 && state.sessionsResult
           ? appendSessionsResult(state.sessionsResult, projected)
           : projected;
+      state.sessionsResult = normalizeStaleCurrentSessionRunRows(state, loadedResult);
       if (hasCurrentChatSession(state)) {
         reconcileChatRunFromCurrentSessionRow(state, {
           publishRunStatus: overrides?.publishChatRunStatus !== false,

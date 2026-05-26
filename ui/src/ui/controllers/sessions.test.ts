@@ -528,6 +528,52 @@ describe("loadSessions", () => {
     }
   });
 
+  it("keeps terminal local run status when a stale active session list row arrives", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method !== "sessions.list") {
+        throw new Error(`unexpected method: ${method}`);
+      }
+      return {
+        ts: 1,
+        path: "(multiple)",
+        count: 1,
+        defaults: { modelProvider: null, model: null, contextTokens: null },
+        sessions: [
+          {
+            key: "main",
+            kind: "direct",
+            updatedAt: 2,
+            hasActiveRun: true,
+            status: "running",
+          },
+        ],
+      };
+    });
+    const state = createState(request, {
+      sessionKey: "main",
+      chatRunId: null,
+      chatRunStatus: {
+        phase: "done",
+        runId: "run-1",
+        sessionKey: "main",
+        occurredAt: 100,
+      },
+    });
+
+    await loadSessions(state);
+
+    expect(state.sessionsResult?.sessions[0]).toMatchObject({
+      key: "main",
+      hasActiveRun: false,
+      status: "done",
+    });
+    expect(state.chatRunStatus).toMatchObject({
+      phase: "done",
+      runId: "run-1",
+      sessionKey: "main",
+    });
+  });
+
   it("omits the active-window cutoff when archived sessions are shown", async () => {
     const request = vi.fn(async (method: string) => {
       if (method !== "sessions.list") {
@@ -1003,6 +1049,55 @@ describe("applySessionsChangedEvent", () => {
       hasActiveRun: false,
       status: "done",
       endedAt: 2,
+    });
+  });
+
+  it("keeps terminal local run status when a stale active websocket row arrives", () => {
+    const state = createState(async () => undefined, {
+      sessionKey: "agent:super:main",
+      chatRunId: null,
+      chatRunStatus: {
+        phase: "interrupted",
+        runId: "run-1",
+        sessionKey: "agent:super:main",
+        occurredAt: 100,
+      },
+      sessionsResult: {
+        ts: 1,
+        path: "(multiple)",
+        count: 1,
+        defaults: { modelProvider: null, model: null, contextTokens: null },
+        sessions: [
+          {
+            key: "agent:super:main",
+            kind: "direct",
+            updatedAt: 1,
+            hasActiveRun: false,
+            status: "killed",
+          },
+        ],
+      },
+    });
+
+    const applied = applySessionsChangedEvent(state, {
+      sessionKey: "agent:super:main",
+      sessionId: "sess-main",
+      status: "running",
+      hasActiveRun: true,
+      updatedAt: 2,
+      ts: 2,
+    });
+
+    expect(applied).toEqual({ applied: true, change: "updated" });
+    expect(state.sessionsResult?.sessions[0]).toMatchObject({
+      hasActiveRun: false,
+      status: "killed",
+      updatedAt: 2,
+    });
+    expect(state.chatRunStatus).toMatchObject({
+      phase: "interrupted",
+      runId: "run-1",
+      sessionKey: "agent:super:main",
     });
   });
 
