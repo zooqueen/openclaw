@@ -28,9 +28,11 @@ const mocks = vi.hoisted(() => {
     runtimeStdout,
     runtimeErrors,
     loadConfigMock: vi.fn(() => ({})),
-    resolveAgentIdByWorkspacePathMock: vi.fn((): string | undefined => undefined),
-    resolveDefaultAgentIdMock: vi.fn(() => "main"),
-    resolveAgentWorkspaceDirMock: vi.fn(),
+    resolveAgentIdByWorkspacePathMock: vi.fn(
+      (_config: unknown, _workspacePath: string): string | undefined => undefined,
+    ),
+    resolveDefaultAgentIdMock: vi.fn((_config: unknown) => "main"),
+    resolveAgentWorkspaceDirMock: vi.fn((_config: unknown, _agentId: string) => ""),
     resolveClawHubBaseUrlMock: vi.fn((baseUrl?: string) =>
       (baseUrl ?? "https://clawhub.ai").replace(/\/+$/, ""),
     ),
