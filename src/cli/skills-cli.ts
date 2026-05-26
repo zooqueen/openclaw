@@ -117,7 +117,8 @@ function resolveClawHubTargetWorkspaceDir(
 }
 
 function shouldFailSkillVerification(result: ClawHubSkillVerificationResponse): boolean {
-  return !result.ok || result.decision === "fail";
+  const envelope = result as { ok: unknown; decision: unknown };
+  return envelope.ok !== true || envelope.decision !== "pass";
 }
 
 function buildSkillVerificationOutput(

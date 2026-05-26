@@ -876,6 +876,36 @@ describe("skills cli commands", () => {
     expect(runtimeErrors).toStrictEqual([]);
   });
 
+  it.each([
+    { label: "unknown decision", ok: true, decision: "quarantined" },
+    { label: "non-boolean ok", ok: "false", decision: "pass" },
+  ])("fails closed for malformed verification envelopes with $label", async ({ ok, decision }) => {
+    fetchClawHubSkillVerificationMock.mockResolvedValueOnce({
+      schema: "clawhub.skill.verify.v1",
+      ok,
+      decision,
+      reasons: [],
+      skill: { slug: "agentreceipt" },
+      publisher: null,
+      version: { version: "1.2.3" },
+      card: {
+        available: true,
+        url: "https://private.example.com/clawhub/api/v1/skills/agentreceipt/card?version=1.2.3",
+      },
+      artifact: null,
+      provenance: null,
+      security: { status: "clean" },
+      signature: { status: "unsigned" },
+    });
+
+    await expect(runCommand(["skills", "verify", "agentreceipt"])).rejects.toThrow("__exit__:1");
+
+    const payload = JSON.parse(runtimeStdout.at(-1) ?? "{}") as Record<string, unknown>;
+    expect(payload.ok).toBe(ok);
+    expect(payload.decision).toBe(decision);
+    expect(runtimeErrors).toStrictEqual([]);
+  });
+
   it("fails before fetching when verification target resolution fails", async () => {
     resolveClawHubSkillVerificationTargetMock.mockResolvedValueOnce({
       ok: false,
