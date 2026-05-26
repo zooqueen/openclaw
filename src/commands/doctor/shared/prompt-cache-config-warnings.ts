@@ -358,6 +358,9 @@ function resolveDefaultModelApi(provider: string): string | undefined {
   if (normalizedProvider === "google-vertex") {
     return "google-vertex";
   }
+  if (normalizedProvider === "moonshot") {
+    return "openai-completions";
+  }
   return undefined;
 }
 
@@ -428,7 +431,7 @@ function isStaticCacheTtlEligibleProvider(
   ) {
     return true;
   }
-  if (normalizedProvider === "moonshot" || normalizedProvider === "zai") {
+  if (normalizedProvider === "zai") {
     return true;
   }
   if (normalizedProvider === "openrouter") {

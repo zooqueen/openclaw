@@ -255,6 +255,16 @@ describe("collectPromptCacheConfigWarnings", () => {
     ]);
   });
 
+  it("warns for Moonshot models because runtime cache-ttl pruning is not enabled there", () => {
+    const cfg = baseCacheTtlConfig("moonshot/kimi-k2.5");
+
+    expect(collectPromptCacheConfigWarnings(cfg)).toEqual([
+      expect.stringContaining(
+        'agents.defaults.model.primary uses moonshot/kimi-k2.5, but agents.defaults.contextPruning.mode="cache-ttl" does not currently run for OpenAI-family models',
+      ),
+    ]);
+  });
+
   it("warns for channel model overrides that bypass a cacheable default model", () => {
     const cfg: OpenClawConfig = {
       agents: {
