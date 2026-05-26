@@ -137,11 +137,21 @@ function buildSkillVerificationOutput(
   };
 }
 
-function skillCardIsUnavailable(result: ClawHubSkillVerificationResponse): boolean {
-  if (!result.card || typeof result.card !== "object") {
-    return false;
+function readVerifiedSkillCardUrl(
+  result: ClawHubSkillVerificationResponse,
+): { ok: true; url: string } | { ok: false; error: string } {
+  if (!result.card || typeof result.card !== "object" || Array.isArray(result.card)) {
+    return { ok: false, error: "ClawHub verification response did not include a Skill Card URL." };
   }
-  return (result.card as { available?: unknown }).available === false;
+  const card = result.card as { available?: unknown; url?: unknown };
+  if (card.available === false) {
+    return { ok: false, error: "Skill Card is not available." };
+  }
+  const url = normalizeOptionalString(card.url);
+  if (!url) {
+    return { ok: false, error: "ClawHub verification response did not include a Skill Card URL." };
+  }
+  return { ok: true, url };
 }
 
 /**
@@ -372,14 +382,13 @@ export function registerSkillsCli(program: Command) {
               baseUrl: target.baseUrl,
             });
             if (opts.card) {
-              if (skillCardIsUnavailable(verification)) {
-                defaultRuntime.error("Skill Card is not available.");
+              const cardUrl = readVerifiedSkillCardUrl(verification);
+              if (!cardUrl.ok) {
+                defaultRuntime.error(cardUrl.error);
                 exitCode = 1;
               } else {
                 const card = await fetchClawHubSkillCard({
-                  slug: target.slug,
-                  version: target.version,
-                  tag: target.tag,
+                  url: cardUrl.url,
                   baseUrl: target.baseUrl,
                 });
                 defaultRuntime.writeStdout(card.endsWith("\n") ? card : `${card}\n`);

@@ -396,6 +396,35 @@ describe("clawhub helpers", () => {
     expect(url.searchParams.has("version")).toBe(false);
   });
 
+  it("fetches generated Skill Card markdown from an exact verified card URL", async () => {
+    let requestedUrl = "";
+
+    await expect(
+      fetchClawHubSkillCard({
+        url: "https://cards.example.test/generated/agentreceipt.md",
+        baseUrl: "https://clawhub.ai",
+        fetchImpl: async (input) => {
+          requestedUrl = input instanceof Request ? input.url : String(input);
+          return new Response("# Agent Receipt\n", {
+            status: 200,
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+          });
+        },
+      }),
+    ).resolves.toBe("# Agent Receipt\n");
+
+    expect(requestedUrl).toBe("https://cards.example.test/generated/agentreceipt.md");
+  });
+
+  it("wraps non-200 skill card responses", async () => {
+    await expect(
+      fetchClawHubSkillCard({
+        slug: "agentreceipt",
+        fetchImpl: async () => new Response("card missing", { status: 404 }),
+      }),
+    ).rejects.toThrow("ClawHub /api/v1/skills/agentreceipt/card failed (404): card missing");
+  });
+
   it("wraps non-200 skill verification responses", async () => {
     await expect(
       fetchClawHubSkillVerification({

@@ -358,11 +358,13 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 
 type ClawHubRequestParams = {
   baseUrl?: string;
-  path: string;
+  path?: string;
+  url?: string;
   token?: string;
   timeoutMs?: number;
   search?: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  skipAuth?: boolean;
 };
 
 type ClawHubConfigLike = {
@@ -564,7 +566,20 @@ function normalizeCalVerCorrectionForPluginApi(pluginApiVersion: string): string
   return match?.[1] ?? pluginApiVersion;
 }
 
-function buildUrl(params: Pick<ClawHubRequestParams, "baseUrl" | "path" | "search">): URL {
+function buildUrl(params: Pick<ClawHubRequestParams, "baseUrl" | "path" | "search" | "url">): URL {
+  if (params.url) {
+    const url = new URL(params.url, `${normalizeBaseUrl(params.baseUrl)}/`);
+    for (const [key, value] of Object.entries(params.search ?? {})) {
+      if (!value) {
+        continue;
+      }
+      url.searchParams.set(key, value);
+    }
+    return url;
+  }
+  if (!params.path) {
+    throw new Error("ClawHub request path is required");
+  }
   const url = new URL(`${normalizeBaseUrl(params.baseUrl)}/`);
   const basePath = url.pathname.replace(/\/+$/, "");
   const requestPath = params.path.startsWith("/") ? params.path : `/${params.path}`;
@@ -582,7 +597,9 @@ async function clawhubRequest(
   params: ClawHubRequestParams,
 ): Promise<{ response: Response; url: URL; hasToken: boolean }> {
   const url = buildUrl(params);
-  const token = normalizeOptionalString(params.token) || (await resolveClawHubAuthToken());
+  const token = params.skipAuth
+    ? undefined
+    : normalizeOptionalString(params.token) || (await resolveClawHubAuthToken());
   const controller = new AbortController();
   const timeout = setTimeout(
     () =>
@@ -924,7 +941,8 @@ export async function fetchClawHubSkillVerification(params: {
 }
 
 export async function fetchClawHubSkillCard(params: {
-  slug: string;
+  slug?: string;
+  url?: string;
   version?: string;
   tag?: string;
   baseUrl?: string;
@@ -932,13 +950,26 @@ export async function fetchClawHubSkillCard(params: {
   timeoutMs?: number;
   fetchImpl?: FetchLike;
 }): Promise<string> {
+  const cardUrl = normalizeOptionalString(params.url);
+  const slug = normalizeOptionalString(params.slug);
+  if (!cardUrl && !slug) {
+    throw new Error("ClawHub skill card fetch requires a slug or card URL");
+  }
+  const explicitToken = normalizeOptionalString(params.token);
+  const skipAuth =
+    cardUrl != null &&
+    explicitToken == null &&
+    new URL(cardUrl, `${normalizeBaseUrl(params.baseUrl)}/`).origin !==
+      new URL(`${normalizeBaseUrl(params.baseUrl)}/`).origin;
   const { response, url, hasToken } = await clawhubRequest({
     baseUrl: params.baseUrl,
-    path: `/api/v1/skills/${encodeURIComponent(params.slug)}/card`,
-    token: params.token,
+    url: cardUrl,
+    path: slug ? `/api/v1/skills/${encodeURIComponent(slug)}/card` : undefined,
+    token: explicitToken,
     timeoutMs: params.timeoutMs,
     fetchImpl: params.fetchImpl,
-    search: buildVersionOrTagSearch(params),
+    search: cardUrl ? undefined : buildVersionOrTagSearch(params),
+    skipAuth,
   });
   if (!response.ok) {
     throw await buildClawHubError(response, url, hasToken);
@@ -946,7 +977,7 @@ export async function fetchClawHubSkillCard(params: {
   const bytes = await readClawHubResponseBytes({
     response,
     timeoutMs: params.timeoutMs,
-    resourceLabel: `skill card for ${params.slug}`,
+    resourceLabel: slug ? `skill card for ${slug}` : `skill card at ${url.pathname}`,
   });
   return new TextDecoder().decode(bytes);
 }
