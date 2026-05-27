@@ -63,9 +63,9 @@ describe("renderActivity", () => {
 
     render(renderActivity(createProps()), container);
 
-    expect(container.querySelector(".activity-entry__text")?.textContent?.trim()).toBe(
-      "0 arguments hidden",
-    );
+    const summary = container.querySelector(".activity-entry__text")?.textContent?.trim();
+    expect(summary).toBe(i18n.t("activity.argumentsHidden", { count: "0" }));
+    expect(summary).not.toBe("0 arguments hidden");
   });
 
   it("exposes the activity stream as a named list", async () => {
