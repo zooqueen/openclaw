@@ -206,6 +206,14 @@ function buildManualInstructionSection(params: {
   return lines;
 }
 
+function buildCommandActionInstructionSection(actions: PendingApprovalView["actions"]): string[] {
+  return actions.flatMap((action) =>
+    action.kind === "command" && action.command.trim()
+      ? [`${action.label}: ${action.command}`]
+      : [],
+  );
+}
+
 function listDecisionActions(actions: PendingApprovalView["actions"]): ExecApprovalReplyDecision[] {
   return normalizeDecisionList(
     actions.flatMap((action) => (action.kind === "decision" ? [action.decision] : [])),
@@ -277,6 +285,10 @@ function buildApprovalReactionPromptText(params: {
   }
   if (params.reactionHint) {
     sections.push(params.reactionHint);
+  }
+  const commandInstructions = buildCommandActionInstructionSection(view.actions);
+  if (commandInstructions.length > 0) {
+    sections.push(commandInstructions.join("\n"));
   }
   const manualInstructions = buildManualInstructionSection({
     approvalId: view.approvalId,
