@@ -12,14 +12,14 @@ import {
   defaultJavaScriptRegexConstructor,
 } from "@shikijs/engine-javascript";
 import { createOnigurumaEngine, loadWasm } from "@shikijs/engine-oniguruma";
-import { bundledLanguages } from "./shiki-curated-languages.js";
+import { bundledLanguages } from "../extensions/diffs/src/shiki-curated-languages.js";
 export * from "@shikijs/core";
 export {
   bundledLanguages,
   bundledLanguagesAlias,
   bundledLanguagesBase,
   bundledLanguagesInfo,
-} from "./shiki-curated-languages.js";
+} from "../extensions/diffs/src/shiki-curated-languages.js";
 export { bundledThemes, bundledThemesInfo } from "shiki/themes";
 import { bundledThemes } from "shiki/themes";
 
