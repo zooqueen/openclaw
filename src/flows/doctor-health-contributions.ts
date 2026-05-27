@@ -8,6 +8,7 @@ import {
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { buildGatewayConnectionDetails } from "../gateway/call.js";
 import type { RuntimeEnv } from "../runtime.js";
+import type { HealthFinding } from "./health-checks.js";
 import type { FlowContribution } from "./types.js";
 export {
   doctorHealthConversionRules,
@@ -604,33 +605,6 @@ async function runToolResultCapHealth(ctx: DoctorHealthFlowContext): Promise<voi
   if (lines.length > 0) {
     note(lines.join("\n"), "Tool result cap");
   }
-}
-
-async function runRuntimeToolSchemasHealth(ctx: DoctorHealthFlowContext): Promise<void> {
-  const { collectRuntimeToolSchemaFindings } = await import("./doctor-core-checks.runtime.js");
-  const findings = await collectRuntimeToolSchemaFindings(ctx.cfg);
-  if (findings.length === 0) {
-    return;
-  }
-
-  const { note } = await import("../terminal/note.js");
-  const lines: string[] = [];
-  for (const finding of findings) {
-    lines.push(finding.message);
-    if (finding.path) {
-      lines.push(`Path: ${finding.path}`);
-    }
-    if (finding.target) {
-      lines.push(`Target: ${finding.target}`);
-    }
-    if (finding.requirement) {
-      lines.push(`Requirement: ${finding.requirement}`);
-    }
-    if (finding.fixHint) {
-      lines.push(`Fix: ${finding.fixHint}`);
-    }
-  }
-  note(lines.join("\n"), "Runtime tool schemas");
 }
 
 async function runSystemdLingerHealth(ctx: DoctorHealthFlowContext): Promise<void> {
