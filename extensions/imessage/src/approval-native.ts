@@ -15,6 +15,7 @@ import {
 import {
   buildExecApprovalPendingReplyPayload,
   buildPluginApprovalPendingReplyPayload,
+  getExecApprovalReplyMetadata,
   resolveExecApprovalCommandDisplay,
   resolveExecApprovalRequestAllowedDecisions,
 } from "openclaw/plugin-sdk/approval-runtime";
@@ -416,24 +417,55 @@ export function shouldSuppressLocalIMessageExecApprovalPrompt(params: {
   payload: ReplyPayload;
   hint?: ChannelOutboundPayloadHint;
 }): boolean {
-  return shouldSuppressLocalNativeExecApprovalPrompt({
+  if (
+    shouldSuppressLocalNativeExecApprovalPrompt({
+      ...params,
+      isTransportEnabled: isIMessageApprovalTransportEnabled,
+      isSessionRouteEligible: ({ cfg, accountId, metadata }) => {
+        if (getIMessageApprovalApprovers({ cfg, accountId }).length > 0) {
+          return true;
+        }
+        const sessionTarget = resolveIMessageSessionTargetFromSessionKey(metadata.sessionKey);
+        if (!sessionTarget || inferIMessageTargetChatType(sessionTarget.to) !== "direct") {
+          return false;
+        }
+        const targetAccountId = normalizeOptionalString(sessionTarget.accountId);
+        return (
+          !targetAccountId ||
+          !accountId ||
+          normalizeAccountId(targetAccountId) === normalizeAccountId(accountId)
+        );
+      },
+    })
+  ) {
+    return true;
+  }
+
+  const metadata = getExecApprovalReplyMetadata(params.payload);
+  if (
+    params.hint?.kind !== "approval-pending" ||
+    params.hint.approvalKind !== "exec" ||
+    params.hint.nativeRouteActive !== true ||
+    metadata?.approvalKind !== "exec"
+  ) {
+    return false;
+  }
+
+  // The Pi tool-result path currently rebuilds the local approval prompt from
+  // exec result details that omit agentId/sessionKey. The native iMessage
+  // approval runtime has already received the full request and will deliver the
+  // reaction prompt. When explicit iMessage approvers exist, keep the local
+  // fallback from sending a second manual prompt for the same approval.
+  if (metadata.agentId || metadata.sessionKey) {
+    return false;
+  }
+  if (getIMessageApprovalApprovers({ cfg: params.cfg, accountId: params.accountId }).length === 0) {
+    return false;
+  }
+  return canApprovalPotentiallyRouteToIMessage({
     ...params,
-    isTransportEnabled: isIMessageApprovalTransportEnabled,
-    isSessionRouteEligible: ({ cfg, accountId, metadata }) => {
-      if (getIMessageApprovalApprovers({ cfg, accountId }).length > 0) {
-        return true;
-      }
-      const sessionTarget = resolveIMessageSessionTargetFromSessionKey(metadata.sessionKey);
-      if (!sessionTarget || inferIMessageTargetChatType(sessionTarget.to) !== "direct") {
-        return false;
-      }
-      const targetAccountId = normalizeOptionalString(sessionTarget.accountId);
-      return (
-        !targetAccountId ||
-        !accountId ||
-        normalizeAccountId(targetAccountId) === normalizeAccountId(accountId)
-      );
-    },
+    approvalKind: "exec",
+    nativeSessionOnly: true,
   });
 }
 

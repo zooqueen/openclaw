@@ -35,7 +35,17 @@ export type IMessageApprovalConversationKey = {
   handle?: string;
 };
 
+export type PendingIMessageApprovalReactionPollTarget = {
+  accountId: string;
+  conversation: IMessageApprovalConversationKey;
+  messageId: string;
+  approvalId: string;
+  allowedDecisions: readonly ExecApprovalReplyDecision[];
+  expiresAtMs: number;
+};
+
 let resolverRuntimePromise: Promise<typeof import("./approval-resolver.js")> | undefined;
+const pendingReactionPollTargets = new Map<string, PendingIMessageApprovalReactionPollTarget>();
 
 function loadApprovalResolver(): Promise<typeof import("./approval-resolver.js")> {
   resolverRuntimePromise ??= import("./approval-resolver.js");
@@ -94,6 +104,38 @@ function enumerateReactionTargetKeys(params: {
   return enumerateConversationKeyForms(params.conversation).map(
     (form) => `${accountId}:${form}:${messageId}`,
   );
+}
+
+function prunePendingReactionPollTargets(nowMs = Date.now()): void {
+  for (const [key, target] of pendingReactionPollTargets.entries()) {
+    if (target.expiresAtMs <= nowMs) {
+      pendingReactionPollTargets.delete(key);
+    }
+  }
+}
+
+export function listPendingIMessageApprovalReactionPollTargets(params: {
+  accountId: string;
+}): PendingIMessageApprovalReactionPollTarget[] {
+  const accountId = params.accountId.trim();
+  if (!accountId) {
+    return [];
+  }
+  prunePendingReactionPollTargets();
+  const seen = new Set<string>();
+  const targets: PendingIMessageApprovalReactionPollTarget[] = [];
+  for (const target of pendingReactionPollTargets.values()) {
+    if (target.accountId !== accountId) {
+      continue;
+    }
+    const key = `${target.approvalId}:${target.messageId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    targets.push(target);
+  }
+  return targets;
 }
 
 function reportPersistentApprovalReactionError(error: unknown): void {
@@ -272,7 +314,16 @@ export function registerIMessageApprovalReactionTarget(params: {
   }
   for (const key of keys) {
     imessageApprovalReactionTargets.register(key, target, { ttlMs });
+    pendingReactionPollTargets.set(key, {
+      accountId: params.accountId,
+      conversation: params.conversation,
+      messageId: params.messageId,
+      approvalId,
+      allowedDecisions,
+      expiresAtMs: Date.now() + ttlMs,
+    });
   }
+  prunePendingReactionPollTargets();
   return target;
 }
 
@@ -307,6 +358,7 @@ export function unregisterIMessageApprovalReactionTarget(params: {
   const keys = enumerateReactionTargetKeys(params);
   for (const key of keys) {
     imessageApprovalReactionTargets.delete(key);
+    pendingReactionPollTargets.delete(key);
   }
 }
 
