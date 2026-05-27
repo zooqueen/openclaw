@@ -28,7 +28,6 @@ import {
   PACKED_BUNDLED_RUNTIME_DEPS_REPAIR_ARGS,
   PACKED_CLI_SMOKE_COMMANDS,
   PACKED_COMPLETION_SMOKE_ARGS,
-  PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE,
   packageNameFromSpecifier,
   resolveReleaseNpmCommand,
   resolveMissingPackBuildHint,
@@ -735,15 +734,21 @@ describe("createPackedPluginSdkTypescriptSmokeProject", () => {
         compilerOptions?: Record<string, unknown>;
       };
       const source = readFileSync(join(consumerDir, "src", "index.ts"), "utf8");
+      const fixtureSource = readFileSync(
+        "scripts/fixtures/packed-plugin-sdk-type-smoke.ts",
+        "utf8",
+      );
 
       expect(packageJson.dependencies?.openclaw).toBe(`file:${packageRoot}`);
       expect(tsconfig.compilerOptions?.skipLibCheck).toBe(true);
-      expect(source).toBe(PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE);
+      expect(source).toBe(fixtureSource);
       expect(source).toContain('"openclaw/plugin-sdk"');
       expect(source).toContain('"openclaw/plugin-sdk/provider-entry"');
       expect(source).toContain('"openclaw/plugin-sdk/channel-entry-contract"');
       expect(source).toContain('"openclaw/plugin-sdk/config-contracts"');
       expect(source).toContain('"openclaw/plugin-sdk/runtime-env"');
+      expect(source).toContain("defineSingleProviderPluginEntry(providerOptions)");
+      expect(source).toContain("defineBundledChannelEntry({");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

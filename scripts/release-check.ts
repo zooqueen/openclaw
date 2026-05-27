@@ -2,6 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -150,44 +151,9 @@ export const PACKED_COMPLETION_SMOKE_ARGS = [
   "--shell",
   "zsh",
 ] as const;
-export const PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE = `
-import { emptyPluginConfigSchema, type OpenClawPluginApi, type ReplyPayload } from "openclaw/plugin-sdk";
-import { defineBundledChannelEntry, type BundledChannelEntryContract } from "openclaw/plugin-sdk/channel-entry-contract";
-import type { OpenClawConfig, TelegramAccountConfig } from "openclaw/plugin-sdk/config-contracts";
-import { defaultRuntime, type RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
-import { defineSingleProviderPluginEntry, type SingleProviderPluginOptions } from "openclaw/plugin-sdk/provider-entry";
-
-const api = {} as OpenClawPluginApi;
-const config = {} as OpenClawConfig;
-const telegramAccount = {} as TelegramAccountConfig;
-const runtimeEnv: RuntimeEnv = defaultRuntime;
-const reply: ReplyPayload = { text: "hello" };
-
-const providerOptions: SingleProviderPluginOptions = {
-  id: "sample-provider",
-  name: "Sample Provider",
-  description: "Sample provider",
-};
-
-const providerEntry = defineSingleProviderPluginEntry(providerOptions);
-const channelEntry: BundledChannelEntryContract = defineBundledChannelEntry({
-  id: "sample-channel",
-  name: "Sample Channel",
-  description: "Sample channel",
-  importMetaUrl: import.meta.url,
-  plugin: { specifier: "./channel.js" },
-});
-
-void api;
-void config;
-void telegramAccount;
-void runtimeEnv;
-void reply;
-void providerEntry;
-void channelEntry;
-void emptyPluginConfigSchema;
-`;
-
+const PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_FIXTURE = resolve(
+  "scripts/fixtures/packed-plugin-sdk-type-smoke.ts",
+);
 export function collectSkillShellScriptExecutableErrors(rootDir = resolve(".")): string[] {
   if (process.platform === "win32") {
     return [];
@@ -561,10 +527,9 @@ export function createPackedPluginSdkTypescriptSmokeProject(params: {
     )}\n`,
     "utf8",
   );
-  writeFileSync(
+  copyFileSync(
+    PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_FIXTURE,
     join(params.consumerDir, "src", "index.ts"),
-    PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE,
-    "utf8",
   );
 }
 

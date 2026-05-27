@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_BUILD_METADATA_DIST_PATHS } from "../../scripts/lib/local-build-metadata-paths.mjs";
 
 const CHECK_SCRIPT = "scripts/check-openclaw-package-tarball.mjs";
+const FLAT_PLUGIN_SDK_DECLARATION = "dist/plugin-sdk/provider-entry.d.ts";
+const DEEP_PLUGIN_SDK_DECLARATION = "dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts";
 
 function withTarball(
   inventory: string[],
@@ -112,14 +114,14 @@ describe("check-openclaw-package-tarball", () => {
 
   it("rejects stale deep plugin SDK declaration inventory entries", () => {
     withTarball(
-      ["dist/plugin-sdk/provider-entry.d.ts", "dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts"],
-      { "dist/plugin-sdk/provider-entry.d.ts": "export {};\n" },
+      [FLAT_PLUGIN_SDK_DECLARATION, DEEP_PLUGIN_SDK_DECLARATION],
+      { [FLAT_PLUGIN_SDK_DECLARATION]: "export {};\n" },
       (tarball) => {
         const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
 
         expect(result.status).not.toBe(0);
         expect(result.stderr).toContain(
-          "inventory references missing tar entry dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts",
+          `inventory references missing tar entry ${DEEP_PLUGIN_SDK_DECLARATION}`,
         );
       },
     );
@@ -127,8 +129,8 @@ describe("check-openclaw-package-tarball", () => {
 
   it("accepts flat plugin SDK declaration inventory without the old deep tree", () => {
     withTarball(
-      ["dist/plugin-sdk/provider-entry.d.ts"],
-      { "dist/plugin-sdk/provider-entry.d.ts": "export {};\n" },
+      [FLAT_PLUGIN_SDK_DECLARATION],
+      { [FLAT_PLUGIN_SDK_DECLARATION]: "export {};\n" },
       (tarball) => {
         const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
 
