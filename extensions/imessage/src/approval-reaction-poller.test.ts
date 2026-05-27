@@ -227,4 +227,65 @@ describe("iMessage approval reaction poller", () => {
       gatewayUrl: undefined,
     });
   });
+
+  it("continues scanning nested reactions after an ignored reaction", async () => {
+    registerIMessageApprovalReactionTarget({
+      accountId: "default",
+      conversation: { chatId: 42, chatGuid: "SMS;-;+15551230000" },
+      messageId: "msg-1",
+      approvalId: "exec-1",
+      allowedDecisions: ["allow-once", "deny"],
+    });
+    const request = vi.fn(async (method: string, payload?: { chat_id?: number }) => {
+      if (method === "messages.history" && payload?.chat_id === 42) {
+        return {
+          messages: [
+            {
+              guid: "msg-1",
+              chat_id: 42,
+              chat_guid: "SMS;-;+15551230000",
+              chat_identifier: "+15551230000",
+              is_from_me: true,
+              sender: "+15551230000",
+              text: "Exec approval required\nID: exec-1",
+              reactions: [
+                {
+                  id: 9,
+                  sender: "+15559999999",
+                  is_from_me: false,
+                  type: "like",
+                  emoji: "👍",
+                  created_at: "2026-05-27T21:02:00.000Z",
+                },
+                {
+                  id: 10,
+                  sender: "+15551230000",
+                  is_from_me: true,
+                  type: "like",
+                  emoji: "👍",
+                  created_at: "2026-05-27T21:03:00.000Z",
+                },
+              ],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected request ${method} ${JSON.stringify(payload)}`);
+    });
+
+    await pollPendingIMessageApprovalReactions({
+      client: createClient(request),
+      cfg: { channels: { imessage: { allowFrom: ["+15551230000"] } } },
+      accountId: "default",
+    });
+
+    expect(resolverMocks.resolveIMessageApproval).toHaveBeenCalledTimes(1);
+    expect(resolverMocks.resolveIMessageApproval).toHaveBeenCalledWith({
+      cfg: { channels: { imessage: { allowFrom: ["+15551230000"] } } },
+      approvalId: "exec-1",
+      decision: "allow-once",
+      senderId: "+15551230000",
+      gatewayUrl: undefined,
+    });
+  });
 });

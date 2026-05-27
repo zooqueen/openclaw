@@ -271,7 +271,7 @@ export async function pollPendingIMessageApprovalReactions(params: {
           logVerboseMessage: params.logVerboseMessage,
         });
         if (handled) {
-          return;
+          continue;
         }
       }
     }
