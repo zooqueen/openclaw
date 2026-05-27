@@ -20,6 +20,7 @@ import {
   collectSkillShellScriptExecutableErrors,
   collectPackUnpackedSizeErrors,
   collectPackedInstalledPackageVerificationErrors,
+  createPackedPluginSdkTypescriptSmokeProject,
   createPackedCompletionSmokeEnv,
   createPackedCliSmokeEnv,
   createPackedBundledPluginPostinstallEnv,
@@ -27,6 +28,7 @@ import {
   PACKED_BUNDLED_RUNTIME_DEPS_REPAIR_ARGS,
   PACKED_CLI_SMOKE_COMMANDS,
   PACKED_COMPLETION_SMOKE_ARGS,
+  PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE,
   packageNameFromSpecifier,
   resolveReleaseNpmCommand,
   resolveMissingPackBuildHint,
@@ -442,6 +444,21 @@ describe("collectForbiddenPackPaths", () => {
     ]);
   });
 
+  it("blocks the old deep plugin SDK declaration tree from npm pack output", () => {
+    expect(
+      collectForbiddenPackPaths([
+        "dist/index.js",
+        "dist/plugin-sdk/index.d.ts",
+        "dist/plugin-sdk/types-abc123.d.ts",
+        "dist/plugin-sdk/src/channels/plugins/types.public.d.ts",
+        "dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts",
+      ]),
+    ).toEqual([
+      "dist/plugin-sdk/src/channels/plugins/types.public.d.ts",
+      "dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts",
+    ]);
+  });
+
   it("blocks local build metadata from npm pack output", () => {
     expect(
       collectForbiddenPackPaths(["dist/index.js", ...LOCAL_BUILD_METADATA_DIST_PATHS]),
@@ -453,6 +470,7 @@ describe("collectForbiddenPackPaths", () => {
     for (const entry of LOCAL_BUILD_METADATA_DIST_PATHS) {
       expect(pkg.files).toContain(`!${entry}`);
     }
+    expect(pkg.files).toContain("!dist/plugin-sdk/src/**");
   });
 
   it("blocks legacy runtime dependency stamps from npm pack output", () => {
@@ -696,6 +714,39 @@ describe("resolveMissingPackBuildHint", () => {
 
   it("does not emit a build hint for unrelated packed paths", () => {
     expect(resolveMissingPackBuildHint(["scripts/npm-runner.mjs"])).toBeNull();
+  });
+});
+
+describe("createPackedPluginSdkTypescriptSmokeProject", () => {
+  it("writes a consumer project that imports representative public SDK subpaths", () => {
+    const root = mkdtempSync(join(tmpdir(), "release-check-plugin-sdk-types-"));
+    try {
+      const consumerDir = join(root, "consumer");
+      const packageRoot = join(root, "openclaw");
+      createPackedPluginSdkTypescriptSmokeProject({
+        consumerDir,
+        packageSpec: `file:${packageRoot}`,
+      });
+
+      const packageJson = JSON.parse(readFileSync(join(consumerDir, "package.json"), "utf8")) as {
+        dependencies?: Record<string, string>;
+      };
+      const tsconfig = JSON.parse(readFileSync(join(consumerDir, "tsconfig.json"), "utf8")) as {
+        compilerOptions?: Record<string, unknown>;
+      };
+      const source = readFileSync(join(consumerDir, "src", "index.ts"), "utf8");
+
+      expect(packageJson.dependencies?.openclaw).toBe(`file:${packageRoot}`);
+      expect(tsconfig.compilerOptions?.skipLibCheck).toBe(true);
+      expect(source).toBe(PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE);
+      expect(source).toContain('"openclaw/plugin-sdk"');
+      expect(source).toContain('"openclaw/plugin-sdk/provider-entry"');
+      expect(source).toContain('"openclaw/plugin-sdk/channel-entry-contract"');
+      expect(source).toContain('"openclaw/plugin-sdk/config-contracts"');
+      expect(source).toContain('"openclaw/plugin-sdk/runtime-env"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

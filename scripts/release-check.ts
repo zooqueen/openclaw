@@ -99,6 +99,7 @@ const forbiddenPrefixes = [
   "dist/plugin-sdk/qa-channel-protocol.",
   "dist/plugin-sdk/qa-lab.",
   "dist/plugin-sdk/qa-runtime.",
+  "dist/plugin-sdk/src/",
   "dist/plugin-sdk/src/plugin-sdk/qa-channel.d.ts",
   "dist/plugin-sdk/src/plugin-sdk/qa-channel-protocol.d.ts",
   "dist/plugin-sdk/src/plugin-sdk/qa-lab.d.ts",
@@ -149,6 +150,43 @@ export const PACKED_COMPLETION_SMOKE_ARGS = [
   "--shell",
   "zsh",
 ] as const;
+export const PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE = `
+import { emptyPluginConfigSchema, type OpenClawPluginApi, type ReplyPayload } from "openclaw/plugin-sdk";
+import { defineBundledChannelEntry, type BundledChannelEntryContract } from "openclaw/plugin-sdk/channel-entry-contract";
+import type { OpenClawConfig, TelegramAccountConfig } from "openclaw/plugin-sdk/config-contracts";
+import { defaultRuntime, type RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
+import { defineSingleProviderPluginEntry, type SingleProviderPluginOptions } from "openclaw/plugin-sdk/provider-entry";
+
+const api = {} as OpenClawPluginApi;
+const config = {} as OpenClawConfig;
+const telegramAccount = {} as TelegramAccountConfig;
+const runtimeEnv: RuntimeEnv = defaultRuntime;
+const reply: ReplyPayload = { text: "hello" };
+
+const providerOptions: SingleProviderPluginOptions = {
+  id: "sample-provider",
+  name: "Sample Provider",
+  description: "Sample provider",
+};
+
+const providerEntry = defineSingleProviderPluginEntry(providerOptions);
+const channelEntry: BundledChannelEntryContract = defineBundledChannelEntry({
+  id: "sample-channel",
+  name: "Sample Channel",
+  description: "Sample channel",
+  importMetaUrl: import.meta.url,
+  plugin: { specifier: "./channel.js" },
+});
+
+void api;
+void config;
+void telegramAccount;
+void runtimeEnv;
+void reply;
+void providerEntry;
+void channelEntry;
+void emptyPluginConfigSchema;
+`;
 
 export function collectSkillShellScriptExecutableErrors(rootDir = resolve(".")): string[] {
   if (process.platform === "win32") {
@@ -483,6 +521,79 @@ function verifyPackedInstalledPackage(params: {
   }
 }
 
+export function createPackedPluginSdkTypescriptSmokeProject(params: {
+  consumerDir: string;
+  packageSpec: string;
+}): void {
+  mkdirSync(join(params.consumerDir, "src"), { recursive: true });
+  writeFileSync(
+    join(params.consumerDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "openclaw-plugin-sdk-type-smoke",
+        private: true,
+        type: "module",
+        dependencies: {
+          openclaw: params.packageSpec,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  writeFileSync(
+    join(params.consumerDir, "tsconfig.json"),
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          noEmit: true,
+          strict: true,
+          skipLibCheck: true,
+          target: "ES2022",
+        },
+        include: ["src/index.ts"],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  writeFileSync(
+    join(params.consumerDir, "src", "index.ts"),
+    PACKED_PLUGIN_SDK_TYPESCRIPT_SMOKE_SOURCE,
+    "utf8",
+  );
+}
+
+function runPackedPluginSdkTypescriptSmoke(tarballPath: string, tmpRoot: string): void {
+  const consumerDir = join(tmpRoot, "plugin-sdk-type-consumer");
+  createPackedPluginSdkTypescriptSmokeProject({
+    consumerDir,
+    packageSpec: `file:${tarballPath}`,
+  });
+  execNpm(["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
+    cwd: consumerDir,
+    encoding: "utf8",
+    stdio: "inherit",
+  });
+
+  const installedOpenClawRoot = join(consumerDir, "node_modules", "openclaw");
+  const tscPath = [
+    join(consumerDir, "node_modules", "typescript", "bin", "tsc"),
+    join(installedOpenClawRoot, "node_modules", "typescript", "bin", "tsc"),
+  ].find((candidate) => existsSync(candidate));
+  if (!tscPath) {
+    throw new Error("release-check: packed plugin SDK TypeScript smoke could not find tsc.");
+  }
+  execFileSync(process.execPath, [tscPath, "-p", "tsconfig.json", "--pretty", "false"], {
+    cwd: consumerDir,
+    stdio: "inherit",
+  });
+}
+
 export function writePackedBundledPluginActivationConfig(homeDir: string): void {
   const configPath = join(homeDir, ".openclaw", "openclaw.json");
   mkdirSync(join(homeDir, ".openclaw"), { recursive: true });
@@ -652,6 +763,7 @@ function runPackedBundledChannelEntrySmoke(): void {
     runPackedBundledPluginPostinstall(packageRoot);
     runPackedBundledPluginActivationSmoke(packageRoot, tmpRoot);
     runPackedTaskRegistryControlRuntimeSmoke(packageRoot);
+    runPackedPluginSdkTypescriptSmoke(tarballPath, tmpRoot);
     execFileSync(
       process.execPath,
       [
