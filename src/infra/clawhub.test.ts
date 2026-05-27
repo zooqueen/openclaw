@@ -464,12 +464,12 @@ describe("clawhub helpers", () => {
     expect(url.searchParams.has("version")).toBe(false);
   });
 
-  it("fetches generated Skill Card markdown from an exact verified card URL", async () => {
+  it("fetches generated Skill Card markdown from an exact same-registry card URL", async () => {
     let requestedUrl = "";
 
     await expect(
       fetchClawHubSkillCard({
-        url: "https://cards.example.test/generated/agentreceipt.md",
+        url: "https://clawhub.ai/generated/agentreceipt.md",
         baseUrl: "https://clawhub.ai",
         fetchImpl: async (input) => {
           requestedUrl = input instanceof Request ? input.url : String(input);
@@ -481,7 +481,19 @@ describe("clawhub helpers", () => {
       }),
     ).resolves.toBe("# Agent Receipt\n");
 
-    expect(requestedUrl).toBe("https://cards.example.test/generated/agentreceipt.md");
+    expect(requestedUrl).toBe("https://clawhub.ai/generated/agentreceipt.md");
+  });
+
+  it("rejects generated Skill Card URLs from a different registry origin", async () => {
+    await expect(
+      fetchClawHubSkillCard({
+        url: "https://cards.example.test/generated/agentreceipt.md",
+        baseUrl: "https://clawhub.ai",
+        fetchImpl: async () => {
+          throw new Error("unexpected fetch");
+        },
+      }),
+    ).rejects.toThrow("ClawHub skill card URL must use the configured ClawHub registry origin");
   });
 
   it("wraps non-200 skill card responses", async () => {

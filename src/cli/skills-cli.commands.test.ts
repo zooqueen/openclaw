@@ -777,7 +777,7 @@ describe("skills cli commands", () => {
       version: { version: "1.2.3" },
       card: {
         available: true,
-        url: "https://cards.example.test/generated/agentreceipt.md",
+        url: "https://private.example.com/clawhub/generated/agentreceipt.md",
       },
       artifact: {
         sourceFingerprint: "source-fingerprint",
@@ -797,7 +797,7 @@ describe("skills cli commands", () => {
       tag: "latest",
     });
     expect(fetchClawHubSkillCardMock).toHaveBeenCalledWith({
-      url: "https://cards.example.test/generated/agentreceipt.md",
+      url: "https://private.example.com/clawhub/generated/agentreceipt.md",
       baseUrl: "https://private.example.com/clawhub",
     });
     expect(defaultRuntime.writeStdout).toHaveBeenCalledTimes(1);

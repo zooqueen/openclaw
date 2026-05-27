@@ -1026,12 +1026,14 @@ export async function fetchClawHubSkillCard(params: {
   if (!cardUrl && !slug) {
     throw new Error("ClawHub skill card fetch requires a slug or card URL");
   }
+  if (cardUrl) {
+    const baseUrl = new URL(`${normalizeBaseUrl(params.baseUrl)}/`);
+    const resolvedCardUrl = new URL(cardUrl, baseUrl);
+    if (resolvedCardUrl.origin !== baseUrl.origin) {
+      throw new Error("ClawHub skill card URL must use the configured ClawHub registry origin");
+    }
+  }
   const explicitToken = normalizeOptionalString(params.token);
-  const skipAuth =
-    cardUrl != null &&
-    explicitToken == null &&
-    new URL(cardUrl, `${normalizeBaseUrl(params.baseUrl)}/`).origin !==
-      new URL(`${normalizeBaseUrl(params.baseUrl)}/`).origin;
   const { response, url, hasToken } = await clawhubRequest({
     baseUrl: params.baseUrl,
     url: cardUrl,
@@ -1040,7 +1042,6 @@ export async function fetchClawHubSkillCard(params: {
     timeoutMs: params.timeoutMs,
     fetchImpl: params.fetchImpl,
     search: cardUrl ? undefined : buildVersionOrTagSearch(params),
-    skipAuth,
   });
   if (!response.ok) {
     throw await buildClawHubError(response, url, hasToken);
