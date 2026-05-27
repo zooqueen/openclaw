@@ -44,6 +44,7 @@ export const DEFAULT_SESSION_WRITE_LOCK_ACQUIRE_TIMEOUT_MS = 60_000;
 const DEFAULT_WATCHDOG_INTERVAL_MS = 60_000;
 const DEFAULT_TIMEOUT_GRACE_MS = 2 * 60 * 1000;
 const REPORT_ONLY_STALE_LOCK_REASONS = new Set(["too-old", "hold-exceeded"]);
+const STALE_LOCK_RETRY_DELAY_MS = 50;
 
 /**
  * Yield control to the event loop so other sessions can make progress
@@ -81,6 +82,11 @@ let resolveProcessStartTimeForLock = getProcessStartTime;
 
 function isFileLockError(error: unknown, code: string): boolean {
   return (error as { code?: unknown } | null)?.code === code;
+}
+
+function resolveFileLockErrorPath(error: unknown, fallback: string): string {
+  const lockPath = (error as { lockPath?: unknown } | null)?.lockPath;
+  return typeof lockPath === "string" && lockPath ? lockPath : fallback;
 }
 
 export type SessionWriteLockAcquireTimeoutConfig = {
@@ -407,6 +413,19 @@ async function readLockPayload(lockPath: string): Promise<LockFilePayload | null
   } catch {
     return null;
   }
+}
+
+async function throwSessionWriteLockTimeout(params: {
+  timeoutMs: number;
+  lockPath: string;
+}): Promise<never> {
+  const payload = await readLockPayload(params.lockPath);
+  const owner = typeof payload?.pid === "number" ? `pid=${payload.pid}` : "unknown";
+  throw new SessionWriteLockTimeoutError({
+    timeoutMs: params.timeoutMs,
+    owner,
+    lockPath: params.lockPath,
+  });
 }
 
 async function resolveNormalizedSessionFile(sessionFile: string): Promise<string> {
@@ -795,6 +814,7 @@ export async function acquireSessionWriteLock(params: {
   const sessionDir = path.dirname(sessionFile);
   const normalizedSessionFile = await resolveNormalizedSessionFile(sessionFile);
   const lockPath = `${normalizedSessionFile}.lock`;
+  const startedAt = Date.now();
   await fs.mkdir(sessionDir, { recursive: true });
 
   while (true) {
@@ -860,13 +880,28 @@ export async function acquireSessionWriteLock(params: {
       });
       return { release: lock.release };
     } catch (err) {
+      if (isFileLockError(err, "file_lock_stale")) {
+        const elapsedMs = Date.now() - startedAt;
+        const staleLockPath = resolveFileLockErrorPath(err, lockPath);
+        if (timeoutMs !== Number.POSITIVE_INFINITY && elapsedMs >= timeoutMs) {
+          await throwSessionWriteLockTimeout({ timeoutMs, lockPath: staleLockPath });
+        }
+        const remainingMs =
+          timeoutMs === Number.POSITIVE_INFINITY
+            ? STALE_LOCK_RETRY_DELAY_MS
+            : Math.max(0, timeoutMs - elapsedMs);
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, Math.min(STALE_LOCK_RETRY_DELAY_MS, remainingMs));
+        });
+        continue;
+      }
       if (!isFileLockError(err, "file_lock_timeout")) {
         throw err;
       }
-      const timeoutLockPath = (err as { lockPath?: string }).lockPath ?? lockPath;
-      const payload = await readLockPayload(timeoutLockPath);
-      const owner = typeof payload?.pid === "number" ? `pid=${payload.pid}` : "unknown";
-      throw new SessionWriteLockTimeoutError({ timeoutMs, owner, lockPath: timeoutLockPath });
+      await throwSessionWriteLockTimeout({
+        timeoutMs,
+        lockPath: resolveFileLockErrorPath(err, lockPath),
+      });
     }
   }
 }

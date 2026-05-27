@@ -1157,6 +1157,28 @@ describe("acquireSessionWriteLock", () => {
     });
   });
 
+  it("retries stale lock reports that become recoverable before surfacing raw lock errors", async () => {
+    if (process.platform !== "linux") {
+      return;
+    }
+    await withTempSessionLockFile(async ({ sessionFile, lockPath }) => {
+      await writeCurrentProcessLock(lockPath, { starttime: 999_999_999 });
+      let resolverCalls = 0;
+      testing.setProcessStartTimeResolverForTest((pid) => {
+        if (pid !== process.pid) {
+          return null;
+        }
+        resolverCalls += 1;
+        return resolverCalls === 1 ? FAKE_STARTTIME : 999_999_999;
+      });
+
+      const lock = await acquireSessionWriteLock({ sessionFile, timeoutMs: 500 });
+      await lock.release();
+      expect(resolverCalls).toBeGreaterThan(1);
+      await expectPathMissing(lockPath);
+    });
+  });
+
   it("reclaims orphan lock files without starttime when PID matches current process", async () => {
     await withTempSessionLockFile(async ({ sessionFile, lockPath }) => {
       // Simulate an old-format lock file left behind by a previous process
