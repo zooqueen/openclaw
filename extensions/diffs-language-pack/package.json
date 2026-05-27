@@ -10,6 +10,9 @@
   "scripts": {
     "build:viewer": "node scripts/build-viewer.mjs"
   },
+  "dependencies": {
+    "esbuild": "0.28.0"
+  },
   "devDependencies": {
     "@openclaw/plugin-sdk": "workspace:*"
   },
