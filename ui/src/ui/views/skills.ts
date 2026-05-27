@@ -732,7 +732,13 @@ function renderInstalledSkillCard(skill: SkillStatusEntry, props: SkillsProps) {
   }
   return html`
     <article class="sidebar-markdown" style="max-width: 100%; overflow-wrap: anywhere;">
-      ${unsafeHTML(toSanitizedMarkdownHtml(content))}
+      ${unsafeHTML(toSanitizedMarkdownHtml(normalizeSkillCardMarkdown(content)))}
     </article>
   `;
+}
+
+function normalizeSkillCardMarkdown(content: string): string {
+  return content
+    .replace(/[ \t]*<br\s*\/?>[ \t]*(?=\r?\n|$)/gi, "")
+    .replace(/[ \t]*<br\s*\/?>[ \t]*/gi, "  \n");
 }

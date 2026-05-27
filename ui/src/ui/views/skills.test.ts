@@ -330,7 +330,7 @@ describe("renderSkills", () => {
           detailKey: "agentreceipt",
           detailTab: "card",
           skillCardContents: {
-            agentreceipt: "# AgentReceipt\n\nLocal **trust** card.",
+            agentreceipt: "# AgentReceipt <br>\n\nLocal **trust** card. <br>\nInline <br> break.",
           },
           clawhubVerdicts: {
             [verdictKey]: {
@@ -353,7 +353,9 @@ describe("renderSkills", () => {
     await Promise.resolve();
 
     expect(container.querySelector(".sidebar-markdown strong")?.textContent).toBe("trust");
-    expect(normalizeText(container)).toContain("AgentReceipt Local trust card.");
+    expect(normalizeText(container)).toContain("AgentReceipt Local trust card. Inline break.");
+    expect(normalizeText(container)).not.toContain("<br>");
+    expect(container.querySelector(".sidebar-markdown")?.innerHTML).not.toContain("&lt;br");
   });
 
   it("fails closed for inconsistent ClawHub verdict envelopes", async () => {
