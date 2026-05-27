@@ -51,7 +51,7 @@ function removeExistingFlatDeclarations(outDir: string): void {
     if (!entry.isFile() || !entry.name.endsWith(".d.ts")) {
       continue;
     }
-    fs.rmSync(path.join(outDir, entry.name));
+    fs.rmSync(path.join(outDir, entry.name), { force: true });
   }
 }
 

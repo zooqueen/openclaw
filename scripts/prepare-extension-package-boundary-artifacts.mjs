@@ -7,6 +7,8 @@ const repoRoot = resolve(import.meta.dirname, "..");
 const runTsgoScript = path.join(repoRoot, "scripts/run-tsgo.mjs");
 const TYPE_INPUT_EXTENSIONS = new Set([".ts", ".tsx", ".d.ts", ".js", ".mjs", ".json"]);
 const VALID_MODES = new Set(["all", "package-boundary"]);
+const ROOT_SHIMS_NODE_OPTIONS =
+  `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=4096`.trim();
 
 const PLUGIN_SDK_TYPE_INPUTS = [
   "tsconfig.json",
@@ -505,6 +507,7 @@ async function main(argv = process.argv.slice(2)) {
         "plugin-sdk boundary root shims",
         ["--import", "tsx", resolve(repoRoot, "scripts/write-plugin-sdk-entry-dts.ts")],
         120_000,
+        { env: { NODE_OPTIONS: ROOT_SHIMS_NODE_OPTIONS } },
       );
     } else if (mode === "all") {
       process.stdout.write("[plugin-sdk boundary root shims] fresh; skipping\n");
