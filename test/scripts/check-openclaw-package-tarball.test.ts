@@ -110,6 +110,34 @@ describe("check-openclaw-package-tarball", () => {
     );
   });
 
+  it("rejects stale deep plugin SDK declaration inventory entries", () => {
+    withTarball(
+      ["dist/plugin-sdk/provider-entry.d.ts", "dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts"],
+      { "dist/plugin-sdk/provider-entry.d.ts": "export {};\n" },
+      (tarball) => {
+        const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
+
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(
+          "inventory references missing tar entry dist/plugin-sdk/src/plugin-sdk/provider-entry.d.ts",
+        );
+      },
+    );
+  });
+
+  it("accepts flat plugin SDK declaration inventory without the old deep tree", () => {
+    withTarball(
+      ["dist/plugin-sdk/provider-entry.d.ts"],
+      { "dist/plugin-sdk/provider-entry.d.ts": "export {};\n" },
+      (tarball) => {
+        const result = spawnSync("node", [CHECK_SCRIPT, tarball], { encoding: "utf8" });
+
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toContain("OpenClaw package tarball integrity passed.");
+      },
+    );
+  });
+
   it("rejects dist files that import missing relative chunks", () => {
     withTarball(
       ["dist/cli/run-main.js"],
