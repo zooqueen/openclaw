@@ -604,7 +604,12 @@ function readCandidatePackageManifest(params: {
   const stat = readPackageManifestStat(params.dir);
   const processCached =
     canUseProcessCache && stat ? packageManifestProcessCache.get(cacheKey) : undefined;
-  if (processCached && processCached.mtimeMs === stat.mtimeMs && processCached.size === stat.size) {
+  if (
+    stat &&
+    processCached &&
+    processCached.mtimeMs === stat.mtimeMs &&
+    processCached.size === stat.size
+  ) {
     params.packageManifestCache?.set(cacheKey, processCached.manifest);
     return processCached.manifest;
   }
