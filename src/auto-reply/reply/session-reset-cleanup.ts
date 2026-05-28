@@ -13,11 +13,36 @@ export type ClearSessionResetRuntimeStateResult = ClearSessionQueueResult & {
 export type ClearSessionResetRuntimeStateParams = {
   sessionKeys: Array<string | undefined>;
   retiredSessionIds?: Array<string | undefined>;
+  clearRetiredDiagnosticActivity?: boolean;
 };
+
+const emptyDiagnosticActivityResult = (): ClearDiagnosticSessionActivityResult => ({
+  activeEmbeddedRunsCleared: 0,
+  activeToolsCleared: 0,
+  activeModelCallsCleared: 0,
+  activitiesCleared: 0,
+});
+
+export function clearRetiredSessionDiagnosticActivity(
+  retiredSessionIds: Array<string | undefined>,
+): ClearDiagnosticSessionActivityResult {
+  return retiredSessionIds.reduce<ClearDiagnosticSessionActivityResult>((acc, key) => {
+    const result = clearDiagnosticSessionActivity({
+      sessionId: key,
+      reason: "session_reset",
+    });
+    acc.activeEmbeddedRunsCleared += result.activeEmbeddedRunsCleared;
+    acc.activeToolsCleared += result.activeToolsCleared;
+    acc.activeModelCallsCleared += result.activeModelCallsCleared;
+    acc.activitiesCleared += result.activitiesCleared;
+    return acc;
+  }, emptyDiagnosticActivityResult());
+}
 
 export function clearSessionResetRuntimeState({
   sessionKeys,
   retiredSessionIds = [],
+  clearRetiredDiagnosticActivity = true,
 }: ClearSessionResetRuntimeStateParams): ClearSessionResetRuntimeStateResult {
   const cleared = clearSessionQueues([...sessionKeys, ...retiredSessionIds]);
   let systemEventsCleared = 0;
@@ -26,25 +51,9 @@ export function clearSessionResetRuntimeState({
     systemEventsCleared += drainSystemEventEntries(key).length;
   }
 
-  const diagnosticActivityCleared = retiredSessionIds.reduce<ClearDiagnosticSessionActivityResult>(
-    (acc, key) => {
-      const result = clearDiagnosticSessionActivity({
-        sessionId: key,
-        reason: "session_reset",
-      });
-      acc.activeEmbeddedRunsCleared += result.activeEmbeddedRunsCleared;
-      acc.activeToolsCleared += result.activeToolsCleared;
-      acc.activeModelCallsCleared += result.activeModelCallsCleared;
-      acc.activitiesCleared += result.activitiesCleared;
-      return acc;
-    },
-    {
-      activeEmbeddedRunsCleared: 0,
-      activeToolsCleared: 0,
-      activeModelCallsCleared: 0,
-      activitiesCleared: 0,
-    },
-  );
+  const diagnosticActivityCleared = clearRetiredDiagnosticActivity
+    ? clearRetiredSessionDiagnosticActivity(retiredSessionIds)
+    : emptyDiagnosticActivityResult();
 
   return {
     ...cleared,

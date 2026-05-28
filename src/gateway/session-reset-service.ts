@@ -14,7 +14,10 @@ import {
   buildSessionEndHookPayload,
   buildSessionStartHookPayload,
 } from "../auto-reply/reply/session-hooks.js";
-import { clearSessionResetRuntimeState } from "../auto-reply/reply/session-reset-cleanup.js";
+import {
+  clearRetiredSessionDiagnosticActivity,
+  clearSessionResetRuntimeState,
+} from "../auto-reply/reply/session-reset-cleanup.js";
 import { getRuntimeConfig } from "../config/io.js";
 import {
   snapshotSessionOrigin,
@@ -381,6 +384,7 @@ async function ensureSessionRuntimeCleanup(params: {
   clearSessionResetRuntimeState({
     sessionKeys: [...queueKeys],
     retiredSessionIds: [params.sessionId],
+    clearRetiredDiagnosticActivity: false,
   });
   stopSubagentsForRequester({ cfg: params.cfg, requesterSessionKey: params.target.canonicalKey });
   if (!params.sessionId) {
@@ -392,6 +396,7 @@ async function ensureSessionRuntimeCleanup(params: {
   const ended = await waitForEmbeddedAgentRunEnd(params.sessionId, 15_000);
   clearBootstrapSnapshot(params.target.canonicalKey);
   if (ended) {
+    clearRetiredSessionDiagnosticActivity([params.sessionId]);
     await retireSessionMcpRuntime({
       sessionId: params.sessionId,
       reason: "gateway-session-cleanup",

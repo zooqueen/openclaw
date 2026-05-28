@@ -6,11 +6,15 @@ import {
 } from "../../infra/system-events.js";
 import {
   getDiagnosticSessionActivitySnapshot,
+  markDiagnosticEmbeddedRunStarted,
   markDiagnosticModelStartedForTest,
   markDiagnosticToolStartedForTest,
   resetDiagnosticRunActivityForTest,
 } from "../../logging/diagnostic-run-activity.js";
-import { clearSessionResetRuntimeState } from "./session-reset-cleanup.js";
+import {
+  clearRetiredSessionDiagnosticActivity,
+  clearSessionResetRuntimeState,
+} from "./session-reset-cleanup.js";
 
 afterEach(() => {
   resetSystemEventsForTest();
@@ -100,5 +104,45 @@ describe("clearSessionResetRuntimeState", () => {
         sessionKey: "agent:main:telegram:chat-1",
       }).activeWorkKind,
     ).toBe("tool_call");
+  });
+
+  it("can defer retired-session diagnostic cleanup until the active run settles", () => {
+    markDiagnosticEmbeddedRunStarted({
+      sessionId: "session-active",
+      sessionKey: "agent:main:telegram:chat-1",
+    });
+
+    const result = clearSessionResetRuntimeState({
+      sessionKeys: ["agent:main:telegram:chat-1"],
+      retiredSessionIds: ["session-active"],
+      clearRetiredDiagnosticActivity: false,
+    });
+
+    expect(result.keys).toEqual(["agent:main:telegram:chat-1", "session-active"]);
+    expect(result.diagnosticActivityCleared).toEqual({
+      activeEmbeddedRunsCleared: 0,
+      activeToolsCleared: 0,
+      activeModelCallsCleared: 0,
+      activitiesCleared: 0,
+    });
+    expect(
+      getDiagnosticSessionActivitySnapshot({
+        sessionId: "session-active",
+        sessionKey: "agent:main:telegram:chat-1",
+      }).activeWorkKind,
+    ).toBe("embedded_run");
+
+    expect(clearRetiredSessionDiagnosticActivity(["session-active"])).toEqual({
+      activeEmbeddedRunsCleared: 1,
+      activeToolsCleared: 0,
+      activeModelCallsCleared: 0,
+      activitiesCleared: 1,
+    });
+    expect(
+      getDiagnosticSessionActivitySnapshot({
+        sessionId: "session-active",
+        sessionKey: "agent:main:telegram:chat-1",
+      }).activeWorkKind,
+    ).toBeUndefined();
   });
 });
