@@ -120,6 +120,7 @@ import {
   registerMemoryRuntimeForPlugin,
 } from "./memory-state.js";
 import { createModelCatalogRegistrationHandlers } from "./model-catalog-registration.js";
+import { wrapPluginToolFactoryWithScope } from "./plugin-callback-scope.js";
 import { normalizeRegisteredProvider } from "./provider-validation.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
 import { isPluginRegistryActivated, isPluginRegistryRetired } from "./registry-lifecycle.js";
@@ -592,8 +593,15 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     }
     const names = [...(opts?.names ?? []), ...(opts?.name ? [opts.name] : [])];
     const optional = opts?.optional === true;
-    const factory: OpenClawPluginToolFactory =
+    const rawFactory: OpenClawPluginToolFactory =
       typeof tool === "function" ? tool : (_ctx: OpenClawPluginToolContext) => tool;
+    const factory = wrapPluginToolFactoryWithScope(
+      {
+        pluginId: record.id,
+        pluginSource: record.source,
+      },
+      rawFactory,
+    );
 
     if (typeof tool !== "function") {
       names.push(tool.name);
