@@ -7,6 +7,7 @@ import type {
   EmbeddedRunAttemptParams,
   EmbeddedRunAttemptResult,
 } from "../pi-embedded-runner/run/types.js";
+import { normalizeEmbeddedAgentRuntime } from "../pi-embedded-runner/runtime.js";
 import type { EmbeddedPiCompactResult } from "../pi-embedded-runner/types.js";
 import {
   resolveEffectiveToolPolicy,
@@ -134,7 +135,10 @@ function selectAgentHarnessDecision(params: {
   agentHarnessRuntimeOverride?: string;
 }): AgentHarnessSelectionDecision {
   const resolvedPolicy = resolveConfiguredAgentHarnessPolicy(params);
-  const runtimeOverride = params.agentHarnessRuntimeOverride?.trim();
+  const runtimeOverride =
+    params.agentHarnessRuntimeOverride === undefined
+      ? undefined
+      : normalizeEmbeddedAgentRuntime(params.agentHarnessRuntimeOverride);
   const policy =
     runtimeOverride && runtimeOverride !== "auto" && runtimeOverride !== "default"
       ? ({
