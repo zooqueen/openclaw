@@ -378,10 +378,10 @@ async function ensureSessionRuntimeCleanup(params: {
 
   const queueKeys = new Set<string>(params.target.storeKeys);
   queueKeys.add(params.target.canonicalKey);
-  if (params.sessionId) {
-    queueKeys.add(params.sessionId);
-  }
-  clearSessionResetRuntimeState([...queueKeys]);
+  clearSessionResetRuntimeState({
+    sessionKeys: [...queueKeys],
+    retiredSessionIds: [params.sessionId],
+  });
   stopSubagentsForRequester({ cfg: params.cfg, requesterSessionKey: params.target.canonicalKey });
   if (!params.sessionId) {
     clearBootstrapSnapshot(params.target.canonicalKey);

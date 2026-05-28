@@ -486,7 +486,10 @@ export async function initSessionState(params: {
     previousSessionId: previousSessionEntry?.sessionId,
   });
   if (previousSessionEntry) {
-    clearSessionResetRuntimeState([sessionKey, previousSessionEntry.sessionId]);
+    clearSessionResetRuntimeState({
+      sessionKeys: [sessionKey],
+      retiredSessionIds: [previousSessionEntry.sessionId],
+    });
   }
 
   if (!isNewSession && freshEntry && canReuseExistingEntry) {

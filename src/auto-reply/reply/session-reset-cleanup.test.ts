@@ -23,7 +23,9 @@ describe("clearSessionResetRuntimeState", () => {
     enqueueSystemEvent("stale beta", { sessionKey: "beta" });
     enqueueSystemEvent("fresh gamma", { sessionKey: "gamma" });
 
-    const result = clearSessionResetRuntimeState([" alpha ", undefined, " ", "alpha", "beta"]);
+    const result = clearSessionResetRuntimeState({
+      sessionKeys: [" alpha ", undefined, " ", "alpha", "beta"],
+    });
 
     expect(result.keys).toEqual(["alpha", "beta"]);
     expect(result.systemEventsCleared).toBe(2);
@@ -54,7 +56,10 @@ describe("clearSessionResetRuntimeState", () => {
       model: "gpt-5.5",
     });
 
-    const result = clearSessionResetRuntimeState(["agent:main:telegram:chat-1", "session-old"]);
+    const result = clearSessionResetRuntimeState({
+      sessionKeys: ["agent:main:telegram:chat-1"],
+      retiredSessionIds: ["session-old"],
+    });
 
     expect(result.diagnosticActivityCleared).toEqual({
       activeEmbeddedRunsCleared: 0,
@@ -79,7 +84,9 @@ describe("clearSessionResetRuntimeState", () => {
       toolCallId: "tool-active",
     });
 
-    const result = clearSessionResetRuntimeState(["agent:main:telegram:chat-1"]);
+    const result = clearSessionResetRuntimeState({
+      sessionKeys: ["agent:main:telegram:chat-1"],
+    });
 
     expect(result.diagnosticActivityCleared).toEqual({
       activeEmbeddedRunsCleared: 0,

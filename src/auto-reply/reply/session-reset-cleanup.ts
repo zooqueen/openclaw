@@ -10,17 +10,23 @@ export type ClearSessionResetRuntimeStateResult = ClearSessionQueueResult & {
   diagnosticActivityCleared: ClearDiagnosticSessionActivityResult;
 };
 
-export function clearSessionResetRuntimeState(
-  keys: Array<string | undefined>,
-): ClearSessionResetRuntimeStateResult {
-  const cleared = clearSessionQueues(keys);
+export type ClearSessionResetRuntimeStateParams = {
+  sessionKeys: Array<string | undefined>;
+  retiredSessionIds?: Array<string | undefined>;
+};
+
+export function clearSessionResetRuntimeState({
+  sessionKeys,
+  retiredSessionIds = [],
+}: ClearSessionResetRuntimeStateParams): ClearSessionResetRuntimeStateResult {
+  const cleared = clearSessionQueues([...sessionKeys, ...retiredSessionIds]);
   let systemEventsCleared = 0;
 
   for (const key of cleared.keys) {
     systemEventsCleared += drainSystemEventEntries(key).length;
   }
 
-  const diagnosticActivityCleared = cleared.keys.reduce<ClearDiagnosticSessionActivityResult>(
+  const diagnosticActivityCleared = retiredSessionIds.reduce<ClearDiagnosticSessionActivityResult>(
     (acc, key) => {
       const result = clearDiagnosticSessionActivity({
         sessionId: key,
