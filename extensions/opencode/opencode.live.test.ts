@@ -65,7 +65,6 @@ describeLive("opencode plugin live", () => {
       apiKey: OPENCODE_API_KEY,
       reasoning: "low",
       maxTokens: 128,
-      toolChoice: "required",
     } as const;
 
     const first = await completeSimple(
@@ -74,7 +73,7 @@ describeLive("opencode plugin live", () => {
         messages: [
           {
             role: "user",
-            content: "Use live_echo with value ok. Do not answer directly.",
+            content: "You must call the live_echo tool with value ok. Do not answer directly.",
             timestamp: Date.now(),
           },
         ],
@@ -96,7 +95,7 @@ describeLive("opencode plugin live", () => {
         messages: [
           {
             role: "user",
-            content: "Use live_echo with value ok. Do not answer directly.",
+            content: "You must call the live_echo tool with value ok. Do not answer directly.",
             timestamp: Date.now() - 3,
           },
           first,
