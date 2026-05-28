@@ -489,6 +489,7 @@ export async function initSessionState(params: {
     clearSessionResetRuntimeState({
       sessionKeys: [sessionKey],
       retiredSessionIds: [previousSessionEntry.sessionId],
+      retiredSessionKeys: [sessionKey],
     });
   }
 

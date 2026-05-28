@@ -13,7 +13,13 @@ export type ClearSessionResetRuntimeStateResult = ClearSessionQueueResult & {
 export type ClearSessionResetRuntimeStateParams = {
   sessionKeys: Array<string | undefined>;
   retiredSessionIds?: Array<string | undefined>;
+  retiredSessionKeys?: Array<string | undefined>;
   clearRetiredDiagnosticActivity?: boolean;
+};
+
+type RetiredSessionDiagnosticRef = {
+  sessionId?: string;
+  sessionKey?: string;
 };
 
 const emptyDiagnosticActivityResult = (): ClearDiagnosticSessionActivityResult => ({
@@ -24,11 +30,13 @@ const emptyDiagnosticActivityResult = (): ClearDiagnosticSessionActivityResult =
 });
 
 export function clearRetiredSessionDiagnosticActivity(
-  retiredSessionIds: Array<string | undefined>,
+  retiredSessionRefs: Array<RetiredSessionDiagnosticRef | string | undefined>,
 ): ClearDiagnosticSessionActivityResult {
-  return retiredSessionIds.reduce<ClearDiagnosticSessionActivityResult>((acc, key) => {
+  return retiredSessionRefs.reduce<ClearDiagnosticSessionActivityResult>((acc, ref) => {
+    const sessionRef = typeof ref === "string" ? { sessionId: ref } : ref;
     const result = clearDiagnosticSessionActivity({
-      sessionId: key,
+      sessionId: sessionRef?.sessionId,
+      sessionKey: sessionRef?.sessionKey,
       reason: "session_reset",
     });
     acc.activeEmbeddedRunsCleared += result.activeEmbeddedRunsCleared;
@@ -42,6 +50,7 @@ export function clearRetiredSessionDiagnosticActivity(
 export function clearSessionResetRuntimeState({
   sessionKeys,
   retiredSessionIds = [],
+  retiredSessionKeys = [],
   clearRetiredDiagnosticActivity = true,
 }: ClearSessionResetRuntimeStateParams): ClearSessionResetRuntimeStateResult {
   const cleared = clearSessionQueues([...sessionKeys, ...retiredSessionIds]);
@@ -52,7 +61,10 @@ export function clearSessionResetRuntimeState({
   }
 
   const diagnosticActivityCleared = clearRetiredDiagnosticActivity
-    ? clearRetiredSessionDiagnosticActivity(retiredSessionIds)
+    ? clearRetiredSessionDiagnosticActivity([
+        ...retiredSessionIds.map((sessionId) => ({ sessionId })),
+        ...retiredSessionKeys.map((sessionKey) => ({ sessionKey })),
+      ])
     : emptyDiagnosticActivityResult();
 
   return {

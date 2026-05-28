@@ -106,6 +106,32 @@ describe("clearSessionResetRuntimeState", () => {
     ).toBe("tool_call");
   });
 
+  it("clears key-only diagnostic activity for explicitly retired session keys", () => {
+    markDiagnosticToolStartedForTest({
+      sessionKey: "agent:main:telegram:chat-1",
+      runId: "run-old-key-only",
+      toolName: "bash",
+      toolCallId: "tool-old-key-only",
+    });
+
+    const result = clearSessionResetRuntimeState({
+      sessionKeys: ["agent:main:telegram:chat-1"],
+      retiredSessionKeys: ["agent:main:telegram:chat-1"],
+    });
+
+    expect(result.diagnosticActivityCleared).toEqual({
+      activeEmbeddedRunsCleared: 0,
+      activeToolsCleared: 1,
+      activeModelCallsCleared: 0,
+      activitiesCleared: 1,
+    });
+    expect(
+      getDiagnosticSessionActivitySnapshot({
+        sessionKey: "agent:main:telegram:chat-1",
+      }).activeWorkKind,
+    ).toBeUndefined();
+  });
+
   it("can defer retired-session diagnostic cleanup until the active run settles", () => {
     markDiagnosticEmbeddedRunStarted({
       sessionId: "session-active",

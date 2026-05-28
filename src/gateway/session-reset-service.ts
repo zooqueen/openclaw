@@ -396,7 +396,12 @@ async function ensureSessionRuntimeCleanup(params: {
   const ended = await waitForEmbeddedAgentRunEnd(params.sessionId, 15_000);
   clearBootstrapSnapshot(params.target.canonicalKey);
   if (ended) {
-    clearRetiredSessionDiagnosticActivity([params.sessionId]);
+    clearRetiredSessionDiagnosticActivity([
+      {
+        sessionId: params.sessionId,
+        sessionKey: params.target.canonicalKey,
+      },
+    ]);
     await retireSessionMcpRuntime({
       sessionId: params.sessionId,
       reason: "gateway-session-cleanup",
