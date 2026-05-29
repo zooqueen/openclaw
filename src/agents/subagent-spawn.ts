@@ -1295,8 +1295,18 @@ export async function spawnSubagentDirect(
     const runAlreadyTerminal =
       typeof registeredRun?.endedAt === "number" || registeredRun?.outcome != null;
     if (runAlreadyTerminal) {
-      // The registry timeout won while the child RPC was still unwinding.
-      // Preserve that terminal result instead of turning it into a late spawn failure.
+      // The registry timeout can win while the child RPC is still unwinding,
+      // but without an accepted RPC response this must not look like a spawned child.
+      const terminalStatus = registeredRun?.outcome?.status;
+      return {
+        status: "error",
+        error:
+          terminalStatus === "timeout"
+            ? "Subagent run timed out before the child agent accepted the request."
+            : "Subagent run completed before the child agent accepted the request.",
+        childSessionKey,
+        runId: childRunId,
+      };
     } else {
       discardFailedSubagentSpawnRun(childRunId);
       await rollbackPreparedContextEngine(contextEnginePreparation);

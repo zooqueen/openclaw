@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => ({
   configOverride: {} as Record<string, unknown>,
   registerSubagentRunMock: vi.fn(),
   startSubagentRunCompletionWaitMock: vi.fn(),
+  listSubagentRunsForRequesterMock: vi.fn(() => []),
   resolveSandboxRuntimeStatusMock: vi.fn<
     (params: { sessionKey?: string }) => { sandboxed: boolean }
   >(() => ({ sandboxed: false })),
@@ -111,6 +112,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
       getRuntimeConfig: () => hoisted.configOverride,
       registerSubagentRunMock: hoisted.registerSubagentRunMock,
       startSubagentRunCompletionWaitMock: hoisted.startSubagentRunCompletionWaitMock,
+      listSubagentRunsForRequesterMock: hoisted.listSubagentRunsForRequesterMock,
       hookRunner: hoisted.hookRunner,
       createRunIdMock: () => "run-thread-register-fail",
       resolveAgentConfig: resolveTestAgentConfig,
@@ -125,6 +127,8 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     hoisted.callGatewayMock.mockClear();
     hoisted.registerSubagentRunMock.mockClear();
     hoisted.startSubagentRunCompletionWaitMock.mockClear();
+    hoisted.listSubagentRunsForRequesterMock.mockReset();
+    hoisted.listSubagentRunsForRequesterMock.mockReturnValue([]);
     hoisted.resolveSandboxRuntimeStatusMock.mockReset();
     hoisted.resolveSandboxRuntimeStatusMock.mockImplementation(() => ({ sandboxed: false }));
     hoisted.hookRunner.hasHooks.mockReset();
@@ -328,6 +332,56 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     expect(deleteCall?.params?.key).toBe(result.childSessionKey);
     expect(deleteCall?.params?.deleteTranscript).toBe(true);
     expect(deleteCall?.params?.emitLifecycleHooks).toBe(false);
+  });
+
+  it("reports a pre-acceptance registry timeout as a spawn error", async () => {
+    hoisted.listSubagentRunsForRequesterMock.mockReturnValue([
+      {
+        runId: "run-thread-register-fail",
+        endedAt: 1000,
+        outcome: { status: "timeout" },
+      },
+    ]);
+    hoisted.callGatewayMock.mockImplementation(
+      async (request: {
+        method?: string;
+        params?: { key?: string; deleteTranscript?: boolean; emitLifecycleHooks?: boolean };
+      }) => {
+        if (request.method === "sessions.patch") {
+          return { ok: true };
+        }
+        if (request.method === "agent") {
+          throw new Error("gateway task timed out");
+        }
+        if (request.method === "sessions.delete") {
+          return { ok: true };
+        }
+        return {};
+      },
+    );
+
+    const result = await spawnSubagentDirect(
+      {
+        task: "timeout before child accepts",
+      },
+      {
+        agentSessionKey: "agent:main:main",
+        agentChannel: "discord",
+        agentAccountId: "acct-1",
+        agentTo: "user-1",
+        workspaceDir: "/tmp/requester-workspace",
+      },
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.error).toBe(
+      "Subagent run timed out before the child agent accepted the request.",
+    );
+    expect(result.runId).toBe("run-thread-register-fail");
+    expect(result.childSessionKey).toMatch(/^agent:main:subagent:/);
+    expect(getRegisteredRun()?.deferCompletionWait).toBe(true);
+    expect(hoisted.startSubagentRunCompletionWaitMock).not.toHaveBeenCalled();
+    expect(findLastSessionDeleteCall()).toBeUndefined();
   });
 
   it("keeps lifecycle hooks enabled when registerSubagentRun fails after thread binding succeeds", async () => {
