@@ -180,6 +180,9 @@ describe("Feishu bot menu handler", () => {
       .mockResolvedValueOnce(undefined);
 
     await onBotMenu(createBotMenuEvent({ eventKey: "quick-actions", timestamp: "1700000000004" }));
+    await vi.waitFor(() => {
+      expect(handleFeishuMessageMock).toHaveBeenCalledTimes(1);
+    });
     await onBotMenu(createBotMenuEvent({ eventKey: "quick-actions", timestamp: "1700000000004" }));
 
     expect(sendCardFeishuMock).toHaveBeenCalledTimes(2);
