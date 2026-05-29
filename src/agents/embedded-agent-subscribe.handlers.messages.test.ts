@@ -585,8 +585,10 @@ describe("handleMessageUpdate text signatures", () => {
 
   it("emits empty replacement text deltas to clear stale streamed text", () => {
     const onAgentEvent = vi.fn();
+    const onPartialReply = vi.fn();
     const context = createMessageUpdateContext({
       onAgentEvent,
+      onPartialReply,
       consumePartialReplyDirectives: vi.fn((text: string) => ({ text })),
       state: {
         deltaBuffer: "stale",
@@ -630,6 +632,7 @@ describe("handleMessageUpdate text signatures", () => {
     expect(context.state.lastStreamedAssistantCleaned).toBe("");
     expect(context.state.deltaBuffer).toBe("");
     expect(context.state.blockBuffer).toBe("");
+    expect(onPartialReply).not.toHaveBeenCalled();
   });
 
   it("resets assistant text stream state before replacement text deltas", () => {

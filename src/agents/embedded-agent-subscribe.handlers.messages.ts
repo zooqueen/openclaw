@@ -790,7 +790,8 @@ export function handleMessageUpdate(
         data,
       });
       ctx.state.emittedAssistantUpdate = true;
-      if (ctx.params.onPartialReply && ctx.state.shouldEmitPartialReplies) {
+      const isPartialReplyClear = replace && !cleanedText && !hasMedia && !hasAudio;
+      if (ctx.params.onPartialReply && ctx.state.shouldEmitPartialReplies && !isPartialReplyClear) {
         void ctx.params.onPartialReply(data);
       }
     }
