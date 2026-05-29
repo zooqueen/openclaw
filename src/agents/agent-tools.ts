@@ -245,6 +245,7 @@ function applyModelProviderToolPolicy(
     agentDir?: string;
     modelCompat?: ModelCompatConfig;
     suppressManagedWebSearch?: boolean;
+    sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   },
 ): AnyAgentTool[] {
   tools = filterLocalModelLeanTools({
@@ -252,6 +253,7 @@ function applyModelProviderToolPolicy(
     config: params?.config,
     agentId: params?.agentId,
     sessionKey: params?.sessionKey,
+    sourceReplyDeliveryMode: params?.sourceReplyDeliveryMode,
   });
 
   if (
@@ -1063,6 +1065,7 @@ export function createOpenClawCodingTools(options?: {
     agentDir: options?.agentDir,
     modelCompat: options?.modelCompat,
     suppressManagedWebSearch: options?.suppressManagedWebSearch,
+    sourceReplyDeliveryMode: options?.sourceReplyDeliveryMode,
   });
   options?.recordToolPrepStage?.("model-provider-policy");
   // Sender identity is carried for command/channel-action auth; tool visibility

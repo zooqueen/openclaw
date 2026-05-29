@@ -32,6 +32,46 @@ describe("local model lean tool filtering", () => {
     ).toEqual(["read", "exec"]);
   });
 
+  it("keeps message when source replies require message-tool delivery", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          experimental: {
+            localModelLean: true,
+          },
+        },
+      },
+    };
+
+    expect(
+      filterLocalModelLeanTools({
+        tools: tools(["read", "browser", "cron", "message", "exec"]),
+        config: cfg,
+        sourceReplyDeliveryMode: "message_tool_only",
+      }).map((tool) => tool.name),
+    ).toEqual(["read", "message", "exec"]);
+  });
+
+  it("drops message when source replies use automatic delivery", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          experimental: {
+            localModelLean: true,
+          },
+        },
+      },
+    };
+
+    expect(
+      filterLocalModelLeanTools({
+        tools: tools(["read", "browser", "cron", "message", "exec"]),
+        config: cfg,
+        sourceReplyDeliveryMode: "automatic",
+      }).map((tool) => tool.name),
+    ).toEqual(["read", "exec"]);
+  });
+
   it("lets an agent opt out of an inherited global lean setting", () => {
     const cfg: OpenClawConfig = {
       agents: {

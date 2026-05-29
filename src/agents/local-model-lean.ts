@@ -1,3 +1,4 @@
+import type { SourceReplyDeliveryMode } from "../auto-reply/get-reply-options.types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { resolveAgentConfig, resolveDefaultAgentId } from "./agent-scope-config.js";
@@ -43,9 +44,14 @@ export function filterLocalModelLeanTools(params: {
   config?: OpenClawConfig;
   agentId?: string;
   sessionKey?: string;
+  sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
 }): AnyAgentTool[] {
   if (!isLocalModelLeanEnabled(params)) {
     return params.tools;
   }
-  return params.tools.filter((tool) => !LOCAL_MODEL_LEAN_DENY_TOOL_NAMES.has(tool.name));
+  return params.tools.filter(
+    (tool) =>
+      (tool.name === "message" && params.sourceReplyDeliveryMode === "message_tool_only") ||
+      !LOCAL_MODEL_LEAN_DENY_TOOL_NAMES.has(tool.name),
+  );
 }

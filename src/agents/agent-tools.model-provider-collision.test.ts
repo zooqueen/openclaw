@@ -164,6 +164,35 @@ describe("applyModelProviderToolPolicy", () => {
     expect(toolNames(filtered)).toEqual(["read", "exec"]);
   });
 
+  it("keeps message in lean local-model mode when source replies require the message tool", () => {
+    const filtered = testing.applyModelProviderToolPolicy(
+      [
+        { name: "read" },
+        { name: "browser" },
+        { name: "cron" },
+        { name: "message" },
+        { name: "exec" },
+      ] as unknown as AnyAgentTool[],
+      {
+        config: {
+          agents: {
+            defaults: {
+              experimental: {
+                localModelLean: true,
+              },
+            },
+          },
+        },
+        modelProvider: "openai",
+        modelApi: "openai-responses",
+        modelId: "gpt-5.4",
+        sourceReplyDeliveryMode: "message_tool_only",
+      },
+    );
+
+    expect(toolNames(filtered)).toEqual(["read", "message", "exec"]);
+  });
+
   it("drops heavyweight tools when lean local-model mode is enabled for the current agent", () => {
     const filtered = testing.applyModelProviderToolPolicy(
       [
