@@ -1616,6 +1616,7 @@ export function resolveSessionModelRef(
         | "modelOverride"
         | "providerOverride"
         | "authProfileOverride"
+        | "authProfileOverrideCompactionCount"
         | "authProfileOverrideSource"
       >,
   agentId?: string,

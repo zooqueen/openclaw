@@ -1274,6 +1274,50 @@ describe("createModelSelectionState auto-failover overrides", () => {
     expect(sessionStore[sessionKey]?.authProfileOverrideCompactionCount).toBeUndefined();
   });
 
+  it("does not override an explicit model directive while repairing stale auto auth state", async () => {
+    authProfileStoreMock.store = {
+      version: 1,
+      profiles: {
+        "deepseek:default": {
+          type: "api_key",
+          provider: "deepseek",
+          key: "fallback-key",
+        },
+      },
+    };
+    const sessionEntry = makeEntry({
+      modelProvider: "deepseek",
+      model: "deepseek-v4-flash",
+      contextTokens: 64_000,
+      authProfileOverride: "deepseek:default",
+      authProfileOverrideSource: "auto",
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+
+    const state = await createModelSelectionState({
+      cfg: {} as OpenClawConfig,
+      agentCfg: undefined,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      defaultProvider: "minimax",
+      defaultModel: "MiniMax-M2.7",
+      primaryProvider: "minimax",
+      primaryModel: "MiniMax-M2.7",
+      provider: "anthropic",
+      model: "claude-opus-4-6",
+      hasModelDirective: true,
+    });
+
+    expect(state.provider).toBe("anthropic");
+    expect(state.model).toBe("claude-opus-4-6");
+    expect(state.resetModelOverride).toBe(true);
+    expect(state.resetModelOverrideRef).toBe("deepseek/deepseek-v4-flash");
+    expect(sessionStore[sessionKey]?.modelProvider).toBeUndefined();
+    expect(sessionStore[sessionKey]?.model).toBeUndefined();
+    expect(sessionStore[sessionKey]?.authProfileOverride).toBeUndefined();
+  });
+
   it("preserves ordinary auto auth profile rotation when runtime model matches selection", async () => {
     authProfileStoreMock.store = {
       version: 1,
