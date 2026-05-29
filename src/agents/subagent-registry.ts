@@ -1475,6 +1475,10 @@ export function registerSubagentRun(params: RegisterSubagentRunParams) {
   subagentRunManager.registerSubagentRun(params);
 }
 
+export function startSubagentRunCompletionWait(runId: string): boolean {
+  return subagentRunManager.startSubagentRunCompletionWait(runId);
+}
+
 export function armSubagentRunTimeout(params: {
   runId: string;
   runTimeoutSeconds: number;

@@ -180,6 +180,7 @@ export type RegisterSubagentRunParams = {
   attachmentsDir?: string;
   attachmentsRootDir?: string;
   retainAttachmentsOnKeep?: boolean;
+  deferCompletionWait?: boolean;
 };
 
 export function createSubagentRunManager(params: {
@@ -825,7 +826,24 @@ export function createSubagentRunManager(params: {
     params.scheduleRunTimeoutFallback(entry, now);
     // Wait for subagent completion via gateway RPC (cross-process).
     // The in-process lifecycle listener is a fallback for embedded runs.
-    void waitForSubagentCompletion(runId, waitTimeoutMs, entry);
+    if (registerParams.deferCompletionWait !== true) {
+      void waitForSubagentCompletion(runId, waitTimeoutMs, entry);
+    }
+  };
+
+  const startSubagentRunCompletionWait = (runId: string): boolean => {
+    const key = runId.trim();
+    if (!key) {
+      return false;
+    }
+    const entry = params.runs.get(key);
+    if (!entry || typeof entry.endedAt === "number" || entry.outcome != null) {
+      return false;
+    }
+    const cfg = params.getRuntimeConfig();
+    const waitTimeoutMs = params.resolveSubagentWaitTimeoutMs(cfg, entry.runTimeoutSeconds);
+    void waitForSubagentCompletion(key, waitTimeoutMs, entry);
+    return true;
   };
 
   const armSubagentRunTimeout = (runId: string, runTimeoutSeconds: number, startedAt?: number) => {
@@ -1031,6 +1049,7 @@ export function createSubagentRunManager(params: {
     registerSubagentRun,
     releaseSubagentRun,
     replaceSubagentRunAfterSteer,
+    startSubagentRunCompletionWait,
     waitForSubagentCompletion,
   };
 }

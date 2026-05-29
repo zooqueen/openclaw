@@ -136,6 +136,7 @@ export async function loadSubagentSpawnModuleForTest(params: {
   registerSubagentRunMock?: MockFn;
   createRunIdMock?: () => string;
   armSubagentRunTimeoutMock?: MockFn;
+  startSubagentRunCompletionWaitMock?: MockFn;
   releaseSubagentRunMock?: MockFn;
   discardFailedSubagentSpawnRunMock?: MockFn;
   emitSessionLifecycleEventMock?: MockFn;
@@ -286,6 +287,7 @@ export async function loadSubagentSpawnModuleForTest(params: {
     registerSubagentRun:
       params.registerSubagentRunMock ?? vi.fn((_record: Record<string, unknown>) => undefined),
     armSubagentRunTimeout: params.armSubagentRunTimeoutMock ?? vi.fn(),
+    startSubagentRunCompletionWait: params.startSubagentRunCompletionWaitMock ?? vi.fn(),
     releaseSubagentRun: params.releaseSubagentRunMock ?? vi.fn(),
     discardFailedSubagentSpawnRun: params.discardFailedSubagentSpawnRunMock ?? vi.fn(),
     resetSubagentRegistryForTests,

@@ -41,6 +41,7 @@ import {
   discardFailedSubagentSpawnRun,
   listSubagentRunsForRequester,
   registerSubagentRun,
+  startSubagentRunCompletionWait,
 } from "./subagent-registry.js";
 import { resolveSubagentSpawnAcceptedNote } from "./subagent-spawn-accepted-note.js";
 import { resolveSubagentSpawnOwnership } from "./subagent-spawn-ownership.js";
@@ -1205,6 +1206,7 @@ export async function spawnSubagentDirect(
       attachmentsDir: attachmentAbsDir,
       attachmentsRootDir: attachmentRootDir,
       retainAttachmentsOnKeep: retainOnSessionKeep,
+      deferCompletionWait: true,
     });
   } catch (err) {
     await rollbackPreparedContextEngine(contextEnginePreparation);
@@ -1285,6 +1287,7 @@ export async function spawnSubagentDirect(
         startedAt: readGatewayAcceptedAt(response),
       });
     }
+    startSubagentRunCompletionWait(childRunId);
   } catch (err) {
     const registeredRun = listSubagentRunsForRequester(
       ownership.completionRequesterSessionKey,

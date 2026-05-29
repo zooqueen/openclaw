@@ -23,6 +23,7 @@ const hoisted = vi.hoisted(() => ({
   callGatewayMock: vi.fn(),
   configOverride: {} as Record<string, unknown>,
   registerSubagentRunMock: vi.fn(),
+  startSubagentRunCompletionWaitMock: vi.fn(),
   resolveSandboxRuntimeStatusMock: vi.fn<
     (params: { sessionKey?: string }) => { sandboxed: boolean }
   >(() => ({ sandboxed: false })),
@@ -99,6 +100,8 @@ async function expectAcceptedWorkspace(params: { agentId: string; expectedWorksp
 
   expect(result.status).toBe("accepted");
   expect(getRegisteredRun()?.workspaceDir).toBe(params.expectedWorkspaceDir);
+  expect(getRegisteredRun()?.deferCompletionWait).toBe(true);
+  expect(hoisted.startSubagentRunCompletionWaitMock).toHaveBeenCalledWith(result.runId);
 }
 
 describe("spawnSubagentDirect workspace inheritance", () => {
@@ -107,6 +110,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
       callGatewayMock: hoisted.callGatewayMock,
       getRuntimeConfig: () => hoisted.configOverride,
       registerSubagentRunMock: hoisted.registerSubagentRunMock,
+      startSubagentRunCompletionWaitMock: hoisted.startSubagentRunCompletionWaitMock,
       hookRunner: hoisted.hookRunner,
       createRunIdMock: () => "run-thread-register-fail",
       resolveAgentConfig: resolveTestAgentConfig,
@@ -120,6 +124,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     resetSubagentRegistryForTests();
     hoisted.callGatewayMock.mockClear();
     hoisted.registerSubagentRunMock.mockClear();
+    hoisted.startSubagentRunCompletionWaitMock.mockClear();
     hoisted.resolveSandboxRuntimeStatusMock.mockReset();
     hoisted.resolveSandboxRuntimeStatusMock.mockImplementation(() => ({ sandboxed: false }));
     hoisted.hookRunner.hasHooks.mockReset();
@@ -316,6 +321,8 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     expect(result.error).toBe("spawn startup failed");
     expect(result.childSessionKey).toMatch(/^agent:main:subagent:/);
     expect(hoisted.registerSubagentRunMock).toHaveBeenCalledTimes(1);
+    expect(getRegisteredRun()?.deferCompletionWait).toBe(true);
+    expect(hoisted.startSubagentRunCompletionWaitMock).not.toHaveBeenCalled();
 
     const deleteCall = findLastSessionDeleteCall();
     expect(deleteCall?.params?.key).toBe(result.childSessionKey);
@@ -370,6 +377,8 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     expect(result.error).toBe("Failed to register subagent run: registry unavailable");
     expect(result.childSessionKey).toMatch(/^agent:main:subagent:/);
     expect(result.runId).toBe("run-thread-register-fail");
+    expect(getRegisteredRun()?.deferCompletionWait).toBe(true);
+    expect(hoisted.startSubagentRunCompletionWaitMock).not.toHaveBeenCalled();
 
     const deleteCall = findLastSessionDeleteCall();
     expect(deleteCall?.params?.key).toBe(result.childSessionKey);
