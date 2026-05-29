@@ -23,30 +23,32 @@ export function hasStaleAutoRuntimeAuthProfileSelection(
     | undefined,
   expectedSelection: { provider: string; model: string; config?: OpenClawConfig },
 ): boolean {
+  if (
+    entry?.authProfileOverrideSource !== "auto" ||
+    normalizeOptionalString(entry.authProfileOverride) === undefined ||
+    normalizeOptionalString(entry.providerOverride) !== undefined ||
+    normalizeOptionalString(entry.modelOverride) !== undefined
+  ) {
+    return false;
+  }
+
   const runtimeProvider = normalizeOptionalString(entry?.modelProvider);
   const runtimeModel = normalizeOptionalString(entry?.model);
   const expectedProvider = normalizeOptionalString(expectedSelection.provider);
   const expectedModel = normalizeOptionalString(expectedSelection.model);
-  const runtimeMatchesExpected =
-    runtimeProvider !== undefined &&
-    runtimeModel !== undefined &&
-    expectedProvider !== undefined &&
-    expectedModel !== undefined &&
-    areRuntimeModelRefsEquivalent(
-      `${runtimeProvider}/${runtimeModel}`,
-      `${expectedProvider}/${expectedModel}`,
-      { config: expectedSelection.config },
-    );
-  return (
-    entry?.authProfileOverrideSource === "auto" &&
-    normalizeOptionalString(entry.authProfileOverride) !== undefined &&
-    normalizeOptionalString(entry.providerOverride) === undefined &&
-    normalizeOptionalString(entry.modelOverride) === undefined &&
-    runtimeProvider !== undefined &&
-    runtimeModel !== undefined &&
-    expectedProvider !== undefined &&
-    expectedModel !== undefined &&
-    !runtimeMatchesExpected
+  if (
+    runtimeProvider === undefined ||
+    runtimeModel === undefined ||
+    expectedProvider === undefined ||
+    expectedModel === undefined
+  ) {
+    return false;
+  }
+
+  return !areRuntimeModelRefsEquivalent(
+    `${runtimeProvider}/${runtimeModel}`,
+    `${expectedProvider}/${expectedModel}`,
+    { config: expectedSelection.config },
   );
 }
 
