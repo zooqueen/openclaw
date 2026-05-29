@@ -1079,9 +1079,10 @@ export async function runEmbeddedAttempt(
           ]
         : toolsAllowWithForcedRuntimeTools;
     const shouldConstructTools =
-      toolConstructionPlan.constructTools ||
-      toolSearchControlsEnabledForRun ||
-      codeModeControlsEnabledForRun;
+      toolsEnabled &&
+      (toolConstructionPlan.constructTools ||
+        toolSearchControlsEnabledForRun ||
+        codeModeControlsEnabledForRun);
     let toolSearchCatalogExecutor: ToolSearchCatalogToolExecutor | undefined;
     toolSearchCatalogRef =
       toolSearchControlsEnabledForRun || codeModeControlsEnabledForRun
