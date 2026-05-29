@@ -1321,69 +1321,68 @@ export async function spawnSubagentDirect(
         childSessionKey,
         runId: childRunId,
       };
-    } else {
-      discardFailedSubagentSpawnRun(childRunId);
-      await rollbackPreparedContextEngine(contextEnginePreparation);
-      if (attachmentAbsDir) {
-        try {
-          await fs.rm(attachmentAbsDir, { recursive: true, force: true });
-        } catch {
-          // Best-effort cleanup only.
-        }
-      }
-      let emitLifecycleHooks = false;
-      if (threadBindingReady) {
-        const hasEndedHook = hookRunner?.hasHooks("subagent_ended") === true;
-        let endedHookEmitted = false;
-        if (hasEndedHook) {
-          try {
-            await hookRunner?.runSubagentEnded(
-              {
-                targetSessionKey: childSessionKey,
-                targetKind: "subagent",
-                reason: "spawn-failed",
-                sendFarewell: true,
-                accountId: childSessionOrigin?.accountId,
-                runId: childRunId,
-                outcome: "error",
-                error: "Session failed to start",
-              },
-              {
-                runId: childRunId,
-                childSessionKey,
-                requesterSessionKey: requesterInternalKey,
-              },
-            );
-            endedHookEmitted = true;
-          } catch {
-            // Spawn should still return an actionable error even if cleanup hooks fail.
-          }
-        }
-        emitLifecycleHooks = !endedHookEmitted;
-      }
-      // Always delete the provisional child session after a failed spawn attempt.
-      // If we already emitted subagent_ended above, suppress a duplicate lifecycle hook.
-      try {
-        await callSubagentGateway({
-          method: "sessions.delete",
-          params: {
-            key: childSessionKey,
-            deleteTranscript: true,
-            emitLifecycleHooks,
-          },
-          timeoutMs: SUBAGENT_CONTROL_GATEWAY_TIMEOUT_MS,
-        });
-      } catch {
-        // Best-effort only.
-      }
-      const messageText = summarizeError(err);
-      return {
-        status: "error",
-        error: messageText,
-        childSessionKey,
-        runId: childRunId,
-      };
     }
+    discardFailedSubagentSpawnRun(childRunId);
+    await rollbackPreparedContextEngine(contextEnginePreparation);
+    if (attachmentAbsDir) {
+      try {
+        await fs.rm(attachmentAbsDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    let emitLifecycleHooks = false;
+    if (threadBindingReady) {
+      const hasEndedHook = hookRunner?.hasHooks("subagent_ended") === true;
+      let endedHookEmitted = false;
+      if (hasEndedHook) {
+        try {
+          await hookRunner?.runSubagentEnded(
+            {
+              targetSessionKey: childSessionKey,
+              targetKind: "subagent",
+              reason: "spawn-failed",
+              sendFarewell: true,
+              accountId: childSessionOrigin?.accountId,
+              runId: childRunId,
+              outcome: "error",
+              error: "Session failed to start",
+            },
+            {
+              runId: childRunId,
+              childSessionKey,
+              requesterSessionKey: requesterInternalKey,
+            },
+          );
+          endedHookEmitted = true;
+        } catch {
+          // Spawn should still return an actionable error even if cleanup hooks fail.
+        }
+      }
+      emitLifecycleHooks = !endedHookEmitted;
+    }
+    // Always delete the provisional child session after a failed spawn attempt.
+    // If we already emitted subagent_ended above, suppress a duplicate lifecycle hook.
+    try {
+      await callSubagentGateway({
+        method: "sessions.delete",
+        params: {
+          key: childSessionKey,
+          deleteTranscript: true,
+          emitLifecycleHooks,
+        },
+        timeoutMs: SUBAGENT_CONTROL_GATEWAY_TIMEOUT_MS,
+      });
+    } catch {
+      // Best-effort only.
+    }
+    const messageText = summarizeError(err);
+    return {
+      status: "error",
+      error: messageText,
+      childSessionKey,
+      runId: childRunId,
+    };
   }
 
   if (hookRunner?.hasHooks("subagent_spawned")) {
