@@ -74,7 +74,7 @@ import {
   normalizeMainKey,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
-import { hasAutoRuntimeAuthProfileSelection } from "../sessions/model-overrides.js";
+import { hasStaleAutoRuntimeAuthProfileSelection } from "../sessions/model-overrides.js";
 import { isCronRunSessionKey } from "../sessions/session-key-utils.js";
 import {
   AVATAR_MAX_BYTES,
@@ -1633,15 +1633,6 @@ export function resolveSessionModelRef(
       allowPluginNormalization: options?.allowPluginNormalization,
     })!;
   }
-  const ignoreRuntimeModel = hasAutoRuntimeAuthProfileSelection(entry);
-  const runtimeProvider = ignoreRuntimeModel
-    ? undefined
-    : normalizeOptionalString(entry?.modelProvider);
-  const runtimeModel = ignoreRuntimeModel ? undefined : normalizeOptionalString(entry?.model);
-  if (runtimeProvider && runtimeModel) {
-    return { provider: runtimeProvider, model: runtimeModel };
-  }
-
   const resolved = agentId
     ? resolveDefaultModelForAgent({
         cfg,
@@ -1654,6 +1645,14 @@ export function resolveSessionModelRef(
         defaultModel: DEFAULT_MODEL,
         allowPluginNormalization: options?.allowPluginNormalization,
       });
+  const ignoreRuntimeModel = hasStaleAutoRuntimeAuthProfileSelection(entry, resolved);
+  const runtimeProvider = ignoreRuntimeModel
+    ? undefined
+    : normalizeOptionalString(entry?.modelProvider);
+  const runtimeModel = ignoreRuntimeModel ? undefined : normalizeOptionalString(entry?.model);
+  if (runtimeProvider && runtimeModel) {
+    return { provider: runtimeProvider, model: runtimeModel };
+  }
 
   const persisted = resolvePersistedSelectedModelRef({
     defaultProvider: resolved.provider || DEFAULT_PROVIDER,

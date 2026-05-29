@@ -78,7 +78,7 @@ import {
   resolveAgentIdFromSessionKey,
   toAgentStoreSessionKey,
 } from "../../routing/session-key.js";
-import { hasAutoRuntimeAuthProfileSelection } from "../../sessions/model-overrides.js";
+import { hasStaleAutoRuntimeAuthProfileSelection } from "../../sessions/model-overrides.js";
 import { ADMIN_SCOPE } from "../operator-scopes.js";
 import { resolveSessionKeyForRun } from "../server-session-key.js";
 import {
@@ -164,11 +164,15 @@ function filterSessionStoreToConfiguredAgents(
 
 function inheritSessionRuntimeSelection(
   parentEntry: SessionEntry | undefined,
+  expectedSelection: { provider: string; model: string },
 ): Partial<SessionEntry> {
   if (!parentEntry) {
     return {};
   }
-  const inheritRuntimeAuthSelection = !hasAutoRuntimeAuthProfileSelection(parentEntry);
+  const inheritRuntimeAuthSelection = !hasStaleAutoRuntimeAuthProfileSelection(
+    parentEntry,
+    expectedSelection,
+  );
   return {
     ...(parentEntry.providerOverride ? { providerOverride: parentEntry.providerOverride } : {}),
     ...(parentEntry.modelOverride ? { modelOverride: parentEntry.modelOverride } : {}),
@@ -1456,6 +1460,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     let canonicalParentSessionKey: string | undefined;
     let parentSessionEntry: SessionEntry | undefined;
     let parentSelectedAgentId: string | undefined;
+    let parentAgentId: string | undefined;
     if (parentSessionKey) {
       const parentCanonicalKey = resolveSessionStoreKey({ cfg, sessionKey: parentSessionKey });
       if (parentCanonicalKey === "global") {
@@ -1484,6 +1489,11 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       }
       canonicalParentSessionKey = parent.canonicalKey;
       parentSessionEntry = parent.entry;
+      parentAgentId = normalizeAgentId(
+        parentSelectedAgentId ??
+          resolveAgentIdFromSessionKey(canonicalParentSessionKey) ??
+          resolveDefaultAgentId(cfg),
+      );
     }
     if (
       canonicalParentSessionKey &&
@@ -1492,12 +1502,10 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       !resolveOptionalInitialSessionMessage(p) &&
       cfg.session?.dmScope === "main"
     ) {
-      const parentAgentId = normalizeAgentId(
-        parentSelectedAgentId ??
-          resolveAgentIdFromSessionKey(canonicalParentSessionKey) ??
-          resolveDefaultAgentId(cfg),
-      );
-      const parentMainKey = resolveAgentMainSessionKey({ cfg, agentId: parentAgentId });
+      const parentMainKey = resolveAgentMainSessionKey({
+        cfg,
+        agentId: parentAgentId ?? resolveDefaultAgentId(cfg),
+      });
       if (canonicalParentSessionKey === parentMainKey) {
         const { performGatewaySessionReset } = await loadSessionsRuntimeModule();
         const resetResult = await performGatewaySessionReset({
@@ -1536,12 +1544,10 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         canonicalParentSessionKey,
         parentSelectedAgentId ? { agentId: parentSelectedAgentId } : undefined,
       );
-      const parentAgentId = normalizeAgentId(
-        parentSelectedAgentId ??
-          resolveAgentIdFromSessionKey(canonicalParentSessionKey) ??
-          resolveDefaultAgentId(cfg),
+      const workspaceDir = resolveAgentWorkspaceDir(
+        cfg,
+        parentAgentId ?? resolveDefaultAgentId(cfg),
       );
-      const workspaceDir = resolveAgentWorkspaceDir(cfg, parentAgentId);
       if (hasInternalHookListeners("command", "new")) {
         const hookEvent = createInternalHookEvent("command", "new", canonicalParentSessionKey, {
           sessionEntry: parentEntry,
@@ -1599,7 +1605,10 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       }
       const inheritedSelection = normalizeOptionalString(p.model)
         ? {}
-        : inheritSessionRuntimeSelection(parentSessionEntry);
+        : inheritSessionRuntimeSelection(
+            parentSessionEntry,
+            resolveSessionModelRef(cfg, parentSessionEntry, parentAgentId ?? targetAgentId),
+          );
       const nextEntry: SessionEntry = {
         ...patched.entry,
         ...inheritedSelection,
