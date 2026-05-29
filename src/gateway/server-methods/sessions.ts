@@ -44,8 +44,10 @@ import {
   waitForEmbeddedAgentRunEnd,
 } from "../../agents/embedded-agent-runner/runs.js";
 import { compactEmbeddedAgentSession } from "../../agents/embedded-agent.js";
+import { resolveModelRefFromString } from "../../agents/model-selection-shared.js";
 import { clearSessionQueues } from "../../auto-reply/reply/queue/cleanup.js";
 import { normalizeReasoningLevel, normalizeThinkLevel } from "../../auto-reply/thinking.js";
+import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import {
   loadSessionStore,
   runSessionsCleanup,
@@ -201,6 +203,53 @@ function inheritSessionRuntimeSelection(
     ...(inheritRuntimeAuthSelection && parentEntry.authProfileOverrideSource
       ? { authProfileOverrideSource: parentEntry.authProfileOverrideSource }
       : {}),
+  };
+}
+
+function resolveParentExpectedRuntimeSelection(
+  cfg: OpenClawConfig,
+  parentEntry: SessionEntry | undefined,
+  agentId: string,
+): { provider: string; model: string; config: OpenClawConfig } {
+  const explicitProviderOverride = normalizeOptionalString(parentEntry?.providerOverride);
+  const explicitModelOverride = normalizeOptionalString(parentEntry?.modelOverride);
+  if (explicitProviderOverride || explicitModelOverride) {
+    return {
+      ...resolveSessionModelRef(
+        cfg,
+        {
+          providerOverride: explicitProviderOverride,
+          modelOverride: explicitModelOverride,
+        },
+        agentId,
+      ),
+      config: cfg,
+    };
+  }
+
+  const defaultSelection = resolveSessionModelRef(cfg, undefined, agentId);
+  const channelModelOverride =
+    cfg.channels?.modelByChannel && parentEntry
+      ? resolveChannelModelOverride({
+          cfg,
+          channel: parentEntry.channel ?? parentEntry.origin?.provider ?? parentEntry.lastChannel,
+          groupId: parentEntry.groupId,
+          groupChatType: parentEntry.chatType,
+          groupChannel: parentEntry.groupChannel,
+          groupSubject: parentEntry.subject,
+          parentSessionKey: parentEntry.parentSessionKey,
+        })
+      : null;
+  const channelSelection = channelModelOverride
+    ? resolveModelRefFromString({
+        cfg,
+        raw: channelModelOverride.model,
+        defaultProvider: defaultSelection.provider,
+      })?.ref
+    : null;
+  return {
+    ...(channelSelection ?? defaultSelection),
+    config: cfg,
   };
 }
 
@@ -1605,10 +1654,14 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       }
       const inheritedSelection = normalizeOptionalString(p.model)
         ? {}
-        : inheritSessionRuntimeSelection(parentSessionEntry, {
-            ...resolveSessionModelRef(cfg, parentSessionEntry, parentAgentId ?? targetAgentId),
-            config: cfg,
-          });
+        : inheritSessionRuntimeSelection(
+            parentSessionEntry,
+            resolveParentExpectedRuntimeSelection(
+              cfg,
+              parentSessionEntry,
+              parentAgentId ?? targetAgentId,
+            ),
+          );
       const nextEntry: SessionEntry = {
         ...patched.entry,
         ...inheritedSelection,

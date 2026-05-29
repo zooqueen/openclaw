@@ -271,6 +271,54 @@ test("sessions.create inherits healthy auto auth runtime selection", async () =>
   expect(created.payload?.entry?.authProfileOverrideSource).toBe("auto");
 });
 
+test("sessions.create inherits auto auth runtime selection for a channel primary", async () => {
+  await createSessionStoreDir();
+  testState.agentConfig = { model: { primary: "minimax/MiniMax-M2.7" } };
+  testState.channelsConfig = {
+    modelByChannel: {
+      telegram: {
+        "*": "anthropic/claude-opus-4-6",
+      },
+    },
+  };
+  await writeSessionStore({
+    entries: {
+      main: sessionStoreEntry("sess-parent", {
+        channel: "telegram",
+        chatType: "direct",
+        modelProvider: "anthropic",
+        model: "claude-opus-4-6",
+        contextTokens: 200000,
+        authProfileOverride: "anthropic:work",
+        authProfileOverrideSource: "auto",
+      }),
+    },
+  });
+
+  const created = await directSessionReq<{
+    entry?: {
+      modelProvider?: string;
+      model?: string;
+      contextTokens?: number;
+      authProfileOverride?: string;
+      authProfileOverrideSource?: string;
+      parentSessionKey?: string;
+    };
+  }>("sessions.create", {
+    agentId: "main",
+    label: "Fresh Chat",
+    parentSessionKey: "main",
+  });
+
+  expect(created.ok).toBe(true);
+  expect(created.payload?.entry?.parentSessionKey).toBe("agent:main:main");
+  expect(created.payload?.entry?.modelProvider).toBe("anthropic");
+  expect(created.payload?.entry?.model).toBe("claude-opus-4-6");
+  expect(created.payload?.entry?.contextTokens).toBe(200000);
+  expect(created.payload?.entry?.authProfileOverride).toBe("anthropic:work");
+  expect(created.payload?.entry?.authProfileOverrideSource).toBe("auto");
+});
+
 test("sessions.create inherits runtime-equivalent OpenAI Codex auth aliases", async () => {
   await createSessionStoreDir();
   testState.agentConfig = { model: { primary: "openai/gpt-5.5" } };

@@ -1653,7 +1653,7 @@ describe("resolveSessionModelRef", () => {
     });
   });
 
-  test("ignores runtime-only model fields that are tied to an auto auth fallback", () => {
+  test("preserves runtime-only auto auth model fields in the generic resolver", () => {
     const cfg = createModelDefaultsConfig({
       primary: "minimax/MiniMax-M2.7",
     });
@@ -1667,10 +1667,10 @@ describe("resolveSessionModelRef", () => {
       authProfileOverrideSource: "auto",
     });
 
-    expect(resolved).toEqual({ provider: "minimax", model: "MiniMax-M2.7" });
+    expect(resolved).toEqual({ provider: "deepseek", model: "deepseek-v4-flash" });
   });
 
-  test("ignores legacy runtime-only model fields tied to auto auth fallback", () => {
+  test("preserves legacy runtime-only auto auth model fields in the generic resolver", () => {
     const cfg = createModelDefaultsConfig({
       primary: "minimax/MiniMax-M2.7",
     });
@@ -1684,7 +1684,7 @@ describe("resolveSessionModelRef", () => {
       authProfileOverrideCompactionCount: 2,
     });
 
-    expect(resolved).toEqual({ provider: "minimax", model: "MiniMax-M2.7" });
+    expect(resolved).toEqual({ provider: "deepseek", model: "deepseek-v4-flash" });
   });
 
   test("preserves auto auth profile runtime fields when they match the selected model", () => {
