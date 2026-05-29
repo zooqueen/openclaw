@@ -7,6 +7,53 @@ export type ModelOverrideSelection = {
   isDefault?: boolean;
 };
 
+export function hasAutoRuntimeAuthProfileSelection(
+  entry:
+    | Pick<
+        SessionEntry,
+        "authProfileOverride" | "authProfileOverrideSource" | "providerOverride" | "modelOverride"
+      >
+    | undefined,
+): boolean {
+  return (
+    entry?.authProfileOverrideSource === "auto" &&
+    normalizeOptionalString(entry.authProfileOverride) !== undefined &&
+    normalizeOptionalString(entry.providerOverride) === undefined &&
+    normalizeOptionalString(entry.modelOverride) === undefined
+  );
+}
+
+export function clearAutoRuntimeAuthProfileSelection(entry: SessionEntry): { updated: boolean } {
+  if (!hasAutoRuntimeAuthProfileSelection(entry)) {
+    return { updated: false };
+  }
+
+  let updated = false;
+  const clear = (key: keyof SessionEntry) => {
+    if (entry[key] !== undefined) {
+      delete entry[key];
+      updated = true;
+    }
+  };
+
+  clear("modelProvider");
+  clear("model");
+  clear("contextTokens");
+  clear("contextBudgetStatus");
+  clear("authProfileOverride");
+  clear("authProfileOverrideSource");
+  clear("authProfileOverrideCompactionCount");
+  clear("fallbackNoticeSelectedModel");
+  clear("fallbackNoticeActiveModel");
+  clear("fallbackNoticeReason");
+
+  if (updated) {
+    entry.updatedAt = Date.now();
+  }
+
+  return { updated };
+}
+
 function clearFallbackOrigin(entry: SessionEntry): boolean {
   let updated = false;
   if (entry.modelOverrideFallbackOriginProvider !== undefined) {

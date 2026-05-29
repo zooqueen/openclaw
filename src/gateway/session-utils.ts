@@ -74,6 +74,7 @@ import {
   normalizeMainKey,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
+import { hasAutoRuntimeAuthProfileSelection } from "../sessions/model-overrides.js";
 import { isCronRunSessionKey } from "../sessions/session-key-utils.js";
 import {
   AVATAR_MAX_BYTES,
@@ -1608,7 +1609,15 @@ export function resolveSessionModelRef(
   cfg: OpenClawConfig,
   entry?:
     | SessionEntry
-    | Pick<SessionEntry, "model" | "modelProvider" | "modelOverride" | "providerOverride">,
+    | Pick<
+        SessionEntry,
+        | "model"
+        | "modelProvider"
+        | "modelOverride"
+        | "providerOverride"
+        | "authProfileOverride"
+        | "authProfileOverrideSource"
+      >,
   agentId?: string,
   options?: { allowPluginNormalization?: boolean },
 ): { provider: string; model: string } {
@@ -1624,8 +1633,11 @@ export function resolveSessionModelRef(
       allowPluginNormalization: options?.allowPluginNormalization,
     })!;
   }
-  const runtimeProvider = normalizeOptionalString(entry?.modelProvider);
-  const runtimeModel = normalizeOptionalString(entry?.model);
+  const ignoreRuntimeModel = hasAutoRuntimeAuthProfileSelection(entry);
+  const runtimeProvider = ignoreRuntimeModel
+    ? undefined
+    : normalizeOptionalString(entry?.modelProvider);
+  const runtimeModel = ignoreRuntimeModel ? undefined : normalizeOptionalString(entry?.model);
   if (runtimeProvider && runtimeModel) {
     return { provider: runtimeProvider, model: runtimeModel };
   }

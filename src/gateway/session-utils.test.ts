@@ -1653,6 +1653,23 @@ describe("resolveSessionModelRef", () => {
     });
   });
 
+  test("ignores runtime-only model fields that are tied to an auto auth fallback", () => {
+    const cfg = createModelDefaultsConfig({
+      primary: "minimax/MiniMax-M2.7",
+    });
+
+    const resolved = resolveSessionModelRef(cfg, {
+      sessionId: "s-auto-fallback-runtime",
+      updatedAt: Date.now(),
+      modelProvider: "deepseek",
+      model: "deepseek-v4-flash",
+      authProfileOverride: "deepseek:default",
+      authProfileOverrideSource: "auto",
+    });
+
+    expect(resolved).toEqual({ provider: "minimax", model: "MiniMax-M2.7" });
+  });
+
   test("falls back to override when runtime model is not recorded yet", () => {
     const cfg = createModelDefaultsConfig({
       primary: "anthropic/claude-opus-4-6",
