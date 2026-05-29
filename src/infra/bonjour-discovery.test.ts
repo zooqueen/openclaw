@@ -180,7 +180,11 @@ describe("bonjour-discovery", () => {
     });
 
     expect(beacons).toHaveLength(1);
-    const beacon = beacons[0] as BeaconRecord;
+    const beacon = beacons[0];
+    expect(beacon).toBeDefined();
+    if (!beacon) {
+      throw new Error("expected one beacon");
+    }
     expect(beacon.domain).toBe("local.");
     expect(beacon.instanceName).toBe("Studio Gateway");
     expect(beacon.displayName).toBe("Peter’s Mac Studio");
@@ -225,7 +229,11 @@ describe("bonjour-discovery", () => {
     });
 
     expect(beacons).toHaveLength(1);
-    const beacon = beacons[0] as BeaconRecord;
+    const beacon = beacons[0];
+    expect(beacon).toBeDefined();
+    if (!beacon) {
+      throw new Error("expected one beacon");
+    }
     expect(beacon.host).toBe("broken.local");
     expect(beacon.port).toBeUndefined();
     expect(beacon.gatewayPort).toBeUndefined();
