@@ -278,7 +278,7 @@ describe("spawnSubagentDirect seam flow", () => {
     expect(agentParams.cleanupBundleMcpOnRunEnd).toBe(true);
   });
 
-  it("preserves a terminal pre-registered run when the child agent RPC fails late", async () => {
+  it("reports a terminal pre-registered timeout when the child agent RPC fails late", async () => {
     let registeredRunId: string | undefined;
     hoisted.registerSubagentRunMock.mockImplementation((record: unknown) => {
       const run = requireRecord(record);
@@ -312,8 +312,11 @@ describe("spawnSubagentDirect seam flow", () => {
       },
     );
 
-    expect(result.status).toBe("accepted");
+    expect(result.status).toBe("error");
     expect(result.runId).toBe(registeredRunId);
+    expect(result.error).toBe(
+      "Subagent run timed out before the child agent accepted the request.",
+    );
     expect(hoisted.releaseSubagentRunMock).not.toHaveBeenCalled();
     expect(gatewayRequestRecords().some((request) => request.method === "sessions.delete")).toBe(
       false,
