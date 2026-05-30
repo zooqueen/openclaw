@@ -104,10 +104,10 @@ function recordPendingGroupHistoryEntry(params: {
     limit: params.groupHistoryLimit,
     entry: {
       sender,
-      body: params.body ?? params.msg.body,
-      timestamp: params.msg.timestamp,
-      id: params.msg.id,
-      senderJid: senderIdentity.jid ?? params.msg.senderJid,
+      body: params.body ?? params.msg.payload.body,
+      timestamp: params.msg.event.timestamp,
+      id: params.msg.event.id,
+      senderJid: senderIdentity.jid ?? params.msg.platform.senderJid,
     },
   });
 }
@@ -171,9 +171,11 @@ export async function applyGroupGating(params: ApplyGroupGatingParams) {
     allowFrom: inboundPolicy.configuredAllowFrom,
   };
   const mentionMsg =
-    params.mentionText !== undefined ? { ...params.msg, body: params.mentionText } : params.msg;
+    params.mentionText !== undefined
+      ? { ...params.msg, payload: { ...params.msg.payload, body: params.mentionText } }
+      : params.msg;
   const commandBody = stripMentionsForCommand(
-    mentionMsg.body,
+    mentionMsg.payload.body,
     mentionConfig.mentionRegexes,
     self.e164,
   );
@@ -244,7 +246,7 @@ export async function applyGroupGating(params: ApplyGroupGatingParams) {
     }
     return skipGroupMessageAndStoreHistory(
       params,
-      `Group message stored for context (no mention detected) in ${params.conversationId}: ${mentionMsg.body}`,
+      `Group message stored for context (no mention detected) in ${params.conversationId}: ${mentionMsg.payload.body}`,
       params.mentionText,
     );
   }

@@ -292,16 +292,16 @@ export async function monitorWebChannel(
         }),
       });
       const shouldDebounce = (msg: WebInboundMsg) => {
-        if (msg.mediaPath || msg.mediaType) {
+        if (msg.payload.media?.path || msg.payload.media?.type) {
           return false;
         }
-        if (msg.location) {
+        if (msg.payload.location) {
           return false;
         }
-        if (msg.replyToId || msg.replyToBody) {
+        if (msg.quote?.id || msg.quote?.body) {
           return false;
         }
-        return !isControlCommandMessage(msg.body, cfg);
+        return !isControlCommandMessage(msg.payload.body, cfg);
       };
 
       let connection;

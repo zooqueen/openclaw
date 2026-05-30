@@ -125,14 +125,14 @@ export function createWebOnMessageHandler(params: {
     const baseMentionConfig = buildMentionConfig(cfg);
 
     // Same-phone mode logging retained
-    if (msg.from === msg.to) {
+    if (msg.from === msg.platform.recipientJid) {
       logVerbose(`📱 Same-phone mode detected (from === to: ${msg.from})`);
     }
 
     // Skip if this is a message we just sent (echo detection)
-    if (params.echoTracker.has(msg.body)) {
+    if (params.echoTracker.has(msg.payload.body)) {
       logVerbose("Skipping auto-reply: detected echo (message matches recently sent text)");
-      params.echoTracker.forget(msg.body);
+      params.echoTracker.forget(msg.payload.body);
       return;
     }
 
@@ -145,7 +145,8 @@ export function createWebOnMessageHandler(params: {
     // undefined = preflight was not attempted (non-audio message).
     let preflightAudioTranscript: string | null | undefined;
     const hasAudioBody =
-      msg.mediaType?.startsWith("audio/") === true && msg.body === "<media:audio>";
+      msg.payload.media?.type?.startsWith("audio/") === true &&
+      msg.payload.body === "<media:audio>";
     const canRunEarlyAudioPreflight = msg.chatType === "group" || msg.accessControlPassed === true;
     let ackAlreadySent = false;
     let ackReaction: AckReactionHandle | null = null;
@@ -155,7 +156,7 @@ export function createWebOnMessageHandler(params: {
         preflightAudioTranscript !== undefined ||
         !canRunEarlyAudioPreflight ||
         !hasAudioBody ||
-        !msg.mediaPath
+        !msg.payload.media?.path
       ) {
         return;
       }
@@ -193,10 +194,10 @@ export function createWebOnMessageHandler(params: {
         preflightAudioTranscript =
           (await transcribeFirstAudio({
             ctx: {
-              MediaPaths: [msg.mediaPath],
-              MediaTypes: msg.mediaType ? [msg.mediaType] : undefined,
+              MediaPaths: [msg.payload.media?.path],
+              MediaTypes: msg.payload.media?.type ? [msg.payload.media?.type] : undefined,
               From: msg.from,
-              To: msg.to,
+              To: msg.platform.recipientJid,
               Provider: "whatsapp",
               Surface: "whatsapp",
               OriginatingChannel: "whatsapp",
@@ -215,12 +216,12 @@ export function createWebOnMessageHandler(params: {
       const sender = getSenderIdentity(msg);
       const metaCtx = {
         From: msg.from,
-        To: msg.to,
+        To: msg.platform.recipientJid,
         SessionKey: route.sessionKey,
         AccountId: route.accountId,
         ChatType: msg.chatType,
         ConversationLabel: conversationId,
-        GroupSubject: msg.groupSubject,
+        GroupSubject: msg.group?.subject,
         SenderName: sender.name ?? undefined,
         SenderId: getPrimaryIdentityId(sender) ?? undefined,
         SenderE164: sender.e164 ?? undefined,
@@ -244,7 +245,7 @@ export function createWebOnMessageHandler(params: {
       let gating = await applyGroupGating({
         cfg,
         msg,
-        deferMissingMention: hasAudioBody && Boolean(msg.mediaPath),
+        deferMissingMention: hasAudioBody && Boolean(msg.payload.media?.path),
         conversationId,
         groupHistoryKey,
         agentId: route.agentId,
@@ -289,11 +290,16 @@ export function createWebOnMessageHandler(params: {
       }
     } else {
       // Ensure `peerId` for DMs is stable and stored as E.164 when possible.
-      if (!msg.sender?.e164 && !msg.senderE164 && peerId && peerId.startsWith("+")) {
+      if (
+        !msg.platform.sender?.e164 &&
+        !msg.platform.senderE164 &&
+        peerId &&
+        peerId.startsWith("+")
+      ) {
         const normalized = normalizeE164(peerId);
         if (normalized) {
-          msg.sender = { ...msg.sender, e164: normalized };
-          msg.senderE164 = normalized;
+          msg.platform.sender = { ...msg.platform.sender, e164: normalized };
+          msg.platform.senderE164 = normalized;
         }
       }
     }

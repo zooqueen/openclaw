@@ -32,14 +32,14 @@ export function buildInboundLine(params: {
   });
   const prefixStr = messagePrefix ? `${messagePrefix} ` : "";
   const replyContext = formatReplyContext(msg);
-  const baseLine = `${prefixStr}${msg.body}${replyContext ? `\n\n${replyContext}` : ""}`;
+  const baseLine = `${prefixStr}${msg.payload.body}${replyContext ? `\n\n${replyContext}` : ""}`;
   const sender = getSenderIdentity(msg);
 
   // Wrap with standardized envelope for the agent.
   return formatInboundEnvelope({
     channel: "WhatsApp",
     from: msg.chatType === "group" ? msg.from : msg.from?.replace(/^whatsapp:/, ""),
-    timestamp: msg.timestamp,
+    timestamp: msg.event.timestamp,
     body: baseLine,
     chatType: msg.chatType,
     sender: {
@@ -49,6 +49,6 @@ export function buildInboundLine(params: {
     },
     previousTimestamp,
     envelope,
-    fromMe: msg.fromMe,
+    fromMe: msg.platform.fromMe,
   });
 }

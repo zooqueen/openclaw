@@ -141,12 +141,12 @@ function logWhatsAppReplyDeliveryError(params: {
     {
       err: normalizeErrForLog(params.err),
       replyKind: params.info.kind,
-      correlationId: params.msg.id ?? null,
+      correlationId: params.msg.event.id ?? null,
       connectionId: params.connectionId,
       conversationId: params.conversationId,
-      chatId: params.msg.chatId ?? null,
+      chatId: params.msg.platform.chatJid ?? null,
       to: params.msg.from ?? null,
-      from: params.msg.to ?? null,
+      from: params.msg.platform.recipientJid ?? null,
     },
     "auto-reply delivery failed",
   );
@@ -310,12 +310,12 @@ export async function buildWhatsAppInboundContext(params: {
       : undefined;
 
   const media = toInboundMediaFacts(
-    params.msg.mediaPath || params.msg.mediaUrl
+    params.msg.payload.media?.path || params.msg.payload.media?.url
       ? [
           {
-            path: params.msg.mediaPath,
-            url: params.msg.mediaUrl ?? params.msg.mediaPath,
-            contentType: params.msg.mediaType,
+            path: params.msg.payload.media?.path,
+            url: params.msg.payload.media?.url ?? params.msg.payload.media?.path,
+            contentType: params.msg.payload.media?.type,
           },
         ]
       : undefined,
@@ -333,11 +333,11 @@ export async function buildWhatsAppInboundContext(params: {
           }
         : undefined,
       groupSystemPrompt: params.groupSystemPrompt,
-      untrustedContext: params.msg.untrustedStructuredContext,
+      untrustedContext: params.msg.payload.untrustedStructuredContext,
     },
     media,
-    messageId: params.msg.id,
-    timestamp: params.msg.timestamp,
+    messageId: params.msg.event.id,
+    timestamp: params.msg.event.timestamp,
     from: params.msg.from,
     sender: {
       id: params.sender.id ?? params.sender.e164,
@@ -354,15 +354,15 @@ export async function buildWhatsAppInboundContext(params: {
       routeSessionKey: params.route.sessionKey,
     },
     reply: {
-      to: params.msg.to,
+      to: params.msg.platform.recipientJid,
       originatingTo: params.msg.from,
     },
     message: {
       body: params.combinedBody,
-      bodyForAgent: params.bodyForAgent ?? params.msg.body,
+      bodyForAgent: params.bodyForAgent ?? params.msg.payload.body,
       inboundHistory,
-      rawBody: params.rawBody ?? params.msg.body,
-      commandBody: params.commandBody ?? params.msg.body,
+      rawBody: params.rawBody ?? params.msg.payload.body,
+      commandBody: params.commandBody ?? params.msg.payload.body,
     },
     access: {
       ...(params.msg.wasMentioned !== undefined
@@ -380,9 +380,9 @@ export async function buildWhatsAppInboundContext(params: {
     commandTurn: params.commandTurn,
     extra: {
       Transcript: params.transcript,
-      GroupSubject: params.msg.groupSubject,
+      GroupSubject: params.msg.group?.subject,
       GroupMembers: formatGroupMembers({
-        participants: params.msg.groupParticipants,
+        participants: params.msg.group?.participants,
         roster: params.groupMemberRoster,
         fallbackE164: params.sender.e164,
       }),
@@ -393,7 +393,7 @@ export async function buildWhatsAppInboundContext(params: {
           ? params.commandTurn.source
           : undefined),
       ReplyThreading: params.replyThreading,
-      ...(params.msg.location ? toLocationContext(params.msg.location) : {}),
+      ...(params.msg.payload.location ? toLocationContext(params.msg.payload.location) : {}),
     },
   });
 }
@@ -616,12 +616,12 @@ export async function dispatchWhatsAppBufferedReply(params: {
     if (!delivery.providerAccepted) {
       params.replyLogger.warn(
         {
-          correlationId: params.msg.id ?? null,
+          correlationId: params.msg.event.id ?? null,
           connectionId: params.connectionId,
           conversationId: params.conversationId,
-          chatId: params.msg.chatId,
+          chatId: params.msg.platform.chatJid,
           to: params.msg.from,
-          from: params.msg.to,
+          from: params.msg.platform.recipientJid,
           replyKind: info.kind,
         },
         "auto-reply was not accepted by WhatsApp provider",
@@ -755,7 +755,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
         logWhatsAppMediaOnlyFlushResult(flushResult);
         return whatsAppReplyDeliveryVisibility(flushResult.delivered > 0);
       },
-      onReplyStart: params.msg.sendComposing,
+      onReplyStart: params.msg.platform.sendComposing,
       ...(statusReactionController
         ? {
             onCompactionStart: async () => {

@@ -27,7 +27,7 @@ export type WhatsAppStatusReactionParams = {
 export async function createWhatsAppStatusReactionController(
   params: WhatsAppStatusReactionParams,
 ): Promise<StatusReactionController | null> {
-  if (!params.msg.id) {
+  if (!params.msg.event.id) {
     return null;
   }
 
@@ -90,8 +90,8 @@ export async function createWhatsAppStatusReactionController(
     ...(params.accountId ? { accountId: params.accountId } : {}),
     cfg: params.cfg,
   };
-  const chatId = params.msg.chatId;
-  const msgId = params.msg.id;
+  const chatId = params.msg.platform.chatJid;
+  const msgId = params.msg.event.id;
 
   return createStatusReactionController({
     enabled: true,

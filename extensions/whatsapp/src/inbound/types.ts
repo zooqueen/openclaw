@@ -53,55 +53,81 @@ export type WhatsAppStructuredContactContext = {
   }>;
 };
 
-export type WebInboundMessage = {
+export type WhatsAppInboundEvent = {
   id?: string;
-  from: string; // conversation id: E.164 for direct chats, group JID for groups
-  conversationId: string; // alias for clarity (same as from)
-  to: string;
-  accountId: string;
-  /** Set by the real inbound monitor after access-control / pairing checks pass. */
-  accessControlPassed?: boolean;
-  body: string;
-  pushName?: string;
   timestamp?: number;
-  chatType: "direct" | "group";
-  chatId: string;
-  sender?: WhatsAppIdentity;
-  senderJid?: string;
-  senderE164?: string;
-  senderName?: string;
-  replyTo?: WhatsAppReplyContext;
-  replyToId?: string;
-  replyToBody?: string;
-  replyToSender?: string;
-  replyToSenderJid?: string;
-  replyToSenderE164?: string;
-  groupSubject?: string;
-  groupParticipants?: string[];
-  mentions?: string[];
-  mentionedJids?: string[];
-  self?: WhatsAppSelfIdentity;
-  selfJid?: string | null;
-  selfLid?: string | null;
-  selfE164?: string | null;
-  fromMe?: boolean;
+  isBatched?: boolean;
+};
+
+export type WhatsAppInboundQuote = {
+  context?: WhatsAppReplyContext;
+  id?: string;
+  body?: string;
+  sender?: {
+    displayName?: string;
+    jid?: string;
+    e164?: string;
+  };
+};
+
+export type WhatsAppInboundGroupContext = {
+  subject?: string;
+  participants?: string[];
+  mentions?: {
+    text?: string[];
+    jids?: string[];
+  };
+};
+
+export type WhatsAppInboundPayload = {
+  body: string;
+  media?: {
+    path?: string;
+    type?: string;
+    fileName?: string;
+    url?: string;
+  };
   location?: NormalizedLocation;
-  sendComposing: () => Promise<void>;
-  reply: (text: string, options?: MiscMessageGenerationOptions) => Promise<WhatsAppSendResult>;
-  sendMedia: (
-    payload: AnyMessageContent,
-    options?: MiscMessageGenerationOptions,
-  ) => Promise<WhatsAppSendResult>;
-  mediaPath?: string;
-  mediaType?: string;
-  mediaFileName?: string;
-  mediaUrl?: string;
   untrustedStructuredContext?: Array<{
     label: string;
     source?: string;
     type?: string;
     payload: unknown;
   }>;
+};
+
+export type WhatsAppInboundPlatform = {
+  chatJid: string;
+  recipientJid: string;
+  sender?: WhatsAppIdentity;
+  senderJid?: string;
+  senderE164?: string;
+  senderName?: string;
+  pushName?: string;
+  self?: WhatsAppSelfIdentity;
+  selfJid?: string | null;
+  selfLid?: string | null;
+  selfE164?: string | null;
+  fromMe?: boolean;
+  sendComposing: () => Promise<void>;
+  reply: (text: string, options?: MiscMessageGenerationOptions) => Promise<WhatsAppSendResult>;
+  sendMedia: (
+    payload: AnyMessageContent,
+    options?: MiscMessageGenerationOptions,
+  ) => Promise<WhatsAppSendResult>;
+};
+
+export type WebInboundMessage = {
+  event: WhatsAppInboundEvent;
+  payload: WhatsAppInboundPayload;
+  platform: WhatsAppInboundPlatform;
+  from: string; // conversation id: E.164 for direct chats, group JID for groups
+  conversationId: string; // alias for clarity (same as from)
+  accountId: string;
+  /** Set by the real inbound monitor after access-control / pairing checks pass. */
+  accessControlPassed?: boolean;
+  chatType: "direct" | "group";
+  quote?: WhatsAppInboundQuote;
+  group?: WhatsAppInboundGroupContext;
   wasMentioned?: boolean;
-  isBatched?: boolean;
 };
