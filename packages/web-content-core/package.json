@@ -22,5 +22,8 @@
   },
   "scripts": {
     "build": "tsdown src/index.ts src/provider-runtime-shared.ts --no-config --platform node --format esm --dts --out-dir dist --clean"
+  },
+  "dependencies": {
+    "@openclaw/secrets-core": "workspace:*"
   }
 }

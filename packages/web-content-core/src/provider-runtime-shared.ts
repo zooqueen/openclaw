@@ -1,3 +1,9 @@
+import {
+  coerceSecretRef,
+  normalizeSecretInput,
+  normalizeSecretInputString,
+} from "@openclaw/secrets-core";
+
 export type WebProviderConfigSource = {
   tools?: {
     web?: {
@@ -6,21 +12,6 @@ export type WebProviderConfigSource = {
     };
   };
 };
-
-type SecretRefSource = "env" | "file" | "exec";
-
-type SecretRef = {
-  source: SecretRefSource;
-  provider: string;
-  id: string;
-};
-
-const DEFAULT_SECRET_PROVIDER_ALIAS = "default";
-const ENV_SECRET_REF_ID_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
-const LEGACY_SECRETREF_ENV_MARKER_PREFIX = "secretref-env:";
-const LEGACY_DOUBLE_UNDERSCORE_ENV_MARKER_PREFIX = "__env__:";
-const ENV_SECRET_TEMPLATE_RE = /^\$\{([A-Z][A-Z0-9_]{0,127})\}$/;
-const ENV_SECRET_SHORTHAND_RE = /^\$([A-Z][A-Z0-9_]{0,127})$/;
 
 type RuntimeWebProviderMetadata = {
   providerConfigured?: string;
@@ -34,85 +25,6 @@ type ProviderWithCredential = {
 };
 
 type WebContentProcessEnv = Record<string, string | undefined>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeSecretInputString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function normalizeSecretInput(value: unknown): string {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const collapsed = value.replace(/[\r\n\u2028\u2029]+/g, "");
-  let latin1Only = "";
-  for (const char of collapsed) {
-    const codePoint = char.codePointAt(0);
-    if (typeof codePoint === "number" && codePoint <= 0xff) {
-      latin1Only += char;
-    }
-  }
-  return latin1Only.trim();
-}
-
-function isSecretRef(value: unknown): value is SecretRef {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (Object.keys(value).length !== 3) {
-    return false;
-  }
-  return (
-    (value.source === "env" || value.source === "file" || value.source === "exec") &&
-    typeof value.provider === "string" &&
-    value.provider.trim().length > 0 &&
-    typeof value.id === "string" &&
-    value.id.trim().length > 0
-  );
-}
-
-function coerceSecretRef(value: unknown): SecretRef | null {
-  if (isSecretRef(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    const legacyPrefix = trimmed.startsWith(LEGACY_SECRETREF_ENV_MARKER_PREFIX)
-      ? LEGACY_SECRETREF_ENV_MARKER_PREFIX
-      : trimmed.startsWith(LEGACY_DOUBLE_UNDERSCORE_ENV_MARKER_PREFIX)
-        ? LEGACY_DOUBLE_UNDERSCORE_ENV_MARKER_PREFIX
-        : undefined;
-    if (legacyPrefix) {
-      const id = trimmed.slice(legacyPrefix.length);
-      return ENV_SECRET_REF_ID_RE.test(id)
-        ? { source: "env", provider: DEFAULT_SECRET_PROVIDER_ALIAS, id }
-        : null;
-    }
-    const match = ENV_SECRET_TEMPLATE_RE.exec(trimmed) ?? ENV_SECRET_SHORTHAND_RE.exec(trimmed);
-    return match ? { source: "env", provider: DEFAULT_SECRET_PROVIDER_ALIAS, id: match[1] } : null;
-  }
-  if (
-    isRecord(value) &&
-    (value.source === "env" || value.source === "file" || value.source === "exec") &&
-    typeof value.id === "string" &&
-    value.id.trim().length > 0 &&
-    value.provider === undefined
-  ) {
-    return {
-      source: value.source,
-      provider: DEFAULT_SECRET_PROVIDER_ALIAS,
-      id: value.id,
-    };
-  }
-  return null;
-}
 
 export function resolveWebProviderConfig(
   cfg: WebProviderConfigSource | undefined,

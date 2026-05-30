@@ -9,6 +9,7 @@ const TSDOWN_PACKAGE_NAMES = [
   "media-understanding-common",
   "model-catalog-core",
   "net-policy",
+  "secrets-core",
   "speech-core",
   "terminal-core",
 ];

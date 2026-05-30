@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEnvTemplateSecretRef } from "./types.secrets.js";
+import { parseEnvTemplateSecretRef } from "./secret-ref.js";
 
 describe("parseEnvTemplateSecretRef", () => {
   it("parses ${VAR} template syntax", () => {

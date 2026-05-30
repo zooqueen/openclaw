@@ -455,6 +455,14 @@ function buildWebContentCoreDistEntries(): Record<string, string> {
   };
 }
 
+function buildSecretsCoreDistEntries(): Record<string, string> {
+  return {
+    index: "packages/secrets-core/src/index.ts",
+    "secret-input": "packages/secrets-core/src/secret-input.ts",
+    "secret-ref": "packages/secrets-core/src/secret-ref.ts",
+  };
+}
+
 function buildSpeechCoreDistEntries(): Record<string, string> {
   return {
     api: "packages/speech-core/api.ts",
@@ -653,6 +661,12 @@ export default defineConfig([
     deps: {
       neverBundle: shouldExternalizeTerminalCoreDependency,
     },
+  }),
+  nodeWorkspacePackageBuildConfig({
+    clean: true,
+    dts: RUN_NODE_SKIP_DTS_BUILD ? false : undefined,
+    entry: buildSecretsCoreDistEntries(),
+    outDir: tsdownPackageOutputRoot("secrets-core"),
   }),
   nodeWorkspacePackageBuildConfig({
     clean: true,

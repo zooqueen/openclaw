@@ -1,0 +1,31 @@
+{
+  "name": "@openclaw/secrets-core",
+  "version": "0.0.0-private",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./secret-input": {
+      "types": "./dist/secret-input.d.mts",
+      "import": "./dist/secret-input.mjs",
+      "default": "./dist/secret-input.mjs"
+    },
+    "./secret-ref": {
+      "types": "./dist/secret-ref.d.mts",
+      "import": "./dist/secret-ref.mjs",
+      "default": "./dist/secret-ref.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts src/secret-input.ts src/secret-ref.ts --no-config --platform node --format esm --dts --out-dir dist --clean"
+  }
+}

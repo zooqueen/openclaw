@@ -116,6 +116,14 @@ export const EXTENSION_PACKAGE_BOUNDARY_BASE_PATHS = {
   "@openclaw/media-generation-core/*": [
     "../dist/plugin-sdk/packages/media-generation-core/src/*.d.ts",
   ],
+  "@openclaw/secrets-core": ["../dist/plugin-sdk/packages/secrets-core/src/index.d.ts"],
+  "@openclaw/secrets-core/secret-input": [
+    "../dist/plugin-sdk/packages/secrets-core/src/secret-input.d.ts",
+  ],
+  "@openclaw/secrets-core/secret-ref": [
+    "../dist/plugin-sdk/packages/secrets-core/src/secret-ref.d.ts",
+  ],
+  "@openclaw/secrets-core/*": ["../dist/plugin-sdk/packages/secrets-core/src/*.d.ts"],
   "@openclaw/terminal-core": ["../dist/plugin-sdk/packages/terminal-core/src/index.d.ts"],
   "@openclaw/terminal-core/ansi": ["../dist/plugin-sdk/packages/terminal-core/src/ansi.d.ts"],
   "@openclaw/terminal-core/decorative-emoji": [

@@ -149,6 +149,10 @@
       ],
       "@openclaw/net-policy/url-userinfo": ["./packages/net-policy/src/url-userinfo.ts"],
       "@openclaw/net-policy/*": ["./packages/net-policy/src/*"],
+      "@openclaw/secrets-core": ["./packages/secrets-core/src/index.ts"],
+      "@openclaw/secrets-core/secret-input": ["./packages/secrets-core/src/secret-input.ts"],
+      "@openclaw/secrets-core/secret-ref": ["./packages/secrets-core/src/secret-ref.ts"],
+      "@openclaw/secrets-core/*": ["./packages/secrets-core/src/*"],
       "@openclaw/web-content-core": ["./packages/web-content-core/src/index.ts"],
       "@openclaw/web-content-core/provider-runtime-shared": [
         "./packages/web-content-core/src/provider-runtime-shared.ts"

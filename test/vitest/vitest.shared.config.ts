@@ -331,6 +331,18 @@ export const sharedVitestConfig = {
         find: "@openclaw/net-policy",
         replacement: path.join(repoRoot, "packages", "net-policy", "src", "index.ts"),
       },
+      {
+        find: "@openclaw/secrets-core/secret-input",
+        replacement: path.join(repoRoot, "packages", "secrets-core", "src", "secret-input.ts"),
+      },
+      {
+        find: "@openclaw/secrets-core/secret-ref",
+        replacement: path.join(repoRoot, "packages", "secrets-core", "src", "secret-ref.ts"),
+      },
+      {
+        find: "@openclaw/secrets-core",
+        replacement: path.join(repoRoot, "packages", "secrets-core", "src", "index.ts"),
+      },
       ...sourcePluginSdkSubpaths.map((subpath) => ({
         find: `openclaw/plugin-sdk/${subpath}`,
         replacement: path.join(repoRoot, "src", "plugin-sdk", `${subpath}.ts`),
