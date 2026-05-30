@@ -1,4 +1,5 @@
 import { resolveChannelConfigWrites } from "openclaw/plugin-sdk/channel-config-writes";
+import { runChannelInboundEvent } from "openclaw/plugin-sdk/channel-inbound";
 import { parseStrictNonNegativeInteger } from "openclaw/plugin-sdk/number-runtime";
 import type { ResolvedAgentRoute } from "openclaw/plugin-sdk/routing";
 import { resolveFeishuRuntimeAccount } from "./accounts.js";
@@ -235,7 +236,7 @@ export async function handleFeishuCommentEvent(
       `feishu[${account.accountId}]: dispatching drive comment to agent ` +
         `(session=${commentSessionKey} comment=${turn.commentId} type=${turn.noticeType})`,
     );
-    const turnResult = await core.channel.inbound.run({
+    const turnResult = await runChannelInboundEvent({
       channel: "feishu",
       accountId: route.accountId,
       raw: turn,

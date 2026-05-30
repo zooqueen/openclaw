@@ -200,27 +200,6 @@ function createFeishuBotRuntime(overrides: DeepPartial<PluginRuntime> = {}): Plu
         upsertPairingRequest: vi.fn(),
         buildPairingReply: vi.fn(),
       },
-      inbound: {
-        run: vi.fn(async (params) => {
-          const input = await params.adapter.ingest(params.raw);
-          const turn = await params.adapter.resolveTurn(input, {
-            kind: "message",
-            canStartAgentTurn: true,
-          });
-          await turn.recordInboundSession({
-            storePath: turn.storePath,
-            sessionKey: turn.ctxPayload.SessionKey ?? turn.routeSessionKey,
-            ctx: turn.ctxPayload,
-            groupResolution: turn.record?.groupResolution,
-            createIfMissing: turn.record?.createIfMissing,
-            updateLastRoute: turn.record?.updateLastRoute,
-            onRecordError: turn.record?.onRecordError ?? (() => undefined),
-          });
-          return {
-            dispatchResult: await turn.runDispatch(),
-          };
-        }),
-      },
       ...overrides.channel,
     },
     ...(overrides.system ? { system: overrides.system as PluginRuntime["system"] } : {}),

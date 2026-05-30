@@ -1,4 +1,3 @@
-import type { PreparedInboundReply } from "openclaw/plugin-sdk/channel-inbound";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClawdbotConfig, PluginRuntime } from "../runtime-api.js";
 import { handleFeishuCommentEvent } from "./comment-handler.js";
@@ -107,26 +106,6 @@ function createTestRuntime(overrides?: {
       },
     );
   const recordInboundSession = vi.fn(async () => {});
-  const dispatchPreparedForTest = vi.fn(async (turn: PreparedInboundReply<unknown>) => {
-    await turn.recordInboundSession({
-      storePath: turn.storePath,
-      sessionKey: turn.ctxPayload.SessionKey ?? turn.routeSessionKey,
-      ctx: turn.ctxPayload,
-      groupResolution: turn.record?.groupResolution,
-      createIfMissing: turn.record?.createIfMissing,
-      updateLastRoute: turn.record?.updateLastRoute,
-      onRecordError: turn.record?.onRecordError ?? (() => undefined),
-    });
-    const dispatchResult = await turn.runDispatch();
-    return {
-      admission: { kind: "dispatch" as const },
-      dispatched: true,
-      ctxPayload: turn.ctxPayload,
-      routeSessionKey: turn.routeSessionKey,
-      dispatchResult,
-    };
-  });
-
   return {
     channel: {
       routing: {
@@ -151,26 +130,6 @@ function createTestRuntime(overrides?: {
       session: {
         resolveStorePath: vi.fn(() => "/tmp/feishu-session-store.json"),
         recordInboundSession,
-      },
-      inbound: {
-        run: vi.fn(async (params: Parameters<PluginRuntime["channel"]["inbound"]["run"]>[0]) => {
-          const input = await params.adapter.ingest(params.raw);
-          if (!input) {
-            return {
-              admission: { kind: "drop" as const, reason: "ingest-null" },
-              dispatched: false,
-            };
-          }
-          const eventClass = {
-            kind: "message" as const,
-            canStartAgentTurn: true,
-          };
-          const turn = await params.adapter.resolveTurn(input, eventClass, {});
-          if (!("runDispatch" in turn)) {
-            throw new Error("feishu comment test runtime only supports prepared turns");
-          }
-          return await dispatchPreparedForTest(turn as PreparedInboundReply<unknown>);
-        }) as unknown as PluginRuntime["channel"]["inbound"]["run"],
       },
       pairing: {
         readAllowFromStore: vi.fn(overrides?.readAllowFromStore ?? (async () => [])),
