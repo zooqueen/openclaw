@@ -32,7 +32,7 @@ function copyArrayEntries(value: unknown): unknown[] {
     try {
       entries.push(value[index]);
     } catch {
-      return [];
+      continue;
     }
   }
   return entries;

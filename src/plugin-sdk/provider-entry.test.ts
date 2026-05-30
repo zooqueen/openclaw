@@ -345,6 +345,46 @@ describe("defineSingleProviderPluginEntry", () => {
     ]);
   });
 
+  it("skips unreadable provider catalog model rows while preserving healthy siblings", async () => {
+    const models = Object.defineProperty([createModel("mock-model", "Mock Model")], "1", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin provider model row read failed");
+      },
+    });
+    const entry = defineSingleProviderPluginEntry({
+      id: "mockplugin",
+      name: "Mock Provider",
+      description: "Synthetic provider plugin",
+      provider: {
+        label: "Mock",
+        docsPath: "/providers/mockplugin",
+        catalog: {
+          run: async () => ({
+            providers: {
+              mockplugin: {
+                api: "openai-completions" as const,
+                baseUrl: "https://mockplugin.test/v1",
+                models,
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    const { unifiedCatalog } = await captureProviderEntry({ entry });
+    expect(unifiedCatalog).toEqual([
+      {
+        kind: "text",
+        provider: "mockplugin",
+        model: "mock-model",
+        label: "Mock Model",
+        source: "live",
+      },
+    ]);
+  });
+
   it("registers provider auth entries without using source array methods", async () => {
     const auth = Object.assign(
       [
