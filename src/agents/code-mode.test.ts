@@ -1,3 +1,4 @@
+import { resolveCodeModeRuntimeWorkerUrl } from "@openclaw/code-mode-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPluginToolMeta } from "../plugins/tools.js";
 import {
@@ -180,6 +181,13 @@ describe("Code Mode", () => {
     expect(testing.resolveCodeModeWorkerUrl("file:///repo/dist/selection-abc123.js").pathname).toBe(
       "/repo/dist/agents/code-mode.worker.js",
     );
+  });
+
+  it("resolves the package worker URL in the runtime package dist", () => {
+    expect(
+      resolveCodeModeRuntimeWorkerUrl("file:///repo/dist/packages/code-mode-runtime/index.js")
+        .pathname,
+    ).toBe("/repo/dist/packages/code-mode-runtime/worker.js");
   });
 
   it("hides all normal tools behind exec and wait", () => {

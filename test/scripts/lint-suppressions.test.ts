@@ -8,7 +8,7 @@ import { listGitTrackedFiles, toRepoRelativePath } from "../../src/test-utils/re
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 const IGNORED_DIRS = new Set([".cache", ".git", "build", "coverage", "dist", "node_modules"]);
-const ROOTS = ["src", "extensions", "scripts", "ui"] as const;
+const ROOTS = ["src", "extensions", "packages", "scripts", "ui"] as const;
 const SUPPRESSION_PATTERN = /(?:oxlint|eslint)-disable(?:-next-line)?\s+([@/\w-]+)(?:\s+--|$)/u;
 
 type SuppressionEntry = {
@@ -185,11 +185,11 @@ describe("production lint suppressions", () => {
       "extensions/telegram/src/telegram-ingress-worker.runtime.ts|unicorn/require-post-message-target-origin|1",
       "extensions/telegram/src/telegram-ingress-worker.ts|unicorn/require-post-message-target-origin|1",
       "extensions/whatsapp/src/document-filename.ts|no-control-regex|1",
+      "packages/code-mode-runtime/src/worker.ts|unicorn/require-post-message-target-origin|1",
       "scripts/e2e/mcp-channels-harness.ts|unicorn/prefer-add-event-listener|1",
       "scripts/lib/extension-package-boundary.ts|typescript/no-unnecessary-type-parameters|1",
       "scripts/lib/plugin-npm-release.ts|typescript/no-unnecessary-type-parameters|1",
       "src/agents/agent-scope.ts|no-control-regex|1",
-      "src/agents/code-mode.worker.ts|unicorn/require-post-message-target-origin|1",
       "src/agents/embedded-agent-runner/run/images.ts|no-control-regex|1",
       "src/agents/subagent-spawn.ts|no-control-regex|1",
       "src/channels/plugins/channel-runtime-surface.types.ts|typescript/no-unnecessary-type-parameters|1",

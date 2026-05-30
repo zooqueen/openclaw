@@ -372,6 +372,16 @@ function buildGatewayClientDistEntries(): Record<string, string> {
   };
 }
 
+function buildCodeModeRuntimeDistEntries(): Record<string, string> {
+  return {
+    // The root package still ships a stable agents/code-mode.worker.js entry.
+    // These entries make the extracted runtime package buildable on its own.
+    index: "packages/code-mode-runtime/src/index.ts",
+    types: "packages/code-mode-runtime/src/types.ts",
+    worker: "packages/code-mode-runtime/src/worker.ts",
+  };
+}
+
 function buildNetPolicyDistEntries(): Record<string, string> {
   return {
     // These subpaths are imported by root runtime code and exported by the
@@ -592,6 +602,12 @@ export default defineConfig([
     deps: {
       neverBundle: shouldExternalizeGatewayClientDependency,
     },
+  }),
+  nodeWorkspacePackageBuildConfig({
+    clean: true,
+    dts: RUN_NODE_SKIP_DTS_BUILD ? false : undefined,
+    entry: buildCodeModeRuntimeDistEntries(),
+    outDir: "packages/code-mode-runtime/dist",
   }),
   nodeWorkspacePackageBuildConfig({
     clean: true,

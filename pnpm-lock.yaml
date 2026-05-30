@@ -1788,6 +1788,12 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
+  packages/code-mode-runtime:
+    dependencies:
+      quickjs-wasi:
+        specifier: 3.0.0
+        version: 3.0.0
+
   packages/gateway-client:
     dependencies:
       '@openclaw/gateway-protocol':

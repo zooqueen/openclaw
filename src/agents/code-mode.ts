@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import type {
+  CodeModeFailureCode,
+  CodeModePendingBridgeRequest as PendingBridgeRequest,
+  CodeModeSettledBridgeRequest as SettledBridgeRequest,
+  CodeModeWorkerResult,
+} from "@openclaw/code-mode-runtime";
 import { Type } from "typebox";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isRecord } from "../shared/record-coerce.js";
@@ -68,21 +74,6 @@ export type CodeModeConfig = {
   maxSearchLimit: number;
 };
 
-type CodeModeBridgeMethod = "search" | "describe" | "call" | "yield";
-
-type PendingBridgeRequest = {
-  id: string;
-  method: CodeModeBridgeMethod;
-  args: unknown[];
-};
-
-type SettledBridgeRequest = {
-  id: string;
-  ok: boolean;
-  value?: unknown;
-  error?: string;
-};
-
 type PendingBridgeState = PendingBridgeRequest & {
   promise: Promise<SettledBridgeRequest>;
   settled?: SettledBridgeRequest;
@@ -102,33 +93,6 @@ type CodeModeRunState = {
 };
 
 type CodeModeToolContext = ToolSearchToolContext;
-
-type CodeModeFailureCode =
-  | "invalid_input"
-  | "runtime_unavailable"
-  | "timeout"
-  | "output_limit_exceeded"
-  | "snapshot_limit_exceeded"
-  | "internal_error";
-
-type CodeModeWorkerResult =
-  | {
-      status: "completed";
-      value: unknown;
-      output: unknown[];
-    }
-  | {
-      status: "waiting";
-      snapshotBytes: Uint8Array;
-      pendingRequests: PendingBridgeRequest[];
-      output: unknown[];
-    }
-  | {
-      status: "failed";
-      error: string;
-      code: CodeModeFailureCode;
-      output: unknown[];
-    };
 
 const activeRuns = new Map<string, CodeModeRunState>();
 const resumingRunIds = new Set<string>();
