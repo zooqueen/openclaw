@@ -30,11 +30,11 @@ Treat them differently from normal config:
 
 ## Local model lean mode
 
-`agents.defaults.experimental.localModelLean: true` is a pressure-release valve for weaker local-model setups. When it is on, OpenClaw drops three default tools — `browser`, `cron`, and `message` — from the agent's tool surface for every turn. Nothing else changes. Use `agents.list[].experimental.localModelLean` to enable or disable the same behavior for one configured agent.
+`agents.defaults.experimental.localModelLean: true` is a pressure-release valve for weaker local-model setups. When it is on, OpenClaw drops `browser` and `cron` from the agent's tool surface, and it drops `message` unless the current runtime requires source replies to go through the message tool. Nothing else changes. Use `agents.list[].experimental.localModelLean` to enable or disable the same behavior for one configured agent.
 
-### Why these three tools
+### Why these tools
 
-These three tools have the largest descriptions and the most parameter shapes in the default OpenClaw runtime. On a small-context or stricter OpenAI-compatible backend that is the difference between:
+These tools have the largest descriptions and the most parameter shapes in the default OpenClaw runtime. On a small-context or stricter OpenAI-compatible backend that is the difference between:
 
 - Tool schemas fitting cleanly in the prompt vs. crowding out conversation history.
 - The model picking the right tool vs. emitting malformed tool calls because there are too many similar-looking schemas.
@@ -94,7 +94,7 @@ Restart the Gateway after changing the flag, then confirm the trimmed tool list 
 openclaw status --deep
 ```
 
-The deep status output lists the active agent tools; `browser`, `cron`, and `message` should be absent when lean mode is on.
+The deep status output lists the active agent tools; `browser` and `cron` should be absent when lean mode is on. `message` is also absent unless the current runtime requires source replies to be delivered through the message tool.
 
 ## Experimental does not mean hidden
 
