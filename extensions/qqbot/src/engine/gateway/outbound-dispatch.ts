@@ -561,7 +561,7 @@ export async function dispatchOutbound(
     }
   } finally {
     // Dispatch can resolve without any deliver callback. Clear the watchdog
-    // before it can reject the already-settled race as an unhandled timeout.
+    // so the completed turn does not leave stale timer work behind.
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = null;

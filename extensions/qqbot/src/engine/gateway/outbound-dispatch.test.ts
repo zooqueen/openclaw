@@ -233,8 +233,8 @@ describe("dispatchOutbound", () => {
 
       await dispatchOutbound(makeInbound(), { runtime, cfg: {}, account });
 
-      // A leftover watchdog later rejects the already-settled race promise
-      // as an unhandled "Response timeout" (#88242), so none may remain.
+      // A no-deliver turn is complete here, so the response watchdog must not
+      // remain scheduled for later timeout work.
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.clearAllTimers();
