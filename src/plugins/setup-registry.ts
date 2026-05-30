@@ -176,21 +176,29 @@ function resolveRelevantSetupMigrationPluginIds(params: {
     workspaceDir: params.workspaceDir,
     env: params.env,
   });
-  for (const plugin of registry.plugins) {
-    const paths = plugin.configContracts?.compatibilityMigrationPaths;
-    if (!paths?.length) {
+  for (const plugin of copySetupManifestRecords(registry)) {
+    const pluginId = readSetupManifestRecordId(plugin);
+    if (!pluginId) {
+      continue;
+    }
+    const paths = readRecordValue(
+      readRecordValue(plugin, "configContracts"),
+      "compatibilityMigrationPaths",
+    );
+    if (!Array.isArray(paths) || paths.length === 0) {
       continue;
     }
     if (
       paths.some(
         (pathPattern) =>
+          typeof pathPattern === "string" &&
           collectPluginConfigContractMatches({
             root: params.config,
             pathPattern,
           }).length > 0,
       )
     ) {
-      ids.add(plugin.id);
+      ids.add(pluginId);
     }
   }
   return [...ids].toSorted();
@@ -368,6 +376,56 @@ function matchesProvider(provider: ProviderPlugin, providerId: string): boolean 
   ].some((alias) => normalizeProviderId(alias) === normalized);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readRecordValue(record: unknown, key: string): unknown {
+  if (!isRecord(record)) {
+    return undefined;
+  }
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function readSetupManifestRecordId(record: PluginManifestRecord): string | undefined {
+  const id = readRecordValue(record, "id");
+  return typeof id === "string" && id ? id : undefined;
+}
+
+function copySetupManifestRecords(registry: PluginManifestRegistry): PluginManifestRecord[] {
+  const plugins = readRecordValue(registry, "plugins");
+  if (!Array.isArray(plugins)) {
+    return [];
+  }
+  let length: number;
+  try {
+    length = plugins.length;
+  } catch {
+    return [];
+  }
+  const records: PluginManifestRecord[] = [];
+  for (let index = 0; index < length; index += 1) {
+    let record: unknown;
+    try {
+      record = plugins[index];
+    } catch {
+      continue;
+    }
+    if (typeof readRecordValue(record, "id") === "string") {
+      records.push(record as PluginManifestRecord);
+    }
+  }
+  return records;
+}
+
+function setupRequiresRuntimeFalse(record: PluginManifestRecord): boolean {
+  return readRecordValue(readRecordValue(record, "setup"), "requiresRuntime") === false;
+}
+
 function loadSetupManifestRegistry(params?: {
   config?: OpenClawConfig;
   workspaceDir?: string;
@@ -389,9 +447,13 @@ function findUniqueSetupManifestOwner(params: {
   normalizedId: string;
   listIds: (record: PluginManifestRecord) => readonly string[];
 }): PluginManifestRecord | undefined {
-  const matches = params.registry.plugins.filter((entry) =>
-    params.listIds(entry).some((id) => normalizeProviderId(id) === params.normalizedId),
-  );
+  const matches = copySetupManifestRecords(params.registry).filter((entry) => {
+    try {
+      return params.listIds(entry).some((id) => normalizeProviderId(id) === params.normalizedId);
+    } catch {
+      return false;
+    }
+  });
   if (matches.length === 0) {
     return undefined;
   }
@@ -416,11 +478,21 @@ function pushDescriptorRuntimeDisabledDiagnostic(params: {
   record: PluginManifestRecord;
   diagnostics: PluginSetupRegistryDiagnostic[];
 }): void {
-  if (!resolveDeclaredSetupRuntimeSource(params.record)) {
+  const pluginId = readSetupManifestRecordId(params.record);
+  if (!pluginId) {
+    return;
+  }
+  let source: string | null;
+  try {
+    source = resolveDeclaredSetupRuntimeSource(params.record);
+  } catch {
+    return;
+  }
+  if (!source) {
     return;
   }
   params.diagnostics.push({
-    pluginId: params.record.id,
+    pluginId,
     code: "setup-descriptor-runtime-disabled",
     message:
       "setup.requiresRuntime is false, so OpenClaw ignored the plugin setup runtime entry. Remove setup-api/openclaw.setupEntry or set requiresRuntime true if setup lookup still needs plugin code.",
@@ -532,76 +604,90 @@ export function resolvePluginSetupRegistry(params?: {
       pluginIds: params?.pluginIds,
     });
 
-  for (const record of manifestRegistry.plugins) {
-    if (scopedPluginIds && !scopedPluginIds.has(record.id)) {
+  for (const record of copySetupManifestRecords(manifestRegistry)) {
+    const recordId = readSetupManifestRecordId(record);
+    if (!recordId) {
       continue;
     }
-    if (record.setup?.requiresRuntime === false) {
+    if (scopedPluginIds && !scopedPluginIds.has(recordId)) {
+      continue;
+    }
+    if (setupRequiresRuntimeFalse(record)) {
       pushDescriptorRuntimeDisabledDiagnostic({
         record,
         diagnostics,
       });
       continue;
     }
-    const setupRegistration = resolveSetupRegistration(record);
+    let setupRegistration: ReturnType<typeof resolveSetupRegistration>;
+    try {
+      setupRegistration = resolveSetupRegistration(record);
+    } catch {
+      continue;
+    }
     if (!setupRegistration) {
       continue;
     }
 
     const recordProviders: ProviderPlugin[] = [];
     const recordCliBackends: CliBackendPlugin[] = [];
-    const api = buildSetupPluginApi({
-      record,
-      setupSource: setupRegistration.setupSource,
-      handlers: {
-        registerProvider(provider) {
-          const providerId = readSetupProviderId(provider);
-          const normalizedProviderId = providerId ? normalizeProviderId(providerId) : "";
-          if (!normalizedProviderId) {
-            return;
-          }
-          const key = `${record.id}:${normalizedProviderId}`;
-          if (providerKeys.has(key)) {
-            return;
-          }
-          providerKeys.add(key);
-          providers.push({
-            pluginId: record.id,
-            provider,
-          });
-          recordProviders.push(provider);
+    let api: ReturnType<typeof buildSetupPluginApi>;
+    try {
+      api = buildSetupPluginApi({
+        record,
+        setupSource: setupRegistration.setupSource,
+        handlers: {
+          registerProvider(provider) {
+            const providerId = readSetupProviderId(provider);
+            const normalizedProviderId = providerId ? normalizeProviderId(providerId) : "";
+            if (!normalizedProviderId) {
+              return;
+            }
+            const key = `${recordId}:${normalizedProviderId}`;
+            if (providerKeys.has(key)) {
+              return;
+            }
+            providerKeys.add(key);
+            providers.push({
+              pluginId: recordId,
+              provider,
+            });
+            recordProviders.push(provider);
+          },
+          registerCliBackend(backend) {
+            const backendId = readSetupCliBackendId(backend);
+            const normalizedBackendId = backendId ? normalizeProviderId(backendId) : "";
+            if (!normalizedBackendId) {
+              return;
+            }
+            const key = `${recordId}:${normalizedBackendId}`;
+            if (cliBackendKeys.has(key)) {
+              return;
+            }
+            cliBackendKeys.add(key);
+            cliBackends.push({
+              pluginId: recordId,
+              backend,
+            });
+            recordCliBackends.push(backend);
+          },
+          registerConfigMigration(migrate) {
+            configMigrations.push({
+              pluginId: recordId,
+              migrate,
+            });
+          },
+          registerAutoEnableProbe(probe) {
+            autoEnableProbes.push({
+              pluginId: recordId,
+              probe,
+            });
+          },
         },
-        registerCliBackend(backend) {
-          const backendId = readSetupCliBackendId(backend);
-          const normalizedBackendId = backendId ? normalizeProviderId(backendId) : "";
-          if (!normalizedBackendId) {
-            return;
-          }
-          const key = `${record.id}:${normalizedBackendId}`;
-          if (cliBackendKeys.has(key)) {
-            return;
-          }
-          cliBackendKeys.add(key);
-          cliBackends.push({
-            pluginId: record.id,
-            backend,
-          });
-          recordCliBackends.push(backend);
-        },
-        registerConfigMigration(migrate) {
-          configMigrations.push({
-            pluginId: record.id,
-            migrate,
-          });
-        },
-        registerAutoEnableProbe(probe) {
-          autoEnableProbes.push({
-            pluginId: record.id,
-            probe,
-          });
-        },
-      },
-    });
+      });
+    } catch {
+      continue;
+    }
 
     try {
       const result = setupRegistration.register(api);
@@ -612,12 +698,16 @@ export function resolvePluginSetupRegistry(params?: {
     } catch {
       continue;
     }
-    pushSetupDescriptorDriftDiagnostics({
-      record,
-      providers: recordProviders,
-      cliBackends: recordCliBackends,
-      diagnostics,
-    });
+    try {
+      pushSetupDescriptorDriftDiagnostics({
+        record,
+        providers: recordProviders,
+        cliBackends: recordCliBackends,
+        diagnostics,
+      });
+    } catch {
+      continue;
+    }
   }
 
   const registry = {
@@ -654,35 +744,45 @@ export function resolvePluginSetupProvider(params: {
     return undefined;
   }
 
-  const setupRegistration = resolveSetupRegistration(record);
+  let setupRegistration: ReturnType<typeof resolveSetupRegistration>;
+  try {
+    setupRegistration = resolveSetupRegistration(record);
+  } catch {
+    return undefined;
+  }
   if (!setupRegistration) {
     return undefined;
   }
 
   let matchedProvider: ProviderPlugin | undefined;
   const localProviderKeys = new Set<string>();
-  const api = buildSetupPluginApi({
-    record,
-    setupSource: setupRegistration.setupSource,
-    handlers: {
-      registerProvider(provider) {
-        const providerId = readSetupProviderId(provider);
-        const key = providerId ? normalizeProviderId(providerId) : "";
-        if (!key) {
-          return;
-        }
-        if (localProviderKeys.has(key)) {
-          return;
-        }
-        localProviderKeys.add(key);
-        if (matchesProvider(provider, normalizedProvider)) {
-          matchedProvider = provider;
-        }
+  let api: ReturnType<typeof buildSetupPluginApi>;
+  try {
+    api = buildSetupPluginApi({
+      record,
+      setupSource: setupRegistration.setupSource,
+      handlers: {
+        registerProvider(provider) {
+          const providerId = readSetupProviderId(provider);
+          const key = providerId ? normalizeProviderId(providerId) : "";
+          if (!key) {
+            return;
+          }
+          if (localProviderKeys.has(key)) {
+            return;
+          }
+          localProviderKeys.add(key);
+          if (matchesProvider(provider, normalizedProvider)) {
+            matchedProvider = provider;
+          }
+        },
+        registerConfigMigration() {},
+        registerAutoEnableProbe() {},
       },
-      registerConfigMigration() {},
-      registerAutoEnableProbe() {},
-    },
-  });
+    });
+  } catch {
+    return undefined;
+  }
 
   try {
     const result = setupRegistration.register(api);
@@ -723,36 +823,46 @@ export function resolvePluginSetupCliBackend(params: {
     return undefined;
   }
 
-  const setupRegistration = resolveSetupRegistration(record);
+  let setupRegistration: ReturnType<typeof resolveSetupRegistration>;
+  try {
+    setupRegistration = resolveSetupRegistration(record);
+  } catch {
+    return undefined;
+  }
   if (!setupRegistration) {
     return undefined;
   }
 
   let matchedBackend: CliBackendPlugin | undefined;
   const localBackendKeys = new Set<string>();
-  const api = buildSetupPluginApi({
-    record,
-    setupSource: setupRegistration.setupSource,
-    handlers: {
-      registerProvider() {},
-      registerConfigMigration() {},
-      registerAutoEnableProbe() {},
-      registerCliBackend(backend) {
-        const backendId = readSetupCliBackendId(backend);
-        const key = backendId ? normalizeProviderId(backendId) : "";
-        if (!key) {
-          return;
-        }
-        if (localBackendKeys.has(key)) {
-          return;
-        }
-        localBackendKeys.add(key);
-        if (key === normalized) {
-          matchedBackend = backend;
-        }
+  let api: ReturnType<typeof buildSetupPluginApi>;
+  try {
+    api = buildSetupPluginApi({
+      record,
+      setupSource: setupRegistration.setupSource,
+      handlers: {
+        registerProvider() {},
+        registerConfigMigration() {},
+        registerAutoEnableProbe() {},
+        registerCliBackend(backend) {
+          const backendId = readSetupCliBackendId(backend);
+          const key = backendId ? normalizeProviderId(backendId) : "";
+          if (!key) {
+            return;
+          }
+          if (localBackendKeys.has(key)) {
+            return;
+          }
+          localBackendKeys.add(key);
+          if (key === normalized) {
+            matchedBackend = backend;
+          }
+        },
       },
-    },
-  });
+    });
+  } catch {
+    return undefined;
+  }
 
   try {
     const result = setupRegistration.register(api);
@@ -764,7 +874,9 @@ export function resolvePluginSetupCliBackend(params: {
     return undefined;
   }
 
-  const resolvedEntry = matchedBackend ? { pluginId: record.id, backend: matchedBackend } : null;
+  const recordId = readSetupManifestRecordId(record);
+  const resolvedEntry =
+    matchedBackend && recordId ? { pluginId: recordId, backend: matchedBackend } : null;
   return resolvedEntry ?? undefined;
 }
 

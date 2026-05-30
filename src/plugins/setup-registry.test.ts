@@ -795,6 +795,85 @@ describe("setup-registry module loader", () => {
     );
   });
 
+  it("skips unreadable setup manifest rows while preserving healthy setup owners", () => {
+    const fuzzRoot = makeTempDir();
+    const mockRoot = makeTempDir();
+    writeSetupApiStub(fuzzRoot);
+    writeSetupApiStub(mockRoot);
+
+    const unreadableIdRecord = {
+      rootDir: fuzzRoot,
+    };
+    Object.defineProperty(unreadableIdRecord, "id", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin setup manifest id getter failed");
+      },
+    });
+    const unreadableSetupRecord = {
+      id: "fuzzplugin",
+      rootDir: fuzzRoot,
+    };
+    Object.defineProperty(unreadableSetupRecord, "setup", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin setup manifest setup getter failed");
+      },
+    });
+    const plugins: unknown[] = [];
+    Object.defineProperty(plugins, "0", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin setup manifest row read failed");
+      },
+    });
+    plugins[1] = unreadableIdRecord;
+    plugins[2] = unreadableSetupRecord;
+    plugins[3] = {
+      id: "mockplugin",
+      rootDir: mockRoot,
+      setup: {
+        providers: [{ id: "mockplugin-provider" }],
+        cliBackends: ["mockplugin-cli"],
+      },
+    };
+    mocks.loadPluginManifestRegistry.mockReturnValue({
+      plugins: plugins as never,
+      diagnostics: [],
+    });
+    mocks.createJiti.mockImplementation(() => {
+      return () => ({
+        default: {
+          register(api: {
+            registerProvider: (provider: unknown) => void;
+            registerCliBackend: (backend: unknown) => void;
+          }) {
+            api.registerProvider({
+              id: "mockplugin-provider",
+              label: "Mock Plugin",
+              auth: [],
+            });
+            api.registerCliBackend({
+              id: "mockplugin-cli",
+              config: { command: "mockplugin" },
+            });
+          },
+        },
+      });
+    });
+
+    const registry = resolvePluginSetupRegistry({ env: {} });
+
+    expect(registry.providers.map((entry) => entry.provider.id)).toEqual(["mockplugin-provider"]);
+    expect(registry.cliBackends.map((entry) => entry.backend.id)).toEqual(["mockplugin-cli"]);
+    expect(resolvePluginSetupProvider({ provider: "mockplugin-provider", env: {} })?.id).toBe(
+      "mockplugin-provider",
+    );
+    expect(resolvePluginSetupCliBackend({ backend: "mockplugin-cli", env: {} })?.backend.id).toBe(
+      "mockplugin-cli",
+    );
+  });
+
   it("keeps synchronously registered cli backends even when register returns a promise", () => {
     mockOpenAiCliBackendRegistration({
       requiresRuntime: true,
