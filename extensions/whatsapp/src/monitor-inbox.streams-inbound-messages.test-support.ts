@@ -191,6 +191,19 @@ describe("web monitor inbox", () => {
     expect(inbound.payload.body).toBe("ping");
     expect(inbound.from).toBe("+999");
     expect(inbound.platform.recipientJid).toBe("+123");
+    expect(inbound.admission).toEqual(
+      expect.objectContaining({
+        accountId: "default",
+        conversation: expect.objectContaining({
+          kind: "direct",
+          id: "+999",
+        }),
+        sender: expect.objectContaining({
+          id: "+999",
+          dmSenderId: "+999",
+        }),
+      }),
+    );
     expect(sock.readMessages).toHaveBeenCalledWith([
       {
         remoteJid: "999@s.whatsapp.net",
@@ -392,6 +405,19 @@ describe("web monitor inbox", () => {
     expect(inbound.platform.senderE164).toBe("+444");
     expect(inbound.chatType).toBe("group");
     expect(inbound.group?.participants).toBeUndefined();
+    expect(inbound.admission).toEqual(
+      expect.objectContaining({
+        accountId: "default",
+        conversation: expect.objectContaining({
+          kind: "group",
+          id: "123@g.us",
+        }),
+        sender: expect.objectContaining({
+          id: "+444",
+          dmSenderId: "123@g.us",
+        }),
+      }),
+    );
 
     await second.listener.close();
   });

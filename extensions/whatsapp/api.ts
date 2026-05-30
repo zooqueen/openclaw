@@ -45,6 +45,7 @@ export {
   type WebListenerCloseReason,
   type WhatsAppStructuredContactContext,
 } from "./src/inbound/types.js";
+export type { WhatsAppInboundAdmission } from "./src/inbound/admission.js";
 export {
   listWhatsAppDirectoryGroupsFromConfig,
   listWhatsAppDirectoryPeersFromConfig,

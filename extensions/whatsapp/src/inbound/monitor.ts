@@ -24,7 +24,10 @@ import type { OpenClawConfig } from "../runtime-api.js";
 import { createWaSocket, formatError, getStatusCode, waitForWaConnection } from "../session.js";
 import { resolveWhatsAppSocketTiming } from "../socket-timing.js";
 import { resolveJidToE164 } from "../text-runtime.js";
-import { checkInboundAccessControl } from "./access-control.js";
+import {
+  checkInboundAccessControl,
+  type AcceptedInboundAccessControlResult,
+} from "./access-control.js";
 import {
   claimRecentInboundMessageDelivery,
   commitRecentInboundMessage,
@@ -247,6 +250,7 @@ export async function attachWebInboxToSocket(
   }
   const self = selfIdentity.identity;
   type QueuedInboundMessageMetadata = {
+    admission: NonNullable<WebInboundMessage["admission"]>;
     dedupeKey?: string;
     debounceKey?: string;
     durableId?: string;
@@ -574,7 +578,7 @@ export async function attachWebInboxToSocket(
     groupSubject?: string;
     groupParticipants?: string[];
     messageTimestampMs?: number;
-    access: Awaited<ReturnType<typeof checkInboundAccessControl>>;
+    access: AcceptedInboundAccessControlResult;
   };
 
   const normalizeInboundMessage = async (
@@ -649,6 +653,7 @@ export async function attachWebInboxToSocket(
       from,
       selfE164: self.e164 ?? null,
       senderE164,
+      senderJid: participantJid,
       group,
       pushName: msg.pushName ?? undefined,
       isFromMe: Boolean(msg.key?.fromMe),
@@ -847,7 +852,9 @@ export async function attachWebInboxToSocket(
       return;
     }
 
-    const dedupeKey = inbound.id ? `${options.accountId}:${inbound.remoteJid}:${inbound.id}` : "";
+    const dedupeKey = inbound.id
+      ? `${inbound.access.admission.accountId}:${inbound.remoteJid}:${inbound.id}`
+      : "";
     const dedupeClaim = dedupeKey ? await claimRecentInboundMessageDelivery(dedupeKey) : "claimed";
     if (dedupeClaim !== "claimed") {
       if (dedupeClaim === "duplicate") {
@@ -857,7 +864,7 @@ export async function attachWebInboxToSocket(
       return;
     }
 
-    recordAcceptedInboundActivity(options.accountId);
+    recordAcceptedInboundActivity(inbound.access.admission.accountId);
     await enqueueInboundMessage(msg, inbound, enriched, {
       durableId,
       readReceipt: deliveryReadReceipt,
@@ -995,7 +1002,7 @@ export async function attachWebInboxToSocket(
 
     inboundLogger.info(
       {
-        from: inbound.from,
+        from: inbound.access.admission.conversation.id,
         to: self.e164 ?? "me",
         body: enriched.body,
         mediaPath: enriched.mediaPath,
@@ -1006,6 +1013,7 @@ export async function attachWebInboxToSocket(
       "inbound message",
     );
     const inboundMessage: QueuedInboundMessage = {
+      admission: inbound.access.admission,
       event: {
         id: inbound.id,
         timestamp,
@@ -1050,11 +1058,11 @@ export async function attachWebInboxToSocket(
         reply,
         sendMedia,
       },
-      from: inbound.from,
-      conversationId: inbound.from,
-      accountId: inbound.access.resolvedAccountId,
+      from: inbound.access.admission.conversation.id,
+      conversationId: inbound.access.admission.conversation.id,
+      accountId: inbound.access.admission.accountId,
       accessControlPassed: true,
-      chatType: inbound.group ? "group" : "direct",
+      chatType: inbound.access.admission.conversation.kind,
       quote: enriched.replyContext
         ? {
             context: enriched.replyContext,
@@ -1076,7 +1084,9 @@ export async function attachWebInboxToSocket(
             },
           }
         : undefined,
-      dedupeKey: inbound.id ? `${options.accountId}:${inbound.remoteJid}:${inbound.id}` : undefined,
+      dedupeKey: inbound.id
+        ? `${inbound.access.admission.accountId}:${inbound.remoteJid}:${inbound.id}`
+        : undefined,
       durableId: durable.durableId,
       readReceipt: durable.readReceipt,
       receiveOrder: durable.receiveOrder,
@@ -1090,13 +1100,15 @@ export async function attachWebInboxToSocket(
     }
     if (inboundMessage.event.id) {
       cacheInboundMessageMeta(
-        inboundMessage.accountId,
+        inboundMessage.admission.accountId,
         inboundMessage.platform.chatJid,
         inboundMessage.event.id,
         {
           participant: inboundMessage.platform.senderJid,
           participantE164:
-            inboundMessage.chatType === "direct" ? inboundMessage.platform.senderE164 : undefined,
+            inboundMessage.admission.conversation.kind === "direct"
+              ? inboundMessage.admission.sender.id
+              : undefined,
           body: inboundMessage.payload.body,
           fromMe: inboundMessage.platform.fromMe,
         },

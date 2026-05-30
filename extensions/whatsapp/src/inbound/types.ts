@@ -2,6 +2,7 @@ import type { AnyMessageContent, MiscMessageGenerationOptions } from "baileys";
 import type { NormalizedLocation } from "openclaw/plugin-sdk/channel-inbound";
 import type { PollInput } from "openclaw/plugin-sdk/poll-runtime";
 import type { WhatsAppIdentity, WhatsAppReplyContext, WhatsAppSelfIdentity } from "../identity.js";
+import type { WhatsAppInboundAdmission } from "./admission.js";
 import type { WhatsAppSendResult } from "./send-result.js";
 
 export type WebListenerCloseReason = {
@@ -118,6 +119,7 @@ export type WhatsAppInboundPlatform = {
 };
 
 export type WebInboundMessage = {
+  admission?: WhatsAppInboundAdmission;
   event: WhatsAppInboundEvent;
   payload: WhatsAppInboundPayload;
   platform: WhatsAppInboundPlatform;
