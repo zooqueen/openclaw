@@ -59,16 +59,13 @@ const MEMORY_HOST_SDK_EXPORTS = [
   "./status",
 ] as const;
 const MEMORY_HOST_SDK_ALLOWED_CORE_BRIDGE_FILES = [
-  "packages/memory-host-sdk/src/host/openclaw-runtime-auth.ts",
-  "packages/memory-host-sdk/src/host/openclaw-runtime-network.ts",
-  "packages/memory-host-sdk/src/host/openclaw-runtime.ts",
-] as const;
-const MEMORY_HOST_SDK_RUNTIME_ADAPTER_FILES = [
   "packages/memory-host-sdk/src/host/openclaw-runtime-agent.ts",
+  "packages/memory-host-sdk/src/host/openclaw-runtime-auth.ts",
   "packages/memory-host-sdk/src/host/openclaw-runtime-cli.ts",
   "packages/memory-host-sdk/src/host/openclaw-runtime-config.ts",
   "packages/memory-host-sdk/src/host/openclaw-runtime-io.ts",
   "packages/memory-host-sdk/src/host/openclaw-runtime-memory.ts",
+  "packages/memory-host-sdk/src/host/openclaw-runtime-network.ts",
   "packages/memory-host-sdk/src/host/openclaw-runtime-session.ts",
 ] as const;
 
@@ -318,9 +315,9 @@ describe("opt-in extension package boundaries", () => {
     expect(collectCoreReferenceFiles("packages/memory-host-sdk/src")).toEqual([
       ...MEMORY_HOST_SDK_ALLOWED_CORE_BRIDGE_FILES,
     ]);
-    expect(collectOpenClawRuntimeDirectImportFiles("packages/memory-host-sdk/src")).toEqual([
-      ...MEMORY_HOST_SDK_RUNTIME_ADAPTER_FILES,
-    ]);
+    expect(collectOpenClawRuntimeDirectImportFiles("packages/memory-host-sdk/src")).toStrictEqual(
+      [],
+    );
   });
 
   it("keeps plugin-package-contract independent from core internals", () => {

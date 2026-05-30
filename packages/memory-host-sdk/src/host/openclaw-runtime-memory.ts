@@ -1,15 +1,24 @@
 export {
-  buildActiveMemoryPromptSection,
-  emptyPluginConfigSchema,
+  buildMemoryPromptSection as buildActiveMemoryPromptSection,
   getMemoryCapabilityRegistration,
-  getMemoryEmbeddingProvider,
   listActiveMemoryPublicArtifacts,
+} from "../../../../src/plugins/memory-state.js";
+export type {
+  MemoryFlushPlan,
+  MemoryFlushPlanResolver,
+  MemoryPluginCapability,
+  MemoryPluginPublicArtifact,
+  MemoryPluginPublicArtifactsProvider,
+  MemoryPluginRuntime,
+  MemoryPromptSectionBuilder,
+} from "../../../../src/plugins/memory-state.js";
+export { emptyPluginConfigSchema } from "../../../../src/plugins/config-schema.js";
+export {
+  getMemoryEmbeddingProvider,
   listMemoryEmbeddingProviders,
   listRegisteredMemoryEmbeddingProviderAdapters,
   listRegisteredMemoryEmbeddingProviders,
-  resolveCanonicalRootMemoryFile,
-  shouldSkipRootMemoryAuxiliaryPath,
-} from "./openclaw-runtime.js";
+} from "../../../../src/plugins/memory-embedding-provider-runtime.js";
 export type {
   MemoryEmbeddingBatchChunk,
   MemoryEmbeddingBatchOptions,
@@ -19,12 +28,9 @@ export type {
   MemoryEmbeddingProviderCreateOptions,
   MemoryEmbeddingProviderCreateResult,
   MemoryEmbeddingProviderRuntime,
-  MemoryFlushPlan,
-  MemoryFlushPlanResolver,
-  MemoryPluginCapability,
-  MemoryPluginPublicArtifact,
-  MemoryPluginPublicArtifactsProvider,
-  MemoryPluginRuntime,
-  MemoryPromptSectionBuilder,
-  OpenClawPluginApi,
-} from "./openclaw-runtime.js";
+} from "../../../../src/plugins/memory-embedding-providers.js";
+export type { OpenClawPluginApi } from "../../../../src/plugins/types.js";
+export {
+  resolveCanonicalRootMemoryFile,
+  shouldSkipRootMemoryAuxiliaryPath,
+} from "../../../../src/memory/root-memory-files.js";
