@@ -17,6 +17,7 @@ export function createExtensionWhatsAppVitestConfig(
     {
       dir: "extensions",
       env,
+      fileParallelism: false,
       name: "extension-whatsapp",
       passWithNoTests: true,
       setupFiles: ["test/setup.extensions.ts"],
