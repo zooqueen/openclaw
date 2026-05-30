@@ -525,7 +525,10 @@ async function runGatewayServicesHealth(ctx: DoctorHealthFlowContext): Promise<v
     resolveDoctorMode(ctx.cfg),
     ctx.runtime,
     ctx.prompter,
-    { allowExecSecretRefs: ctx.options.allowExec === true },
+    {
+      allowExecSecretRefs: ctx.options.allowExec === true,
+      ...resolveLegacyParentVersionOverride(ctx),
+    },
   );
   await noteMacLaunchAgentOverrides();
   await noteMacStaleOpenClawUpdateLaunchdJobs();
@@ -868,11 +871,8 @@ async function runWriteConfigHealth(ctx: DoctorHealthFlowContext): Promise<void>
       ctx.runtime.log("Skipping doctor config write during legacy update handoff.");
       return;
     }
-    const legacyParentVersionOverride = isLegacyParentWritableUpdateDoctorPass(
-      ctx.env ?? process.env,
-    )
-      ? ctx.configResult.sourceLastTouchedVersion?.trim() || ctx.cfg.meta?.lastTouchedVersion
-      : undefined;
+    const legacyParentVersionOverride =
+      resolveLegacyParentVersionOverride(ctx).lastTouchedVersionOverride;
     await replaceConfigFile({
       nextConfig: ctx.cfg,
       afterWrite: { mode: "auto" },
@@ -902,6 +902,17 @@ async function runWriteConfigHealth(ctx: DoctorHealthFlowContext): Promise<void>
   if (!ctx.prompter.shouldRepair) {
     ctx.runtime.log(`Run "${formatCliCommand("openclaw doctor --fix")}" to apply changes.`);
   }
+}
+
+function resolveLegacyParentVersionOverride(ctx: DoctorHealthFlowContext): {
+  lastTouchedVersionOverride?: string;
+} {
+  if (!isLegacyParentWritableUpdateDoctorPass(ctx.env ?? process.env)) {
+    return {};
+  }
+  const version =
+    ctx.configResult.sourceLastTouchedVersion?.trim() || ctx.cfg.meta?.lastTouchedVersion;
+  return version ? { lastTouchedVersionOverride: version } : {};
 }
 
 async function runWorkspaceSuggestionsHealth(ctx: DoctorHealthFlowContext): Promise<void> {

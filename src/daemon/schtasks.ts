@@ -462,6 +462,27 @@ async function isStartupEntryInstalled(env: GatewayServiceEnv): Promise<boolean>
   return false;
 }
 
+async function removeStartupEntries(
+  env: GatewayServiceEnv,
+  stdout: NodeJS.WritableStream,
+): Promise<void> {
+  for (const startupEntryPath of resolveStartupEntryPaths(env)) {
+    try {
+      await fs.unlink(startupEntryPath);
+      stdout.write(`${formatLine("Removed Windows login item", startupEntryPath)}\n`);
+    } catch {}
+  }
+}
+
+async function hasScheduledTaskRunningEvidence(env: GatewayServiceEnv): Promise<boolean> {
+  const runtime = await readScheduledTaskRuntime(env).catch(() => null);
+  if (runtime?.status !== "running") {
+    return false;
+  }
+  const normalizedResult = normalizeTaskResultCode(runtime.lastRunResult);
+  return normalizedResult !== null && RUNNING_RESULT_CODES.has(normalizedResult);
+}
+
 async function isRegisteredScheduledTask(env: GatewayServiceEnv): Promise<boolean> {
   const taskName = resolveTaskName(env);
   const res = await execSchtasks(["/Query", "/TN", taskName]).catch(() => ({
@@ -1145,14 +1166,14 @@ async function activateScheduledTask(params: {
   scriptPath: string;
   taskLaunchPath: string;
   description?: string;
-}) {
+}): Promise<"scheduled-task" | "startup-fallback"> {
   const taskDescription = params.description ?? "OpenClaw Gateway";
 
   const taskName = resolveTaskName(params.env);
   const quotedLaunchPath = quoteSchtasksArg(params.taskLaunchPath);
 
   if (await updateExistingScheduledTask({ ...params, taskName, quotedLaunchPath })) {
-    return;
+    return "scheduled-task";
   }
 
   const taskUser = resolveTaskUser(params.env);
@@ -1206,7 +1227,7 @@ async function activateScheduledTask(params: {
         ],
         { leadingBlankLine: true },
       );
-      return;
+      return "startup-fallback";
     }
     throw new Error(`schtasks create failed: ${detail}`.trim());
   }
@@ -1225,19 +1246,27 @@ async function activateScheduledTask(params: {
     ],
     { leadingBlankLine: true },
   );
+  return "scheduled-task";
 }
 
 export async function installScheduledTask(
   args: GatewayServiceInstallArgs,
 ): Promise<{ scriptPath: string }> {
   const staged = await writeScheduledTaskScript(args);
-  await activateScheduledTask({
+  const activation = await activateScheduledTask({
     env: args.env,
     stdout: args.stdout,
     scriptPath: staged.scriptPath,
     taskLaunchPath: staged.taskLaunchPath,
     description: staged.taskDescription,
   });
+  if (activation === "scheduled-task") {
+    // A busy gateway port can be the old Startup-folder fallback. Keep that
+    // fallback until Task Scheduler itself reports the task is running.
+    if (await hasScheduledTaskRunningEvidence(args.env)) {
+      await removeStartupEntries(args.env, args.stdout);
+    }
+  }
   return { scriptPath: staged.scriptPath };
 }
 
@@ -1252,12 +1281,7 @@ export async function uninstallScheduledTask({
     await execSchtasks(["/Delete", "/F", "/TN", taskName]);
   }
 
-  for (const startupEntryPath of resolveStartupEntryPaths(env)) {
-    try {
-      await fs.unlink(startupEntryPath);
-      stdout.write(`${formatLine("Removed Windows login item", startupEntryPath)}\n`);
-    } catch {}
-  }
+  await removeStartupEntries(env, stdout);
 
   const scriptPath = resolveTaskScriptPath(env);
   const launcherPath = resolveTaskLauncherScriptPath(env, scriptPath);
@@ -1366,6 +1390,9 @@ export async function restartScheduledTask({
     env: effectiveEnv,
     scriptPath: resolveTaskScriptPath(effectiveEnv),
   });
+  if (await hasScheduledTaskRunningEvidence(effectiveEnv)) {
+    await removeStartupEntries(effectiveEnv, stdout);
+  }
   stdout.write(`${formatLine("Restarted Scheduled Task", taskName)}\n`);
   return { outcome: "completed" };
 }
