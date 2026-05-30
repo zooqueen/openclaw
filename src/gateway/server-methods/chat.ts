@@ -2004,12 +2004,30 @@ function broadcastChatError(params: {
   errorMessage?: string;
 }) {
   const seq = nextChatSeq({ agentRunSeq: params.context.agentRunSeq }, params.runId);
+  const errorText = params.errorMessage?.trim();
   const payload = {
     runId: params.runId,
     sessionKey: params.sessionKey,
     seq,
     state: "error" as const,
     errorMessage: params.errorMessage,
+    ...(errorText
+      ? {
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text:
+                  errorText.startsWith("⚠️") || errorText.startsWith("Error:")
+                    ? errorText
+                    : `Error: ${errorText}`,
+              },
+            ],
+            timestamp: Date.now(),
+          },
+        }
+      : {}),
   };
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
