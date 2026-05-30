@@ -9,7 +9,6 @@ import {
   describePluginInstallSource,
   type PluginInstallSourceInfo,
 } from "./install-source-info.js";
-import type { InstalledPluginInstallRecordInfo } from "./installed-plugin-index.js";
 import type { PluginPackageInstall } from "./manifest.js";
 import {
   getOfficialExternalPluginCatalogManifest,
@@ -18,7 +17,7 @@ import {
   type OfficialExternalProviderAuthChoice,
 } from "./official-external-plugin-catalog.js";
 import type { PluginOrigin } from "./plugin-origin.types.js";
-import { loadPluginRegistrySnapshot, type PluginRegistryRecord } from "./plugin-registry.js";
+import { loadPluginRegistrySnapshot } from "./plugin-registry.js";
 import {
   resolveManifestProviderAuthChoices,
   type ProviderAuthChoiceMetadata,
@@ -74,32 +73,104 @@ function isPreferredOrigin(candidate: PluginOrigin, current: PluginOrigin | unde
   return !current || INSTALL_ORIGIN_PRIORITY[candidate] < INSTALL_ORIGIN_PRIORITY[current];
 }
 
+function isReadableRecord(value: unknown): value is Record<string, unknown> {
+  try {
+    return isRecord(value);
+  } catch {
+    return false;
+  }
+}
+
+function readRecordValue(record: unknown, key: string): unknown {
+  if (!isReadableRecord(record)) {
+    return undefined;
+  }
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function copyArrayEntries(value: unknown): unknown[] {
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    return [];
+  }
+  if (!isArray) {
+    return [];
+  }
+  const arrayValue = value as readonly unknown[];
+  let length: number;
+  try {
+    length = arrayValue.length;
+  } catch {
+    return [];
+  }
+  const entries: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    try {
+      entries.push(arrayValue[index]);
+    } catch {
+      continue;
+    }
+  }
+  return entries;
+}
+
+function readStringField(record: unknown, key: string): string | undefined {
+  return normalizeOptionalString(readRecordValue(record, key));
+}
+
+function readBooleanField(record: unknown, key: string): boolean | undefined {
+  const value = readRecordValue(record, key);
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readPluginOrigin(record: unknown): PluginOrigin | undefined {
+  const origin = readStringField(record, "origin");
+  return origin === "config" ||
+    origin === "bundled" ||
+    origin === "global" ||
+    origin === "workspace"
+    ? origin
+    : undefined;
+}
+
+function copyPluginRegistryRecords(snapshot: unknown): unknown[] {
+  return copyArrayEntries(readRecordValue(snapshot, "plugins")).filter(isReadableRecord);
+}
+
 function normalizeDefaultChoice(value: unknown): PluginPackageInstall["defaultChoice"] | undefined {
   return value === "clawhub" || value === "npm" || value === "local" ? value : undefined;
 }
 
-function resolveInstallInfoFromInstallRecord(
-  record: InstalledPluginInstallRecordInfo | undefined,
-): PluginPackageInstall | null {
+function resolveInstallInfoFromInstallRecord(record: unknown): PluginPackageInstall | null {
   if (!record) {
     return null;
   }
-  const npmSpec = (record.resolvedSpec ?? record.spec)?.trim();
-  const localPath = (record.installPath ?? record.sourcePath)?.trim();
-  if (record.source === "clawhub" && record.spec?.trim()) {
+  const source = readStringField(record, "source");
+  const spec = readStringField(record, "spec");
+  const resolvedSpec = readStringField(record, "resolvedSpec");
+  const npmSpec = resolvedSpec ?? spec;
+  const localPath = readStringField(record, "installPath") ?? readStringField(record, "sourcePath");
+  if (source === "clawhub" && spec) {
     return {
-      clawhubSpec: record.spec.trim(),
+      clawhubSpec: spec,
       defaultChoice: "clawhub",
     };
   }
-  if (record.source === "npm" && npmSpec) {
+  if (source === "npm" && npmSpec) {
+    const integrity = readStringField(record, "integrity");
     return {
       npmSpec,
       defaultChoice: "npm",
-      ...(record.integrity ? { expectedIntegrity: record.integrity } : {}),
+      ...(integrity ? { expectedIntegrity: integrity } : {}),
     };
   }
-  if (record.source === "path" && localPath) {
+  if (source === "path" && localPath) {
     return {
       localPath,
       defaultChoice: "local",
@@ -112,24 +183,27 @@ function resolveInstallInfoFromPackageSource(params: {
   origin: PluginOrigin;
   source?: unknown;
 }): PluginPackageInstall | null {
-  const source = isRecord(params.source) ? params.source : undefined;
-  const npm = isRecord(source?.npm) ? source.npm : undefined;
-  const clawhub = isRecord(source?.clawhub) ? source.clawhub : undefined;
-  const local = isRecord(source?.local) ? source.local : undefined;
+  const source = isReadableRecord(params.source) ? params.source : undefined;
+  const npmValue = readRecordValue(source, "npm");
+  const clawhubValue = readRecordValue(source, "clawhub");
+  const localValue = readRecordValue(source, "local");
+  const npm = isReadableRecord(npmValue) ? npmValue : undefined;
+  const clawhub = isReadableRecord(clawhubValue) ? clawhubValue : undefined;
+  const local = isReadableRecord(localValue) ? localValue : undefined;
   const npmSpec =
     params.origin === "bundled" || params.origin === "config"
-      ? normalizeOptionalString(npm?.spec)
+      ? readStringField(npm, "spec")
       : undefined;
   const clawhubSpec =
     params.origin === "bundled" || params.origin === "config"
-      ? normalizeOptionalString(clawhub?.spec)
+      ? readStringField(clawhub, "spec")
       : undefined;
-  const localPath = normalizeOptionalString(local?.path);
+  const localPath = readStringField(local, "path");
   if (!clawhubSpec && !npmSpec && !localPath) {
     return null;
   }
-  const defaultChoice = normalizeDefaultChoice(source?.defaultChoice);
-  const expectedIntegrity = normalizeOptionalString(npm?.expectedIntegrity);
+  const defaultChoice = normalizeDefaultChoice(readRecordValue(source, "defaultChoice"));
+  const expectedIntegrity = readStringField(npm, "expectedIntegrity");
   return {
     ...(clawhubSpec ? { clawhubSpec } : {}),
     ...(npmSpec ? { npmSpec } : {}),
@@ -146,14 +220,15 @@ function resolveInstallInfoFromPackageSource(params: {
 }
 
 function resolveInstallInfoFromRegistryRecord(params: {
-  record: PluginRegistryRecord;
-  installRecord?: InstalledPluginInstallRecordInfo;
+  record: unknown;
+  origin: PluginOrigin;
+  installRecord?: unknown;
 }): PluginPackageInstall | null {
   return (
     resolveInstallInfoFromInstallRecord(params.installRecord) ??
     resolveInstallInfoFromPackageSource({
-      origin: params.record.origin,
-      source: params.record.packageInstall,
+      origin: params.origin,
+      source: readRecordValue(params.record, "packageInstall"),
     })
   );
 }
@@ -175,7 +250,7 @@ function readProviderIndexPluginField(
 ): unknown {
   try {
     const plugin = (provider as { plugin?: unknown }).plugin;
-    if (!isRecord(plugin)) {
+    if (!isReadableRecord(plugin)) {
       return undefined;
     }
     return plugin[field];
@@ -209,7 +284,7 @@ function resolveInstallInfoFromProviderIndex(
   provider: OpenClawProviderIndexProvider,
 ): PluginPackageInstall | null {
   const install = readProviderIndexPluginField(provider, "install");
-  if (!isRecord(install)) {
+  if (!isReadableRecord(install)) {
     return null;
   }
   const clawhubSpec = readProviderIndexInstallStringField(install, "clawhubSpec");
@@ -240,35 +315,48 @@ function resolvePreferredInstallsByPluginId(
     workspaceDir: params.workspaceDir,
     env: params.env,
   });
-  const installedPluginIds = new Set(index.plugins.map((record) => record.pluginId));
+  const pluginRecords = copyPluginRegistryRecords(index);
+  const installedPluginIds = new Set(
+    pluginRecords
+      .map((record) => readStringField(record, "pluginId"))
+      .filter((pluginId): pluginId is string => Boolean(pluginId)),
+  );
   const normalizedConfig = normalizePluginsConfig(params.config?.plugins);
-  for (const record of index.plugins) {
+  for (const record of pluginRecords) {
+    const pluginId = readStringField(record, "pluginId");
+    const origin = readPluginOrigin(record);
+    if (!pluginId || !origin) {
+      continue;
+    }
     if (
-      record.origin === "workspace" &&
+      origin === "workspace" &&
       params.includeUntrustedWorkspacePlugins === false &&
       !resolveEffectiveEnableState({
-        id: record.pluginId,
-        origin: record.origin,
+        id: pluginId,
+        origin,
         config: normalizedConfig,
         rootConfig: params.config,
-        enabledByDefault: record.enabledByDefault,
+        enabledByDefault: readBooleanField(record, "enabledByDefault"),
       }).enabled
     ) {
       continue;
     }
+    const installRecords = readRecordValue(index, "installRecords");
     const install = resolveInstallInfoFromRegistryRecord({
       record,
-      installRecord: index.installRecords[record.pluginId],
+      origin,
+      installRecord: readRecordValue(installRecords, pluginId),
     });
     if (!install) {
       continue;
     }
-    const existing = preferredByPluginId.get(record.pluginId);
-    if (!existing || isPreferredOrigin(record.origin, existing.origin)) {
-      preferredByPluginId.set(record.pluginId, {
-        origin: record.origin,
+    const existing = preferredByPluginId.get(pluginId);
+    if (!existing || isPreferredOrigin(origin, existing.origin)) {
+      const packageName = readStringField(record, "packageName");
+      preferredByPluginId.set(pluginId, {
+        origin,
         install,
-        ...(record.packageName ? { packageName: record.packageName } : {}),
+        ...(packageName ? { packageName } : {}),
       });
     }
   }

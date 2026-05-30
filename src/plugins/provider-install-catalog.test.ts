@@ -438,6 +438,111 @@ describe("provider install catalog", () => {
     expect(resolveProviderInstallCatalogEntries()).toStrictEqual([]);
   });
 
+  it("skips unreadable registry install rows while preserving healthy manifest install metadata", () => {
+    const unreadablePluginId: Record<string, unknown> = {
+      origin: "bundled",
+      packageInstall: {
+        npm: {
+          spec: "@openclaw/fuzzplugin@1.0.0",
+        },
+      },
+    };
+    Object.defineProperty(unreadablePluginId, "pluginId", {
+      get() {
+        throw new Error("fuzzplugin id failed");
+      },
+    });
+    const unreadableInstall: Record<string, unknown> = {
+      pluginId: "fuzzplugin-install",
+      origin: "bundled",
+    };
+    Object.defineProperty(unreadableInstall, "packageInstall", {
+      get() {
+        throw new Error("fuzzplugin package install failed");
+      },
+    });
+    const revokedPlugin = Proxy.revocable(
+      {
+        pluginId: "fuzzplugin-revoked",
+        origin: "bundled",
+        packageInstall: {
+          npm: {
+            spec: "@openclaw/fuzzplugin-revoked@1.0.0",
+          },
+        },
+      },
+      {},
+    );
+    revokedPlugin.revoke();
+
+    loadPluginRegistrySnapshot.mockReturnValue(
+      registrySnapshot({
+        plugins: [
+          unreadablePluginId as never,
+          unreadableInstall as never,
+          revokedPlugin.proxy as never,
+          {
+            pluginId: "mockplugin",
+            origin: "bundled",
+            manifestPath: "/repo/extensions/mockplugin/openclaw.plugin.json",
+            manifestHash: "hash",
+            rootDir: "/repo/extensions/mockplugin",
+            enabled: true,
+            startup: {
+              sidecar: false,
+              memory: false,
+              deferConfiguredChannelFullLoadUntilAfterListen: false,
+              agentHarnesses: [],
+            },
+            compat: [],
+            packageName: "@openclaw/mockplugin",
+            packageInstall: {
+              npm: {
+                spec: "@openclaw/mockplugin@1.2.3",
+                packageName: "@openclaw/mockplugin",
+                selector: "1.2.3",
+                selectorKind: "exact-version",
+                exactVersion: true,
+                expectedIntegrity: "sha512-mockplugin",
+                pinState: "exact-with-integrity",
+              },
+              warnings: [],
+            },
+          },
+        ],
+      }),
+    );
+    resolveManifestProviderAuthChoices.mockReturnValue([
+      {
+        pluginId: "fuzzplugin-install",
+        providerId: "fuzzprovider",
+        methodId: "api-key",
+        choiceId: "fuzzprovider-api-key",
+        choiceLabel: "Fuzz Provider API key",
+      },
+      {
+        pluginId: "mockplugin",
+        providerId: "mockprovider",
+        methodId: "api-key",
+        choiceId: "mockprovider-api-key",
+        choiceLabel: "Mock Provider API key",
+      },
+    ]);
+
+    expect(resolveProviderInstallCatalogEntries().map((entry) => entry.choiceId)).toEqual([
+      "mockprovider-api-key",
+    ]);
+    expect(resolveProviderInstallCatalogEntry("mockprovider-api-key")).toMatchObject({
+      pluginId: "mockplugin",
+      providerId: "mockprovider",
+      choiceLabel: "Mock Provider API key",
+      install: {
+        npmSpec: "@openclaw/mockplugin@1.2.3",
+        expectedIntegrity: "sha512-mockplugin",
+      },
+    });
+  });
+
   it("skips untrusted workspace package install metadata when the plugin is disabled", () => {
     loadPluginRegistrySnapshot.mockReturnValue({
       version: 1,
