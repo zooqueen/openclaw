@@ -817,6 +817,47 @@ describe("markAuthProfileBlockedUntil", () => {
     expect(store.usageStats).toEqual({});
     expect(storeMocks.saveAuthProfileStore).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    "does not preserve invalid existing blockedUntil values over valid updates (lock=%s)",
+    async (useLock) => {
+      const now = 1_700_000_000_000;
+      const blockedUntil = now + 60_000;
+      const store = makeStore({
+        "openai-codex:default": {
+          blockedUntil: Number.MAX_SAFE_INTEGER,
+          blockedReason: "subscription_limit",
+        },
+      });
+      if (useLock) {
+        storeMocks.updateAuthProfileStoreWithLock.mockImplementationOnce(
+          async (lockParams: { updater: (store: AuthProfileStore) => boolean }) => {
+            const freshStore = structuredClone(store);
+            const changed = lockParams.updater(freshStore);
+            return changed ? freshStore : null;
+          },
+        );
+      }
+
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      try {
+        await markAuthProfileBlockedUntil({
+          store,
+          profileId: "openai-codex:default",
+          blockedUntil,
+          source: "codex_rate_limits",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const stats = store.usageStats?.["openai-codex:default"];
+      expect(stats?.blockedUntil).toBe(blockedUntil);
+      expect(stats?.blockedReason).toBe("subscription_limit");
+      expect(stats?.blockedSource).toBe("codex_rate_limits");
+    },
+  );
 });
 
 describe("markAuthProfileFailure — WHAM-aware Codex cooldowns", () => {
