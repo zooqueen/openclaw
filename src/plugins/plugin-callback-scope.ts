@@ -7,6 +7,8 @@ export type PluginCallbackScope = {
   pluginSource?: string;
 };
 
+type ToolPrepareArguments = NonNullable<AnyAgentTool["prepareArguments"]>;
+
 const scopedTools = new WeakMap<AnyAgentTool, Map<string, AnyAgentTool>>();
 
 function callbackScopeKey(scope: PluginCallbackScope): string {
@@ -32,15 +34,27 @@ function isAgentTool(value: unknown): value is AnyAgentTool {
   );
 }
 
-function wrapPluginToolExecute(scope: PluginCallbackScope, tool: AnyAgentTool): AnyAgentTool {
+function wrapPluginToolCallbacks(scope: PluginCallbackScope, tool: AnyAgentTool): AnyAgentTool {
   const key = callbackScopeKey(scope);
   const scopedByKey = scopedTools.get(tool);
   const cached = scopedByKey?.get(key);
   if (cached) {
     return cached;
   }
+  const prepareArguments = tool.prepareArguments;
   const wrapped: AnyAgentTool = {
     ...tool,
+    ...(prepareArguments
+      ? {
+          prepareArguments(args) {
+            return runWithPluginCallbackScope(
+              scope,
+              () =>
+                Reflect.apply(prepareArguments, tool, [args]) as ReturnType<ToolPrepareArguments>,
+            );
+          },
+        }
+      : {}),
     execute(toolCallId, params, signal, onUpdate) {
       return runWithPluginCallbackScope(
         scope,
@@ -62,9 +76,9 @@ function wrapPluginToolFactoryResult(
   result: ReturnType<OpenClawPluginToolFactory>,
 ): ReturnType<OpenClawPluginToolFactory> {
   if (Array.isArray(result)) {
-    return result.map((tool) => (isAgentTool(tool) ? wrapPluginToolExecute(scope, tool) : tool));
+    return result.map((tool) => (isAgentTool(tool) ? wrapPluginToolCallbacks(scope, tool) : tool));
   }
-  return isAgentTool(result) ? wrapPluginToolExecute(scope, result) : result;
+  return isAgentTool(result) ? wrapPluginToolCallbacks(scope, result) : result;
 }
 
 export function wrapPluginToolFactoryWithScope(
