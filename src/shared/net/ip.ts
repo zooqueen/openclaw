@@ -1,16 +1,5 @@
 import ipaddr from "ipaddr.js";
-
-function normalizeOptionalString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed || undefined;
-}
-
-function normalizeLowercaseStringOrEmpty(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
+import { normalizeLowercaseStringOrEmpty, normalizeOptionalString } from "../string-coerce.js";
 
 export type ParsedIpAddress = ipaddr.IPv4 | ipaddr.IPv6;
 type Ipv4Range = ReturnType<ipaddr.IPv4["range"]>;

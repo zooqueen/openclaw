@@ -1,5 +1,6 @@
 import { lookup as dnsLookupCb, type LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
+import type { Dispatcher } from "undici";
 import {
   extractEmbeddedIpv4FromIpv6,
   isCloudMetadataIpAddress,
@@ -13,8 +14,7 @@ import {
   isLegacyIpv4Literal,
   parseCanonicalIpAddress,
   parseLooseIpAddress,
-} from "@openclaw/net-policy/ip";
-import type { Dispatcher } from "undici";
+} from "../../shared/net/ip.js";
 import { normalizeUniqueStringEntries } from "../../shared/string-normalization.js";
 import { normalizeHostname } from "./hostname.js";
 import {

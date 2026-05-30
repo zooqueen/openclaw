@@ -1,9 +1,4 @@
 import {
-  isCloudMetadataIpAddress,
-  isLinkLocalIpAddress,
-  parseCanonicalIpAddress,
-} from "@openclaw/net-policy/ip";
-import {
   fetchWithSsrFGuard,
   withTrustedEnvProxyGuardedFetchMode,
 } from "../infra/net/fetch-guard.js";
@@ -17,6 +12,11 @@ import {
 import type { Model } from "../llm/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveDebugProxySettings } from "../proxy-capture/env.js";
+import {
+  isCloudMetadataIpAddress,
+  isLinkLocalIpAddress,
+  parseCanonicalIpAddress,
+} from "../shared/net/ip.js";
 import {
   asFiniteNumberInRange,
   clampTimerTimeoutMs,
@@ -42,6 +42,8 @@ const BLOCKED_EXACT_ORIGIN_TRUST_HOSTNAME_LABELS = new Set(["instance-data"]);
 const PLAIN_DECIMAL_NUMBER_RE = /^\d+(?:\.\d+)?$/;
 const RETRY_AFTER_HTTP_DATE_RE =
   /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ \d]\d \d{2}:\d{2}:\d{2} \d{4})$/;
+const RETRY_AFTER_ASCTIME_HTTP_DATE_RE =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ \d]\d \d{2}:\d{2}:\d{2} \d{4}$/;
 
 function hasReadableSseData(block: string): boolean {
   const dataLines = block
@@ -268,7 +270,11 @@ function parseRetryAfterSeconds(headers: Headers): number | undefined {
     return undefined;
   }
 
-  const retryAt = Date.parse(trimmedRetryAfter);
+  const retryAt = Date.parse(
+    RETRY_AFTER_ASCTIME_HTTP_DATE_RE.test(trimmedRetryAfter)
+      ? `${trimmedRetryAfter} GMT`
+      : trimmedRetryAfter,
+  );
   if (Number.isNaN(retryAt)) {
     return undefined;
   }
