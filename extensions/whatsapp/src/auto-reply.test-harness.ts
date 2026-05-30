@@ -8,8 +8,10 @@ import { resetLogger, setLoggerOverride } from "openclaw/plugin-sdk/runtime-env"
 import { mockPinnedHostnameResolution } from "openclaw/plugin-sdk/test-env";
 import { afterAll, afterEach, beforeAll, beforeEach, vi, type Mock } from "vitest";
 import type { WebChannelStatus } from "./auto-reply/types.js";
-import type { WebInboundMessage, WebListenerCloseReason } from "./inbound.js";
+import type { WebListenerCloseReason } from "./inbound.js";
+import { createTestWebInboundMessage } from "./inbound/admission.test-support.js";
 import type { WhatsAppSendKind, WhatsAppSendResult } from "./inbound/send-result.js";
+import type { WebInboundMessage } from "./inbound/types.js";
 import {
   resetBaileysMocks as _resetBaileysMocks,
   resetLoadConfigMock as _resetLoadConfigMock,
@@ -379,24 +381,36 @@ export async function sendWebGroupInboundMessage(params: {
 }) {
   const conversationId = params.conversationId ?? "123@g.us";
   const accountId = params.accountId ?? "default";
-  await params.onMessage({
-    body: params.body,
-    from: conversationId,
-    conversationId,
-    chatId: conversationId,
-    chatType: "group",
-    to: "+2",
-    accountId,
-    id: params.id,
-    senderE164: params.senderE164,
-    senderName: params.senderName,
-    mentionedJids: params.mentionedJids,
-    selfE164: params.selfE164,
-    selfJid: params.selfJid,
-    sendComposing: params.spies.sendComposing,
-    reply: params.spies.reply,
-    sendMedia: params.spies.sendMedia,
-  } as WebInboundMessage);
+  await params.onMessage(
+    createTestWebInboundMessage({
+      admissionOverrides: {
+        accountId,
+        chatType: "group",
+        conversationId,
+        requireMention: true,
+        senderId: params.senderE164,
+        dmSenderId: conversationId,
+      },
+      event: {
+        id: params.id,
+      },
+      payload: {
+        body: params.body,
+      },
+      group: {
+        mentions: params.mentionedJids ? { jids: params.mentionedJids } : undefined,
+      },
+      platform: {
+        recipientJid: "+2",
+        senderName: params.senderName,
+        selfE164: params.selfE164,
+        selfJid: params.selfJid,
+        sendComposing: params.spies.sendComposing,
+        reply: params.spies.reply,
+        sendMedia: params.spies.sendMedia,
+      },
+    }),
+  );
 }
 
 export async function sendWebDirectInboundMessage(params: {
@@ -410,18 +424,27 @@ export async function sendWebDirectInboundMessage(params: {
   timestamp?: number;
 }) {
   const accountId = params.accountId ?? "default";
-  await params.onMessage({
-    accountId,
-    id: params.id,
-    from: params.from,
-    conversationId: params.from,
-    to: params.to,
-    body: params.body,
-    timestamp: params.timestamp ?? Date.now(),
-    chatType: "direct",
-    chatId: `direct:${params.from}`,
-    sendComposing: params.spies.sendComposing,
-    reply: params.spies.reply,
-    sendMedia: params.spies.sendMedia,
-  } as WebInboundMessage);
+  await params.onMessage(
+    createTestWebInboundMessage({
+      admissionOverrides: {
+        accountId,
+        chatType: "direct",
+        conversationId: params.from,
+      },
+      event: {
+        id: params.id,
+        timestamp: params.timestamp ?? Date.now(),
+      },
+      payload: {
+        body: params.body,
+      },
+      platform: {
+        recipientJid: params.to,
+        chatJid: `direct:${params.from}`,
+        sendComposing: params.spies.sendComposing,
+        reply: params.spies.reply,
+        sendMedia: params.spies.sendMedia,
+      },
+    }),
+  );
 }

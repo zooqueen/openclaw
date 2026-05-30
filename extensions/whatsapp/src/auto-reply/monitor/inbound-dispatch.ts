@@ -4,21 +4,21 @@ import {
 } from "openclaw/plugin-sdk/channel-feedback";
 import {
   buildChannelInboundEventContext,
+  hasVisibleInboundReplyDispatch,
   type CommandTurnContext,
   toInboundMediaFacts,
 } from "openclaw/plugin-sdk/channel-inbound";
-import { hasVisibleInboundReplyDispatch } from "openclaw/plugin-sdk/channel-inbound";
 import { deliverInboundReplyWithMessageSendContext } from "openclaw/plugin-sdk/channel-outbound";
 import { buildInboundHistoryFromEntries } from "openclaw/plugin-sdk/reply-history";
 import type { FinalizedMsgContext } from "openclaw/plugin-sdk/reply-runtime";
 import { normalizeStringEntries } from "openclaw/plugin-sdk/string-coerce-runtime";
+import type { WebInboundMessage } from "../../inbound/types.js";
 import {
   type DeliverableWhatsAppOutboundPayload,
   normalizeWhatsAppOutboundPayload,
   normalizeWhatsAppPayloadTextPreservingIndentation,
 } from "../../outbound-media-contract.js";
 import type { WhatsAppReplyDeliveryResult } from "../deliver-reply.js";
-import type { WebInboundMsg } from "../types.js";
 import { formatGroupMembers } from "./group-members.js";
 import type { GroupHistoryEntry } from "./inbound-context.js";
 import {
@@ -26,7 +26,6 @@ import {
   dispatchReplyWithBufferedBlockDispatcher,
   finalizeInboundContext,
   getAgentScopedMediaLocalRoots,
-  jidToE164,
   logVerbose,
   resolveChannelMessageSourceReplyDeliveryMode,
   resolveChunkMode,
@@ -43,6 +42,7 @@ import {
   type ReplyPayload,
   type resolveAgentRoute,
 } from "./inbound-dispatch.runtime.js";
+import { resolveDirectPeerId } from "./peer.js";
 
 type ReplyLifecycleKind = "tool" | "block" | "final";
 type ChannelReplyOnModelSelected = NonNullable<
@@ -134,7 +134,7 @@ function logWhatsAppReplyDeliveryError(params: {
   info: ReplyDeliveryInfo;
   connectionId: string;
   conversationId: string;
-  msg: WebInboundMsg;
+  msg: WebInboundMessage;
   replyLogger: ReturnType<typeof getChildLogger>;
 }) {
   params.replyLogger.error(
@@ -144,9 +144,9 @@ function logWhatsAppReplyDeliveryError(params: {
       correlationId: params.msg.event.id ?? null,
       connectionId: params.connectionId,
       conversationId: params.conversationId,
-      chatId: params.msg.platform.chatJid ?? null,
-      to: params.msg.from ?? null,
-      from: params.msg.platform.recipientJid ?? null,
+      chatId: params.msg.platform.chatJid,
+      to: params.conversationId,
+      from: params.msg.platform.recipientJid,
     },
     "auto-reply delivery failed",
   );
@@ -276,18 +276,17 @@ export function resolveWhatsAppResponsePrefix(params: {
   );
 }
 
-export async function buildWhatsAppInboundContext(params: {
+export function buildWhatsAppInboundContext(params: {
   bodyForAgent?: string;
   combinedBody: string;
   commandBody?: string;
   commandAuthorized?: boolean;
   commandTurn?: CommandTurnContext;
   commandSource?: "text";
-  conversationId: string;
   groupHistory?: GroupHistoryEntry[];
   groupMemberRoster?: Map<string, string>;
   groupSystemPrompt?: string;
-  msg: WebInboundMsg;
+  msg: WebInboundMessage;
   rawBody?: string;
   route: ReturnType<typeof resolveAgentRoute>;
   sender: SenderContext;
@@ -295,9 +294,12 @@ export async function buildWhatsAppInboundContext(params: {
   mediaTranscribedIndexes?: number[];
   replyThreading?: ReplyThreadingContext;
   visibleReplyTo?: VisibleReplyTarget;
-}): Promise<FinalizedMsgContext> {
+  wasMentioned?: boolean;
+}): FinalizedMsgContext {
+  const chatType = params.msg.admission.conversation.kind;
+  const conversationId = params.msg.admission.conversation.id;
   const inboundHistory =
-    params.msg.chatType === "group"
+    chatType === "group"
       ? buildInboundHistoryFromEntries({
           entries: (params.groupHistory ?? []).map((entry) => ({
             sender: entry.sender,
@@ -313,9 +315,9 @@ export async function buildWhatsAppInboundContext(params: {
     params.msg.payload.media?.path || params.msg.payload.media?.url
       ? [
           {
-            path: params.msg.payload.media?.path,
-            url: params.msg.payload.media?.url ?? params.msg.payload.media?.path,
-            contentType: params.msg.payload.media?.type,
+            path: params.msg.payload.media.path,
+            url: params.msg.payload.media.url ?? params.msg.payload.media.path,
+            contentType: params.msg.payload.media.type,
           },
         ]
       : undefined,
@@ -338,24 +340,24 @@ export async function buildWhatsAppInboundContext(params: {
     media,
     messageId: params.msg.event.id,
     timestamp: params.msg.event.timestamp,
-    from: params.msg.from,
+    from: conversationId,
     sender: {
       id: params.sender.id ?? params.sender.e164,
       name: params.sender.name,
     },
     conversation: {
-      kind: params.msg.chatType,
-      id: params.conversationId,
-      label: params.msg.chatType === "group" ? params.conversationId : params.msg.from,
+      kind: chatType,
+      id: conversationId,
+      label: conversationId,
     },
     route: {
       agentId: params.route.agentId,
-      accountId: params.route.accountId,
+      accountId: params.msg.admission.accountId,
       routeSessionKey: params.route.sessionKey,
     },
     reply: {
       to: params.msg.platform.recipientJid,
-      originatingTo: params.msg.from,
+      originatingTo: conversationId,
     },
     message: {
       body: params.combinedBody,
@@ -365,11 +367,11 @@ export async function buildWhatsAppInboundContext(params: {
       commandBody: params.commandBody ?? params.msg.payload.body,
     },
     access: {
-      ...(params.msg.wasMentioned !== undefined
+      ...(params.wasMentioned !== undefined
         ? {
             mentions: {
-              canDetectMention: params.msg.chatType === "group",
-              wasMentioned: params.msg.wasMentioned,
+              canDetectMention: chatType === "group",
+              wasMentioned: params.wasMentioned,
             },
           }
         : {}),
@@ -436,20 +438,10 @@ function normalizeCommandTurnFromContext(value: unknown): CommandTurnContext | u
 }
 
 export function resolveWhatsAppDmRouteTarget(params: {
-  msg: WebInboundMsg;
-  senderE164?: string;
+  msg: WebInboundMessage;
   normalizeE164: (value: string) => string | null;
 }): string | undefined {
-  if (params.msg.chatType === "group") {
-    return undefined;
-  }
-  if (params.senderE164) {
-    return params.normalizeE164(params.senderE164) ?? undefined;
-  }
-  if (params.msg.from.includes("@")) {
-    return jidToE164(params.msg.from) ?? undefined;
-  }
-  return params.normalizeE164(params.msg.from) ?? undefined;
+  return resolveDirectPeerId(params);
 }
 
 export function updateWhatsAppMainLastRoute(params: {
@@ -517,7 +509,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
   deliverReply: (params: {
     replyResult: ReplyPayload;
     normalizedReplyResult?: DeliverableWhatsAppOutboundPayload<ReplyPayload>;
-    msg: WebInboundMsg;
+    msg: WebInboundMessage;
     mediaLocalRoots: readonly string[];
     maxMediaBytes: number;
     textLimit: number;
@@ -531,7 +523,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
   groupHistoryKey: string;
   maxMediaBytes: number;
   maxMediaTextChunkLimit?: number;
-  msg: WebInboundMsg;
+  msg: WebInboundMessage;
   onModelSelected?: ChannelReplyOnModelSelected;
   rememberSentText: (
     text: string | undefined,
@@ -563,7 +555,9 @@ export async function dispatchWhatsAppBufferedReply(params: {
   });
   const mediaLocalRoots = getAgentScopedMediaLocalRoots(params.cfg, params.route.agentId);
   const sourceReplyChatType =
-    typeof params.context.ChatType === "string" ? params.context.ChatType : params.msg.chatType;
+    typeof params.context.ChatType === "string"
+      ? params.context.ChatType
+      : params.msg.admission.conversation.kind;
   const sourceReplyCommandSource =
     params.context.CommandSource === "native" || params.context.CommandSource === "text"
       ? params.context.CommandSource
@@ -620,7 +614,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
           connectionId: params.connectionId,
           conversationId: params.conversationId,
           chatId: params.msg.platform.chatJid,
-          to: params.msg.from,
+          to: params.conversationId,
           from: params.msg.platform.recipientJid,
           replyKind: info.kind,
         },
@@ -635,8 +629,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
       combinedBodySessionKey: params.route.sessionKey,
       logVerboseMessage: shouldLog,
     });
-    const fromDisplay =
-      params.msg.chatType === "group" ? params.conversationId : (params.msg.from ?? "unknown");
+    const fromDisplay = params.conversationId;
     if (shouldLogVerbose()) {
       const preview = normalizedDeliveryPayload.text != null ? reply.text : "<media>";
       logVerbose(`Reply body: ${preview}${reply.hasMedia ? " (media)" : ""} -> ${fromDisplay}`);
@@ -694,7 +687,7 @@ export async function dispatchWhatsAppBufferedReply(params: {
               ctxPayload: params.context as FinalizedMsgContext,
               payload: normalizedDeliveryPayload,
               info,
-              to: params.msg.from,
+              to: params.conversationId,
               formatting: {
                 textLimit,
                 tableMode,

@@ -419,7 +419,6 @@ export async function processMessage(params: {
   });
   const dmRouteTarget = resolveWhatsAppDmRouteTarget({
     msg: params.msg,
-    senderE164: sender.e164 ?? undefined,
     normalizeE164,
   });
   const shouldCheckCommandAuth = shouldComputeCommandAuthorized(
@@ -482,7 +481,6 @@ export async function processMessage(params: {
     commandBody: params.msg.payload.body,
     commandAuthorized,
     commandTurn,
-    conversationId,
     groupHistory: visibleGroupHistory,
     groupMemberRoster: params.groupMemberNames.get(params.groupHistoryKey),
     groupSystemPrompt: conversationSystemPrompt,

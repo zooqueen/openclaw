@@ -26,6 +26,7 @@ import {
 } from "../connection-controller.js";
 import { resolveWhatsAppInboundPolicy } from "../inbound-policy.js";
 import { attachWebInboxToSocket, type WhatsAppGroupMetadataCache } from "../inbound/monitor.js";
+import type { WebInboundMessage } from "../inbound/types.js";
 import {
   newConnectionId,
   resolveHeartbeatSeconds,
@@ -47,7 +48,7 @@ import { createWebChannelStatusController } from "./monitor-state.js";
 import { createEchoTracker } from "./monitor/echo.js";
 import { formatWhatsAppInboundListeningLog } from "./monitor/listener-log.js";
 import { createWebOnMessageHandler } from "./monitor/on-message.js";
-import type { WebInboundMsg, WebMonitorTuning } from "./types.js";
+import type { WebMonitorTuning } from "./types.js";
 import { isLikelyWhatsAppCryptoError } from "./util.js";
 
 function isNonRetryableWebCloseStatus(statusCode: unknown): boolean {
@@ -91,6 +92,7 @@ function resolveWebMonitorConfigSnapshot(params: {
         allowFrom: account.allowFrom,
         groupAllowFrom: account.groupAllowFrom,
         groupPolicy: account.groupPolicy,
+        contextVisibility: account.contextVisibility,
         textChunkLimit: account.textChunkLimit,
         chunkMode: account.chunkMode,
         mediaMaxMb: account.mediaMaxMb,
@@ -152,6 +154,7 @@ async function clearTerminalWebAuthState(params: {
   healthState: "logged-out" | "conflict";
   log: ReturnType<typeof getChildLogger>;
 }) {
+  const { accountId } = params.account;
   try {
     const cleared = await logoutWeb({
       authDir: params.account.authDir,
@@ -160,7 +163,7 @@ async function clearTerminalWebAuthState(params: {
     });
     params.log.warn(
       {
-        accountId: params.account.accountId,
+        accountId,
         cleared,
         healthState: params.healthState,
         status: params.statusLabel,
@@ -170,7 +173,7 @@ async function clearTerminalWebAuthState(params: {
   } catch (error) {
     params.log.warn(
       {
-        accountId: params.account.accountId,
+        accountId,
         error: formatError(error),
         healthState: params.healthState,
         status: params.statusLabel,
@@ -291,7 +294,7 @@ export async function monitorWebChannel(
           accountId: account.accountId,
         }),
       });
-      const shouldDebounce = (msg: WebInboundMsg) => {
+      const shouldDebounce = (msg: WebInboundMessage) => {
         if (msg.payload.media?.path || msg.payload.media?.type) {
           return false;
         }
@@ -342,7 +345,7 @@ export async function monitorWebChannel(
               disconnectRetryPolicy: reconnectPolicy,
               disconnectRetryAbortSignal: controller.getDisconnectRetryAbortSignal(),
               groupMetadataCache,
-              onMessage: async (msg: WebInboundMsg) => {
+              onMessage: async (msg: WebInboundMessage) => {
                 const inboundAt = Date.now();
                 controller.noteInbound(inboundAt);
                 statusController.noteInbound(inboundAt);

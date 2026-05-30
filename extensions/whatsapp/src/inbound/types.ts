@@ -119,7 +119,7 @@ export type WhatsAppInboundPlatform = {
 };
 
 export type WebInboundMessage = {
-  admission?: WhatsAppInboundAdmission;
+  admission: WhatsAppInboundAdmission;
   event: WhatsAppInboundEvent;
   payload: WhatsAppInboundPayload;
   platform: WhatsAppInboundPlatform;

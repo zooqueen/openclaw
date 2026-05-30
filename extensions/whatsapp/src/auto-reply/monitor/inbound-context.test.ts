@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTestWebInboundMessage } from "../../inbound/admission.test-support.js";
 import type { WhatsAppSendResult } from "../../inbound/send-result.js";
 import {
   resolveVisibleWhatsAppGroupHistory,
@@ -16,27 +17,36 @@ function acceptedSendResult(kind: "media" | "text", id: string): WhatsAppSendRes
   };
 }
 
-const makeBlockedQuotedReplyMessage = (id: string): ReplyContextParams["msg"] => ({
-  id,
-  from: "123@g.us",
-  conversationId: "123@g.us",
-  to: "+2000",
-  accountId: "default",
-  chatType: "group",
-  chatId: "123@g.us",
-  body: "Current message",
-  senderName: "Alice",
-  senderJid: "111@s.whatsapp.net",
-  senderE164: "+111",
-  selfE164: "+999",
-  replyToId: "blocked-reply",
-  replyToBody: "Blocked quoted text",
-  replyToSender: "Mallory (+999)",
-  replyToSenderJid: "999@s.whatsapp.net",
-  sendComposing: async () => {},
-  reply: async () => acceptedSendResult("text", "r1"),
-  sendMedia: async () => acceptedSendResult("media", "m1"),
-});
+const makeBlockedQuotedReplyMessage = (id: string): ReplyContextParams["msg"] =>
+  createTestWebInboundMessage({
+    admissionOverrides: {
+      chatType: "group",
+      conversationId: "123@g.us",
+    },
+    event: {
+      id,
+    },
+    payload: {
+      body: "Current message",
+    },
+    platform: {
+      recipientJid: "+2000",
+      senderName: "Alice",
+      senderJid: "111@s.whatsapp.net",
+      selfE164: "+999",
+      sendComposing: async () => {},
+      reply: async () => acceptedSendResult("text", "r1"),
+      sendMedia: async () => acceptedSendResult("media", "m1"),
+    },
+    quote: {
+      id: "blocked-reply",
+      body: "Blocked quoted text",
+      sender: {
+        displayName: "Mallory (+999)",
+        jid: "999@s.whatsapp.net",
+      },
+    },
+  });
 
 describe("whatsapp inbound context visibility", () => {
   it("filters non-allowlisted group history from supplemental context", () => {

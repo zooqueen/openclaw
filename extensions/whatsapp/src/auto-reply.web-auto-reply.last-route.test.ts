@@ -11,6 +11,7 @@ import { buildMentionConfig } from "./auto-reply/mentions.js";
 import { createEchoTracker } from "./auto-reply/monitor/echo.js";
 import { awaitBackgroundTasks } from "./auto-reply/monitor/last-route.js";
 import { createWebOnMessageHandler } from "./auto-reply/monitor/on-message.js";
+import { createTestWebInboundMessage } from "./inbound/admission.test-support.js";
 
 const updateLastRouteInBackgroundMock = vi.hoisted(() => vi.fn());
 
@@ -58,7 +59,6 @@ function createHandlerForTest(opts: { cfg: OpenClawConfig; replyResolver: unknow
     >[0]["replyResolver"],
     replyLogger,
     baseMentionConfig: buildMentionConfig(opts.cfg),
-    account: {},
   });
 
   return { handler, backgroundTasks };
@@ -78,23 +78,31 @@ function buildInboundMessage(params: {
   senderName?: string;
   selfE164?: string;
 }) {
-  return {
-    id: params.id,
-    from: params.from,
-    conversationId: params.conversationId,
-    to: params.to ?? "+2000",
-    body: params.body ?? "hello",
-    timestamp: params.timestamp,
-    chatType: params.chatType,
-    chatId: params.chatId,
-    accountId: params.accountId ?? "default",
-    senderE164: params.senderE164,
-    senderName: params.senderName,
-    selfE164: params.selfE164,
-    sendComposing: vi.fn().mockResolvedValue(undefined),
-    reply: vi.fn().mockResolvedValue(createAcceptedWhatsAppSendResult("text", "r1")),
-    sendMedia: vi.fn().mockResolvedValue(createAcceptedWhatsAppSendResult("media", "m1")),
-  };
+  return createTestWebInboundMessage({
+    admissionOverrides: {
+      accountId: params.accountId ?? "default",
+      chatType: params.chatType,
+      conversationId: params.conversationId,
+      senderId: params.senderE164,
+      requireMention: params.chatType === "group",
+    },
+    event: {
+      id: params.id,
+      timestamp: params.timestamp,
+    },
+    payload: {
+      body: params.body ?? "hello",
+    },
+    platform: {
+      recipientJid: params.to ?? "+2000",
+      chatJid: params.chatId,
+      senderName: params.senderName,
+      selfE164: params.selfE164,
+      sendComposing: vi.fn().mockResolvedValue(undefined),
+      reply: vi.fn().mockResolvedValue(createAcceptedWhatsAppSendResult("text", "r1")),
+      sendMedia: vi.fn().mockResolvedValue(createAcceptedWhatsAppSendResult("media", "m1")),
+    },
+  });
 }
 
 describe("web auto-reply last-route", () => {

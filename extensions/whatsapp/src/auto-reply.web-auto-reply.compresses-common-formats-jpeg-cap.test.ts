@@ -9,7 +9,8 @@ import {
   resetLoadConfigMock,
   setLoadConfigMock,
 } from "./auto-reply.test-harness.js";
-import type { WebInboundMessage } from "./inbound.js";
+import { createTestWebInboundMessage } from "./inbound/admission.test-support.js";
+import type { WebInboundMessage } from "./inbound/types.js";
 
 installWebAutoReplyTestHomeHooks();
 
@@ -52,23 +53,38 @@ describe("web auto-reply", () => {
       dispatch: async (
         id = "msg1",
         overrides?: Partial<
-          Pick<WebInboundMessage, "from" | "conversationId" | "to" | "accountId" | "chatId">
+          Pick<WebInboundMessage["admission"], "accountId"> & {
+            conversationId?: string;
+            senderId?: string;
+            recipientJid?: string;
+            chatJid?: string;
+          }
         >,
       ) => {
-        await onMessage({
-          body: "hello",
-          from: "+1",
-          conversationId: "+1",
-          to: "+2",
-          accountId: "default",
-          chatType: "direct",
-          chatId: "+1",
-          ...overrides,
-          id,
-          sendComposing,
-          reply,
-          sendMedia: params.sendMedia,
-        } as WebInboundMessage);
+        const conversationId = overrides?.conversationId ?? "+1";
+        await onMessage(
+          createTestWebInboundMessage({
+            admissionOverrides: {
+              accountId: overrides?.accountId ?? "default",
+              chatType: "direct",
+              conversationId,
+              senderId: overrides?.senderId,
+            },
+            event: {
+              id,
+            },
+            payload: {
+              body: "hello",
+            },
+            platform: {
+              recipientJid: overrides?.recipientJid ?? "+2",
+              chatJid: overrides?.chatJid ?? conversationId,
+              sendComposing,
+              reply: reply as WebInboundMessage["platform"]["reply"],
+              sendMedia: params.sendMedia as WebInboundMessage["platform"]["sendMedia"],
+            },
+          }),
+        );
       },
     };
   }
@@ -200,9 +216,9 @@ describe("web auto-reply", () => {
         for (const [index, fmt] of formats.entries()) {
           const beforeCalls = sendMedia.mock.calls.length;
           await dispatch(`msg-${fmt.name}-${index}`, {
-            from: `+1${index}`,
+            senderId: `+1${index}`,
             conversationId: `conv-${index}`,
-            chatId: `conv-${index}`,
+            chatJid: `conv-${index}`,
           });
           expect(sendMedia).toHaveBeenCalledTimes(beforeCalls + 1);
           const payload = imagePayloadAt(sendMedia, beforeCalls);

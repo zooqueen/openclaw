@@ -5,7 +5,9 @@ import { normalizeMainKey } from "openclaw/plugin-sdk/routing";
 import { saveSessionStore } from "openclaw/plugin-sdk/session-store-runtime";
 import { withTempDir } from "openclaw/plugin-sdk/test-env";
 import { describe, expect, it, vi } from "vitest";
+import { createTestWebInboundMessage } from "../inbound/admission.test-support.js";
 import type { WhatsAppSendResult } from "../inbound/send-result.js";
+import type { WebInboundMessage } from "../inbound/types.js";
 import {
   evaluateSessionFreshness,
   loadSessionStore,
@@ -22,7 +24,6 @@ import {
   resolveMentionTargets,
   resolveOwnerList,
 } from "./mentions.js";
-import type { WebInboundMsg } from "./types.js";
 import { elide, isLikelyWhatsAppCryptoError } from "./util.js";
 
 function acceptedSendResult(kind: "media" | "text", id: string): WhatsAppSendResult {
@@ -34,21 +35,44 @@ function acceptedSendResult(kind: "media" | "text", id: string): WhatsAppSendRes
   };
 }
 
-const makeMsg = (overrides: Partial<WebInboundMsg>): WebInboundMsg =>
-  ({
-    id: "m1",
-    from: "120363401234567890@g.us",
-    conversationId: "120363401234567890@g.us",
-    to: "15551234567@s.whatsapp.net",
-    accountId: "default",
-    body: "",
-    chatType: "group",
-    chatId: "120363401234567890@g.us",
-    sendComposing: async () => {},
-    reply: async () => acceptedSendResult("text", "r1"),
-    sendMedia: async () => acceptedSendResult("media", "m1"),
-    ...overrides,
-  }) as WebInboundMsg;
+type TestMessageOverrides = {
+  conversationId?: string;
+  from?: string;
+  body?: string;
+  chatType?: "direct" | "group";
+  mentionedJids?: string[];
+  selfE164?: string;
+  selfJid?: string;
+  selfLid?: string;
+};
+
+const makeMsg = (overrides: TestMessageOverrides): WebInboundMessage => {
+  const chatType = overrides.chatType ?? "group";
+  const conversationId = overrides.conversationId ?? "120363401234567890@g.us";
+  return createTestWebInboundMessage({
+    admissionOverrides: {
+      chatType,
+      conversationId,
+      senderId: overrides.from,
+    },
+    event: { id: "m1" },
+    payload: { body: overrides.body ?? "" },
+    group:
+      chatType === "group"
+        ? {
+            mentions: overrides.mentionedJids ? { jids: overrides.mentionedJids } : undefined,
+          }
+        : null,
+    platform: {
+      chatJid: conversationId,
+      selfE164: overrides.selfE164,
+      selfJid: overrides.selfJid,
+      selfLid: overrides.selfLid,
+      reply: async () => acceptedSendResult("text", "r1"),
+      sendMedia: async () => acceptedSendResult("media", "m1"),
+    },
+  });
+};
 
 function getSessionSnapshotForTest(
   cfg: OpenClawConfig,
@@ -108,7 +132,7 @@ describe("isBotMentionedFromTargets", () => {
   const mentionCfg = { mentionRegexes: [/\bopenclaw\b/i] };
 
   function expectMentioned(
-    msg: WebInboundMsg,
+    msg: WebInboundMessage,
     cfg: { mentionRegexes: RegExp[]; allowFrom?: Array<string | number>; isSelfChat?: boolean },
     expected: boolean,
   ) {
@@ -151,7 +175,6 @@ describe("isBotMentionedFromTargets", () => {
       // Direct chat with self, not a group — the original "ignore mentions
       // in self-chat" suppression still applies here so that mentioning the
       // owner in their own DM does not falsely trigger the bot.
-      from: "999@s.whatsapp.net",
       conversationId: "999@s.whatsapp.net",
       chatType: "direct",
       body: "@owner ping",
@@ -162,7 +185,6 @@ describe("isBotMentionedFromTargets", () => {
     expectMentioned(msg, cfg, false);
 
     const msgTextMention = makeMsg({
-      from: "999@s.whatsapp.net",
       conversationId: "999@s.whatsapp.net",
       chatType: "direct",
       body: "openclaw ping",
@@ -187,6 +209,20 @@ describe("isBotMentionedFromTargets", () => {
       selfE164: "+15551234567",
       selfJid: "15551234567@s.whatsapp.net",
       selfLid: "216372600647751@lid",
+    });
+    expectMentioned(msg, cfg, true);
+  });
+
+  it("uses admitted chat type for self-chat mention suppression", () => {
+    const cfg = { mentionRegexes: [/\bopenclaw\b/i], allowFrom: ["+15551234567"] };
+    const msg = makeMsg({
+      conversationId: "120363401234567890@g.us",
+      from: "15551234567@s.whatsapp.net",
+      chatType: "group",
+      body: "@bot ping",
+      mentionedJids: ["15551234567@s.whatsapp.net"],
+      selfE164: "+15551234567",
+      selfJid: "15551234567@s.whatsapp.net",
     });
     expectMentioned(msg, cfg, true);
   });
