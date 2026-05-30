@@ -836,9 +836,12 @@ export async function markAuthProfileBlockedUntil(params: {
       previousStats = freshStore.usageStats?.[profileId];
       updateTime = now;
       const existingBlockedUntil = previousStats?.blockedUntil;
-      const activeBlockedUntil = isFutureDateTimestampMs(existingBlockedUntil, { nowMs: now })
-        ? existingBlockedUntil
-        : 0;
+      const activeBlockedUntil =
+        typeof existingBlockedUntil === "number" &&
+        Number.isFinite(existingBlockedUntil) &&
+        existingBlockedUntil > now
+          ? existingBlockedUntil
+          : 0;
       nextStats = {
         ...previousStats,
         blockedUntil: Math.max(activeBlockedUntil, blockedUntil),
@@ -883,9 +886,12 @@ export async function markAuthProfileBlockedUntil(params: {
   }
   previousStats = store.usageStats?.[profileId];
   const existingBlockedUntil = previousStats?.blockedUntil;
-  const activeBlockedUntil = isFutureDateTimestampMs(existingBlockedUntil, { nowMs: now })
-    ? existingBlockedUntil
-    : 0;
+  const activeBlockedUntil =
+    typeof existingBlockedUntil === "number" &&
+    Number.isFinite(existingBlockedUntil) &&
+    existingBlockedUntil > now
+      ? existingBlockedUntil
+      : 0;
   nextStats = {
     ...previousStats,
     blockedUntil: Math.max(activeBlockedUntil, blockedUntil),
