@@ -1066,9 +1066,15 @@ async function sendSubagentAnnounceDirectly(params: {
         directOrigin: effectiveDirectOrigin,
         requesterSessionOrigin,
       });
+    const subagentDirectMessageCompletionRequiresMessageTool =
+      params.expectsCompletionMessage &&
+      isSubagentCompletion &&
+      deliveryTarget.deliver &&
+      isDirectMessageDeliveryTarget(deliveryTarget, canonicalRequesterSessionKey);
     const requiresMessageToolDelivery =
       completionRouteRequiresMessageToolDelivery ||
-      (agentMediatedCompletion && expectedMediaUrls.length > 0);
+      (agentMediatedCompletion && expectedMediaUrls.length > 0) ||
+      subagentDirectMessageCompletionRequiresMessageTool;
     const requesterActivity = resolveRequesterSessionActivity(canonicalRequesterSessionKey);
     if (
       params.expectsCompletionMessage &&
@@ -1233,7 +1239,7 @@ async function sendSubagentAnnounceDirectly(params: {
       }
       if (
         params.expectsCompletionMessage &&
-        shouldDeliverAgentFinal &&
+        (shouldDeliverAgentFinal || subagentDirectMessageCompletionRequiresMessageTool) &&
         isSubagentCompletion &&
         isIncompleteAnnounceAgentResultError(err)
       ) {
@@ -1284,6 +1290,10 @@ async function sendSubagentAnnounceDirectly(params: {
       };
     }
 
+    const directDeliveryFailure =
+      shouldDeliverAgentFinal || requiresMessageToolDelivery
+        ? getGatewayAgentCommandDeliveryFailure(directAnnounceResponse)
+        : undefined;
     if (
       agentMediatedCompletion &&
       expectedMediaUrls.length > 0 &&
@@ -1304,9 +1314,6 @@ async function sendSubagentAnnounceDirectly(params: {
         error: "completion agent did not deliver generated media",
       };
     }
-    const directDeliveryFailure = shouldDeliverAgentFinal
-      ? getGatewayAgentCommandDeliveryFailure(directAnnounceResponse)
-      : undefined;
     if (directDeliveryFailure) {
       return {
         delivered: false,
@@ -1346,6 +1353,25 @@ async function sendSubagentAnnounceDirectly(params: {
       !hasGatewayAgentMessagingToolDeliveryEvidence(directAnnounceResponse) &&
       !hasIntentionalSilentGatewayAgentPayload(directAnnounceResponse)
     ) {
+      if (hasFailedSubagentNoOutputCompletion(params.internalEvents)) {
+        return {
+          delivered: false,
+          path: "direct",
+          error: "completion agent did not produce a visible reply",
+        };
+      }
+      if (subagentDirectMessageCompletionRequiresMessageTool) {
+        const textDelivery = await deliverTextCompletionDirect({
+          cfg,
+          requesterSessionKey: canonicalRequesterSessionKey,
+          directIdempotencyKey: params.directIdempotencyKey,
+          deliveryTarget,
+          internalEvents: params.internalEvents,
+        });
+        if (textDelivery) {
+          return textDelivery;
+        }
+      }
       return {
         delivered: false,
         path: "direct",
