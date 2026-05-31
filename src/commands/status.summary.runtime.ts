@@ -202,6 +202,7 @@ function resolveContextTokensForModel(params: {
   return params.fallbackContextTokens ?? DEFAULT_CONTEXT_TOKENS;
 }
 
+/** Runtime helpers used by status summary assembly and kept lazy for startup. */
 export const statusSummaryRuntime = {
   resolveContextTokensForModel,
   classifySessionKey: classifySessionKind,
