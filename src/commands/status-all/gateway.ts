@@ -53,6 +53,8 @@ function consumeJsonBlock(
   const parts: string[] = [startLine.slice(braceAt)];
   let depth = countMatches(parts[0] ?? "", "{") - countMatches(parts[0] ?? "", "}");
   let i = startIndex;
+  // Log tails may start after the opening line of a pretty-printed JSON error;
+  // depth tracking keeps multi-line OAuth payloads grouped before redaction.
   while (depth > 0 && i + 1 < lines.length) {
     i += 1;
     const next = lines[i] ?? "";
@@ -184,6 +186,8 @@ export function summarizeLogTail(rawLines: string[], opts?: { maxLines?: number 
 
   const head = Math.min(6, Math.floor(maxLines / 3));
   const tail = Math.max(1, maxLines - head - 1);
+  // Keep the earliest grouped symptom and the newest tail evidence; both are
+  // usually needed to explain a recent gateway failure from a compact paste.
   const kept = [
     ...deduped.slice(0, head),
     `… ${deduped.length - head - tail} lines omitted …`,
