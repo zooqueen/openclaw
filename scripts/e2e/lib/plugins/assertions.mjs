@@ -2,6 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readPositiveIntEnv } from "../env-limits.mjs";
+import {
+  readInstalledPluginIndex,
+  readInstalledPluginRecords,
+  writeInstalledPluginIndex,
+} from "../installed-plugin-index.mjs";
 
 const command = process.argv[2];
 const scratchRoot = process.env.OPENCLAW_PLUGINS_TMP_DIR || os.tmpdir();
@@ -108,12 +113,25 @@ function pathsEqual(left, right) {
   return comparablePath(left) === comparablePath(right);
 }
 
+function readInstalledPluginIndexWithFileFallback() {
+  const sqliteIndex = readInstalledPluginIndex();
+  if (sqliteIndex.installRecords) {
+    return sqliteIndex;
+  }
+  const indexPath = path.join(process.env.HOME, ".openclaw", "plugins", "installs.json");
+  return fs.existsSync(indexPath) ? readJson(indexPath) : sqliteIndex;
+}
+
 function getInstallRecords() {
-  const index = readInstalledPluginIndex();
-  if (!index.installRecords) {
+  const index = readInstalledPluginIndexWithFileFallback();
+  const config = readOpenClawConfig();
+  const allowLegacyCompat = process.env.OPENCLAW_PACKAGE_ACCEPTANCE_LEGACY_COMPAT === "1";
+  if (!allowLegacyCompat && !index.installRecords) {
     throw new Error("expected modern installRecords in installed plugin index");
   }
-  return index.installRecords;
+  return allowLegacyCompat
+    ? (index.installRecords ?? index.records ?? config.plugins?.installs ?? {})
+    : (index.installRecords ?? {});
 }
 
 function readOpenClawConfig() {
@@ -904,7 +922,7 @@ function assertClawHubInstalled() {
     throw new Error(`unexpected ClawHub inspect plugin id: ${inspect.plugin?.id}`);
   }
 
-  const index = readInstalledPluginIndex();
+  const index = readInstalledPluginIndexWithFileFallback();
   if (!index.installRecords) {
     throw new Error("expected modern installRecords in installed plugin index");
   }
