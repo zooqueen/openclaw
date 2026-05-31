@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 import { spawnSync as spawnSyncImpl } from "node:child_process";
 import { existsSync as existsSyncImpl, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { resolvePnpmRunner } from "./pnpm-runner.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const playwrightInstallArgs = ["--dir", "ui", "exec", "playwright", "install", "chromium"];
+const require = createRequire(import.meta.url);
+const playwrightInstallArgs = ["install", "chromium"];
+
+function resolvePlaywrightCliPath() {
+  return resolve(dirname(require.resolve("playwright/package.json")), "cli.js");
+}
 
 export function resolvePlaywrightInstallRunner(options = {}) {
-  const env = options.env ?? process.env;
-  return resolvePnpmRunner({
-    comSpec: options.comSpec ?? env.ComSpec ?? env.COMSPEC,
-    npmExecPath: env === process.env ? env.npm_execpath : (env.npm_execpath ?? ""),
-    platform: options.platform,
-    pnpmArgs: playwrightInstallArgs,
-  });
+  return {
+    command: options.nodeExecPath ?? process.execPath,
+    args: [options.playwrightCliPath ?? resolvePlaywrightCliPath(), ...playwrightInstallArgs],
+    shell: false,
+  };
 }
 
 export function isDirectScriptExecution(
@@ -54,9 +57,8 @@ export function ensurePlaywrightChromium(options = {}) {
 
   log(`[ui-e2e] Playwright Chromium is missing at ${executablePath}; installing chromium.`);
   const runner = resolvePlaywrightInstallRunner({
-    comSpec: options.comSpec,
-    env,
-    platform: options.platform,
+    nodeExecPath: options.nodeExecPath,
+    playwrightCliPath: options.playwrightCliPath,
   });
   const result = spawnSync(runner.command, runner.args, {
     cwd: options.cwd ?? repoRoot,

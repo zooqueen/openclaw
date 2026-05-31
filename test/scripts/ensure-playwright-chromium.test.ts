@@ -35,7 +35,7 @@ describe("ensurePlaywrightChromium", () => {
     expect(logs.join("\n")).toContain("leaves the lane skipped");
   });
 
-  it("installs Chromium through the UI Playwright package when missing", () => {
+  it("installs Chromium through the local Playwright CLI when missing", () => {
     const spawnSync = vi.fn(() => ({ status: 0 }));
     let existsCalls = 0;
 
@@ -45,14 +45,15 @@ describe("ensurePlaywrightChromium", () => {
         env: { PATH: "/bin" },
         executablePath: "/cache/chromium/chrome",
         existsSync: () => ++existsCalls > 1,
-        platform: "linux",
+        nodeExecPath: "/node/bin/node",
+        playwrightCliPath: "/repo/node_modules/playwright/cli.js",
         spawnSync,
         stdio: "pipe",
       }),
     ).toBe(0);
     expect(spawnSync).toHaveBeenCalledWith(
-      "pnpm",
-      ["--dir", "ui", "exec", "playwright", "install", "chromium"],
+      "/node/bin/node",
+      ["/repo/node_modules/playwright/cli.js", "install", "chromium"],
       {
         cwd: "/repo",
         env: { PATH: "/bin" },
@@ -74,23 +75,16 @@ describe("ensurePlaywrightChromium", () => {
     ).toBe(23);
   });
 
-  it("wraps the pnpm command shim on Windows", () => {
+  it("uses Node for the Playwright CLI on Windows", () => {
     expect(
       resolvePlaywrightInstallRunner({
-        comSpec: "C:\\Windows\\System32\\cmd.exe",
-        env: {},
-        platform: "win32",
+        nodeExecPath: "C:\\Program Files\\nodejs\\node.exe",
+        playwrightCliPath: "C:\\repo\\node_modules\\playwright\\cli.js",
       }),
     ).toEqual({
-      args: [
-        "/d",
-        "/s",
-        "/c",
-        'pnpm.cmd --dir ui exec playwright install chromium',
-      ],
-      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["C:\\repo\\node_modules\\playwright\\cli.js", "install", "chromium"],
+      command: "C:\\Program Files\\nodejs\\node.exe",
       shell: false,
-      windowsVerbatimArguments: true,
     });
   });
 });
