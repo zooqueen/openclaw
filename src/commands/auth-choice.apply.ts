@@ -81,6 +81,8 @@ export async function applyAuthChoice(
     normalizedProviderAuthChoice === params.authChoice
       ? params
       : { ...params, authChoice: normalizedProviderAuthChoice };
+  // Plugin providers own modern auth choices; built-in fallbacks below only
+  // explain unmatched legacy or generic choices.
   const result = await applyAuthChoiceLoadedPluginProvider(normalizedParams);
   if (result) {
     return result;
