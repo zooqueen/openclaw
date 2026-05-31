@@ -55,11 +55,12 @@ describe("Control UI Vite config", () => {
   it("uses a browser-safe redactor for shared tool display imports", async () => {
     const plugin = controlUiBrowserOnlySharedModuleAliases();
     const resolveId = plugin.resolveId;
-    if (typeof resolveId !== "function") {
+    if (!resolveId) {
       throw new Error("Expected browser-only shared module alias plugin to expose resolveId");
     }
+    const resolveIdHandler = typeof resolveId === "function" ? resolveId : resolveId.handler;
 
-    const resolved = await resolveId.call(
+    const resolved = await resolveIdHandler.call(
       {} as never,
       "../logging/redact.js",
       path.join(repoRoot, "src/agents/tool-display-common.ts"),
