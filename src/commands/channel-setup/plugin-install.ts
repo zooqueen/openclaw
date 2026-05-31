@@ -99,6 +99,8 @@ function loadChannelSetupPluginRegistry(params: {
       env: process.env,
     });
   const log = createSubsystemLogger("plugins");
+  // Setup commands need a fresh registry snapshot because plugin installation
+  // can change config moments before this loader runs.
   return loadOpenClawPlugins({
     config: resolvedConfig,
     activationSourceConfig: params.cfg,
@@ -137,6 +139,8 @@ function resolveUniqueManifestScopedChannelPluginId(params: {
   channel: string;
   workspaceDir?: string;
 }): string | undefined {
+  // Multiple discoverable owners means setup must load the normal configured
+  // set instead of guessing which plugin should answer for the channel.
   const matches = resolveDiscoverableScopedChannelPluginIds({
     config: params.cfg,
     channelIds: [params.channel],
