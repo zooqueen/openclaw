@@ -119,7 +119,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
         { ...SUCCESS_RESPONSE },
         {
           ...SUCCESS_RESPONSE,
-          stdout: "<Task><Settings><Enabled>true</Enabled></Settings></Task>",
+          stdout: "<Task><Settings><StartWhenAvailable>true</StartWhenAvailable></Settings></Task>",
         },
         { ...SUCCESS_RESPONSE },
       );
@@ -198,6 +198,28 @@ describe("Scheduled Task stop/restart cleanup", () => {
       await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(false);
 
       expect(schtasksCalls).toEqual([["/Query"], ["/Query", "/TN", "OpenClaw Gateway", "/XML"]]);
+    });
+  });
+
+  it("treats omitted Settings Enabled state as enabled", async () => {
+    await withPreparedGatewayTask(async ({ env }) => {
+      schtasksResponses.push(
+        { ...SUCCESS_RESPONSE },
+        {
+          ...SUCCESS_RESPONSE,
+          stdout:
+            "<Task><Triggers><LogonTrigger><Enabled>false</Enabled></LogonTrigger></Triggers><Settings><Hidden>false</Hidden></Settings></Task>",
+        },
+        { ...SUCCESS_RESPONSE },
+      );
+
+      await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(true);
+
+      expect(schtasksCalls).toEqual([
+        ["/Query"],
+        ["/Query", "/TN", "OpenClaw Gateway", "/XML"],
+        ["/Change", "/TN", "OpenClaw Gateway", "/DISABLE"],
+      ]);
     });
   });
 

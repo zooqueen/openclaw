@@ -1283,9 +1283,12 @@ function isTaskNotRunning(res: { stdout: string; stderr: string; code: number })
 function parseScheduledTaskXmlEnabled(output: string): boolean | null {
   const normalizedOutput = output.replace(/^\uFEFF/u, "").replaceAll(String.fromCharCode(0), "");
   const settings = /<Settings(?:\s[^>]*)?>([\s\S]*?)<\/Settings>/iu.exec(normalizedOutput);
-  const match = settings?.[1] ? /<Enabled>\s*(true|false)\s*<\/Enabled>/iu.exec(settings[1]) : null;
-  if (!match?.[1]) {
+  if (!settings?.[1]) {
     return null;
+  }
+  const match = /<Enabled>\s*(true|false)\s*<\/Enabled>/iu.exec(settings[1]);
+  if (!match?.[1]) {
+    return true;
   }
   return match[1].toLowerCase() === "true";
 }
