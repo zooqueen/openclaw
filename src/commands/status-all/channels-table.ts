@@ -13,6 +13,7 @@ type ChannelIssueLike = {
   message: string;
 };
 
+/** Column contract for the `status --all` channel overview table renderer. */
 export const statusChannelsTableColumns = [
   { key: "Channel", header: "Channel", minWidth: 10 },
   { key: "Enabled", header: "Enabled", minWidth: 7 },
@@ -20,6 +21,11 @@ export const statusChannelsTableColumns = [
   { key: "Detail", header: "Detail", flex: true, minWidth: 24 },
 ] as const;
 
+/**
+ * Converts collected channel state into display rows, letting gateway-reported
+ * channel issues upgrade an otherwise healthy row to WARN without mutating the
+ * underlying collector result.
+ */
 export function buildStatusChannelsTableRows(params: {
   rows: readonly ChannelTableRowInput[];
   channelIssues: readonly ChannelIssueLike[];
