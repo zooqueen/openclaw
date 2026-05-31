@@ -200,11 +200,13 @@ import {
   buildEmptyExplicitToolAllowlistError,
   collectExplicitToolAllowlistSources,
 } from "../../tool-allowlist-guard.js";
+import { filterRuntimeCompatibleTools } from "../../tool-schema-projection.js";
 import {
-  filterProviderNormalizableTools,
-  filterRuntimeCompatibleTools,
-} from "../../tool-schema-projection.js";
-import { logRuntimeToolSchemaQuarantine } from "../../tool-schema-quarantine.js";
+  filterProviderNormalizableRuntimeTools,
+  filterRuntimeToolsWithReadableNames,
+  hasReadableRuntimeToolName,
+  logRuntimeToolSchemaQuarantine,
+} from "../../tool-schema-quarantine.js";
 import {
   addClientToolsToToolSearchCatalog,
   applyToolSearchCatalog,
@@ -216,7 +218,6 @@ import {
   type ToolSearchCatalogToolExecutor,
   type ToolSearchTargetTranscriptProjection,
 } from "../../tool-search.js";
-import type { AnyAgentTool } from "../../tools/common.js";
 import { shouldAllowProviderOwnedThinkingReplay } from "../../transcript-policy.js";
 import { normalizeUsage, type NormalizedUsage } from "../../usage.js";
 import { DEFAULT_BOOTSTRAP_FILENAME, type WorkspaceBootstrapFile } from "../../workspace.js";
@@ -513,65 +514,8 @@ function pluginMetadataSnapshotCoversProvider(
   });
 }
 
-function filterProviderNormalizableAttemptTools(params: {
-  tools: readonly AnyAgentTool[];
-  runId: string;
-  sessionKey?: string;
-  sessionId?: string;
-}): AnyAgentTool[] {
-  const projection = filterProviderNormalizableTools(params.tools);
-  logRuntimeToolSchemaQuarantine({
-    diagnostics: projection.diagnostics,
-    tools: params.tools,
-    runId: params.runId,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-  });
-  return [...projection.tools];
-}
-
 function allowlistNeedsReadableToolNames(toolsAllow: readonly string[] | undefined): boolean {
   return Boolean(toolsAllow?.length && !toolsAllow.some((entry) => entry.trim() === "*"));
-}
-
-function filterReadableAttemptToolNames(tools: readonly AnyAgentTool[]): AnyAgentTool[] {
-  let length = 0;
-  try {
-    length = tools.length;
-  } catch {
-    return [];
-  }
-  const readableTools: AnyAgentTool[] = [];
-  for (let index = 0; index < length; index += 1) {
-    try {
-      const tool = tools[index];
-      if (typeof tool.name === "string") {
-        readableTools.push(tool);
-      }
-    } catch {
-      continue;
-    }
-  }
-  return readableTools;
-}
-
-function hasReadableAttemptToolName(tools: readonly AnyAgentTool[], name: string): boolean {
-  let length = 0;
-  try {
-    length = tools.length;
-  } catch {
-    return false;
-  }
-  for (let index = 0; index < length; index += 1) {
-    try {
-      if (tools[index].name === name) {
-        return true;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return false;
 }
 
 function summarizeMessagePayload(msg: AgentMessage): { textChars: number; imageBlocks: number } {
@@ -1305,7 +1249,7 @@ export async function runEmbeddedAttempt(
           });
           corePluginToolStages.mark("attempt:create-openclaw-coding-tools");
           const allowlistCandidateTools = allowlistNeedsReadableToolNames(effectiveToolsAllow)
-            ? filterReadableAttemptToolNames(allTools)
+            ? filterRuntimeToolsWithReadableNames(allTools)
             : allTools;
           const filteredTools = applyEmbeddedAttemptToolsAllow(
             allowlistCandidateTools,
@@ -1319,7 +1263,7 @@ export async function runEmbeddedAttempt(
         })();
     prepStages.mark("core-plugin-tools");
     emitCorePluginToolStageSummary("core-plugin-tools", corePluginToolStages.snapshot());
-    const bootstrapHasFileAccess = toolsEnabled && hasReadableAttemptToolName(toolsRaw, "read");
+    const bootstrapHasFileAccess = toolsEnabled && hasReadableRuntimeToolName(toolsRaw, "read");
     const bootstrapWarn = makeBootstrapWarn({
       sessionLabel,
       workspaceDir: resolvedWorkspace,
@@ -1471,7 +1415,7 @@ export async function runEmbeddedAttempt(
     const activeToolsRaw = toolsEnabled ? toolsRaw : [];
     const providerNormalizableTools =
       activeToolsRaw.length > 0
-        ? filterProviderNormalizableAttemptTools({
+        ? filterProviderNormalizableRuntimeTools({
             tools: activeToolsRaw,
             runId: params.runId,
             sessionKey: params.sessionKey,
@@ -1525,7 +1469,7 @@ export async function runEmbeddedAttempt(
           reservedToolNames: [
             ...tools.map((tool) => tool.name),
             ...(clientTools?.map((tool) => tool.function.name) ?? []),
-            ...filterReadableAttemptToolNames(bundleMcpRuntime?.tools ?? []).map(
+            ...filterRuntimeToolsWithReadableNames(bundleMcpRuntime?.tools ?? []).map(
               (tool) => tool.name,
             ),
           ],
@@ -1535,7 +1479,8 @@ export async function runEmbeddedAttempt(
       ...(bundleMcpRuntime?.tools ?? []),
       ...(bundleLspRuntime?.tools ?? []),
     ];
-    const readableBundledToolCandidates = filterReadableAttemptToolNames(bundledToolCandidates);
+    const readableBundledToolCandidates =
+      filterRuntimeToolsWithReadableNames(bundledToolCandidates);
     const allowedBundledTools = applyEmbeddedAttemptToolsAllow(
       readableBundledToolCandidates,
       effectiveToolsAllow,
@@ -1565,7 +1510,7 @@ export async function runEmbeddedAttempt(
     });
     const providerNormalizableBundledTools =
       filteredBundledTools.length > 0
-        ? filterProviderNormalizableAttemptTools({
+        ? filterProviderNormalizableRuntimeTools({
             tools: filteredBundledTools,
             runId: params.runId,
             sessionKey: params.sessionKey,

@@ -111,12 +111,12 @@ import {
 } from "../session-write-lock.js";
 import { createAgentSession, estimateTokens, SessionManager } from "../sessions/index.js";
 import { detectRuntimeShell } from "../shell-utils.js";
+import { filterRuntimeCompatibleTools } from "../tool-schema-projection.js";
 import {
-  filterProviderNormalizableTools,
-  filterRuntimeCompatibleTools,
-} from "../tool-schema-projection.js";
-import { logRuntimeToolSchemaQuarantine } from "../tool-schema-quarantine.js";
-import type { AnyAgentTool } from "../tools/common.js";
+  filterProviderNormalizableRuntimeTools,
+  filterRuntimeToolsWithReadableNames,
+  logRuntimeToolSchemaQuarantine,
+} from "../tool-schema-quarantine.js";
 import {
   classifyCompactionReason,
   formatUnknownCompactionReasonDetail,
@@ -248,44 +248,6 @@ function prepareCompactionSessionAgent(params: {
     undefined,
     preparedRuntimeExtraParams ? { preparedExtraParams: preparedRuntimeExtraParams } : undefined,
   );
-}
-
-function filterProviderNormalizableCompactionTools(params: {
-  tools: readonly AnyAgentTool[];
-  runId: string;
-  sessionKey?: string;
-  sessionId?: string;
-}): AnyAgentTool[] {
-  const projection = filterProviderNormalizableTools(params.tools);
-  logRuntimeToolSchemaQuarantine({
-    diagnostics: projection.diagnostics,
-    tools: params.tools,
-    runId: params.runId,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-  });
-  return [...projection.tools];
-}
-
-function filterReadableCompactionToolNames(tools: readonly AnyAgentTool[]): AnyAgentTool[] {
-  let length = 0;
-  try {
-    length = tools.length;
-  } catch {
-    return [];
-  }
-  const readableTools: AnyAgentTool[] = [];
-  for (let index = 0; index < length; index += 1) {
-    try {
-      const tool = tools[index];
-      if (typeof tool.name === "string") {
-        readableTools.push(tool);
-      }
-    } catch {
-      // Unreadable bundled names cannot participate in allowlists/reserved names.
-    }
-  }
-  return readableTools;
 }
 
 function resolveCompactionProviderStream(params: {
@@ -871,7 +833,7 @@ async function compactEmbeddedAgentSessionDirectOnce(
     const activeToolsRaw = toolsEnabled ? toolsRaw : [];
     const providerNormalizableTools =
       activeToolsRaw.length > 0
-        ? filterProviderNormalizableCompactionTools({
+        ? filterProviderNormalizableRuntimeTools({
             tools: activeToolsRaw,
             runId,
             sessionKey: params.sessionKey,
@@ -892,15 +854,15 @@ async function compactEmbeddedAgentSessionDirectOnce(
           cfg: params.config,
           reservedToolNames: [
             ...tools.map((tool) => tool.name),
-            ...filterReadableCompactionToolNames(bundleMcpRuntime?.tools ?? []).map(
+            ...filterRuntimeToolsWithReadableNames(bundleMcpRuntime?.tools ?? []).map(
               (tool) => tool.name,
             ),
           ],
         })
       : undefined;
     const readableBundledToolCandidates = [
-      ...filterReadableCompactionToolNames(bundleMcpRuntime?.tools ?? []),
-      ...filterReadableCompactionToolNames(bundleLspRuntime?.tools ?? []),
+      ...filterRuntimeToolsWithReadableNames(bundleMcpRuntime?.tools ?? []),
+      ...filterRuntimeToolsWithReadableNames(bundleLspRuntime?.tools ?? []),
     ];
     const filteredBundledTools = applyFinalEffectiveToolPolicy({
       bundledTools: readableBundledToolCandidates,
@@ -929,7 +891,7 @@ async function compactEmbeddedAgentSessionDirectOnce(
     });
     const providerNormalizableBundledTools =
       filteredBundledTools.length > 0
-        ? filterProviderNormalizableCompactionTools({
+        ? filterProviderNormalizableRuntimeTools({
             tools: filteredBundledTools,
             runId,
             sessionKey: params.sessionKey,

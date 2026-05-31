@@ -1,7 +1,10 @@
 import { emitTrustedDiagnosticEvent } from "../infra/diagnostic-events.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
-import type { RuntimeToolSchemaDiagnostic } from "./tool-schema-projection.js";
+import {
+  filterProviderNormalizableTools,
+  type RuntimeToolSchemaDiagnostic,
+} from "./tool-schema-projection.js";
 import type { AnyAgentTool } from "./tools/common.js";
 
 const log = createSubsystemLogger("agents/tools");
@@ -26,6 +29,65 @@ function readToolPluginId(tool: AnyAgentTool | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function filterRuntimeToolsWithReadableNames(
+  tools: readonly AnyAgentTool[],
+): AnyAgentTool[] {
+  let length = 0;
+  try {
+    length = tools.length;
+  } catch {
+    return [];
+  }
+  const readableTools: AnyAgentTool[] = [];
+  for (let index = 0; index < length; index += 1) {
+    try {
+      const tool = tools[index];
+      if (typeof tool.name === "string") {
+        readableTools.push(tool);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return readableTools;
+}
+
+export function hasReadableRuntimeToolName(tools: readonly AnyAgentTool[], name: string): boolean {
+  let length = 0;
+  try {
+    length = tools.length;
+  } catch {
+    return false;
+  }
+  for (let index = 0; index < length; index += 1) {
+    try {
+      if (tools[index].name === name) {
+        return true;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+export function filterProviderNormalizableRuntimeTools(params: {
+  tools: readonly AnyAgentTool[];
+  runId: string;
+  sessionKey?: string;
+  sessionId?: string;
+}): AnyAgentTool[] {
+  const projection = filterProviderNormalizableTools(params.tools);
+  logRuntimeToolSchemaQuarantine({
+    diagnostics: projection.diagnostics,
+    tools: params.tools,
+    runId: params.runId,
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+  });
+  return [...projection.tools];
 }
 
 export function logRuntimeToolSchemaQuarantine(params: {
