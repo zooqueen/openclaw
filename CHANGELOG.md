@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.5.31-alpha.1
+
+### Fixes
+
+- Alpha release candidate with nightly release-gate stabilization fixes.
+
 ## 2026.5.30
 
 ### Highlights
