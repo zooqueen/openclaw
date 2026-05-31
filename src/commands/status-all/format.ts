@@ -528,7 +528,9 @@ export function buildGatewayStatusJsonPayload(params: {
     ...(params.gatewayProbe?.health &&
     typeof params.gatewayProbe.health === "object" &&
     "modelPricing" in params.gatewayProbe.health
-      ? {
+      ? // Preserve the gateway health pricing payload verbatim for JSON callers;
+        // text output formats it elsewhere and should not stringify it here.
+        {
           modelPricing: (params.gatewayProbe.health as { modelPricing?: unknown }).modelPricing,
         }
       : {}),
@@ -541,6 +543,8 @@ export function redactSecrets(text: string): string {
     return text;
   }
   let out = text;
+  // Key/value redaction runs before bearer/openai-shaped token redaction so
+  // quoted diagnostics keep their surrounding syntax intact.
   out = out.replace(
     /(\b(?:access[_-]?token|refresh[_-]?token|token|password|secret|api[_-]?key)\b\s*[:=]\s*)("?)([^"\\s]+)("?)/gi,
     "$1$2***$4",
