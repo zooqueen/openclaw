@@ -404,6 +404,8 @@ export async function appendStatusAllDiagnosis(params: {
   if (logPaths) {
     params.progress.setLabel("Reading logs…");
     const restartLogPath = resolveGatewayRestartLogPath(process.env);
+    // launchd combines useful service output on stdout; Linux keeps stderr
+    // separate, so only read stderr where the log path is expected to exist.
     const readStderr = process.platform !== "darwin";
     const [stderrTail, stdoutTail, restartTail] = await Promise.all([
       readStderr ? readFileTailLines(logPaths.stderrPath, 40).catch(() => []) : [],
@@ -476,6 +478,8 @@ export async function appendStatusAllDiagnosis(params: {
       return value;
     }
     try {
+      // Preserve object-shaped health errors for pasteable diagnosis while still
+      // passing through the same redaction path as string errors.
       return JSON.stringify(value, null, 2);
     } catch {
       return "[unserializable error]";
