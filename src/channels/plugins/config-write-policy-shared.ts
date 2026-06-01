@@ -16,23 +16,33 @@ type ConfigWritePolicyConfig = {
 
 /** Channel/account scope used by config-write authorization checks. */
 export type ConfigWriteScopeLike<TChannelId extends string = string> = {
+  /** Channel id that owns or initiates the config write. */
   channelId?: TChannelId | null;
+  /** Optional account id under the channel; omitted/default means channel-level scope. */
   accountId?: string | null;
 };
 
 /** Normalized config-write target derived from explicit scope or config path. */
 export type ConfigWriteTargetLike<TChannelId extends string = string> =
+  /** A write outside channel-owned config, or one explicitly allowed to touch global config. */
   | { kind: "global" }
+  /** A write scoped to one channel root without naming a concrete account. */
   | { kind: "channel"; scope: { channelId: TChannelId } }
+  /** A write scoped to one channel account entry. */
   | { kind: "account"; scope: { channelId: TChannelId; accountId: string } }
+  /** A path that could affect multiple scopes and needs operator-admin bypass. */
   | { kind: "ambiguous"; scopes: ConfigWriteScopeLike<TChannelId>[] };
 
 /** Config-write authorization result shared by core and SDK adapters. */
 export type ConfigWriteAuthorizationResultLike<TChannelId extends string = string> =
+  /** The write may proceed under the configured policy. */
   | { allowed: true }
   | {
+      /** The write was rejected and callers should surface a policy denial. */
       allowed: false;
+      /** Stable denial reason used by user-facing formatting and tests. */
       reason: "ambiguous-target" | "origin-disabled" | "target-disabled";
+      /** Concrete origin/target scope that caused the denial when known. */
       blockedScope?: {
         kind: "origin" | "target";
         scope: ConfigWriteScopeLike<TChannelId>;
