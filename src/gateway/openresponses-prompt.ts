@@ -26,6 +26,9 @@ export function buildAgentPrompt(input: string | ItemParam[]): {
   message: string;
   extraSystemPrompt?: string;
 } {
+  // Responses input preserves system/developer text separately so Gateway can
+  // pass it as ingress context while replaying user/assistant/tool turns in
+  // transcript order.
   if (typeof input === "string") {
     return { message: input };
   }
@@ -58,7 +61,6 @@ export function buildAgentPrompt(input: string | ItemParam[]): {
         entry: { sender: `Tool:${item.call_id}`, body: item.output },
       });
     }
-    // Skip reasoning and item_reference for prompt building (Phase 1)
   }
 
   const message = buildAgentMessageFromConversationEntries(conversationEntries);
