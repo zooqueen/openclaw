@@ -48,6 +48,7 @@ type TelephonyModelOverrideConfig = {
   allowSeed?: boolean;
 };
 
+/** Builds the telephony TTS adapter that applies voice-call overrides before mu-law conversion. */
 export function createTelephonyTtsProvider(params: {
   coreConfig: CoreConfig;
   ttsOverride?: VoiceCallTtsConfig;
