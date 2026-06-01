@@ -118,6 +118,8 @@ function cloneManifestCatalogCost(cost: ModelCatalogCost): ModelDefinitionConfig
 
 function buildManifestCatalogModelInput(model: ModelCatalogModel): ModelDefinitionConfig["input"] {
   if (model.input?.includes("document")) {
+    // Runtime model config cannot represent documents yet; fail the manifest projection before
+    // the unsupported modality is silently filtered out of a published catalog row.
     throw new Error(
       `Manifest modelCatalog row ${model.id} uses unsupported runtime input document`,
     );
@@ -263,6 +265,8 @@ function withStreamingUsageCompat(provider: ModelProviderConfig): ModelProviderC
   let changed = false;
   const models = provider.models.map((model) => {
     if (model.compat?.supportsUsageInStreaming !== undefined) {
+      // Provider authors can force native streaming usage on or off per model; endpoint-level
+      // detection should only fill in missing compat metadata.
       return model;
     }
     changed = true;
