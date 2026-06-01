@@ -43,6 +43,12 @@ function toGatewayCredentialOptions(
   };
 }
 
+/**
+ * Resolve connection credentials with SecretInput support for live clients.
+ *
+ * This async path is used when config values may point at secret providers that
+ * need IO before a Gateway client can connect.
+ */
 export async function resolveGatewayConnectionAuth(
   params: GatewayConnectionAuthOptions,
 ): Promise<{ token?: string; password?: string }> {
@@ -52,6 +58,7 @@ export async function resolveGatewayConnectionAuth(
   });
 }
 
+/** Resolve connection credentials from already-readable config/env values. */
 export function resolveGatewayConnectionAuthFromConfig(
   params: Omit<GatewayConnectionAuthOptions, "config"> & { cfg: OpenClawConfig },
 ): { token?: string; password?: string } {
