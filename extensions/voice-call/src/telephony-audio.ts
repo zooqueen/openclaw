@@ -1,3 +1,4 @@
+/** Core realtime-voice audio conversion helpers re-exported for voice-call provider code. */
 export { convertPcmToMulaw8k, resamplePcmTo8k } from "openclaw/plugin-sdk/realtime-voice";
 
 /**
