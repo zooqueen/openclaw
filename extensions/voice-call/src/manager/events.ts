@@ -198,6 +198,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
   }
 
   if (!call) {
+    // Do not burn the replay key; a later redelivery may arrive after call registration.
     return;
   }
 
@@ -208,6 +209,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
     if (previousProviderCallId) {
       const mapped = ctx.providerCallIdMap.get(previousProviderCallId);
       if (mapped === call.callId) {
+        // Providers can replace request ids with stable call ids; drop only our stale mapping.
         ctx.providerCallIdMap.delete(previousProviderCallId);
       }
     }
@@ -289,6 +291,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
           event.turnToken,
         );
         if (hadWaiter && !resolved) {
+          // Keep a mismatched turn-token transcript out of both waiters and durable history.
           console.warn(
             `[voice-call] Ignoring speech event with mismatched turn token for ${call.callId}`,
           );
