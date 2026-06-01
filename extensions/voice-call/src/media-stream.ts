@@ -292,9 +292,7 @@ export class MediaStreamHandler {
     });
   }
 
-  /**
-   * Handle stream start event.
-   */
+  /** Accepts Twilio's `start` frame and creates the STT/Talk session for the stream. */
   private handleStart(
     ws: WebSocket,
     message: TwilioMediaMessage,
@@ -429,6 +427,8 @@ export class MediaStreamHandler {
       this.sessions.get(session.streamSid) !== session ||
       session.ws.readyState !== WebSocket.OPEN
     ) {
+      // The socket may close while provider auth/connect is still pending; close
+      // the orphan STT session instead of announcing readiness for a dead stream.
       session.sttSession.close();
       return;
     }
@@ -440,9 +440,7 @@ export class MediaStreamHandler {
     this.config.onTranscriptionReady?.(session.callId, session.streamSid);
   }
 
-  /**
-   * Handle stream stop event.
-   */
+  /** Tears down stream-owned STT, Talk, and TTS state exactly once on stop/close. */
   private handleStop(session: StreamSession): void {
     console.log(`[MediaStream] Stream stopped: ${session.streamSid}`);
 
@@ -661,10 +659,7 @@ export class MediaStreamHandler {
     return this.sendToStream(streamSid, { event: "clear", streamSid });
   }
 
-  /**
-   * Queue a TTS operation for sequential playback.
-   * Only one TTS operation plays at a time per stream to prevent overlap.
-   */
+  /** Queues one TTS playback unit behind any active audio for the same stream. */
   async queueTts(streamSid: string, playFn: (signal: AbortSignal) => Promise<void>): Promise<void> {
     const queue = this.getTtsQueue(streamSid);
     let resolveEntry: () => void;
