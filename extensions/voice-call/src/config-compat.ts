@@ -38,6 +38,7 @@ function mergeProviderConfig(
   };
 }
 
+/** Collects legacy voice-call config keys that runtime load accepts only through doctor migration. */
 export function collectVoiceCallLegacyConfigIssues(value: unknown): VoiceCallLegacyConfigIssue[] {
   const raw = asObject(value) ?? {};
   const realtime = asObject(raw.realtime);
@@ -107,6 +108,7 @@ export function collectVoiceCallLegacyConfigIssues(value: unknown): VoiceCallLeg
   return issues;
 }
 
+/** Formats legacy-config warnings with the exact doctor command operators should run. */
 export function formatVoiceCallLegacyConfigWarnings(params: {
   value: unknown;
   configPathPrefix: string;
@@ -125,6 +127,7 @@ export function formatVoiceCallLegacyConfigWarnings(params: {
   ];
 }
 
+/** Migrates the retired voice-call config shape into the canonical schema input. */
 export function migrateVoiceCallLegacyConfigInput(params: {
   value: unknown;
   configPathPrefix?: string;
@@ -165,6 +168,7 @@ export function migrateVoiceCallLegacyConfigInput(params: {
     ? {
         ...streaming,
         provider: streamingProvider ?? legacyStreamingProvider,
+        // Legacy top-level STT knobs now live under the OpenAI streaming provider config.
         providers: mergeProviderConfig(streaming.providers, "openai", legacyStreamingOpenAICompat),
       }
     : undefined;
@@ -254,10 +258,12 @@ export function migrateVoiceCallLegacyConfigInput(params: {
   return { config, changes, issues };
 }
 
+/** Returns only the migrated config object for callers that do not need issue/change details. */
 export function normalizeVoiceCallLegacyConfigInput(value: unknown): Record<string, unknown> {
   return migrateVoiceCallLegacyConfigInput({ value }).config;
 }
 
+/** Parses voice-call plugin config after applying the bounded legacy migration. */
 export function parseVoiceCallPluginConfig(value: unknown): VoiceCallConfig {
   return VoiceCallConfigSchema.parse(normalizeVoiceCallLegacyConfigInput(value));
 }
