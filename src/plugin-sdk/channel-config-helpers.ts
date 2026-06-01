@@ -112,15 +112,25 @@ type MultiAccountChannelConfigAdapterParams<
   AccessorAccount = ResolvedAccount,
   Config extends OpenClawConfig = OpenClawConfig,
 > = {
+  /** Channel config key under `channels`. */
   sectionKey: string;
+  /** Lists configured account ids for channel status/setup UIs. */
   listAccountIds: (cfg: Config) => string[];
+  /** Resolves the account object used by CRUD operations. */
   resolveAccount: (cfg: Config, accountId?: string | null) => ResolvedAccount;
+  /** Optional read-only resolver for inherited allowlist/default-target views. */
   resolveAccessorAccount?: (params: ChannelConfigAccessorParams<Config>) => AccessorAccount;
+  /** Resolves the channel's default account id for accountless operations. */
   defaultAccountId: (cfg: Config) => string;
+  /** Optional raw account inspector for diagnostics/status payloads. */
   inspectAccount?: (cfg: Config, accountId?: string | null) => unknown;
+  /** Root fields to clear when deleting the default account from section-root storage. */
   clearBaseFields: string[];
+  /** Reads the raw DM allowlist/default allowlist source from the accessor account. */
   resolveAllowFrom: (account: AccessorAccount) => Array<string | number> | null | undefined;
+  /** Canonicalizes allowlist entries before writing or presenting them. */
   formatAllowFrom: (allowFrom: Array<string | number>) => string[];
+  /** Optional default destination selector for outbound replies from this account. */
   resolveDefaultTo?: (account: AccessorAccount) => string | number | null | undefined;
 };
 
@@ -128,11 +138,17 @@ type NamedAccountChannelConfigBaseParams<
   ResolvedAccount,
   Config extends OpenClawConfig = OpenClawConfig,
 > = {
+  /** Channel config key under `channels`. */
   sectionKey: string;
+  /** Lists configured account ids for channel status/setup UIs. */
   listAccountIds: (cfg: Config) => string[];
+  /** Resolves the account object used by CRUD operations. */
   resolveAccount: (cfg: Config, accountId?: string | null) => ResolvedAccount;
+  /** Resolves the channel's default account id for accountless operations. */
   defaultAccountId: (cfg: Config) => string;
+  /** Optional raw account inspector for diagnostics/status payloads. */
   inspectAccount?: (cfg: Config, accountId?: string | null) => unknown;
+  /** Root fields to clear when deleting account credentials from section-root storage. */
   clearBaseFields: string[];
 };
 
@@ -321,6 +337,7 @@ export function createScopedChannelConfigBase<
   Config extends OpenClawConfig = OpenClawConfig,
 >(
   params: NamedAccountChannelConfigBaseParams<ResolvedAccount, Config> & {
+    /** False forces the default account under `accounts.default` instead of the section root. */
     allowTopLevel?: boolean;
   },
 ): ChannelCrudConfigAdapter<ResolvedAccount> {
@@ -445,12 +462,19 @@ export function createTopLevelChannelConfigBase<
   ResolvedAccount,
   Config extends OpenClawConfig = OpenClawConfig,
 >(params: {
+  /** Channel config key under `channels`. */
   sectionKey: string;
+  /** Resolves the single account stored at the channel section root. */
   resolveAccount: (cfg: Config) => ResolvedAccount;
+  /** Optional account list override; defaults to the canonical default account. */
   listAccountIds?: (cfg: Config) => string[];
+  /** Optional default account override; defaults to the canonical default account. */
   defaultAccountId?: (cfg: Config) => string;
+  /** Optional raw account inspector for diagnostics/status payloads. */
   inspectAccount?: (cfg: Config) => unknown;
+  /** Remove the whole section or only account-scoped fields during delete. */
   deleteMode?: "remove-section" | "clear-fields";
+  /** Fields cleared when `deleteMode` is `clear-fields`. */
   clearBaseFields?: string[];
 }): Pick<
   ChannelConfigAdapter<ResolvedAccount>,
@@ -504,16 +528,27 @@ export function createTopLevelChannelConfigAdapter<
   AccessorAccount = ResolvedAccount,
   Config extends OpenClawConfig = OpenClawConfig,
 >(params: {
+  /** Channel config key under `channels`. */
   sectionKey: string;
+  /** Resolves the single account stored at the channel section root. */
   resolveAccount: (cfg: Config) => ResolvedAccount;
+  /** Optional read-only resolver for inherited allowlist/default-target views. */
   resolveAccessorAccount?: (params: { cfg: Config; accountId?: string | null }) => AccessorAccount;
+  /** Optional account list override; defaults to the canonical default account. */
   listAccountIds?: (cfg: Config) => string[];
+  /** Optional default account override; defaults to the canonical default account. */
   defaultAccountId?: (cfg: Config) => string;
+  /** Optional raw account inspector for diagnostics/status payloads. */
   inspectAccount?: (cfg: Config) => unknown;
+  /** Remove the whole section or only account-scoped fields during delete. */
   deleteMode?: "remove-section" | "clear-fields";
+  /** Fields cleared when `deleteMode` is `clear-fields`. */
   clearBaseFields?: string[];
+  /** Reads the raw DM allowlist/default allowlist source from the accessor account. */
   resolveAllowFrom: (account: AccessorAccount) => Array<string | number> | null | undefined;
+  /** Canonicalizes allowlist entries before writing or presenting them. */
   formatAllowFrom: (allowFrom: Array<string | number>) => string[];
+  /** Optional default destination selector for outbound replies from this account. */
   resolveDefaultTo?: (account: AccessorAccount) => string | number | null | undefined;
 }): ChannelConfigAdapterWithAccessors<ResolvedAccount> {
   // Top-level adapters always resolve the root account for accessor methods;
@@ -544,6 +579,7 @@ export function createHybridChannelConfigBase<
   Config extends OpenClawConfig = OpenClawConfig,
 >(
   params: NamedAccountChannelConfigBaseParams<ResolvedAccount, Config> & {
+    /** Preserve the channel section and clear root account fields when deleting the default. */
     preserveSectionOnDefaultDelete?: boolean;
   },
 ): ChannelCrudConfigAdapter<ResolvedAccount> {
@@ -602,6 +638,7 @@ export function createHybridChannelConfigAdapter<
   Config extends OpenClawConfig = OpenClawConfig,
 >(
   params: MultiAccountChannelConfigAdapterParams<ResolvedAccount, AccessorAccount, Config> & {
+    /** Preserve the channel section and clear root account fields when deleting the default. */
     preserveSectionOnDefaultDelete?: boolean;
   },
 ): ChannelConfigAdapterWithAccessors<ResolvedAccount> {
