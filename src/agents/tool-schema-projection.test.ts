@@ -135,10 +135,10 @@ describe("runtime tool input schema projection", () => {
           enum: ["last"],
         },
         flexibleId: {
-          type: "string",
+          anyOf: [{ type: "string", const: "last" }, { type: "string" }],
         },
         threadId: {
-          type: "string",
+          anyOf: [{ type: "string" }, { type: "number" }],
           description: "Thread/topic id",
         },
       },
@@ -158,6 +158,7 @@ describe("runtime tool input schema projection", () => {
     expect(projectRuntimeToolInputSchema(hiddenByProjection.parameters)).toEqual({
       schema: {
         type: "object",
+        anyOf: [{ $dynamicRef: "#target" }, { type: "string" }],
         properties: {},
       },
       violations: ["parameters.anyOf[0].$dynamicRef"],

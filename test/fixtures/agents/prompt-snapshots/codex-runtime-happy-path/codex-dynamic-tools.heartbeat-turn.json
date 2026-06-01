@@ -232,8 +232,15 @@
                   "type": "string"
                 },
                 "threadId": {
-                  "description": "Thread/topic id",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "description": "Thread/topic id"
                 },
                 "to": {
                   "description": "Delivery target",
@@ -454,8 +461,15 @@
                   "type": "string"
                 },
                 "threadId": {
-                  "description": "Thread/topic id",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "description": "Thread/topic id"
                 },
                 "to": {
                   "description": "Delivery target, or null to clear",

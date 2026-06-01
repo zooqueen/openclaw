@@ -190,11 +190,14 @@ function normalizeSchemaComposition(
   if (hasNullVariant && nonNullVariants.length === 1 && isJsonObject(nonNullVariants[0])) {
     return mergeCompositionWrapper(schema, nonNullVariants[0], keyword);
   }
-  const stringVariant = nonNullVariants.find(
-    (variant) => isJsonObject(variant) && variant.type === "string" && !("const" in variant),
-  );
-  if (stringVariant !== undefined && isJsonObject(stringVariant)) {
-    return mergeCompositionWrapper(schema, stringVariant, keyword);
+  if (hasNullVariant) {
+    return mergeCompositionWrapper(
+      schema,
+      {
+        [keyword]: nonNullVariants,
+      },
+      keyword,
+    );
   }
   return undefined;
 }
