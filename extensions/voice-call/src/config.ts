@@ -558,6 +558,8 @@ function normalizeVoiceCallTtsConfig(
     return undefined;
   }
 
+  // TTS route overrides are partial by design; preserve global provider knobs
+  // while letting per-number routes replace only the nested fields they own.
   return TtsConfigSchema.parse(deepMergeDefined(defaults ?? {}, overrides ?? {}));
 }
 
@@ -577,6 +579,8 @@ export function resolveVoiceCallNumberRouteKey(
     return phone;
   }
 
+  // Config keys are E.164, but callers can arrive with formatted phone text.
+  // Normalize only for lookup; keep the canonical configured route key in the result.
   const normalizedPhone = normalizePhoneRouteKey(phone);
   if (!normalizedPhone) {
     return undefined;
@@ -667,6 +671,8 @@ export function normalizeVoiceCallConfig(config: VoiceCallConfigInput): VoiceCal
     ...config.realtime?.agentContext,
     files: config.realtime?.agentContext?.files ?? defaults.realtime.agentContext.files,
   };
+  // Zod defaults only apply to complete subtrees. Normalize here so callers can
+  // provide partial nested config without losing defaults from sibling fields.
   return {
     ...defaults,
     ...config,
@@ -726,6 +732,8 @@ export function resolveVoiceCallSessionKey(params: {
     return `voice:call:${params.callId}`;
   }
   const normalizedPhone = params.phone?.replace(/\D/g, "");
+  // Per-phone scope intentionally strips formatting so the same caller keeps
+  // one memory thread across inbound/outbound formatting differences.
   return normalizedPhone ? `voice:${normalizedPhone}` : `voice:${params.callId}`;
 }
 
@@ -858,6 +866,8 @@ export function validateProviderConfig(config: VoiceCallConfig): {
     );
   }
 
+  // Realtime and streaming both own the live audio WebSocket path; allowing both
+  // would create two competing handlers for a single telephony media stream.
   if (config.realtime.enabled && config.streaming.enabled) {
     errors.push(
       "plugins.entries.voice-call.config.realtime.enabled and plugins.entries.voice-call.config.streaming.enabled cannot both be true",
