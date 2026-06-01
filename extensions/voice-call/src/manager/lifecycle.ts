@@ -19,10 +19,12 @@ function removeProviderCallMapping(
   }
   const mappedCallId = providerCallIdMap.get(call.providerCallId);
   if (mappedCallId === call.callId) {
+    // Provider ids can be reassigned during webhook repair; remove only our own mapping.
     providerCallIdMap.delete(call.providerCallId);
   }
 }
 
+/** Finalizes one call record, persists it, and clears transient timers/waiters. */
 export function finalizeCall(params: {
   ctx: CallLifecycleContext;
   call: CallRecord;
