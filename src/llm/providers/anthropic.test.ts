@@ -3,12 +3,16 @@ import type { Context, Model } from "../types.js";
 
 const anthropicMockState = vi.hoisted(() => ({
   configs: [] as unknown[],
+  createImpl: null as null | ((params: unknown, options: unknown) => unknown),
 }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class MockAnthropic {
     messages = {
-      create: vi.fn(() => {
+      create: vi.fn((params: unknown, options: unknown) => {
+        if (anthropicMockState.createImpl) {
+          return anthropicMockState.createImpl(params, options);
+        }
         throw new Error("stop after constructor");
       }),
     };
@@ -22,7 +26,9 @@ vi.mock("@anthropic-ai/sdk", () => ({
 import { streamAnthropic, streamSimpleAnthropic } from "./anthropic.js";
 
 function createSseResponse(events: Record<string, unknown>[] = []): Response {
-  const body = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+  const body = events
+    .map((event) => `event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream" },
@@ -48,6 +54,7 @@ function makeAnthropicModel(overrides: Partial<Model<"anthropic-messages">> = {}
 describe("Anthropic provider", () => {
   beforeEach(() => {
     anthropicMockState.configs = [];
+    anthropicMockState.createImpl = null;
   });
 
   it("keeps Cloudflare AI Gateway upstream provider auth on the Anthropic API key", async () => {
@@ -166,6 +173,214 @@ describe("Anthropic provider", () => {
         signature: "reasoning_content",
       },
     ]);
+  });
+
+  it("skips malformed tools when building Anthropic provider payloads", async () => {
+    let capturedPayload: unknown;
+    const tools = [
+      {
+        get name() {
+          throw new Error("legacy anthropic tool name getter exploded");
+        },
+        description: "unreadable name",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        name: "description_poisoned_tool",
+        get description() {
+          throw new Error("legacy anthropic tool description getter exploded");
+        },
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+        },
+      },
+      {
+        name: "parameters_poisoned_tool",
+        get parameters() {
+          throw new Error("legacy anthropic tool parameters getter exploded");
+        },
+      },
+      {
+        name: "dynamic_schema_tool",
+        description: "unsupported dynamic schema",
+        parameters: {
+          type: "object",
+          properties: {
+            target: { $dynamicRef: "#target" },
+          },
+        },
+      },
+      {
+        name: "tojson_projected_tool",
+        description: "schema projection differs from live properties",
+        parameters: {
+          type: "object",
+          properties: {
+            target: { $dynamicRef: "#target" },
+          },
+          toJSON() {
+            return {
+              type: "object",
+              properties: {
+                safe: { type: "string" },
+              },
+              required: ["safe"],
+            };
+          },
+        },
+      },
+      {
+        name: "dynamic_keyword_field_tool",
+        description: "schema map names can look like dynamic schema keywords",
+        parameters: {
+          type: "object",
+          properties: {
+            $dynamicRef: { type: "string" },
+          },
+          required: ["$dynamicRef"],
+        },
+      },
+      {
+        name: "good_plugin_tool",
+        description: "valid schema",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
+      },
+    ];
+
+    const stream = streamAnthropic(
+      makeAnthropicModel(),
+      {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        tools,
+      } as unknown as Context,
+      {
+        apiKey: "sk-ant-provider",
+        onPayload: (payload) => {
+          capturedPayload = payload;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect(result.errorMessage).toContain("stop before network");
+    const payloadTools = (capturedPayload as { tools?: Array<Record<string, unknown>> }).tools;
+    expect(payloadTools).toHaveLength(4);
+    expect(payloadTools?.[0]).toMatchObject({
+      name: "description_poisoned_tool",
+      input_schema: {
+        properties: {
+          query: { type: "string" },
+        },
+      },
+    });
+    expect(payloadTools?.[0]).not.toHaveProperty("description");
+    expect(payloadTools?.[1]).toMatchObject({
+      name: "tojson_projected_tool",
+      input_schema: {
+        properties: {
+          safe: { type: "string" },
+        },
+        required: ["safe"],
+      },
+    });
+    expect(payloadTools?.[2]).toMatchObject({
+      name: "dynamic_keyword_field_tool",
+      description: "schema map names can look like dynamic schema keywords",
+      input_schema: {
+        properties: {
+          $dynamicRef: { type: "string" },
+        },
+        required: ["$dynamicRef"],
+      },
+    });
+    expect(payloadTools?.[3]).toMatchObject({
+      name: "good_plugin_tool",
+      description: "valid schema",
+      input_schema: {
+        properties: {
+          query: { type: "string" },
+        },
+        required: ["query"],
+      },
+    });
+  });
+
+  it("remaps OAuth tool-use names without scanning poisoned descriptors", async () => {
+    anthropicMockState.createImpl = () => ({
+      asResponse: () =>
+        Promise.resolve(
+          createSseResponse([
+            {
+              type: "message_start",
+              message: { id: "msg_1", usage: { input_tokens: 1, output_tokens: 0 } },
+            },
+            {
+              type: "content_block_start",
+              index: 0,
+              content_block: {
+                type: "tool_use",
+                id: "toolu_1",
+                name: "Read",
+                input: { file_path: "README.md" },
+              },
+            },
+            { type: "content_block_stop", index: 0 },
+            {
+              type: "message_delta",
+              delta: { stop_reason: "tool_use" },
+              usage: { input_tokens: 1, output_tokens: 1 },
+            },
+            { type: "message_stop" },
+          ]),
+        ),
+    });
+    const tools = [
+      {
+        get name() {
+          throw new Error("legacy anthropic OAuth remap name getter exploded");
+        },
+        description: "unreadable name",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        name: "read",
+        description: "read a file",
+        parameters: { type: "object", properties: {} },
+      },
+    ];
+
+    const stream = streamAnthropic(
+      makeAnthropicModel(),
+      {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        tools,
+      } as unknown as Context,
+      {
+        apiKey: "sk-ant-oat-example",
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("toolUse");
+    expect(result.content).toContainEqual(
+      expect.objectContaining({
+        type: "toolCall",
+        name: "read",
+      }),
+    );
   });
 
   it("clamps max adaptive effort when the Claude model does not advertise it", async () => {

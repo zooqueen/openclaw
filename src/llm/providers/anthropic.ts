@@ -97,15 +97,50 @@ const ccToolLookup = new Map(claudeCodeTools.map((t) => [t.toLowerCase(), t]));
 // Convert tool name to CC canonical casing if it matches (case-insensitive)
 const toClaudeCodeName = (name: string) => ccToolLookup.get(name.toLowerCase()) ?? name;
 const fromClaudeCodeName = (name: string, tools?: Tool[]) => {
-  if (tools && tools.length > 0) {
-    const lowerName = name.toLowerCase();
-    const matchedTool = tools.find((tool) => tool.name.toLowerCase() === lowerName);
-    if (matchedTool) {
-      return matchedTool.name;
+  const toolCount = readToolCount(tools);
+  if (!tools || toolCount === undefined || toolCount <= 0) {
+    return name;
+  }
+  const lowerName = name.toLowerCase();
+  for (let index = 0; index < toolCount; index += 1) {
+    const tool = readToolAt(tools, index);
+    const toolName = tool ? readToolField(tool, "name") : undefined;
+    if (typeof toolName === "string" && toolName.toLowerCase() === lowerName) {
+      return toolName;
     }
   }
   return name;
 };
+
+function readToolCount(tools?: readonly Tool[]): number | undefined {
+  if (!tools) {
+    return undefined;
+  }
+  try {
+    return tools.length;
+  } catch {
+    return undefined;
+  }
+}
+
+function readToolAt(tools: readonly Tool[], index: number): Tool | undefined {
+  try {
+    return tools[index];
+  } catch {
+    return undefined;
+  }
+}
+
+function readToolField<TField extends keyof Tool>(
+  tool: Tool,
+  field: TField,
+): Tool[TField] | undefined {
+  try {
+    return tool[field];
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Convert content blocks to Anthropic API format
@@ -1229,31 +1264,117 @@ function shouldUseFineGrainedToolStreamingBeta(
   );
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+const schemaMapKeywords = new Set([
+  "$defs",
+  "definitions",
+  "dependencies",
+  "dependentSchemas",
+  "patternProperties",
+  "properties",
+]);
+
+function hasDynamicSchemaKeyword(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasDynamicSchemaKeyword);
+  }
+  if (!isJsonObject(value)) {
+    return false;
+  }
+  if ("$dynamicRef" in value || "$dynamicAnchor" in value) {
+    return true;
+  }
+  for (const [key, childValue] of Object.entries(value)) {
+    if (!childValue || typeof childValue !== "object") {
+      continue;
+    }
+    if (schemaMapKeywords.has(key) && isJsonObject(childValue)) {
+      if (Object.values(childValue).some(hasDynamicSchemaKeyword)) {
+        return true;
+      }
+      continue;
+    }
+    if (hasDynamicSchemaKeyword(childValue)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function projectAnthropicToolSchema(value: unknown): Record<string, unknown> | undefined {
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+  if (!text) {
+    return undefined;
+  }
+  const parsed = JSON.parse(text) as unknown;
+  if (!isJsonObject(parsed)) {
+    return undefined;
+  }
+  if (parsed.type !== undefined && parsed.type !== "object") {
+    return undefined;
+  }
+  if (hasDynamicSchemaKeyword(parsed)) {
+    return undefined;
+  }
+  return parsed;
+}
+
 function convertTools(
   tools: Tool[],
   isOAuthTokenLocal: boolean,
   supportsEagerToolInputStreaming: boolean,
   cacheControl?: CacheControlEphemeral,
 ): Anthropic.Messages.Tool[] {
-  if (!tools) {
+  const toolCount = readToolCount(tools);
+  if (toolCount === undefined) {
     return [];
   }
 
-  return tools.map((tool, index) => {
-    const schema = tool.parameters as { properties?: unknown; required?: string[] };
-
-    return {
-      name: isOAuthTokenLocal ? toClaudeCodeName(tool.name) : tool.name,
-      description: tool.description,
+  const converted: Anthropic.Messages.Tool[] = [];
+  for (let index = 0; index < toolCount; index += 1) {
+    const tool = readToolAt(tools, index);
+    if (!tool) {
+      continue;
+    }
+    const rawName = readToolField(tool, "name");
+    if (typeof rawName !== "string" || !rawName) {
+      continue;
+    }
+    const schema = projectAnthropicToolSchema(readToolField(tool, "parameters"));
+    if (!schema) {
+      continue;
+    }
+    const description = readToolField(tool, "description");
+    const properties = isJsonObject(schema.properties) ? schema.properties : {};
+    const required = Array.isArray(schema.required)
+      ? schema.required.filter((item): item is string => typeof item === "string")
+      : [];
+    converted.push({
+      name: isOAuthTokenLocal ? toClaudeCodeName(rawName) : rawName,
+      ...(typeof description === "string" ? { description } : {}),
       ...(supportsEagerToolInputStreaming ? { eager_input_streaming: true } : {}),
       input_schema: {
         type: "object",
-        properties: schema.properties ?? {},
-        required: schema.required ?? [],
+        properties,
+        required,
       },
-      ...(cacheControl && index === tools.length - 1 ? { cache_control: cacheControl } : {}),
-    };
-  });
+    });
+  }
+  if (cacheControl && converted.length > 0) {
+    const lastTool = converted.at(-1);
+    if (lastTool) {
+      converted[converted.length - 1] = { ...lastTool, cache_control: cacheControl };
+    }
+  }
+  return converted;
 }
 
 function mapStopReason(reason: string): StopReason {
