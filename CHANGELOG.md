@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.1-alpha.3
+
+### Fixes
+
+- Alpha release candidate with refreshed release metadata, shrinkwrap alignment, and release-gate stabilization fixes.
+
 ## 2026.6.1
 
 ### Highlights
