@@ -40,7 +40,9 @@ const HOOK_AUTH_FAILURE_WINDOW_MS = 60_000;
 
 /** Client-IP trust policy used only for hook auth throttling. */
 export type HookClientIpConfig = Readonly<{
+  /** Proxy CIDRs whose forwarded headers can identify the caller for throttling. */
   trustedProxies?: string[];
+  /** Allows direct real-IP headers when the request is not from a trusted proxy. */
   allowRealIpFallback?: boolean;
 }>;
 
@@ -53,14 +55,19 @@ type HookDispatchers = {
 };
 
 type HookReplayEntry = {
+  /** Timestamp used to expire and LRU-prune cached idempotency responses. */
   ts: number;
+  /** Previously dispatched isolated run id returned for a matching replay. */
   runId: string;
 };
 
 type HookReplayScope = {
+  /** Effective route identity, kept separate from provider-supplied idempotency keys. */
   pathKey: string;
+  /** Auth token participates in replay scope without being stored in plaintext. */
   token: string | undefined;
   idempotencyKey?: string;
+  /** Normalized dispatch fields that must match before reusing a run id. */
   dispatchScope: Record<string, unknown>;
 };
 
