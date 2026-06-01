@@ -325,7 +325,12 @@ export function registerMatrixMonitorEvents(params: {
   };
 
   client.on("room.failed_decryption", (roomId: string, event: MatrixRawEvent, error: Error) => {
-    void handleFailedDecryption(roomId, event, error);
+    void runMonitorTask(
+      `failed decryption handler room=${roomId} id=${event.event_id ?? "unknown"}`,
+      async () => {
+        await handleFailedDecryption(roomId, event, error);
+      },
+    );
   });
 
   client.on("verification.summary", (summary) => {
