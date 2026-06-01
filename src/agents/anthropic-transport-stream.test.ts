@@ -623,6 +623,16 @@ describe("anthropic transport stream", () => {
           messages: [{ role: "user", content: "Read the file" }],
           tools: [
             {
+              get name() {
+                throw new Error("anthropic oauth tool name getter exploded");
+              },
+              description: "unreadable name",
+              parameters: {
+                type: "object",
+                properties: {},
+              },
+            },
+            {
               name: "read",
               description: "Read a file",
               parameters: {
@@ -1186,11 +1196,75 @@ describe("anthropic transport stream", () => {
   });
 
   it("skips malformed tools when building Anthropic payloads", async () => {
+    const unreadableName = {
+      get name() {
+        throw new Error("anthropic tool name getter exploded");
+      },
+      description: "unreadable name",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    };
+    const unreadableDescription = {
+      name: "description_poisoned_tool",
+      get description() {
+        throw new Error("anthropic tool description getter exploded");
+      },
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+        },
+      },
+    };
+    const unreadableParameters = {
+      name: "parameters_poisoned_tool",
+      description: "unreadable parameters",
+      get parameters() {
+        throw new Error("anthropic tool parameters getter exploded");
+      },
+    };
+    const dynamicSchema = {
+      name: "dynamic_schema_tool",
+      description: "unsupported dynamic schema",
+      parameters: {
+        type: "object",
+        properties: {
+          target: { $dynamicRef: "#target" },
+        },
+      },
+    };
+    const toJsonProjectedSchema = {
+      name: "tojson_projected_tool",
+      description: "schema projection differs from live properties",
+      parameters: {
+        type: "object",
+        properties: {
+          target: { $dynamicRef: "#target" },
+        },
+        toJSON() {
+          return {
+            type: "object",
+            properties: {
+              safe: { type: "string" },
+            },
+            required: ["safe"],
+          };
+        },
+      },
+    };
+
     await runTransportStream(
       makeAnthropicTransportModel(),
       {
         messages: [{ role: "user", content: "hello" }],
         tools: [
+          unreadableName,
+          unreadableDescription,
+          unreadableParameters,
+          dynamicSchema,
+          toJsonProjectedSchema,
           {
             name: "bad_plugin_tool",
             description: "missing schema",
@@ -1215,10 +1289,24 @@ describe("anthropic transport stream", () => {
     );
 
     const tools = requireArray(latestAnthropicRequest().payload.tools, "tools");
-    expect(tools).toHaveLength(1);
-    const tool = requireRecord(tools[0], "tool");
-    expect(tool.name).toBe("good_plugin_tool");
-    expect(requireRecord(tool.input_schema, "input schema").properties).toEqual({
+    expect(tools).toHaveLength(3);
+    const descriptionPoisonedTool = requireRecord(tools[0], "description poisoned tool");
+    expect(descriptionPoisonedTool.name).toBe("description_poisoned_tool");
+    expect(descriptionPoisonedTool).not.toHaveProperty("description");
+    expect(requireRecord(descriptionPoisonedTool.input_schema, "input schema").properties).toEqual({
+      query: { type: "string" },
+    });
+    const projectedTool = requireRecord(tools[1], "projected tool");
+    expect(projectedTool.name).toBe("tojson_projected_tool");
+    expect(requireRecord(projectedTool.input_schema, "input schema")).toMatchObject({
+      properties: {
+        safe: { type: "string" },
+      },
+      required: ["safe"],
+    });
+    const goodTool = requireRecord(tools[2], "good tool");
+    expect(goodTool.name).toBe("good_plugin_tool");
+    expect(requireRecord(goodTool.input_schema, "input schema").properties).toEqual({
       query: { type: "string" },
     });
   });

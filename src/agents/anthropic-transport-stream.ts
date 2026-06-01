@@ -14,6 +14,7 @@ import { parseJsonObjectPreservingUnsafeIntegers } from "./json-unsafe-integers.
 import { resolveProviderEndpoint } from "./provider-attribution.js";
 import { buildGuardedModelFetch } from "./provider-transport-fetch.js";
 import type { StreamFn } from "./runtime/index.js";
+import { projectRuntimeToolInputSchema } from "./tool-schema-projection.js";
 import { transformTransportMessages } from "./transport-message-transform.js";
 import {
   coerceTransportToolCallArguments,
@@ -241,13 +242,22 @@ function toClaudeCodeName(name: string): string {
 }
 
 function fromClaudeCodeName(name: string, tools: Context["tools"] | undefined): string {
-  if (tools && tools.length > 0) {
-    const lowerName = normalizeLowercaseStringOrEmpty(name);
-    const matchedTool = tools.find(
-      (tool) => normalizeLowercaseStringOrEmpty(tool.name) === lowerName,
-    );
-    if (matchedTool) {
-      return matchedTool.name;
+  if (!tools) {
+    return name;
+  }
+  const toolCount = readAnthropicToolCount(tools);
+  if (!toolCount) {
+    return name;
+  }
+  const lowerName = normalizeLowercaseStringOrEmpty(name);
+  for (let toolIndex = 0; toolIndex < toolCount; toolIndex += 1) {
+    const tool = readAnthropicToolAt(tools, toolIndex);
+    if (!tool) {
+      continue;
+    }
+    const toolName = readAnthropicToolField(tool, "name");
+    if (typeof toolName === "string" && normalizeLowercaseStringOrEmpty(toolName) === lowerName) {
+      return toolName;
     }
   }
   return name;
@@ -474,8 +484,46 @@ function ensureNonEmptyAnthropicMessages(messages: Array<Record<string, unknown>
     : [{ role: "user", content: EMPTY_ANTHROPIC_MESSAGES_FALLBACK_TEXT }];
 }
 
+function readAnthropicToolField<TField extends keyof NonNullable<Context["tools"]>[number]>(
+  tool: NonNullable<Context["tools"]>[number],
+  field: TField,
+): NonNullable<Context["tools"]>[number][TField] | undefined {
+  try {
+    return tool[field];
+  } catch {
+    return undefined;
+  }
+}
+
+function isAnthropicObjectSchema(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readAnthropicToolCount(tools: NonNullable<Context["tools"]>): number | undefined {
+  try {
+    return tools.length;
+  } catch {
+    return undefined;
+  }
+}
+
+function readAnthropicToolAt(
+  tools: NonNullable<Context["tools"]>,
+  index: number,
+): NonNullable<Context["tools"]>[number] | undefined {
+  try {
+    return tools[index];
+  } catch {
+    return undefined;
+  }
+}
+
 function convertAnthropicTools(tools: Context["tools"], isOAuthToken: boolean) {
   if (!tools) {
+    return [];
+  }
+  const toolCount = readAnthropicToolCount(tools);
+  if (toolCount === undefined) {
     return [];
   }
   const converted: Array<{
@@ -487,24 +535,38 @@ function convertAnthropicTools(tools: Context["tools"], isOAuthToken: boolean) {
       required: unknown;
     };
   }> = [];
-  for (const tool of tools) {
+  for (let toolIndex = 0; toolIndex < toolCount; toolIndex += 1) {
     // Main quarantine happens when plugin tools materialize; this keeps Anthropic
     // safe for direct/custom tool arrays that bypass the plugin registry.
-    const parameters =
-      tool.parameters && typeof tool.parameters === "object" && !Array.isArray(tool.parameters)
-        ? (tool.parameters as Record<string, unknown>)
-        : undefined;
-    if (!parameters) {
+    const tool = readAnthropicToolAt(tools, toolIndex);
+    if (!tool) {
       continue;
     }
-    converted.push({
-      name: isOAuthToken ? toClaudeCodeName(tool.name) : tool.name,
-      description: tool.description,
+    const rawName = readAnthropicToolField(tool, "name");
+    const parameters = readAnthropicToolField(tool, "parameters");
+    const description = readAnthropicToolField(tool, "description");
+    if (typeof rawName !== "string" || !rawName) {
+      continue;
+    }
+    const projectedSchema = projectRuntimeToolInputSchema(parameters, `${rawName}.parameters`);
+    if (projectedSchema.violations.length > 0) {
+      continue;
+    }
+    if (!isAnthropicObjectSchema(projectedSchema.schema)) {
+      continue;
+    }
+    const parametersRecord = projectedSchema.schema;
+    const convertedTool = {
+      name: isOAuthToken ? toClaudeCodeName(rawName) : rawName,
       input_schema: {
-        type: "object",
-        properties: parameters.properties || {},
-        required: parameters.required || [],
+        type: "object" as const,
+        properties: parametersRecord.properties || {},
+        required: parametersRecord.required || [],
       },
+    };
+    converted.push({
+      ...convertedTool,
+      ...(typeof description === "string" ? { description } : {}),
     });
   }
   return converted;
