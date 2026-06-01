@@ -119,6 +119,7 @@ function validateDtmfDigits(digits: string): string | null {
     : "digits may only contain digits, *, #, comma, w, p";
 }
 
+/** Initiate an outbound call and register the local record before provider handoff. */
 export async function initiateCall(
   ctx: InitiateContext,
   to: string,
@@ -132,6 +133,8 @@ export async function initiateCall(
   const dtmfSequence = opts.dtmfSequence;
   const requesterSessionKey = opts.requesterSessionKey?.trim();
   if (dtmfSequence) {
+    // Pre-connect DTMF only makes sense for conversation calls because the
+    // redirect returns control to the webhook for the live exchange.
     const validationError = validateDtmfDigits(dtmfSequence);
     if (validationError) {
       return { callId: "", success: false, error: validationError };
@@ -209,6 +212,8 @@ export async function initiateCall(
     }
 
     const streamSession =
+      // Telnyx streaming authenticates with a per-call token; include it only
+      // when realtime is enabled and the provider can consume stream URLs.
       ctx.config.realtime?.enabled && ctx.provider.name === "telnyx" && ctx.streamSessionIssuer
         ? ctx.streamSessionIssuer({
             providerName: "telnyx",
@@ -254,6 +259,7 @@ export async function initiateCall(
   }
 }
 
+/** Speak TTS into a connected call and append the spoken text to the transcript. */
 export async function speak(
   ctx: SpeakContext,
   callId: CallId,
@@ -306,6 +312,7 @@ function shouldStartListeningAfterInitialMessage(ctx: ConversationContext): bool
   return streamAwareProvider.isConversationStreamConnectEnabled?.() !== true;
 }
 
+/** Send outbound DTMF digits through providers that expose live DTMF support. */
 export async function sendDtmf(
   ctx: SpeakContext,
   callId: CallId,
@@ -335,6 +342,7 @@ export async function sendDtmf(
   }
 }
 
+/** Play any initial outbound message, then continue with notify hangup or listening mode. */
 export async function speakInitialMessage(
   ctx: ConversationContext,
   providerCallId: string,
@@ -409,6 +417,7 @@ export async function speakInitialMessage(
   }
 }
 
+/** Speak a prompt, collect the caller's final transcript, and record turn latency. */
 export async function continueCall(
   ctx: ConversationContext,
   callId: CallId,
@@ -426,6 +435,8 @@ export async function continueCall(
   ctx.activeTurnCalls.add(callId);
 
   const turnStartedAt = Date.now();
+  // Twilio needs a turn token to ignore stale final transcripts from earlier
+  // listen windows; other providers already scope transcripts by stream state.
   const turnToken = provider.name === "twilio" ? crypto.randomUUID() : undefined;
 
   try {
@@ -477,6 +488,7 @@ export async function continueCall(
   }
 }
 
+/** Hang up a connected call and finalize local state exactly once. */
 export async function endCall(
   ctx: EndCallContext,
   callId: CallId,
