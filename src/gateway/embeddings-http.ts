@@ -179,6 +179,8 @@ function adaptGenericEmbeddingProvider(
     ...(typeof provider.maxInputTokens === "number"
       ? { maxInputTokens: provider.maxInputTokens }
       : {}),
+    // Generic providers distinguish query/document input types; the memory
+    // provider facade keeps that distinction while exposing the older methods.
     embedQuery: async (text, options) =>
       await provider.embed(text, {
         ...options,
@@ -207,6 +209,8 @@ function resolveEmbeddingsTarget(params: {
     return { provider: configuredProvider, model: raw };
   }
 
+  // `/v1/embeddings` allows provider/model only when the provider matches the
+  // agent's configured memory-search provider; callers cannot route elsewhere.
   const provider = normalizeLowercaseStringOrEmpty(raw.slice(0, slash));
   const model = raw.slice(slash + 1).trim();
   if (!model) {
@@ -313,6 +317,8 @@ export async function handleOpenAiEmbeddingsHttpRequest(
       memorySearch: memorySearch
         ? {
             ...memorySearch,
+            // OpenAI-compatible `dimensions` overrides only the embedding
+            // output dimensionality for this request, leaving config unchanged.
             outputDimensionality:
               typeof payload.dimensions === "number" && payload.dimensions > 0
                 ? Math.floor(payload.dimensions)
