@@ -17,6 +17,8 @@ export async function resolveRealtimeFastContextConsult(params: {
   args: unknown;
   logger: Logger;
 }): Promise<RealtimeVoiceFastContextConsultResult> {
+  // Voice-call consults share the SDK resolver, but label the audience as a
+  // caller so fallback prompts and logs stay telephony-specific.
   return await resolveRealtimeVoiceFastContextConsult({
     ...params,
     labels: {

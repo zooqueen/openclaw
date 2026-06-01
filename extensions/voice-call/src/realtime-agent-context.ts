@@ -35,6 +35,8 @@ async function readWorkspaceVoiceContextFiles(params: {
     if (remaining <= 0) {
       continue;
     }
+    // The security runtime keeps reads rooted in the agent workspace, so config
+    // file names can be user-controlled without allowing path escape.
     const content = await workspaceRoot.readText(file).catch(() => undefined);
     const trimmed = content?.trim();
     if (!trimmed) {
@@ -48,6 +50,7 @@ async function readWorkspaceVoiceContextFiles(params: {
   return sections;
 }
 
+/** Build realtime voice system instructions with bounded agent identity/context capsules. */
 export async function buildRealtimeVoiceInstructions(params: {
   baseInstructions: string;
   config: VoiceCallConfig;
@@ -66,6 +69,8 @@ export async function buildRealtimeVoiceInstructions(params: {
     return sections.filter(Boolean).join("\n\n");
   }
 
+  // Realtime calls need a small always-available context capsule; larger memory,
+  // tools, and workspace state stay behind openclaw_agent_consult.
   const agentId = config.agentId ?? "main";
   const capsule: string[] = [
     "OpenClaw agent voice context:",
