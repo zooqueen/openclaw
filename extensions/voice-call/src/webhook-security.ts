@@ -72,6 +72,8 @@ function markReplay(cache: ReplayCache, replayKey: string): boolean {
     return true;
   }
 
+  // If expiry would overflow the valid Date range, skip storing the entry
+  // rather than pinning an unusable replay marker forever.
   const expiresAt = resolveExpiresAtMsFromDurationMs(REPLAY_WINDOW_MS, { nowMs: now });
   if (expiresAt !== undefined) {
     cache.seenUntil.set(replayKey, expiresAt);
@@ -277,7 +279,8 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
   const fromTrustedProxy =
     !hasTrustedProxyIPs || (remoteIP ? trustedProxyIPs.includes(remoteIP) : false);
 
-  // Only trust forwarding headers if: (has whitelist OR explicitly trusted) AND from trusted proxy
+  // Forwarded hosts affect signature URLs, so require both an explicit trust mode
+  // and a trusted proxy source before honoring them.
   const shouldTrustForwardingHeaders = (hasAllowedHosts || explicitlyTrusted) && fromTrustedProxy;
 
   const isAllowedForwardedHost = (host: string): boolean => !allowedHosts || allowedHosts.has(host);
@@ -733,6 +736,8 @@ function createPlivoV3ReplayKey(params: {
     url: params.url,
     postParams: params.postParams,
   });
+  // Mirror Plivo's canonical V3 base string so reordered query/post parameters
+  // resolve to the same verified request identity.
   return `plivo:v3:${sha256Hex(`${baseUrl}\n${params.nonce}`)}`;
 }
 
@@ -913,6 +918,8 @@ export function verifyPlivoWebhook(
   let verificationUrl = reconstructed;
   if (options?.publicUrl) {
     try {
+      // publicUrl supplies the external origin; the actual webhook request keeps
+      // ownership of path and query for signature verification.
       const req = new URL(reconstructed);
       const base = new URL(options.publicUrl);
       base.pathname = req.pathname;
