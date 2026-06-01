@@ -78,6 +78,9 @@ function shouldPreserveSessionAuthProfileOverride(params: {
   currentProvider: string;
   provider: string;
 }): boolean {
+  // Auth profiles are provider-owned. Bare profile names stay only when the
+  // current provider resolves to the target provider; qualified names carry
+  // their own provider owner and survive only same-auth-provider switches.
   const profileOverride = normalizeOptionalString(params.entry.authProfileOverride);
   if (!profileOverride) {
     return false;
@@ -189,6 +192,9 @@ export async function applySessionsPatchToStore(params: {
   }
 
   if ("spawnedBy" in patch) {
+    // Spawn lineage is append-only session identity. Allow the first write on
+    // subagent/ACP sessions, but reject later clears or changes so parent links
+    // remain stable for session trees.
     const raw = patch.spawnedBy;
     if (raw === null) {
       if (existing?.spawnedBy) {
@@ -615,6 +621,9 @@ export async function applySessionsPatchToStore(params: {
           `thinkingLevel "${thinkingLevel}" is not supported for ${effectiveProvider}/${effectiveModel} (use ${formatThinkingLevels(effectiveProvider, effectiveModel, "|", thinkingCatalog)})`,
         );
       }
+      // Existing overrides can become unsupported after a model switch; downgrade
+      // them to the nearest supported level unless the caller explicitly asked
+      // for the now-invalid value in this same patch.
       next.thinkingLevel = resolveSupportedThinkingLevel({
         provider: effectiveProvider,
         model: effectiveModel,
