@@ -1,12 +1,3 @@
-/**
- * Media Stream Handler
- *
- * Handles bidirectional audio streaming between Twilio and the AI services.
- * - Receives mu-law audio from Twilio via WebSocket
- * - Forwards to the selected realtime transcription provider
- * - Sends TTS audio back to Twilio
- */
-
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
@@ -187,6 +178,8 @@ export class MediaStreamHandler {
       return;
     }
 
+    // Count the socket before ws has emitted "connection"; otherwise a burst of
+    // slow handshakes can bypass the max-connection cap.
     this.inflightUpgrades += 1;
     let released = false;
     const releaseUpgradeReservation = () => {
@@ -336,6 +329,8 @@ export class MediaStreamHandler {
       onPartial: (partial) => {
         const session = this.sessions.get(streamSid);
         if (session) {
+          // Provider callbacks can arrive after stop/close; emit observability
+          // only for the currently registered session.
           this.emitTalkEvent(session, {
             type: "transcript.delta",
             turnId: this.ensureActiveTurn(session),
@@ -498,6 +493,8 @@ export class MediaStreamHandler {
       return false;
     }
 
+    // A Twilio media socket is unauthenticated until its start frame arrives, so
+    // bound both time and cardinality for these pre-start connections.
     const timeout = setTimeout(() => {
       if (!this.pendingConnections.has(ws)) {
         return;
@@ -577,6 +574,8 @@ export class MediaStreamHandler {
       };
     }
     if (bufferedBeforeBytes > MAX_WS_BUFFERED_BYTES) {
+      // Once ws has already crossed the cap, skip enqueueing more frames. The
+      // caller treats sent:false as backpressure/failure evidence.
       try {
         session.ws.close(1013, "Backpressure: send buffer exceeded");
       } catch {
@@ -594,6 +593,8 @@ export class MediaStreamHandler {
       session.ws.send(JSON.stringify(message));
       const bufferedAfterBytes = session.ws.bufferedAmount;
       if (bufferedAfterBytes > MAX_WS_BUFFERED_BYTES) {
+        // send() can synchronously enqueue beyond the cap; close immediately so
+        // the stream does not keep accumulating TTS/audio frames.
         try {
           session.ws.close(1013, "Backpressure: send buffer exceeded");
         } catch {
@@ -692,6 +693,8 @@ export class MediaStreamHandler {
    */
   clearTtsQueue(streamSid: string, _reason = "unspecified"): void {
     const queue = this.getTtsQueue(streamSid);
+    // Barge-in resolves queued work as cancelled success while the active
+    // playback observes AbortSignal, so callers do not hang during teardown.
     this.resolveQueuedTtsEntries(queue);
     this.ttsActiveControllers.get(streamSid)?.abort();
     const session = this.sessions.get(streamSid);
