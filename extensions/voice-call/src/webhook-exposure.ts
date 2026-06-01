@@ -17,23 +17,28 @@ type VoiceCallWebhookExposureStatus = {
   message: string;
 };
 
+/** Returns true for providers that must receive externally reachable webhook callbacks. */
 export function providerRequiresPublicWebhook(providerName: string | undefined): boolean {
   return providerName === "twilio" || providerName === "telnyx" || providerName === "plivo";
 }
 
+/** Checks whether a webhook hostname resolves to loopback, private, or otherwise blocked space. */
 export function isLocalOnlyWebhookHost(hostname: string): boolean {
   return isBlockedHostnameOrIp(hostname);
 }
 
+/** Detects public webhook URLs that carrier providers cannot reach. */
 export function isProviderUnreachableWebhookUrl(webhookUrl: string): boolean {
   try {
     const parsed = new URL(webhookUrl);
     return isLocalOnlyWebhookHost(parsed.hostname);
   } catch {
+    // Let config validation report malformed URLs; this helper only classifies reachable hosts.
     return false;
   }
 }
 
+/** Summarizes whether voice-call webhook exposure is configured for the selected provider. */
 export function resolveWebhookExposureStatus(
   config: VoiceCallWebhookExposureConfig,
 ): VoiceCallWebhookExposureStatus {
