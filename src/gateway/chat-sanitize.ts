@@ -81,6 +81,8 @@ export function stripEnvelopeFromMessage(message: unknown): unknown {
   let changed = false;
   const next: Record<string, unknown> = { ...entry };
   const senderLabel = stripUserEnvelope ? extractMessageSenderLabel(entry) : null;
+  // User envelopes may be the only place a channel sender name exists; preserve
+  // that label separately before removing the transport metadata from display.
   if (senderLabel && entry.senderLabel !== senderLabel) {
     next.senderLabel = senderLabel;
     changed = true;
@@ -126,5 +128,7 @@ export function stripEnvelopeFromMessages(messages: unknown[]): unknown[] {
     }
     return stripped;
   });
+  // Callers use reference equality to skip downstream projection work when
+  // transcript rows were already display-safe.
   return changed ? next : messages;
 }
