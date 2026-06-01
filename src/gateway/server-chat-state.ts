@@ -110,6 +110,8 @@ export function createChatRunState(): ChatRunState {
     deltaSentAt.delete(runId);
     deltaLastBroadcastLen.delete(runId);
     deltaLastBroadcastText.delete(runId);
+    // Agent events are keyed by the run plus logical stream lane; clear every
+    // lane so a later run id reuse cannot replay stale assistant/thinking text.
     for (const key of [runId, `${runId}:assistant`, `${runId}:thinking`]) {
       agentDeltaSentAt.delete(key);
       bufferedAgentEvents.delete(key);
@@ -255,6 +257,8 @@ export function createSessionMessageSubscriberRegistry(): SessionMessageSubscrib
       if (!sessionKeys) {
         return;
       }
+      // Walk the reverse index so disconnect cleanup removes the connection
+      // from every per-session subscriber set in one pass.
       for (const sessionKey of sessionKeys) {
         const connIds = sessionToConnIds.get(sessionKey);
         if (!connIds) {
@@ -323,6 +327,8 @@ export function createToolEventRecipientRegistry(): ToolEventRecipientRegistry {
     if (!entry) {
       return undefined;
     }
+    // Reading recipients is activity: extend the normal TTL while a stream is
+    // still producing tool chunks for the registered websocket set.
     entry.updatedAt = Date.now();
     prune();
     return entry.connIds;
