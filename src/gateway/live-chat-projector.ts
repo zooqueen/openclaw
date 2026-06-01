@@ -28,6 +28,9 @@ export function resolveMergedAssistantText(params: {
 }): string {
   const { previousText, nextText, nextDelta } = params;
   if (nextText && previousText) {
+    // Some runtimes send cumulative snapshots while others send pure deltas.
+    // Prefer a longer prefix snapshot, but never collapse repeated delta text
+    // such as "111" or markdown separators.
     if (nextText.startsWith(previousText) && nextText.length > previousText.length) {
       return capLiveAssistantBuffer(nextText);
     }
@@ -74,6 +77,8 @@ export function projectLiveAssistantBufferedText(
     return { text: "", suppress: true, pendingLeadFragment: false };
   }
   if (options?.suppressLeadFragments !== false && isSuppressedControlReplyLeadFragment(rawText)) {
+    // Keep a possible leading control token hidden until enough bytes arrive to
+    // prove whether it is a full silent reply or ordinary assistant text.
     return { text: rawText, suppress: true, pendingLeadFragment: true };
   }
   const text = startsWithSilentToken(rawText, SILENT_REPLY_TOKEN)
