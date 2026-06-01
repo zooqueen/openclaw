@@ -74,6 +74,7 @@ export function sendInvalidRequest(res: ServerResponse, message: string) {
   });
 }
 
+/** Build the standard 403 body for operator-scope failures without writing the response. */
 export function buildMissingScopeForbiddenBody(missingScope: string | undefined) {
   return {
     ok: false,
@@ -88,6 +89,7 @@ export function sendMissingScopeForbidden(res: ServerResponse, missingScope: str
   sendJson(res, 403, buildMissingScopeForbiddenBody(missingScope));
 }
 
+/** Read a JSON request body and translate parser failures into Gateway HTTP errors. */
 export async function readJsonBodyOrError(
   req: IncomingMessage,
   res: ServerResponse,
@@ -120,10 +122,12 @@ export async function readJsonBodyOrError(
   return body.value;
 }
 
+/** Write the OpenAI-compatible SSE completion sentinel. */
 export function writeDone(res: ServerResponse) {
   res.write("data: [DONE]\n\n");
 }
 
+/** Prepare an HTTP response for server-sent event streaming. */
 export function setSseHeaders(res: ServerResponse) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -132,6 +136,7 @@ export function setSseHeaders(res: ServerResponse) {
   res.flushHeaders?.();
 }
 
+/** Abort the supplied operation when either request or response socket closes. */
 export function watchClientDisconnect(
   req: IncomingMessage,
   res: ServerResponse,
