@@ -42,6 +42,8 @@ async function readWorkspaceVoiceContextFiles(params: {
     if (!trimmed) {
       continue;
     }
+    // Charge headings against the same budget as content so a long file list
+    // cannot crowd out the final prompt with metadata alone.
     const body = limitText(trimmed, Math.max(0, remaining - file.length - 16));
     const section = `### ${file}\n${body}`;
     sections.push(section);
@@ -113,6 +115,8 @@ export async function buildRealtimeVoiceInstructions(params: {
     }
   }
 
+  // Keep the voice capsule after policy guidance: it is persona/context, not a
+  // stronger instruction layer than realtime consult and transfer rules.
   sections.push(limitText(capsule.join("\n\n"), contextConfig.maxChars));
   return sections.filter(Boolean).join("\n\n");
 }
