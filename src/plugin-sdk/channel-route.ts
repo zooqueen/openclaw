@@ -16,29 +16,45 @@ export type ChannelRouteThreadSource = "explicit" | "target" | "session" | "turn
 
 /** Normalized channel route used for comparison, binding, and dedupe helpers. */
 export type ChannelRouteRef = {
+  /** Lowercase channel/plugin id that owns the target namespace. */
   channel?: string;
+  /** Optional account identity; exact matching treats absence as different from a value. */
   accountId?: string;
   target?: {
+    /** Normalized provider destination id used for identity comparisons. */
     to: string;
+    /** Original provider grammar when it differs from the normalized destination. */
     rawTo?: string;
+    /** Coarse target shape for providers that route direct/group/channel differently. */
     chatType?: ChannelRouteChatType;
   };
   thread?: {
+    /** Provider thread/topic/reply id; numeric ids are preserved until key stringification. */
     id: string | number;
+    /** Provider thread semantics attached to the id. */
     kind?: ChannelRouteThreadKind;
+    /** Source that supplied the thread id, used when routes are projected across surfaces. */
     source?: ChannelRouteThreadSource;
   };
 };
 
 /** Loose route input accepted at SDK boundaries before normalization. */
 export type ChannelRouteRefInput = {
+  /** Channel/plugin id before lowercase normalization. */
   channel?: unknown;
+  /** Account id before account-id normalization. */
   accountId?: unknown;
+  /** Provider destination before string trimming. */
   to?: unknown;
+  /** Original destination grammar when a parser rewrites `to`. */
   rawTo?: unknown;
+  /** Optional coarse target shape retained on normalized targets. */
   chatType?: ChannelRouteChatType;
+  /** Provider thread/topic/reply id before thread normalization. */
   threadId?: unknown;
+  /** Optional thread semantic retained with the normalized thread id. */
   threadKind?: ChannelRouteThreadKind;
+  /** Optional source marker retained with the normalized thread id. */
   threadSource?: ChannelRouteThreadSource;
 };
 
@@ -53,8 +69,11 @@ export type ChannelRouteKeyInput = ChannelRouteRef | ChannelRouteTargetInput;
 
 /** @deprecated Use `messaging.resolveOutboundSessionRoute` for provider-specific target grammar. */
 export type ChannelRouteExplicitTarget = {
+  /** Normalized destination emitted by a legacy provider parser. */
   to: string;
+  /** Optional parsed thread id; wins over fallback thread ids. */
   threadId?: string | number;
+  /** Optional parsed chat type when the target grammar carries it. */
   chatType?: ChannelRouteChatType;
 };
 
@@ -136,10 +155,15 @@ export function normalizeChannelRouteTarget(
 
 /** Parsed target shape retained for deprecated explicit-target parser adapters. */
 export type ChannelRouteParsedTarget = ChannelRouteTargetInput & {
+  /** Normalized lowercase channel id. */
   channel: string;
+  /** Original user/provider target string before parser rewrites. */
   rawTo: string;
+  /** Normalized destination after parser rewrite or raw fallback. */
   to: string;
+  /** Parsed or fallback thread id after thread normalization. */
   threadId?: string | number;
+  /** Parsed chat type retained for downstream route normalization. */
   chatType?: ChannelRouteChatType;
 };
 
