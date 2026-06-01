@@ -2,7 +2,7 @@
  * Shared session persistence and prompt-body helpers for agent attempt
  * execution paths.
  */
-import { updateSessionStore } from "../../config/sessions/store.js";
+import { patchSessionLifecycleEntry } from "../../config/sessions/session-entry-lifecycle.js";
 import { mergeSessionEntry, type SessionEntry } from "../../config/sessions/types.js";
 import {
   formatAgentInternalEventsForPlainPrompt,
@@ -34,37 +34,41 @@ function normalizeTranscriptMarkerUpdatedAt(value: number | undefined): number |
 export async function persistSessionEntry(
   params: PersistSessionEntryParams,
 ): Promise<SessionEntry | undefined> {
-  const persisted = await updateSessionStore(
-    params.storePath,
-    (store) => {
-      const current = store[params.sessionKey];
-      if (params.shouldPersist && !params.shouldPersist(current)) {
-        return current;
-      }
-      const merged = mergeSessionEntry(store[params.sessionKey], params.entry);
-      if (params.preserveTranscriptMarkerUpdatedAt) {
-        const currentUpdatedAt = normalizeTranscriptMarkerUpdatedAt(current?.updatedAt);
-        const markerUpdatedAt = normalizeTranscriptMarkerUpdatedAt(params.entry.updatedAt);
-        if (markerUpdatedAt !== undefined) {
-          merged.updatedAt = Math.max(currentUpdatedAt ?? 0, markerUpdatedAt);
+  const persisted =
+    (await patchSessionLifecycleEntry(
+      { sessionKey: params.sessionKey, storePath: params.storePath },
+      (current, context) => {
+        // shouldPersist=false maps to a null patch: the lifecycle seam skips
+        // persistence and returns the existing entry (or null when absent),
+        // matching the prior updateSessionStore early-return behavior.
+        if (params.shouldPersist && !params.shouldPersist(context.existingEntry)) {
+          return null;
         }
-      }
-      for (const field of params.clearedFields ?? []) {
-        // Cleared fields only apply when the replacement entry did not set the
-        // field again; this preserves explicit false/null updates.
-        if (!Object.hasOwn(params.entry, field)) {
-          Reflect.deleteProperty(merged, field);
+        const merged = mergeSessionEntry(current, params.entry);
+        if (params.preserveTranscriptMarkerUpdatedAt) {
+          const currentUpdatedAt = normalizeTranscriptMarkerUpdatedAt(
+            context.existingEntry?.updatedAt,
+          );
+          const markerUpdatedAt = normalizeTranscriptMarkerUpdatedAt(params.entry.updatedAt);
+          if (markerUpdatedAt !== undefined) {
+            merged.updatedAt = Math.max(currentUpdatedAt ?? 0, markerUpdatedAt);
+          }
         }
-      }
-      store[params.sessionKey] = merged;
-      return merged;
-    },
-    {
-      resolveSingleEntryPersistence: (entry) =>
-        entry ? { sessionKey: params.sessionKey, entry } : null,
-      takeCacheOwnership: true,
-    },
-  );
+        for (const field of params.clearedFields ?? []) {
+          // Cleared fields only apply when the replacement entry did not set the
+          // field again; this preserves explicit false/null updates.
+          if (!Object.hasOwn(params.entry, field)) {
+            Reflect.deleteProperty(merged, field);
+          }
+        }
+        return merged;
+      },
+      {
+        fallbackEntry: params.entry,
+        replaceEntry: true,
+        takeCacheOwnership: true,
+      },
+    )) ?? undefined;
   if (persisted) {
     params.sessionStore[params.sessionKey] = persisted;
   } else {
