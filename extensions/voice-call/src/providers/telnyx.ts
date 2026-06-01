@@ -270,6 +270,8 @@ export class TelnyxProvider implements VoiceCallProvider {
       from: input.from,
       webhook_url: input.webhookUrl,
       webhook_url_method: "POST",
+      // Telnyx echoes client_state on webhooks; encode the OpenClaw call id so
+      // outbound callbacks can rejoin local state before call_control_id mapping exists.
       client_state: Buffer.from(input.callId).toString("base64"),
       timeout_secs: 30,
       ...(input.streamUrl
@@ -297,6 +299,7 @@ export class TelnyxProvider implements VoiceCallProvider {
 
   async answerCall(input: AnswerCallInput): Promise<void> {
     const body: Record<string, unknown> = {
+      // Stable command id makes answer retries idempotent for one OpenClaw call.
       command_id: `openclaw-answer-${input.callId}`,
       ...(input.streamUrl
         ? buildTelnyxStreamingFields(input.streamUrl, input.streamAuthToken)
@@ -374,7 +377,8 @@ function buildTelnyxStreamingFields(
   streamUrl: string,
   streamAuthToken: string | undefined,
 ): Record<string, unknown> {
-  // Realtime voice expects 8kHz PCMU in both directions, matching telephony media frames.
+  // Realtime voice expects 8kHz PCMU both ways; keep these fields in sync with
+  // the WebSocket bridge's frame codec and sample-rate assumptions.
   return {
     stream_url: streamUrl,
     stream_track: "inbound_track",
