@@ -21,8 +21,11 @@ import { normalizeSessionKeyPreservingOpaquePeerIds } from "../sessions/session-
 export function canonicalizeSessionKeyForAgent(agentId: string, key: string): string {
   const lowered = normalizeLowercaseStringOrEmpty(key);
   if (lowered === "global" || lowered === "unknown") {
+    // These sentinels are cross-agent scopes, not agent-owned session rows.
     return lowered;
   }
+  // Channel peer ids can be case/base64-sensitive; normalize the structural
+  // prefix without lowercasing opaque peer-id tails.
   const normalized = normalizeSessionKeyPreservingOpaquePeerIds(key);
   if (normalized.startsWith("agent:")) {
     return normalized;
@@ -45,6 +48,8 @@ function shouldRemapLegacyDefaultMainAlias(
   }
   const defaultAgentId = resolveDefaultStoreAgentId(cfg);
   if (options?.storeAgentId && normalizeAgentId(options.storeAgentId) !== defaultAgentId) {
+    // Physical non-default agent stores may still contain deleted-agent rows;
+    // keep their `agent:main:*` keys exact instead of borrowing default aliases.
     return false;
   }
   // Pre-agent stores used agent:main:main for the configured default session.
@@ -145,6 +150,8 @@ export function resolveStoredSessionKeyForAgentStore(params: {
     return lowered;
   }
   const key = parseAgentSessionKey(raw) ? raw : canonicalizeSessionKeyForAgent(params.agentId, raw);
+  // Resolve through the general store-key path after prefixing so configured
+  // main aliases and legacy default-agent remaps stay identical for reads/writes.
   return resolveSessionStoreKey({
     cfg: params.cfg,
     sessionKey: key,
