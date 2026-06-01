@@ -111,6 +111,10 @@ export type ResolvedMemorySearchConfig = {
 };
 
 export type ResolvedMemorySearchSyncConfig = ResolvedMemorySearchConfig["sync"];
+export type MemorySearchResolvePurpose = "default" | "status" | "cli";
+export type MemorySearchResolveOptions = {
+  purpose?: MemorySearchResolvePurpose;
+};
 
 const DEFAULT_CHUNK_TOKENS = 400;
 const DEFAULT_CHUNK_OVERLAP = 80;
@@ -210,6 +214,7 @@ function mergeConfig(
   defaults: MemorySearchConfig | undefined,
   overrides: MemorySearchConfig | undefined,
   agentId: string,
+  options?: MemorySearchResolveOptions,
 ): ResolvedMemorySearchConfig {
   const enabled = overrides?.enabled ?? defaults?.enabled ?? true;
   const sessionMemory =
@@ -309,7 +314,7 @@ function mergeConfig(
     tokens: overrides?.chunking?.tokens ?? defaults?.chunking?.tokens ?? DEFAULT_CHUNK_TOKENS,
     overlap: overrides?.chunking?.overlap ?? defaults?.chunking?.overlap ?? DEFAULT_CHUNK_OVERLAP,
   };
-  const sync = resolveSyncConfig(defaults, overrides);
+  const sync = resolveSyncConfig(cfg, defaults, overrides, options);
   const query = {
     maxResults: overrides?.query?.maxResults ?? defaults?.query?.maxResults ?? DEFAULT_MAX_RESULTS,
     minScore: overrides?.query?.minScore ?? defaults?.query?.minScore ?? DEFAULT_MIN_SCORE,
@@ -434,13 +439,16 @@ function mergeConfig(
 }
 
 function resolveSyncConfig(
+  cfg: OpenClawConfig,
   defaults: MemorySearchConfig | undefined,
   overrides: MemorySearchConfig | undefined,
+  options?: MemorySearchResolveOptions,
 ): ResolvedMemorySearchSyncConfig {
+  const configuredWatch = overrides?.sync?.watch ?? defaults?.sync?.watch;
   return {
     onSessionStart: overrides?.sync?.onSessionStart ?? defaults?.sync?.onSessionStart ?? true,
     onSearch: overrides?.sync?.onSearch ?? defaults?.sync?.onSearch ?? true,
-    watch: overrides?.sync?.watch ?? defaults?.sync?.watch ?? true,
+    watch: configuredWatch ?? resolveDefaultMemoryWatch(cfg, options),
     watchDebounceMs:
       overrides?.sync?.watchDebounceMs ??
       defaults?.sync?.watchDebounceMs ??
@@ -465,13 +473,27 @@ function resolveSyncConfig(
   };
 }
 
+function resolveDefaultMemoryWatch(
+  cfg: OpenClawConfig,
+  options?: MemorySearchResolveOptions,
+): boolean {
+  const purpose = options?.purpose ?? "default";
+  if (purpose !== "default") {
+    return true;
+  }
+  // Gateway-mode managers live for the daemon lifetime, so unset watch should
+  // avoid allocating file watchers unless the operator opts in explicitly.
+  return cfg.gateway?.mode !== "local" && cfg.gateway?.mode !== "remote";
+}
+
 export function resolveMemorySearchConfig(
   cfg: OpenClawConfig,
   agentId: string,
+  options?: MemorySearchResolveOptions,
 ): ResolvedMemorySearchConfig | null {
   const defaults = cfg.agents?.defaults?.memorySearch;
   const overrides = resolveAgentConfig(cfg, agentId)?.memorySearch;
-  const resolved = mergeConfig(cfg, defaults, overrides, agentId);
+  const resolved = mergeConfig(cfg, defaults, overrides, agentId, options);
   if (!resolved.enabled) {
     return null;
   }
@@ -500,6 +522,7 @@ export function resolveMemorySearchConfig(
 export function resolveMemorySearchSyncConfig(
   cfg: OpenClawConfig,
   agentId: string,
+  options?: MemorySearchResolveOptions,
 ): ResolvedMemorySearchSyncConfig | null {
   const defaults = cfg.agents?.defaults?.memorySearch;
   const overrides = resolveAgentConfig(cfg, agentId)?.memorySearch;
@@ -507,5 +530,5 @@ export function resolveMemorySearchSyncConfig(
   if (!enabled) {
     return null;
   }
-  return resolveSyncConfig(defaults, overrides);
+  return resolveSyncConfig(cfg, defaults, overrides, options);
 }

@@ -320,7 +320,8 @@ export class QmdMemoryManager implements MemorySearchManager {
       return null;
     }
     const runtimeConfig =
-      params.runtimeConfig ?? resolveQmdManagerRuntimeConfig(params.cfg, params.agentId);
+      params.runtimeConfig ??
+      resolveQmdManagerRuntimeConfig(params.cfg, params.agentId, params.mode ?? "full");
     const manager = new QmdMemoryManager({
       agentId: params.agentId,
       resolved,
@@ -3255,10 +3256,12 @@ export class QmdMemoryManager implements MemorySearchManager {
 function resolveQmdManagerRuntimeConfig(
   cfg: OpenClawConfig,
   agentId: string,
+  mode?: QmdManagerMode,
 ): QmdManagerRuntimeConfig {
+  const purpose = mode === "cli" || mode === "status" ? mode : "default";
   return {
     workspaceDir: resolveAgentWorkspaceDir(cfg, agentId),
-    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId),
+    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId, { purpose }),
     contextLimits: resolveAgentContextLimits(cfg, agentId),
   };
 }
