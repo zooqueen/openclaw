@@ -9,7 +9,7 @@ import { collectProviderDangerousNameMatchingScopes } from "../config/dangerous-
 import type { GroupPolicy } from "../config/types.base.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createScopedDmSecurityResolver } from "./channel-config-helpers.js";
-/** Shared policy warnings and DM/group policy helpers for channel plugins. */
+
 export type {
   GroupToolPolicyBySenderConfig,
   GroupToolPolicyConfig,
@@ -80,7 +80,9 @@ export function coerceNativeSetting(value: unknown): boolean | "auto" | undefine
 
 /** Candidate mutable allowlist path inspected for dangerous name-matching warnings. */
 export type ChannelMutableAllowlistCandidate = {
+  /** Human-readable config path shown in doctor output. */
   pathLabel: string;
+  /** Raw allowlist value from config; non-arrays are ignored by the collector. */
   list: unknown;
 };
 
@@ -120,8 +122,11 @@ function collectMutableAllowlistWarningLines(
 
 /** Creates a warning collector for mutable name/email/nick allowlists when matching is disabled. */
 export function createDangerousNameMatchingMutableAllowlistWarningCollector(params: {
+  /** Channel config key used to find dangerous-name-matching scopes. */
   channel: string;
+  /** Returns true when an allowlist entry depends on mutable names/emails/nicks. */
   detector: (entry: string) => boolean;
+  /** Projects all mutable allowlist candidates for one account/config scope. */
   collectLists: (scope: {
     prefix: string;
     account: Record<string, unknown>;
@@ -161,23 +166,41 @@ export function createDangerousNameMatchingMutableAllowlistWarningCollector(para
 export function createRestrictSendersChannelSecurity<
   ResolvedAccount extends { accountId?: string | null },
 >(params: {
+  /** Channel config key used for shared defaults and account lookups. */
   channelKey: string;
+  /** Resolves the DM policy value from a channel account. */
   resolveDmPolicy: (account: ResolvedAccount) => string | null | undefined;
+  /** Resolves account-local DM allowlist entries before shared fallback handling. */
   resolveDmAllowFrom: (account: ResolvedAccount) => Array<string | number> | null | undefined;
+  /** Resolves group policy for restrict-senders warning collection. */
   resolveGroupPolicy: (account: ResolvedAccount) => GroupPolicy | null | undefined;
+  /** User-facing channel/plugin name shown in warning text. */
   surface: string;
+  /** Config scope considered open enough to require restrict-senders warnings. */
   openScope: string;
+  /** Config path shown for the group policy value. */
   groupPolicyPath: string;
+  /** Config path shown for the group sender allowlist value. */
   groupAllowFromPath: string;
+  /** Whether group access is additionally gated on mentions. */
   mentionGated?: boolean;
+  /** Returns true when provider/channel config exists and warnings should run. */
   providerConfigPresent?: (cfg: OpenClawConfig) => boolean;
+  /** Resolves the account id used when account.accountId is absent. */
   resolveFallbackAccountId?: (account: ResolvedAccount) => string | null | undefined;
+  /** Default DM policy when account config omits one. */
   defaultDmPolicy?: string;
+  /** Config path suffix for account-local DM allowlists. */
   allowFromPathSuffix?: string;
+  /** Config path suffix for account-local DM policy values. */
   policyPathSuffix?: string;
+  /** Approval channel id used when DM policy allows approval fallback. */
   approveChannelId?: string;
+  /** Optional hint shown beside approval fallback guidance. */
   approveHint?: string;
+  /** Normalizes raw allowlist entries before DM policy matching. */
   normalizeDmEntry?: (raw: string) => string;
+  /** Reuses default-account shared policy defaults for account-specific config. */
   inheritSharedDefaultsFromDefaultAccount?: boolean;
 }): ChannelSecurityAdapter<ResolvedAccount> {
   return {
