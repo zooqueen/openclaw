@@ -28,15 +28,21 @@ type ChannelHealthEvaluationReason =
   | "stale-socket";
 
 export type ChannelHealthEvaluation = {
+  /** True when the account should be treated as ready and not restartable. */
   healthy: boolean;
+  /** Stable policy reason used by readiness, health output, and restart monitors. */
   reason: ChannelHealthEvaluationReason;
 };
 
 /** Time-window inputs shared by readiness checks and background restarts. */
 export type ChannelHealthPolicy = {
+  /** Channel being evaluated; retained for future channel-specific policy branches. */
   channelId: ChannelId;
+  /** Wall-clock timestamp used to compute lifecycle and activity ages. */
   now: number;
+  /** Maximum transport inactivity before a connected channel is considered stale. */
   staleEventThresholdMs: number;
+  /** Startup window where not-yet-connected channels remain healthy. */
   channelConnectGraceMs: number;
 };
 
