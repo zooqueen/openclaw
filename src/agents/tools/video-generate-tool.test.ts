@@ -716,7 +716,7 @@ describe("createVideoGenerateTool", () => {
     });
 
     expect((firstMockCallArg(generateSpy) as { timeoutMs?: number }).timeoutMs).toBe(180_000);
-    expect((generateSpy.mock.calls.at(1)?.[0] as { timeoutMs?: number }).timeoutMs).toBe(12_345);
+    expect((generateSpy.mock.calls.at(1)![0] as { timeoutMs?: number }).timeoutMs).toBe(12_345);
     expect(resultDetails(defaultResult).timeoutMs).toBe(180_000);
     expect(resultDetails(overrideResult).timeoutMs).toBe(12_345);
   });
@@ -933,7 +933,7 @@ describe("createVideoGenerateTool", () => {
     expect(details.async).toBe(true);
     expect(details.status).toBe("started");
     expect((details.task as { taskId?: string }).taskId).toBe("task-123");
-    expect((result as { terminate?: boolean }).terminate).toBe(true);
+    expect((result as { terminate?: boolean }).terminate).toBeUndefined();
     if (!scheduledWork) {
       throw new Error("expected scheduled video generation work");
     }

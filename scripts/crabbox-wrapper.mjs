@@ -140,6 +140,11 @@ const shellControlCommandPrefixes = new Set([
 ]);
 const shellCommandExecutionPrefixes = new Set(["exec"]);
 const shellInlineCommandInterpreters = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
+const remoteChangedGateEnv = [
+  "OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1",
+  "OPENCLAW_CHANGED_LANES_RAW_SYNC=1",
+  "CI=1",
+];
 const shellInlineCommandOptionsWithNextValue = new Set([
   "+O",
   "+o",
@@ -244,9 +249,9 @@ function gitOutput(commandArgs) {
 }
 
 function envProvider() {
-  const envProvider = process.env.CRABBOX_PROVIDER?.trim();
-  if (envProvider) {
-    return envProvider;
+  const envProviderValue = process.env.CRABBOX_PROVIDER?.trim();
+  if (envProviderValue) {
+    return envProviderValue;
   }
   return "";
 }
@@ -427,8 +432,8 @@ function crabboxOptionArgs(commandArgs) {
   if (commandArgs[0] === "run") {
     return commandArgs.slice(0, bounds.optionEnd);
   }
-  const delimiter = commandArgs.indexOf("--");
-  return delimiter >= 0 ? commandArgs.slice(0, delimiter) : commandArgs;
+  const delimiterCandidate = commandArgs.indexOf("--");
+  return delimiterCandidate >= 0 ? commandArgs.slice(0, delimiterCandidate) : commandArgs;
 }
 
 function commandProvider(commandArgsInput) {
@@ -535,8 +540,8 @@ function commandOptionEnd(commandArgs) {
   if (commandArgs[0] === "run") {
     return runCommandBounds(commandArgs).optionEnd;
   }
-  const delimiter = commandArgs.indexOf("--");
-  return delimiter >= 0 ? delimiter : commandArgs.length;
+  const delimiterEntry = commandArgs.indexOf("--");
+  return delimiterEntry >= 0 ? delimiterEntry : commandArgs.length;
 }
 
 function shouldPreferAzureForWindows(commandArgs, advertisedProviders = []) {
@@ -1148,7 +1153,7 @@ function lineHeredocDelimiters(line) {
 }
 
 function readHeredocDelimiter(line, startIndex) {
-  let delimiter = "";
+  let delimiterResult = "";
   let quote = "";
   let escaped = false;
   let quoted = false;
@@ -1156,7 +1161,7 @@ function readHeredocDelimiter(line, startIndex) {
   for (; index < line.length; index += 1) {
     const char = line[index];
     if (escaped) {
-      delimiter += char;
+      delimiterResult += char;
       escaped = false;
       continue;
     }
@@ -1169,7 +1174,7 @@ function readHeredocDelimiter(line, startIndex) {
       if (char === quote) {
         quote = "";
       } else {
-        delimiter += char;
+        delimiterResult += char;
       }
       continue;
     }
@@ -1181,9 +1186,9 @@ function readHeredocDelimiter(line, startIndex) {
     if (/\s/u.test(char) || /[;&|()<>]/u.test(char)) {
       break;
     }
-    delimiter += char;
+    delimiterResult += char;
   }
-  return { delimiter, endIndex: Math.max(startIndex, index), quoted };
+  return { delimiter: delimiterResult, endIndex: Math.max(startIndex, index), quoted };
 }
 
 function extractCommandSubstitutionBodies(line) {
@@ -1437,6 +1442,82 @@ function remoteGitBootstrapForChangedGate(changedGateBase) {
   ].join(" ");
 }
 
+function injectRemoteChangedGateEnvironment(commandArgs) {
+  if (commandArgs[0] !== "run" || isWindowsRemoteTarget(commandArgs)) {
+    return commandArgs;
+  }
+
+  const { start } = runCommandBounds(commandArgs);
+  if (start < 0) {
+    return commandArgs;
+  }
+
+  const remoteCommand = commandArgs.slice(start);
+  if (!isChangedGateCommand(remoteCommand)) {
+    return commandArgs;
+  }
+
+  const normalizedArgs = [...commandArgs];
+  const markedRemoteCommand =
+    hasOption(normalizedArgs, "--shell") && remoteCommand.length === 1
+      ? [markShellChangedGateAsRemoteChild(remoteCommand[0])]
+      : markDirectChangedGateAsRemoteChild(remoteCommand);
+  normalizedArgs.splice(start, normalizedArgs.length - start, ...markedRemoteCommand);
+  return normalizedArgs;
+}
+
+function markShellChangedGateAsRemoteChild(command) {
+  const missingEnv = remoteChangedGateEnv.filter((assignment) => !command.includes(assignment));
+  if (missingEnv.length === 0) {
+    return command;
+  }
+  return `export ${missingEnv.join(" ")}; ${command}`;
+}
+
+function markDirectChangedGateAsRemoteChild(commandArgs) {
+  const missingEnv = remoteChangedGateEnv.filter((assignment) => !commandArgs.includes(assignment));
+  if (missingEnv.length === 0) {
+    return commandArgs;
+  }
+
+  const markedCommandArgs = [...commandArgs];
+  if (shellWordBasename(markedCommandArgs[0]) !== "env") {
+    return ["env", ...missingEnv, ...markedCommandArgs];
+  }
+
+  markedCommandArgs.splice(envAssignmentInsertIndex(markedCommandArgs), 0, ...missingEnv);
+  return markedCommandArgs;
+}
+
+function envAssignmentInsertIndex(words) {
+  let index = 1;
+  for (;;) {
+    const word = words[index] ?? "";
+    if (!word) {
+      return 1;
+    }
+    if (word === "--") {
+      return index + 1;
+    }
+    if (word === "-S" || word === "--split-string" || (word.startsWith("-S") && word !== "-S")) {
+      return index;
+    }
+    if (word === "-u" || word === "--unset" || word === "-C" || word === "--chdir") {
+      index += 2;
+      continue;
+    }
+    if (word.startsWith("--unset=") || word.startsWith("--chdir=")) {
+      index += 1;
+      continue;
+    }
+    if (word.startsWith("-") && word !== "-") {
+      index += 1;
+      continue;
+    }
+    return index;
+  }
+}
+
 function isWindowsRemoteTarget(commandArgs) {
   return (
     optionValue(commandArgs, "--target") === "windows" || hasOption(commandArgs, "--windows-mode")
@@ -1673,15 +1754,15 @@ function createAwsMacosScriptStdinWrapper(script) {
   if (!script.startsWith("#!")) {
     return `${remoteAwsMacosJsBootstrap({ packageManager })} || exit $?\n${script}`;
   }
-  const delimiter = uniqueHereDocDelimiter(script);
+  const delimiterValue = uniqueHereDocDelimiter(script);
   return [
     `${remoteAwsMacosJsBootstrap({ packageManager })} || exit $?`,
     'tmp_script="$(mktemp "${TMPDIR:-/tmp}/openclaw-crabbox-script.XXXXXX")" || exit $?',
     'cleanup_openclaw_crabbox_script() { rm -f "$tmp_script"; }',
     "trap cleanup_openclaw_crabbox_script EXIT",
-    `cat >"$tmp_script" <<'${delimiter}'`,
+    `cat >"$tmp_script" <<'${delimiterValue}'`,
     script.endsWith("\n") ? script.slice(0, -1) : script,
-    delimiter,
+    delimiterValue,
     'chmod 700 "$tmp_script" || exit $?',
     '"$tmp_script" "$@"',
     "",
@@ -1708,9 +1789,9 @@ function scriptNeedsAwsMacosPackageManager(script) {
 function uniqueHereDocDelimiter(script) {
   let index = 0;
   for (;;) {
-    const delimiter = `OPENCLAW_CRABBOX_SCRIPT_${index}`;
-    if (!new RegExp(`^${delimiter}$`, "mu").test(script)) {
-      return delimiter;
+    const delimiterLocal = `OPENCLAW_CRABBOX_SCRIPT_${index}`;
+    if (!new RegExp(`^${delimiterLocal}$`, "mu").test(script)) {
+      return delimiterLocal;
     }
     index += 1;
   }
@@ -1729,7 +1810,7 @@ function isWorktreeClean() {
   return gitOutput(["status", "--porcelain=v1"]).stdout === "";
 }
 
-function shouldUseFullCheckoutForCleanSparseRemoteSync(commandArgs, providerName) {
+function shouldUseFullCheckoutForCleanSparseRemoteSync(commandArgs, _providerName) {
   if (commandArgs[0] !== "run") {
     return false;
   }
@@ -1924,15 +2005,15 @@ if (canonicalProvider === "blacksmith-testbox") {
 enforceBrokeredAws(normalizedArgs, provider);
 
 if (canonicalProvider === "blacksmith-testbox") {
-  const envProvider = process.env.CRABBOX_PROVIDER?.trim();
+  const envProviderLocal = process.env.CRABBOX_PROVIDER?.trim();
   const source = commandProviderValue
     ? "explicit"
-    : envProvider
+    : envProviderLocal
       ? "from CRABBOX_PROVIDER"
       : "from config";
   const fallback = commandProviderValue
     ? "rerun without --provider to use .crabbox.yaml"
-    : envProvider
+    : envProviderLocal
       ? "unset CRABBOX_PROVIDER to use .crabbox.yaml"
       : "pass another --provider to override it";
   console.error(
@@ -1944,10 +2025,9 @@ let childCwd = repoRoot;
 let cleanupChildCwd = () => {};
 let cleanupDone = false;
 let remoteChangedGateBase = "";
-let scriptStdinPrepared = false;
 const scriptBootstrap = prepareAwsMacosScriptStdinBootstrap(normalizedArgs, provider);
 normalizedArgs = scriptBootstrap.args;
-scriptStdinPrepared = scriptBootstrap.prepared;
+const scriptStdinPrepared = scriptBootstrap.prepared;
 try {
   if (shouldUseFullCheckoutForCleanSparseRemoteSync(normalizedArgs, provider)) {
     const runWords = runCommandArgs(normalizedArgs);
@@ -2024,11 +2104,12 @@ if (
   );
 }
 
+const remoteMarkedArgs = injectRemoteChangedGateEnvironment(normalizedArgs);
 const childArgs =
   childCwd === repoRoot
-    ? injectRemoteAwsMacosJsBootstrap(normalizedArgs, provider)
+    ? injectRemoteAwsMacosJsBootstrap(remoteMarkedArgs, provider)
     : injectRemoteChangedGateGitBootstrap(
-        injectRemoteAwsMacosJsBootstrap(absolutizeLocalRunPaths(normalizedArgs), provider),
+        injectRemoteAwsMacosJsBootstrap(absolutizeLocalRunPaths(remoteMarkedArgs), provider),
         remoteChangedGateBase,
       );
 const childInvocation = spawnInvocation(binary, childArgs, childEnv, process.platform);

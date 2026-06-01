@@ -31,8 +31,15 @@ export type CronDelivery = {
   /** Explicit channel account id for multi-account setups (e.g. multiple Telegram bots). */
   accountId?: string;
   bestEffort?: boolean;
+  /** Additional webhook destination used when a job must keep chat delivery. */
+  completionDestination?: CronCompletionDestination;
   /** Separate destination for failure notifications. */
   failureDestination?: CronFailureDestination;
+};
+
+export type CronCompletionDestination = {
+  mode: "webhook";
+  to?: string;
 };
 
 export type CronFailureDestination = {
@@ -42,7 +49,21 @@ export type CronFailureDestination = {
   mode?: "announce" | "webhook";
 };
 
-export type CronDeliveryPatch = Partial<CronDelivery>;
+export type CronFailureDestinationPatch = {
+  channel?: CronMessageChannel | null;
+  to?: string | null;
+  accountId?: string | null;
+  mode?: "announce" | "webhook" | null;
+};
+
+export type CronDeliveryPatch = Partial<Pick<CronDelivery, "mode" | "bestEffort">> & {
+  channel?: CronMessageChannel | null;
+  to?: string | null;
+  threadId?: string | number | null;
+  accountId?: string | null;
+  completionDestination?: CronCompletionDestination | null;
+  failureDestination?: CronFailureDestinationPatch | null;
+};
 
 export type CronRunStatus = "ok" | "error" | "skipped";
 export type CronDeliveryStatus = "delivered" | "not-delivered" | "unknown" | "not-requested";
@@ -255,7 +276,9 @@ export type CronJobCreate = Omit<CronJob, "id" | "createdAtMs" | "updatedAtMs" |
   state?: Partial<CronJobState>;
 };
 
-export type CronJobPatch = Partial<Omit<CronJob, "id" | "createdAtMs" | "state" | "payload">> & {
+export type CronJobPatch = Partial<
+  Omit<CronJob, "id" | "createdAtMs" | "state" | "payload" | "delivery">
+> & {
   payload?: CronPayloadPatch;
   delivery?: CronDeliveryPatch;
   state?: Partial<CronJobState>;

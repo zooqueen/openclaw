@@ -23,6 +23,12 @@ import {
   readNonNegativeIntegerParam,
   readStringParam,
 } from "./common.js";
+import {
+  canonicalizeCronToolObject,
+  hasCronCreateSignal,
+  isEmptyRecoveredCronPatch,
+  recoverCronObjectFromFlatParams,
+} from "./cron-tool-canonicalize.js";
 import { gatewayCallOptionSchemaProperties } from "./gateway-schema.js";
 import { callGatewayTool, readGatewayCallOptions, type GatewayCallOptions } from "./gateway.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
@@ -47,47 +53,6 @@ const CRON_WAKE_MODES = ["now", "next-heartbeat"] as const;
 const CRON_PAYLOAD_KINDS = ["systemEvent", "agentTurn"] as const;
 const CRON_DELIVERY_MODES = ["none", "announce", "webhook"] as const;
 const CRON_RUN_MODES = ["due", "force"] as const;
-const CRON_FLAT_PAYLOAD_KEYS = [
-  "message",
-  "text",
-  "model",
-  "fallbacks",
-  "toolsAllow",
-  "thinking",
-  "timeoutSeconds",
-  "lightContext",
-  "allowUnsafeExternalContent",
-] as const;
-const CRON_FLAT_SCHEDULE_KEYS = [
-  "kind",
-  "at",
-  "atMs",
-  "every",
-  "everyMs",
-  "anchorMs",
-  "cron",
-  "expr",
-  "tz",
-  "stagger",
-  "staggerMs",
-  "exact",
-] as const;
-const CRON_RECOVERABLE_OBJECT_KEYS: ReadonlySet<string> = new Set([
-  "name",
-  "schedule",
-  "sessionTarget",
-  "wakeMode",
-  "payload",
-  "delivery",
-  "enabled",
-  "description",
-  "deleteAfterRun",
-  "agentId",
-  "sessionKey",
-  "failureAlert",
-  ...CRON_FLAT_PAYLOAD_KEYS,
-  ...CRON_FLAT_SCHEDULE_KEYS,
-]);
 
 const REMINDER_CONTEXT_MESSAGES_MAX = 10;
 const REMINDER_CONTEXT_PER_MESSAGE_MAX = 220;
@@ -98,53 +63,32 @@ function isMissingOrEmptyObject(value: unknown): boolean {
   return !value || (isRecord(value) && Object.keys(value).length === 0);
 }
 
-function recoverCronObjectFromFlatParams(params: Record<string, unknown>): {
-  found: boolean;
-  value: Record<string, unknown>;
-} {
-  const value: Record<string, unknown> = {};
-  let found = false;
-  for (const key of Object.keys(params)) {
-    if (CRON_RECOVERABLE_OBJECT_KEYS.has(key) && params[key] !== undefined) {
-      value[key] = params[key];
-      found = true;
-    }
-  }
-  if (value.everyMs === undefined && value.every !== undefined) {
-    value.everyMs = value.every;
-  }
-  if (value.staggerMs === undefined && value.stagger !== undefined) {
-    value.staggerMs = value.stagger;
-  }
-  if (value.exact === true && value.staggerMs === undefined) {
-    value.staggerMs = 0;
-  }
-  delete value.every;
-  delete value.stagger;
-  delete value.exact;
-  return { found, value };
-}
-
-function hasCronCreateSignal(value: Record<string, unknown>): boolean {
-  return (
-    value.schedule !== undefined ||
-    value.at !== undefined ||
-    value.atMs !== undefined ||
-    value.everyMs !== undefined ||
-    value.cron !== undefined ||
-    value.expr !== undefined ||
-    value.payload !== undefined ||
-    value.message !== undefined ||
-    value.text !== undefined
-  );
-}
-
 function nullableStringSchema(description: string) {
-  return Type.Optional(Type.String({ description }));
+  return Type.Optional(Type.Union([Type.String(), Type.Null()], { description }));
 }
 
 function nullableStringArraySchema(description: string) {
-  return Type.Optional(Type.Array(Type.String(), { description }));
+  return Type.Optional(Type.Union([Type.Array(Type.String()), Type.Null()], { description }));
+}
+
+function deliveryStringSchema(params: { description: string; nullableClears: boolean }) {
+  return params.nullableClears
+    ? nullableStringSchema(params.description)
+    : Type.Optional(Type.String({ description: params.description }));
+}
+
+function deliveryThreadIdSchema(params: { nullableClears: boolean }) {
+  const variants = params.nullableClears
+    ? [Type.String(), Type.Number(), Type.Null()]
+    : [Type.String(), Type.Number()];
+  return Type.Optional(Type.Union(variants, { description: "Thread/topic id" }));
+}
+
+function failureDestinationModeSchema(params: { nullableClears: boolean }) {
+  const variants = params.nullableClears
+    ? [Type.Literal("announce"), Type.Literal("webhook"), Type.Null()]
+    : [Type.Literal("announce"), Type.Literal("webhook")];
+  return Type.Optional(Type.Union(variants));
 }
 
 function cronPayloadObjectSchema(params: { toolsAllow: TSchema }) {
@@ -198,34 +142,59 @@ const CronPayloadSchema = Type.Optional(
   }),
 );
 
-const CronDeliverySchema = Type.Optional(
-  Type.Object(
+function cronDeliverySchema(params: { nullableClears: boolean }) {
+  const failureDestinationObject = Type.Object(
     {
-      mode: optionalStringEnum(CRON_DELIVERY_MODES, { description: "Delivery mode" }),
-      channel: Type.Optional(Type.String({ description: "Delivery channel" })),
-      to: Type.Optional(Type.String({ description: "Delivery target" })),
-      threadId: Type.Optional(
-        Type.Union([Type.String(), Type.Number()], {
-          description: "Thread/topic id",
-        }),
-      ),
-      bestEffort: Type.Optional(Type.Boolean()),
-      accountId: Type.Optional(Type.String({ description: "Delivery account" })),
-      failureDestination: Type.Optional(
-        Type.Object(
-          {
-            channel: Type.Optional(Type.String()),
-            to: Type.Optional(Type.String()),
-            accountId: Type.Optional(Type.String()),
-            mode: optionalStringEnum(["announce", "webhook"] as const),
-          },
-          { additionalProperties: true },
-        ),
-      ),
+      channel: deliveryStringSchema({
+        description: "Failure delivery channel",
+        nullableClears: params.nullableClears,
+      }),
+      to: deliveryStringSchema({
+        description: "Failure delivery target",
+        nullableClears: params.nullableClears,
+      }),
+      accountId: deliveryStringSchema({
+        description: "Failure delivery account",
+        nullableClears: params.nullableClears,
+      }),
+      mode: failureDestinationModeSchema({ nullableClears: params.nullableClears }),
     },
     { additionalProperties: true },
-  ),
-);
+  );
+
+  return Type.Optional(
+    Type.Object(
+      {
+        mode: optionalStringEnum(CRON_DELIVERY_MODES, { description: "Delivery mode" }),
+        channel: deliveryStringSchema({
+          description: "Delivery channel",
+          nullableClears: params.nullableClears,
+        }),
+        to: deliveryStringSchema({
+          description: "Delivery target",
+          nullableClears: params.nullableClears,
+        }),
+        threadId: deliveryThreadIdSchema({ nullableClears: params.nullableClears }),
+        bestEffort: Type.Optional(Type.Boolean()),
+        accountId: deliveryStringSchema({
+          description: "Delivery account",
+          nullableClears: params.nullableClears,
+        }),
+        failureDestination: params.nullableClears
+          ? Type.Optional(
+              Type.Union([failureDestinationObject, Type.Null()], {
+                description: "Failure destination, or null to clear",
+              }),
+            )
+          : Type.Optional(failureDestinationObject),
+      },
+      { additionalProperties: true },
+    ),
+  );
+}
+
+const CronDeliverySchema = cronDeliverySchema({ nullableClears: false });
+const CronDeliveryPatchSchema = cronDeliverySchema({ nullableClears: true });
 
 // Omitting `failureAlert` means "leave defaults/unchanged"; `false` explicitly disables alerts.
 // Runtime handles `failureAlert === false` in cron/service/timer.ts.
@@ -287,7 +256,7 @@ const CronPatchObjectSchema = Type.Optional(
           toolsAllow: nullableStringArraySchema("Allowed tool ids, or null to clear"),
         }),
       ),
-      delivery: CronDeliverySchema,
+      delivery: CronDeliveryPatchSchema,
       description: Type.Optional(Type.String()),
       enabled: Type.Optional(Type.Boolean()),
       deleteAfterRun: Type.Optional(Type.Boolean()),
@@ -662,10 +631,11 @@ Use jobId canonical; id accepted compat. contextMessages (0-10) adds previous me
           if (!params.job || typeof params.job !== "object") {
             throw new Error("job required");
           }
+          const canonicalJob = canonicalizeCronToolObject(params.job as Record<string, unknown>);
           const job =
-            normalizeCronJobCreate(params.job, {
+            normalizeCronJobCreate(canonicalJob, {
               sessionContext: { sessionKey: opts?.agentSessionKey },
-            }) ?? params.job;
+            }) ?? canonicalJob;
           const cfg = getRuntimeConfig();
           if (job && typeof job === "object") {
             const { mainKey, alias } = resolveMainSessionAlias(cfg);
@@ -775,13 +745,11 @@ Use jobId canonical; id accepted compat. contextMessages (0-10) adds previous me
           if (!params.patch || typeof params.patch !== "object") {
             throw new Error("patch required");
           }
-          const patch = normalizeCronJobPatch(params.patch) ?? params.patch;
-          if (
-            recoveredFlatPatch &&
-            typeof patch === "object" &&
-            patch !== null &&
-            Object.keys(patch as Record<string, unknown>).length === 0
-          ) {
+          const canonicalPatch = canonicalizeCronToolObject(
+            params.patch as Record<string, unknown>,
+          );
+          const patch = normalizeCronJobPatch(canonicalPatch) ?? canonicalPatch;
+          if (recoveredFlatPatch && isEmptyRecoveredCronPatch(patch)) {
             throw new Error("patch required");
           }
           return jsonResult(
