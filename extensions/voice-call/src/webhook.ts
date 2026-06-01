@@ -941,16 +941,21 @@ export class VoiceCallWebhookServer {
     }
 
     if (ctx.query?.type === "status") {
+      // Status callbacks only carry lifecycle notifications; returning realtime
+      // TwiML here would cause Twilio to open media streams from notification retries.
       return null;
     }
 
     const callStatus = params.get("CallStatus");
     if (callStatus && isProviderStatusTerminal(callStatus)) {
+      // Terminal callbacks must be parsed as events so local cleanup/finalization
+      // happens instead of attempting to reconnect a dead call.
       return null;
     }
 
     // Initial TwiML fetches without gathered input may enter realtime handling.
     // Replay checks run before this helper so retries cannot mint new stream tokens.
+    // Gathered speech/DTMF callbacks must stay on the provider event path.
     return !params.get("SpeechResult") && !params.get("Digits") ? params : null;
   }
 
