@@ -2,7 +2,12 @@ import type { OpenClawConfig } from "../config/types.js";
 
 export { normalizePluginsConfig, resolveEffectiveEnableState } from "../plugins/config-state.js";
 
-/** Requires a resolved runtime config at plugin runtime boundaries. */
+/**
+ * Requires a resolved runtime config at plugin runtime boundaries.
+ *
+ * @param config Resolved config passed through the current command/gateway path.
+ * @param context Human-readable caller context included in the thrown setup error.
+ */
 export function requireRuntimeConfig(config: OpenClawConfig, context: string): OpenClawConfig {
   if (config) {
     return config;
@@ -12,7 +17,12 @@ export function requireRuntimeConfig(config: OpenClawConfig, context: string): O
   );
 }
 
-/** Resolves a plugin's config object from the normalized plugins.entries map. */
+/**
+ * Resolves a plugin's config object from the normalized plugins.entries map.
+ *
+ * @param config Resolved OpenClaw config; missing config returns undefined for optional callers.
+ * @param pluginId Canonical plugin id used as the plugins.entries key.
+ */
 export function resolvePluginConfigObject(
   config: OpenClawConfig | undefined,
   pluginId: string,
@@ -37,7 +47,13 @@ export function resolvePluginConfigObject(
     : undefined;
 }
 
-/** Resolves live plugin config when a runtime loader exists, otherwise falls back to startup config. */
+/**
+ * Resolves live plugin config when a runtime loader exists, otherwise falls back to startup config.
+ *
+ * @param runtimeConfigLoader Live config supplier installed by long-running plugin runtimes.
+ * @param pluginId Canonical plugin id used as the plugins.entries key.
+ * @param startupPluginConfig Config snapshot captured before live reload became available.
+ */
 export function resolveLivePluginConfigObject(
   runtimeConfigLoader: (() => OpenClawConfig | undefined) | undefined,
   pluginId: string,
