@@ -287,6 +287,8 @@ export async function createVoiceCallRuntime(params: {
   };
 
   const config = resolveVoiceCallConfig(rawConfig);
+  // fullConfig carries the complete host config for provider/plugin lookups; coreConfig
+  // is the narrowed voice-call bridge used by older call sites and tests.
   const cfg = fullConfig ?? (coreConfig as OpenClawConfig);
 
   if (!config.enabled) {
@@ -309,6 +311,8 @@ export async function createVoiceCallRuntime(params: {
     setVoiceCallStateRuntime({ state: stateRuntime });
   }
   const manager = new CallManager(config);
+  // Resolve realtime lazily only when enabled so normal TTS/STT call flows do
+  // not load provider runtimes or validate realtime credentials.
   const realtimeProvider = config.realtime.enabled
     ? await resolveRealtimeProvider({
         config,
@@ -382,6 +386,8 @@ export async function createVoiceCallRuntime(params: {
           if (fastContext.handled) {
             return fastContext.result;
           }
+          // Slow consults reuse the normal embedded-agent lane, but fork from the
+          // requester session when an outbound call came from another channel.
           const { provider: agentProvider, model } = resolveVoiceResponseModel({
             voiceConfig: effectiveConfig,
             agentRuntime,
@@ -474,11 +480,15 @@ export async function createVoiceCallRuntime(params: {
       provider.setPublicUrl?.(publicUrl);
     }
     if (publicUrl && realtimeProvider) {
+      // Realtime stream TwiML must use the same externally reachable origin as
+      // provider webhooks, not the local bind URL.
       webhookServer.getRealtimeHandler()?.setPublicUrl(publicUrl);
     }
 
     const realtimeHandler = webhookServer.getRealtimeHandler();
     if (realtimeHandler) {
+      // Providers that attach streams during answer/initiate get one-time WS
+      // tokens from the realtime handler and echo them on upgrade.
       manager.streamSessionIssuer = (request) => realtimeHandler.issueStreamSession(request);
     }
 
