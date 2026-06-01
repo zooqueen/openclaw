@@ -115,6 +115,8 @@ function persistRejectedInboundCall(params: {
 }): void {
   const callId = params.event.callId || params.providerCallId;
   const now = Date.now();
+  // Rejections are persisted as terminal snapshots even though they never enter
+  // activeCalls, so replay recovery keeps the dedupe key and policy decision.
   const rejectedCall: CallRecord = {
     callId,
     providerCallId: params.providerCallId,
@@ -167,6 +169,8 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
       if (ctx.rejectedProviderCallIds.has(pid)) {
         return;
       }
+      // Track rejected provider IDs separately from processed event IDs because
+      // carriers can emit multiple event ids for the same blocked call.
       ctx.rejectedProviderCallIds.add(pid);
       const callId = event.callId ?? pid;
       persistRejectedInboundCall({ ctx, event, dedupeKey, providerCallId: pid });
@@ -198,7 +202,8 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
   }
 
   if (!call) {
-    // Do not burn the replay key; a later redelivery may arrive after call registration.
+    // Do not burn the replay key. Some providers can deliver status callbacks
+    // before the create/answer event that registers the call.
     return;
   }
 
@@ -215,6 +220,8 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
     }
   }
 
+  // Retryable errors are observations, not terminal decisions; keep their
+  // replay keys reusable so a redelivery can still advance the call.
   const shouldCommitReplayKey = !(event.type === "call.error" && event.retryable);
   if (shouldCommitReplayKey) {
     ctx.processedEventIds.add(dedupeKey);
