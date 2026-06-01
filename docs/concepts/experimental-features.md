@@ -30,7 +30,7 @@ Treat them differently from normal config:
 
 ## Local model lean mode
 
-`agents.defaults.experimental.localModelLean: true` is a pressure-release valve for weaker local-model setups. When it is on, OpenClaw drops default web/browser, scheduling, and outbound message tools — `web_search`, `web_fetch`, `browser`, `cron`, and `message` — from the agent's tool surface for every turn. Nothing else changes. Use `agents.list[].experimental.localModelLean` to enable or disable the same behavior for one configured agent.
+`agents.defaults.experimental.localModelLean: true` is a pressure-release valve for weaker local-model setups. When it is on, OpenClaw drops default web/browser, scheduling, and outbound message tools — `web_search`, `web_fetch`, `x_search`, `browser`, `cron`, and `message` — from the agent's tool surface for every turn. Nothing else changes. Use `agents.list[].experimental.localModelLean` to enable or disable the same behavior for one configured agent.
 
 ### Why these tools
 
@@ -94,7 +94,7 @@ Restart the Gateway after changing the flag, then confirm the trimmed tool list 
 openclaw status --deep
 ```
 
-The deep status output lists the active agent tools; `web_search`, `web_fetch`, `browser`, `cron`, and `message` should be absent when lean mode is on.
+The deep status output lists the active agent tools; `web_search`, `web_fetch`, `x_search`, `browser`, `cron`, and `message` should be absent when lean mode is on.
 
 ## Experimental does not mean hidden
 

@@ -11,6 +11,7 @@ const LOCAL_MODEL_LEAN_DENY_TOOL_NAMES = new Set([
   "message",
   "web_fetch",
   "web_search",
+  "x_search",
 ]);
 
 function resolvePreservedLocalModelLeanToolNames(names?: Iterable<string>): string[] {

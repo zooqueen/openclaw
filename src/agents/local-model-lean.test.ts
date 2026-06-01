@@ -11,7 +11,16 @@ function tools(names: string[]): AnyAgentTool[] {
   return names.map((name) => ({ name })) as AnyAgentTool[];
 }
 
-const defaultToolNames = ["read", "web_search", "web_fetch", "browser", "cron", "message", "exec"];
+const defaultToolNames = [
+  "read",
+  "web_search",
+  "web_fetch",
+  "x_search",
+  "browser",
+  "cron",
+  "message",
+  "exec",
+];
 
 describe("local model lean tool filtering", () => {
   it("filters heavyweight tools for one configured agent", () => {
