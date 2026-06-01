@@ -1,6 +1,6 @@
 import { escapeXml } from "../voice-mapping.js";
 
-/** Render a terminal TwiML response that speaks a status message and hangs up. */
+/** Render a terminal Twilio TwiML response that speaks an escaped status message and hangs up. */
 export function generateNotifyTwiml(message: string, voice: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -9,7 +9,7 @@ export function generateNotifyTwiml(message: string, voice: string): string {
 </Response>`;
 }
 
-/** Render a TwiML response that sends DTMF digits, then returns control to the webhook. */
+/** Render Twilio TwiML that sends escaped DTMF digits before returning to the webhook. */
 export function generateDtmfRedirectTwiml(digits: string, webhookUrl: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
