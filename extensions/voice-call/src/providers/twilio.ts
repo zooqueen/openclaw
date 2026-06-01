@@ -48,6 +48,9 @@ function createTwilioRequestDedupeKey(ctx: WebhookContext, verifiedRequestKey?: 
     return verifiedRequestKey;
   }
 
+  // Before signature verification succeeds, derive idempotency from the actual
+  // request facts we route on; Twilio's raw idempotency header is not enough
+  // because query tokens select the OpenClaw call/turn.
   const signature = getHeader(ctx.headers, "x-twilio-signature") ?? "";
   const params = new URLSearchParams(ctx.rawBody);
   const callSid = params.get("CallSid") ?? "";
@@ -184,6 +187,8 @@ export class TwilioProvider implements VoiceCallProvider {
       return;
     }
     if (streamSid && currentStreamSid !== streamSid) {
+      // Twilio can deliver a stop for an older stream after reconnecting the
+      // same call; keep the newer stream registered so playback is not severed.
       return;
     }
     this.callStreamMap.delete(callSid);
@@ -245,6 +250,9 @@ export class TwilioProvider implements VoiceCallProvider {
         if (!isTwilioCallNotInProgressError(err)) {
           throw err;
         }
+        // Twilio can acknowledge answer/status webhooks before the Calls API
+        // accepts live TwiML updates for that SID. Short retries bridge that
+        // provider race without hiding real API failures.
         console.warn(
           `[voice-call] Twilio ${operation} update hit call state race (21220); retrying in ${retryDelayMs}ms`,
         );
@@ -430,9 +438,13 @@ export class TwilioProvider implements VoiceCallProvider {
     });
 
     if (decision.consumeStoredTwimlCallId) {
+      // Stored notify/pre-connect TwiML is single-use; replaying it on later
+      // callbacks would restart setup digits instead of entering conversation.
       this.deleteStoredTwiml(decision.consumeStoredTwimlCallId);
     }
     if (decision.activateStreamCallSid) {
+      // activeStreamCalls is the admission lock for inbound calls before the
+      // WebSocket start event has registered a stream SID.
       this.activeStreamCalls.add(decision.activateStreamCallSid);
     }
 
@@ -498,6 +510,8 @@ export class TwilioProvider implements VoiceCallProvider {
     if (existing) {
       return existing;
     }
+    // Keep the token stable for the call: Twilio may fetch TwiML more than once
+    // before the WebSocket "start" frame carries customParameters.token.
     const token = crypto.randomBytes(16).toString("base64url");
     this.streamAuthTokens.set(callSid, token);
     return token;
@@ -697,6 +711,8 @@ export class TwilioProvider implements VoiceCallProvider {
         sent?: unknown;
       };
       return {
+        // Older handlers returned void; treat that as success while allowing
+        // newer handlers to report dropped frames or marks explicitly.
         sent: typed.sent === undefined ? true : Boolean(typed.sent),
       };
     };
