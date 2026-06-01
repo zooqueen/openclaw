@@ -895,18 +895,25 @@ function hasConfiguredMemoryWatchFdPressureSurface(
   defaults: MemorySearchConfig | undefined,
   override: MemorySearchConfig | undefined,
 ): boolean {
+  const hasMemorySearchConfig = Boolean(defaults || override);
+  const hasMultipleGatewayAgents = (config.agents?.list?.length ?? 0) > 1;
+  const hasQmdBackend = config.memory?.backend === "qmd";
+  const hasQmdPaths = Boolean(config.memory?.qmd?.paths?.length);
+  const hasExtraPaths = Boolean(defaults?.extraPaths?.length || override?.extraPaths?.length);
+  const hasExtraQmdCollections = Boolean(
+    defaults?.qmd?.extraCollections?.length || override?.qmd?.extraCollections?.length,
+  );
+  const hasSessionMemory = Boolean(
+    defaults?.experimental?.sessionMemory || override?.experimental?.sessionMemory,
+  );
   return Boolean(
-    defaults ||
-    override ||
-    (config.agents?.list?.length ?? 0) > 1 ||
-    config.memory?.backend === "qmd" ||
-    config.memory?.qmd?.paths?.length ||
-    defaults?.extraPaths?.length ||
-    override?.extraPaths?.length ||
-    defaults?.qmd?.extraCollections?.length ||
-    override?.qmd?.extraCollections?.length ||
-    defaults?.experimental?.sessionMemory ||
-    override?.experimental?.sessionMemory,
+    hasMemorySearchConfig ||
+    hasMultipleGatewayAgents ||
+    hasQmdBackend ||
+    hasQmdPaths ||
+    hasExtraPaths ||
+    hasExtraQmdCollections ||
+    hasSessionMemory,
   );
 }
 
