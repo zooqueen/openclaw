@@ -1353,6 +1353,136 @@ describe("doctor legacy state migrations", () => {
     });
   });
 
+  it("archives equivalent legacy npm install records after spec pinning", async () => {
+    const root = await makeTempRoot();
+    await writePersistedInstalledPluginIndex(
+      {
+        version: 1,
+        hostContractVersion: "test",
+        compatRegistryVersion: "test",
+        migrationVersion: 1,
+        policyHash: "test",
+        generatedAtMs: 1,
+        installRecords: {
+          codex: {
+            source: "npm",
+            spec: "@openclaw/codex@2026.5.31",
+            installPath: "/tmp/openclaw-plugins/codex",
+            version: "2026.5.31",
+            resolvedName: "@openclaw/codex",
+            resolvedVersion: "2026.5.31",
+            resolvedSpec: "@openclaw/codex@2026.5.31",
+            integrity: "sha512-codex",
+          },
+        },
+        plugins: [],
+        diagnostics: [],
+      },
+      { stateDir: root },
+    );
+    const sourcePath = path.join(root, "plugins", "installs.json");
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(
+      sourcePath,
+      JSON.stringify({
+        records: {
+          codex: {
+            source: "npm",
+            spec: "@openclaw/codex",
+            installPath: "/tmp/openclaw-plugins/codex",
+            version: "2026.5.31",
+            resolvedName: "@openclaw/codex",
+            resolvedVersion: "2026.5.31",
+            resolvedSpec: "@openclaw/codex@2026.5.31",
+            integrity: "sha512-codex",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const detected = await detectLegacyStateMigrations({
+      cfg: {},
+      env: { OPENCLAW_STATE_DIR: root } as NodeJS.ProcessEnv,
+    });
+    const result = await runLegacyStateMigrations({ detected });
+
+    expect(result.warnings).toStrictEqual([]);
+    expect(result.changes).toContain(
+      `Archived plugin install index legacy source → ${sourcePath}.migrated`,
+    );
+    expect(fs.existsSync(sourcePath)).toBe(false);
+    expect(fs.existsSync(`${sourcePath}.migrated`)).toBe(true);
+    await expect(readPersistedInstalledPluginIndex({ stateDir: root })).resolves.toMatchObject({
+      installRecords: {
+        codex: {
+          source: "npm",
+          spec: "@openclaw/codex@2026.5.31",
+          resolvedVersion: "2026.5.31",
+        },
+      },
+    });
+  });
+
+  it("keeps the legacy plugin install index when npm artifact versions differ", async () => {
+    const root = await makeTempRoot();
+    await writePersistedInstalledPluginIndex(
+      {
+        version: 1,
+        hostContractVersion: "test",
+        compatRegistryVersion: "test",
+        migrationVersion: 1,
+        policyHash: "test",
+        generatedAtMs: 1,
+        installRecords: {
+          codex: {
+            source: "npm",
+            spec: "@openclaw/codex@2026.5.31",
+            installPath: "/tmp/openclaw-plugins/codex",
+            version: "2026.5.31",
+            resolvedName: "@openclaw/codex",
+            resolvedVersion: "2026.5.31",
+            resolvedSpec: "@openclaw/codex@2026.5.31",
+          },
+        },
+        plugins: [],
+        diagnostics: [],
+      },
+      { stateDir: root },
+    );
+    const sourcePath = path.join(root, "plugins", "installs.json");
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(
+      sourcePath,
+      JSON.stringify({
+        records: {
+          codex: {
+            source: "npm",
+            spec: "@openclaw/codex",
+            installPath: "/tmp/openclaw-plugins/codex",
+            version: "2026.5.30",
+            resolvedName: "@openclaw/codex",
+            resolvedVersion: "2026.5.30",
+            resolvedSpec: "@openclaw/codex@2026.5.30",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const detected = await detectLegacyStateMigrations({
+      cfg: {},
+      env: { OPENCLAW_STATE_DIR: root } as NodeJS.ProcessEnv,
+    });
+    const result = await runLegacyStateMigrations({ detected });
+
+    expect(result.warnings).toStrictEqual([
+      "Left plugin install index in place because shared SQLite state has conflicting plugin install metadata for: codex",
+    ]);
+    expect(fs.existsSync(sourcePath)).toBe(true);
+    expect(fs.existsSync(`${sourcePath}.migrated`)).toBe(false);
+  });
+
   it("auto-migrates the shipped plugin-state SQLite sidecar by itself", async () => {
     const root = await makeTempRoot();
     const sourcePath = writeLegacyPluginStateSidecar(root);

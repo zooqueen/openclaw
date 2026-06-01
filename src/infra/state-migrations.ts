@@ -44,6 +44,7 @@ import {
   INSTALLED_PLUGIN_INDEX_MIGRATION_VERSION,
   INSTALLED_PLUGIN_INDEX_VERSION,
   type InstalledPluginIndex,
+  type InstalledPluginInstallRecordInfo,
 } from "../plugins/installed-plugin-index.js";
 import {
   buildAgentMainSessionKey,
@@ -63,6 +64,7 @@ import {
   getNodeSqliteKysely,
 } from "./kysely-sync.js";
 import { requireNodeSqlite } from "./node-sqlite.js";
+import { parseRegistryNpmSpec } from "./npm-registry-spec.js";
 import { isWithinDir } from "./path-safety.js";
 import {
   ensureDir,
@@ -374,6 +376,86 @@ function legacyInstalledPluginIndexMatches(
   );
 }
 
+function readInstallRecordString(
+  record: InstalledPluginInstallRecordInfo,
+  key: keyof InstalledPluginInstallRecordInfo,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function resolveNpmRecordPackageName(record: InstalledPluginInstallRecordInfo): string | undefined {
+  const resolvedName = normalizeLowercaseStringOrEmpty(
+    readInstallRecordString(record, "resolvedName"),
+  );
+  if (resolvedName) {
+    return resolvedName;
+  }
+  const specName = parseRegistryNpmSpec(readInstallRecordString(record, "spec") ?? "")?.name;
+  if (specName) {
+    return specName;
+  }
+  return parseRegistryNpmSpec(readInstallRecordString(record, "resolvedSpec") ?? "")?.name;
+}
+
+function resolveExactRegistryNpmSpecVersion(spec: string | undefined): string | undefined {
+  const parsed = spec ? parseRegistryNpmSpec(spec) : null;
+  return parsed?.selectorKind === "exact-version" ? parsed.selector : undefined;
+}
+
+function resolveNpmRecordArtifactVersion(
+  record: InstalledPluginInstallRecordInfo,
+): string | undefined {
+  return (
+    readInstallRecordString(record, "resolvedVersion") ??
+    resolveExactRegistryNpmSpecVersion(readInstallRecordString(record, "resolvedSpec")) ??
+    resolveExactRegistryNpmSpecVersion(readInstallRecordString(record, "spec")) ??
+    readInstallRecordString(record, "version")
+  );
+}
+
+function installRecordStringFieldMatches(params: {
+  current: InstalledPluginInstallRecordInfo;
+  legacy: InstalledPluginInstallRecordInfo;
+  key: keyof InstalledPluginInstallRecordInfo;
+}): boolean {
+  const current = readInstallRecordString(params.current, params.key);
+  const legacy = readInstallRecordString(params.legacy, params.key);
+  return !current || !legacy || current === legacy;
+}
+
+function npmInstallRecordsReferToSameArtifact(params: {
+  current: InstalledPluginInstallRecordInfo;
+  legacy: InstalledPluginInstallRecordInfo;
+}): boolean {
+  if (params.current.source !== "npm" || params.legacy.source !== "npm") {
+    return false;
+  }
+  const currentName = resolveNpmRecordPackageName(params.current);
+  const legacyName = resolveNpmRecordPackageName(params.legacy);
+  if (!currentName || currentName !== legacyName) {
+    return false;
+  }
+  const currentVersion = resolveNpmRecordArtifactVersion(params.current);
+  const legacyVersion = resolveNpmRecordArtifactVersion(params.legacy);
+  if (!currentVersion || currentVersion !== legacyVersion) {
+    return false;
+  }
+  return (["installPath", "integrity", "shasum"] as const).every((key) =>
+    installRecordStringFieldMatches({ ...params, key }),
+  );
+}
+
+function installRecordsMatchForLegacyIndexMigration(params: {
+  current: InstalledPluginInstallRecordInfo;
+  legacy: InstalledPluginInstallRecordInfo;
+}): boolean {
+  if (JSON.stringify(params.current) === JSON.stringify(params.legacy)) {
+    return true;
+  }
+  return npmInstallRecordsReferToSameArtifact(params);
+}
+
 function mergeLegacyInstalledPluginIndexRecords(
   current: InstalledPluginIndex,
   legacy: InstalledPluginIndex,
@@ -388,7 +470,9 @@ function mergeLegacyInstalledPluginIndexRecords(
       addedCount += 1;
       continue;
     }
-    if (JSON.stringify(currentRecord) !== JSON.stringify(legacyRecord)) {
+    if (
+      !installRecordsMatchForLegacyIndexMigration({ current: currentRecord, legacy: legacyRecord })
+    ) {
       conflicts.push(pluginId);
     }
   }
