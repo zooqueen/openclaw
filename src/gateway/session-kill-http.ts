@@ -49,9 +49,13 @@ export async function handleSessionKillHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   opts: {
+    /** Gateway auth policy used before any session or run lookup occurs. */
     auth: ResolvedGatewayAuth;
+    /** Trusted proxy CIDRs for classifying local/direct admin requests. */
     trustedProxies?: string[];
+    /** Whether proxy headers may fall back to the socket remote address. */
     allowRealIpFallback?: boolean;
+    /** Optional auth limiter shared with the surrounding Gateway HTTP server. */
     rateLimiter?: AuthRateLimiter;
   },
 ): Promise<boolean> {
@@ -93,6 +97,8 @@ export async function handleSessionKillHttpRequest(
   const requestedScopes = resolveTrustedHttpOperatorScopes(req, requestAuth);
 
   if (!requesterSessionKey && !allowLocalAdminKill) {
+    // Remote kills need an owning requester session; without one they would be
+    // indistinguishable from arbitrary cross-session abort requests.
     sendJson(res, 403, {
       ok: false,
       error: {
@@ -127,6 +133,8 @@ export async function handleSessionKillHttpRequest(
   if (!allowLocalAdminKill && requesterSessionKey) {
     const runEntry = getLatestSubagentRunByChildSessionKey(canonicalKey);
     if (runEntry) {
+      // Requester-scoped kills go through subagent control so parent/child
+      // ownership is enforced before the run receives a stop signal.
       const result = await killControlledSubagentRun({
         cfg,
         controller: resolveSubagentController({ cfg, agentSessionKey: requesterSessionKey }),
