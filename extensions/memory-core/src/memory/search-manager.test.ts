@@ -853,24 +853,6 @@ describe("getMemorySearchManager caching", () => {
     expect(fullAgain.manager).toBe(full.manager);
   });
 
-  it("reuses cached full qmd manager for gateway status-only requests", async () => {
-    const agentId = "status-reuses-gateway-full-agent";
-    const cfg = {
-      ...createQmdCfg(agentId),
-      gateway: { mode: "local" },
-    } as OpenClawConfig;
-
-    const full = await getMemorySearchManager({ cfg, agentId });
-    const status = await getMemorySearchManager({ cfg, agentId, purpose: "status" });
-
-    requireManager(full);
-    requireManager(status);
-    expect(status.manager).not.toBe(full.manager);
-    expect(createQmdManagerMock.mock.calls).toHaveLength(1);
-    await status.manager?.close?.();
-    expect(mockPrimary.close).not.toHaveBeenCalled();
-  });
-
   it("does not borrow a cached full qmd manager for status across different workspaces", async () => {
     const agentId = "status-workspace-reload";
     const firstCfg = createQmdCfg(agentId, "/tmp/workspace-a");

@@ -1331,7 +1331,7 @@ export const FIELD_HELP: Record<string, string> = {
   "agents.defaults.memorySearch.sync.onSearch":
     "Uses lazy sync by scheduling reindex on search after content changes are detected. Keep enabled for lower idle overhead, or disable if you require pre-synced indexes before any query.",
   "agents.defaults.memorySearch.sync.watch":
-    "Watches memory files and schedules index updates from file-change events. Defaults to enabled for local CLI/desktop-style use, but unset gateway-mode default managers keep it disabled to avoid long-lived watcher FD pressure. Set true to opt back in.",
+    "Watches memory files and schedules index updates from file-change events (default: true). Disable on large memory trees, extraPaths, QMD collections, or multi-agent gateways if watcher file-descriptor pressure appears.",
   "agents.defaults.memorySearch.sync.watchDebounceMs":
     "Debounce window in milliseconds for coalescing rapid file-watch events before reindex runs. Increase to reduce churn on frequently-written files, or lower for faster freshness.",
   "agents.defaults.memorySearch.sync.embeddingBatchTimeoutSeconds":

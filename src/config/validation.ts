@@ -46,6 +46,7 @@ import { shouldSuppressMissingCodexPluginDiagnostics } from "./codex-plugin-diag
 import { materializeRuntimeConfig } from "./materialize.js";
 import type { OpenClawConfig, ConfigValidationIssue } from "./types.js";
 import { coerceSecretRef } from "./types.secrets.js";
+import type { MemorySearchConfig } from "./types.tools.js";
 import { isBuiltInModelProviderOverlayId } from "./zod-schema.core.js";
 import { OpenClawSchema } from "./zod-schema.js";
 
@@ -871,6 +872,81 @@ function validateGatewayTailscaleAuth(config: OpenClawConfig): ConfigValidationI
   ];
 }
 
+function isGatewayMode(config: OpenClawConfig): boolean {
+  return config.gateway?.mode === "local" || config.gateway?.mode === "remote";
+}
+
+function isMemorySearchEnabled(
+  defaults: MemorySearchConfig | undefined,
+  override: MemorySearchConfig | undefined,
+): boolean {
+  return override?.enabled ?? defaults?.enabled ?? true;
+}
+
+function isMemoryWatchEnabled(
+  defaults: MemorySearchConfig | undefined,
+  override: MemorySearchConfig | undefined,
+): boolean {
+  return override?.sync?.watch ?? defaults?.sync?.watch ?? true;
+}
+
+function hasConfiguredMemoryWatchFdPressureSurface(
+  config: OpenClawConfig,
+  defaults: MemorySearchConfig | undefined,
+  override: MemorySearchConfig | undefined,
+): boolean {
+  return Boolean(
+    defaults ||
+    override ||
+    (config.agents?.list?.length ?? 0) > 1 ||
+    config.memory?.backend === "qmd" ||
+    config.memory?.qmd?.paths?.length ||
+    defaults?.extraPaths?.length ||
+    override?.extraPaths?.length ||
+    defaults?.qmd?.extraCollections?.length ||
+    override?.qmd?.extraCollections?.length ||
+    defaults?.experimental?.sessionMemory ||
+    override?.experimental?.sessionMemory,
+  );
+}
+
+function memoryWatchFdPressureWarningMessage(): string {
+  return "memorySearch.sync.watch is enabled in gateway mode; large memory/ trees, extraPaths, QMD collections, session-memory indexing, or multi-agent gateways can create file-descriptor pressure. If FD usage grows, set memorySearch.sync.watch: false for the affected default or agent and use manual indexing or sync.intervalMinutes for freshness.";
+}
+
+function collectGatewayMemoryWatchWarnings(config: OpenClawConfig): ConfigValidationIssue[] {
+  if (!isGatewayMode(config)) {
+    return [];
+  }
+  const defaults = config.agents?.defaults?.memorySearch;
+  const warnings: ConfigValidationIssue[] = [];
+  if (
+    isMemorySearchEnabled(defaults, undefined) &&
+    isMemoryWatchEnabled(defaults, undefined) &&
+    hasConfiguredMemoryWatchFdPressureSurface(config, defaults, undefined)
+  ) {
+    warnings.push({
+      path: "agents.defaults.memorySearch.sync.watch",
+      message: memoryWatchFdPressureWarningMessage(),
+    });
+  }
+  for (const [index, agent] of (config.agents?.list ?? []).entries()) {
+    const override = agent.memorySearch;
+    if (
+      override &&
+      isMemorySearchEnabled(defaults, override) &&
+      isMemoryWatchEnabled(defaults, override) &&
+      hasConfiguredMemoryWatchFdPressureSurface(config, defaults, override)
+    ) {
+      warnings.push({
+        path: `agents.list.${index}.memorySearch.sync.watch`,
+        message: memoryWatchFdPressureWarningMessage(),
+      });
+    }
+  }
+  return warnings;
+}
+
 /**
  * Validates config without applying runtime defaults.
  * Use this when you need the raw validated config (e.g., for writing back to file).
@@ -1039,16 +1115,17 @@ function validateConfigObjectWithPluginsBase(
         manifestRegistry: registryInfo?.registry,
       })
     : base.config;
+  const configWarnings = collectGatewayMemoryWatchWarnings(base.config);
   if (opts.pluginValidation === "skip") {
     return {
       ok: true,
       config,
-      warnings: [],
+      warnings: configWarnings,
     };
   }
 
   const issues: ConfigValidationIssue[] = [];
-  const warnings: ConfigValidationIssue[] = [];
+  const warnings: ConfigValidationIssue[] = [...configWarnings];
   const hasExplicitPluginsConfig = isRecord(raw) && Object.hasOwn(raw, "plugins");
   const explicitPluginReferences = collectExplicitPluginReferences(raw);
 

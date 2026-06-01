@@ -95,7 +95,7 @@ export async function closeMemoryIndexManagersForAgent(params: {
   cfg: OpenClawConfig;
   agentId: string;
 }): Promise<void> {
-  const settings = resolveMemorySearchConfig(params.cfg, params.agentId, { purpose: "default" });
+  const settings = resolveMemorySearchConfig(params.cfg, params.agentId);
   if (!settings) {
     return;
   }
@@ -202,13 +202,13 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     purpose?: MemoryIndexManagerPurpose;
   }): Promise<MemoryIndexManager | null> {
     const { cfg, agentId } = params;
-    const purpose =
-      params.purpose === "status" || params.purpose === "cli" ? params.purpose : "default";
-    const settings = resolveMemorySearchConfig(cfg, agentId, { purpose });
+    const settings = resolveMemorySearchConfig(cfg, agentId);
     if (!settings) {
       return null;
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const purpose =
+      params.purpose === "status" || params.purpose === "cli" ? params.purpose : "default";
     const key = `${agentId}:${workspaceDir}:${JSON.stringify(settings)}:${purpose}`;
     const transient = purpose === "status" || purpose === "cli";
     return await getOrCreateManagedCacheEntry({

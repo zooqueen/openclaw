@@ -320,8 +320,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       return null;
     }
     const runtimeConfig =
-      params.runtimeConfig ??
-      resolveQmdManagerRuntimeConfig(params.cfg, params.agentId, params.mode ?? "full");
+      params.runtimeConfig ?? resolveQmdManagerRuntimeConfig(params.cfg, params.agentId);
     const manager = new QmdMemoryManager({
       agentId: params.agentId,
       resolved,
@@ -1617,6 +1616,12 @@ export class QmdMemoryManager implements MemorySearchManager {
     this.watcher.on("add", markDirty);
     this.watcher.on("change", markDirty);
     this.watcher.on("unlink", markDirty);
+    this.watcher.on("error", (err) => {
+      // File watcher errors (for example ENOSPC/EMFILE) should not crash the
+      // gateway. Search still works; automatic watch freshness may be degraded.
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`qmd watcher error: ${message}`);
+    });
     this.watcher.once("ready", () => {
       log.info(
         `qmd watcher ready for agent "${this.agentId}" paths=${watchPathList.length} durationMs=${Date.now() - startTime}`,
@@ -3256,12 +3261,10 @@ export class QmdMemoryManager implements MemorySearchManager {
 function resolveQmdManagerRuntimeConfig(
   cfg: OpenClawConfig,
   agentId: string,
-  mode?: QmdManagerMode,
 ): QmdManagerRuntimeConfig {
-  const purpose = mode === "cli" || mode === "status" ? mode : "default";
   return {
     workspaceDir: resolveAgentWorkspaceDir(cfg, agentId),
-    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId, { purpose }),
+    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId),
     contextLimits: resolveAgentContextLimits(cfg, agentId),
   };
 }

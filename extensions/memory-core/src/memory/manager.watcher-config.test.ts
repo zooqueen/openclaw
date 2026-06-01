@@ -297,19 +297,6 @@ describe("memory watcher config", () => {
     expect(nativeWatchMock).not.toHaveBeenCalled();
   });
 
-  it("does not start watchers for unset watch in gateway mode", async () => {
-    await setupWatcherWorkspace({ name: "notes.md", contents: "hello" });
-    const cfg = createWatcherConfig({
-      sync: { watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-    });
-    cfg.gateway = { mode: "local" };
-
-    await expectWatcherManager(cfg);
-
-    expect(watchMock).not.toHaveBeenCalled();
-    expect(nativeWatchMock).not.toHaveBeenCalled();
-  });
-
   it("watches multimodal extra directories via native watch", async () => {
     await setupWatcherWorkspace({ name: "PHOTO.PNG", contents: "png" });
     const cfg = createWatcherConfig({

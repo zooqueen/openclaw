@@ -291,7 +291,7 @@ describe("memory search config", () => {
     expect(resolveMemorySearchSyncConfig(cfg, "main")?.embeddingBatchTimeoutSeconds).toBe(600);
   });
 
-  it("defaults memory watching off for long-lived gateway managers when unset", () => {
+  it("keeps memory watching enabled by default in gateway mode", () => {
     const cfg = asConfig({
       gateway: { mode: "local" },
       agents: {
@@ -303,61 +303,8 @@ describe("memory search config", () => {
       },
     });
 
-    expect(resolveMemorySearchConfig(cfg, "main")?.sync.watch).toBe(false);
-    expect(resolveMemorySearchSyncConfig(cfg, "main")?.watch).toBe(false);
-  });
-
-  it("keeps explicit memory watch config in gateway mode", () => {
-    const defaultEnabled = asConfig({
-      gateway: { mode: "local" },
-      agents: {
-        defaults: {
-          memorySearch: {
-            provider: "openai",
-            sync: { watch: true },
-          },
-        },
-      },
-    });
-    const overrideDisabled = asConfig({
-      gateway: { mode: "remote" },
-      agents: {
-        defaults: {
-          memorySearch: {
-            provider: "openai",
-            sync: { watch: true },
-          },
-        },
-        list: [
-          {
-            id: "main",
-            default: true,
-            memorySearch: {
-              sync: { watch: false },
-            },
-          },
-        ],
-      },
-    });
-
-    expect(resolveMemorySearchConfig(defaultEnabled, "main")?.sync.watch).toBe(true);
-    expect(resolveMemorySearchConfig(overrideDisabled, "main")?.sync.watch).toBe(false);
-  });
-
-  it("keeps transient CLI and status memory watch defaults unchanged in gateway mode", () => {
-    const cfg = asConfig({
-      gateway: { mode: "local" },
-      agents: {
-        defaults: {
-          memorySearch: {
-            provider: "openai",
-          },
-        },
-      },
-    });
-
-    expect(resolveMemorySearchConfig(cfg, "main", { purpose: "cli" })?.sync.watch).toBe(true);
-    expect(resolveMemorySearchSyncConfig(cfg, "main", { purpose: "status" })?.watch).toBe(true);
+    expect(resolveMemorySearchConfig(cfg, "main")?.sync.watch).toBe(true);
+    expect(resolveMemorySearchSyncConfig(cfg, "main")?.watch).toBe(true);
   });
 
   it("merges defaults and overrides", () => {

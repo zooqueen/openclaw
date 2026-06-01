@@ -85,9 +85,10 @@ OpenClaw indexes `MEMORY.md` and `memory/*.md` into chunks (~400 tokens with
 - **Storage maintenance:** SQLite WAL sidecars are bounded with periodic and
   shutdown checkpoints.
 - **File watching:** changes to memory files trigger a debounced reindex (1.5s).
-  Unset `memorySearch.sync.watch` stays enabled for local CLI and desktop-style
-  use, but gateway-mode default managers leave watchers off unless you set
-  `sync.watch: true`.
+  It stays enabled by default, including in gateway mode, so small and typical
+  workspaces keep near-real-time freshness. Large memory trees, `extraPaths`, or
+  QMD collections can create file-descriptor pressure in long-lived gateways;
+  set `sync.watch: false` if that happens.
 - **Auto-reindex:** when the embedding provider, model, or chunking config
   changes, the entire index is rebuilt automatically.
 - **Reindex on demand:** `openclaw memory index --force`
@@ -129,7 +130,7 @@ Both standalone CLI commands and the Gateway use the same `local` provider id.
 Set `memorySearch.provider: "local"` when you want local embeddings.
 
 **Stale results?** Run `openclaw memory index --force` to rebuild. The watcher
-may be disabled in gateway mode or miss changes in rare edge cases.
+may be disabled explicitly or miss changes in rare edge cases.
 
 **sqlite-vec not loading?** OpenClaw falls back to in-process cosine similarity
 automatically. `openclaw memory status --deep` reports the local vector store

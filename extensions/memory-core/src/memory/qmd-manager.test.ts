@@ -569,9 +569,8 @@ describe("QmdMemoryManager", () => {
     await manager.close();
   });
 
-  it("does not start qmd watcher for unset watch in gateway mode", async () => {
+  it("logs qmd watcher errors without throwing", async () => {
     cfg = {
-      gateway: { mode: "local" },
       agents: {
         defaults: {
           workspace: workspaceDir,
@@ -579,7 +578,7 @@ describe("QmdMemoryManager", () => {
             provider: "openai",
             model: "mock-embed",
             store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-            sync: { watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+            sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
           },
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
@@ -595,9 +594,14 @@ describe("QmdMemoryManager", () => {
     } as OpenClawConfig;
 
     const { manager } = await createManager({ mode: "full" });
+    const watcher = watchMock.mock.results[0]?.value as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
 
-    expect(manager.status().backend).toBe("qmd");
-    expect(watchMock).not.toHaveBeenCalled();
+    expect(watcher.emit("error", new Error("watcher error: ENOSPC"))).toBe(true);
+    expect(logWarnMock).toHaveBeenCalledWith("qmd watcher error: watcher error: ENOSPC");
+
+    await manager.close();
   });
 
   it("delays qmd watch sync until changed file stats settle", async () => {

@@ -523,7 +523,7 @@ export type MemorySearchConfig = {
   sync?: {
     onSessionStart?: boolean;
     onSearch?: boolean;
-    /** Watch memory files for near-real-time reindexing. Default: true, except unset gateway-mode default managers use false. */
+    /** Watch memory files for near-real-time reindexing. Default: true. */
     watch?: boolean;
     watchDebounceMs?: number;
     intervalMinutes?: number;

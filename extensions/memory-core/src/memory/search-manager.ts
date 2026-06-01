@@ -157,21 +157,11 @@ export async function getMemorySearchManager(params: {
   if (resolved.backend === "qmd" && resolved.qmd) {
     const qmdResolved = resolved.qmd;
     const normalizedAgentId = normalizeAgentId(params.agentId);
-    const purpose =
-      params.purpose === "status" || params.purpose === "cli" ? params.purpose : "default";
-    const runtimeConfig = resolveQmdManagerRuntimeConfig(params.cfg, normalizedAgentId, purpose);
+    const runtimeConfig = resolveQmdManagerRuntimeConfig(params.cfg, normalizedAgentId);
     const { workspaceDir } = runtimeConfig;
-    const transient = purpose === "status" || purpose === "cli";
+    const transient = params.purpose === "status" || params.purpose === "cli";
     const scopeKey = buildQmdManagerScopeKey(normalizedAgentId);
-    const identityRuntimeConfig =
-      purpose === "status"
-        ? resolveQmdManagerRuntimeConfig(params.cfg, normalizedAgentId, "default")
-        : runtimeConfig;
-    const identityKey = buildQmdManagerIdentityKey(
-      normalizedAgentId,
-      qmdResolved,
-      identityRuntimeConfig,
-    );
+    const identityKey = buildQmdManagerIdentityKey(normalizedAgentId, qmdResolved, runtimeConfig);
 
     const createPrimaryQmdManager = async (
       mode: "full" | "status" | "cli",
@@ -259,19 +249,21 @@ export async function getMemorySearchManager(params: {
     const cached = QMD_MANAGER_CACHE.get(scopeKey);
     const cachedMatchesIdentity = cached?.identityKey === identityKey;
     if (cachedMatchesIdentity) {
-      if (purpose === "status") {
+      if (params.purpose === "status") {
         // Status callers often close the manager they receive. Wrap the live
         // full manager with a no-op close so health/status probes do not tear
         // down the active QMD manager for the process.
         return { manager: new BorrowedMemoryManager(cached.manager) };
       }
-      if (purpose !== "cli") {
+      if (params.purpose !== "cli") {
         return { manager: cached.manager };
       }
     }
 
     if (transient) {
-      const { manager } = await createPrimaryQmdManager(purpose === "cli" ? "cli" : "status");
+      const { manager } = await createPrimaryQmdManager(
+        params.purpose === "cli" ? "cli" : "status",
+      );
       return manager ? { manager } : await getBuiltinMemorySearchManager(params);
     }
 
@@ -659,11 +651,10 @@ function buildQmdManagerIdentityKey(
 function resolveQmdManagerRuntimeConfig(
   cfg: OpenClawConfig,
   agentId: string,
-  purpose?: MemorySearchManagerPurpose,
 ): QmdManagerRuntimeConfig {
   return {
     workspaceDir: resolveAgentWorkspaceDir(cfg, agentId),
-    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId, { purpose }),
+    syncSettings: resolveMemorySearchSyncConfig(cfg, agentId),
     contextLimits: resolveAgentContextLimits(cfg, agentId),
   };
 }
