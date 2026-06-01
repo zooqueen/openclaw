@@ -6,8 +6,11 @@ import { resolveGatewayScopedTools } from "./tool-resolution.js";
 export type McpLoopbackTool = ReturnType<typeof resolveGatewayScopedTools>["tools"][number];
 
 export type McpToolSchemaEntry = {
+  /** MCP-visible tool name after trimming and rejecting empty names. */
   name: string;
+  /** Optional description copied from the gateway tool definition. */
   description: string | undefined;
+  /** Object input schema exported to MCP clients after compatibility normalization. */
   inputSchema: Record<string, unknown>;
 };
 
@@ -129,6 +132,7 @@ function flattenUnionSchema(raw: Record<string, unknown>): Record<string, unknow
   const required =
     requiredSets.length > 0
       ? [...(requiredSets[0] ?? [])].filter(
+          // A flattened union can only require fields present in every variant.
           (key) => key in mergedProps && requiredSets.every((set) => set.has(key)),
         )
       : [];
