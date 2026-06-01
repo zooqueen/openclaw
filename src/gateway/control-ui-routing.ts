@@ -12,6 +12,12 @@ type ControlUiRequestClassification =
 
 const ROOT_MOUNTED_GATEWAY_PROBE_PATHS = new Set(["/health", "/healthz", "/ready", "/readyz"]);
 
+/**
+ * Classify one HTTP request before the Control UI asset handler runs.
+ *
+ * Root-mounted UI needs explicit carve-outs for probes, API, and plugin routes
+ * so SPA fallback does not steal non-UI Gateway traffic.
+ */
 export function classifyControlUiRequest(params: {
   /** Configured Control UI base path; empty means root-mounted SPA. */
   basePath: string;
