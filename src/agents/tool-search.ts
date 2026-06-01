@@ -334,7 +334,7 @@ async function runModelCode(code, timeoutMs) {
       }),
     ).then(
       (value) => ({ ok: true, value: toJsonSafe(value) }),
-      (error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+      (error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }),
     );
     do {
       pumpController(controller);

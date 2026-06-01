@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenKeyedStoreOptions } from "openclaw/plugin-sdk/plugin-state-runtime";
+import type {
+  OpenKeyedStoreOptions,
+  PluginStateKeyedStore,
+} from "openclaw/plugin-sdk/plugin-state-runtime";
 import {
   createPluginStateKeyedStoreForTests,
   resetPluginStateStoreForTests,
@@ -72,6 +75,25 @@ function createApi(params: {
     registerCommand: params.registerCommand,
     ...(params.registerService ? { registerService: params.registerService } : {}),
   });
+}
+
+function createMockKeyedStore<T>(params: {
+  lookup?: (key: string) => Promise<T | null | undefined>;
+  delete?: (key: string) => Promise<boolean>;
+}): PluginStateKeyedStore<T> {
+  return {
+    register: vi.fn(async () => {}),
+    registerIfAbsent: vi.fn(async () => false),
+    update: vi.fn(async () => false),
+    lookup: async (key) => {
+      const value = await params.lookup?.(key);
+      return value === null ? undefined : value;
+    },
+    consume: vi.fn(async () => undefined),
+    delete: params.delete ?? vi.fn(async () => false),
+    entries: vi.fn(async () => []),
+    clear: vi.fn(async () => {}),
+  };
 }
 
 function createCommandContext(args: string): PluginCommandContext {
@@ -343,7 +365,7 @@ describe("phone-control plugin", () => {
   it("does not block service startup on the initial expiry check", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), PHONE_CONTROL_STATE_PREFIX));
     try {
-      const lookup = vi.fn(async () => null);
+      const lookup = vi.fn(async (_key: string) => null);
       let service: OpenClawPluginService | undefined;
 
       registerPhoneControl.register(
@@ -355,12 +377,10 @@ describe("phone-control plugin", () => {
           registerService: (registeredService) => {
             service = registeredService;
           },
-          openKeyedStore: () =>
-            ({
-              lookup,
-              delete: vi.fn(),
-              register: vi.fn(),
-            }) as ReturnType<OpenClawPluginApi["runtime"]["state"]["openKeyedStore"]>,
+          openKeyedStore: <T>() =>
+            createMockKeyedStore<T>({
+              lookup: async (key) => (await lookup(key)) as T | null | undefined,
+            }),
         }),
       );
 
@@ -376,7 +396,9 @@ describe("phone-control plugin", () => {
 
       expect(lookup).not.toHaveBeenCalled();
 
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
 
       expect(lookup).toHaveBeenCalledWith("current");
 
@@ -404,7 +426,7 @@ describe("phone-control plugin", () => {
       const writeConfigFile = vi.fn(async (next: Record<string, unknown>) => {
         config = next;
       });
-      const lookup = vi.fn(async () => ({
+      const lookup = vi.fn(async (_key: string) => ({
         version: 2,
         armedAtMs: Date.now() - 120_000,
         expiresAtMs: Date.now() - 60_000,
@@ -425,12 +447,11 @@ describe("phone-control plugin", () => {
           registerService: (registeredService) => {
             service = registeredService;
           },
-          openKeyedStore: () =>
-            ({
-              lookup,
+          openKeyedStore: <T>() =>
+            createMockKeyedStore<T>({
+              lookup: async (key) => (await lookup(key)) as T | null | undefined,
               delete: removeState,
-              register: vi.fn(),
-            }) as ReturnType<OpenClawPluginApi["runtime"]["state"]["openKeyedStore"]>,
+            }),
         }),
       );
 
