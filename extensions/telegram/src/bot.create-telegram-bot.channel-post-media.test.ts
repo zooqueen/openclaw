@@ -110,6 +110,9 @@ async function flushChannelPostMediaGroup(setTimeoutSpy: ReturnType<typeof vi.sp
   const flushTimer = resolveFlushTimer(setTimeoutSpy);
   expect(flushTimer).toBeTypeOf("function");
   await flushTimer?.();
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 async function flushChannelPostMediaGroupForDelay(
@@ -119,6 +122,9 @@ async function flushChannelPostMediaGroupForDelay(
   const flushTimer = resolveFlushTimerForDelay(setTimeoutSpy, delayMs);
   expect(flushTimer).toBeTypeOf("function");
   await flushTimer?.();
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 async function queueChannelPostAlbum(
@@ -197,7 +203,9 @@ describe("createTelegramBot channel_post media", () => {
       expect(replySpy).not.toHaveBeenCalled();
       await flushChannelPostMediaGroup(setTimeoutSpy);
 
-      expect(replySpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(replySpy).toHaveBeenCalledTimes(1);
+      });
       const payload = replyPayload() as { Body?: string };
       expect(payload.Body).toContain("album caption");
     } finally {
@@ -235,7 +243,9 @@ describe("createTelegramBot channel_post media", () => {
       expect(replySpy).not.toHaveBeenCalled();
       await flushChannelPostMediaGroupForDelay(setTimeoutSpy, 75);
 
-      expect(replySpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(replySpy).toHaveBeenCalledTimes(1);
+      });
       const payload = replyPayload() as { Body?: string };
       expect(payload.Body).toContain("configured album");
     } finally {
@@ -282,7 +292,9 @@ describe("createTelegramBot channel_post media", () => {
         TELEGRAM_TEST_TIMINGS.textFragmentGapMs,
       );
 
-      expect(replySpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(replySpy).toHaveBeenCalledTimes(1);
+      });
       const payload = replyPayload() as { RawBody?: string };
       expect(payload.RawBody).toContain(part1.slice(0, 32));
       expect(payload.RawBody).toContain(part2.slice(0, 32));
@@ -569,7 +581,9 @@ describe("createTelegramBot channel_post media", () => {
       expect(replySpy).not.toHaveBeenCalled();
       await flushChannelPostMediaGroup(setTimeoutSpy);
 
-      expect(replySpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(replySpy).toHaveBeenCalledTimes(1);
+      });
       const payload = replyPayload() as { Body?: string };
       expect(payload.Body).toContain("partial album");
     } finally {

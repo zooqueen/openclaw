@@ -272,7 +272,7 @@ export function registerMatrixMonitorEvents(params: {
   });
 
   client.on("room.failed_decryption", (roomId: string, event: MatrixRawEvent, error: Error) => {
-    void (async () => {
+    return (async () => {
       const failureState = postHealthySyncDecryptFailureTracker.recordFailure(roomId, event, error);
       const selfUserId = await resolveMatrixSelfUserId(client, logVerboseMessage);
       const sender = typeof event.sender === "string" ? event.sender : null;
