@@ -542,6 +542,8 @@ function normalizeWebhookLikePath(pathname: string): string {
 function defaultRealtimeStreamPathForServePath(servePath: string): string {
   const normalized = normalizeWebhookLikePath(servePath);
   if (normalized.endsWith("/webhook")) {
+    // Keep the realtime route next to the webhook route so reverse-proxy rules
+    // for custom voice paths can forward both HTTP callbacks and WS upgrades.
     return `${normalized.slice(0, -"/webhook".length)}/stream/realtime`;
   }
   if (normalized === "/") {
@@ -703,6 +705,8 @@ export function normalizeVoiceCallConfig(config: VoiceCallConfigInput): VoiceCal
       provider: realtimeProvider,
       streamPath:
         config.realtime?.streamPath ??
+        // Realtime stream defaults depend on the normalized serve path, not the
+        // schema default, because callers can override serve.path with partial config.
         defaultRealtimeStreamPathForServePath(serve.path ?? defaults.serve.path),
       tools:
         (config.realtime?.tools as RealtimeToolConfig[] | undefined) ?? defaults.realtime.tools,
