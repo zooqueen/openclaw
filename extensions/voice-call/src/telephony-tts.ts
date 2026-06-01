@@ -155,6 +155,8 @@ function resolveTelephonyModelOverridePolicy(
 ): SpeechModelOverridePolicy {
   const enabled = overrides?.enabled ?? true;
   if (!enabled) {
+    // Disabled means no directive-controlled TTS surface at all, not just
+    // falling back to per-field defaults.
     return {
       enabled: false,
       allowText: false,
@@ -170,6 +172,8 @@ function resolveTelephonyModelOverridePolicy(
   return {
     enabled: true,
     allowText: allow(overrides?.allowText),
+    // Provider swaps can cross billing/latency/security boundaries, so they
+    // remain opt-in even when other directive overrides are enabled by default.
     allowProvider: allow(overrides?.allowProvider, false),
     allowVoice: allow(overrides?.allowVoice),
     allowModelId: allow(overrides?.allowModelId),
@@ -240,6 +244,8 @@ function collectTelephonyProviderConfigs(
     ) {
       continue;
     }
+    // Keep legacy direct provider blocks available to directive parsing, but do
+    // not let scalar global TTS fields masquerade as provider configs.
     const normalized = normalizeProviderId(key) ?? key;
     entries[normalized] ??= asProviderConfig(value);
   }
