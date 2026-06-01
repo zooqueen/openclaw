@@ -2,8 +2,11 @@ import { normalizeOptionalString } from "@openclaw/normalization-core/string-coe
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 
 export type GatewayProbeTargetResolution = {
+  /** Configured gateway mode before fallback decisions. */
   gatewayMode: "local" | "remote";
+  /** Effective probe target mode after handling incomplete remote config. */
   mode: "local" | "remote";
+  /** True when remote mode was configured but no usable remote URL exists. */
   remoteUrlMissing: boolean;
 };
 
