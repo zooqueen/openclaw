@@ -39,6 +39,7 @@ export class TwilioApiError extends Error {
   }
 }
 
+/** Sends a Twilio REST API form request through the SSRF guard and parses JSON responses. */
 export async function twilioApiRequest<T = unknown>(params: {
   baseUrl: string;
   accountSid: string;
@@ -52,6 +53,7 @@ export async function twilioApiRequest<T = unknown>(params: {
       ? params.body
       : Object.entries(params.body).reduce((acc, [key, value]) => {
           if (Array.isArray(value)) {
+            // Twilio expects repeated form keys for multi-value params like StatusCallbackEvent.
             for (const entry of value) {
               acc.append(key, entry);
             }
@@ -95,6 +97,7 @@ export async function twilioApiRequest<T = unknown>(params: {
       throw new Error("Twilio API returned malformed JSON.");
     }
   } finally {
+    // Release the resolved-address pin after response text has been consumed.
     await release();
   }
 }

@@ -37,6 +37,7 @@ function isOutboundDirection(direction: string | null): boolean {
   return direction?.startsWith("outbound") ?? false;
 }
 
+/** Extracts the Twilio webhook fields needed for TwiML response routing. */
 export function readTwimlRequestView(ctx: WebhookContext): TwimlRequestView {
   const params = new URLSearchParams(ctx.rawBody);
   const type = normalizeOptionalString(ctx.query?.type);
@@ -51,6 +52,7 @@ export function readTwimlRequestView(ctx: WebhookContext): TwimlRequestView {
   };
 }
 
+/** Chooses stored, streaming, pause, queue, or empty TwiML for a Twilio webhook. */
 export function decideTwimlResponse(input: TwimlPolicyInput): TwimlDecision {
   if (input.callIdFromQuery && !input.isStatusCallback) {
     if (input.hasStoredTwiml) {
@@ -66,6 +68,7 @@ export function decideTwimlResponse(input: TwimlPolicyInput): TwimlDecision {
   }
 
   if (input.isStatusCallback) {
+    // Status callbacks are event notifications, not instructions for call media.
     return { kind: "empty" };
   }
 
