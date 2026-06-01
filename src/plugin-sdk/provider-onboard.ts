@@ -23,7 +23,9 @@ export {
 export type AgentModelAliasEntry =
   | string
   | {
+      /** Fully qualified provider/model ref that becomes the config map key. */
       modelRef: string;
+      /** Friendly display alias; existing user aliases win over preset aliases. */
       alias?: string;
     };
 
@@ -67,8 +69,11 @@ function normalizeAgentModelAliasEntry(entry: AgentModelAliasEntry): {
 }
 
 type ProviderModelMergeState = {
+  /** Mutable copy of configured providers keyed by normalized provider id. */
   providers: Record<string, ModelProviderConfig>;
+  /** Existing provider config after case/alias key normalization, if present. */
   existingProvider?: ModelProviderConfig;
+  /** Existing models with ids normalized for the destination provider namespace. */
   existingModels: ModelDefinitionConfig[];
 };
 
@@ -96,6 +101,8 @@ function normalizeProviderModelsForConfig(
     const existingIndex = seenById.get(normalized.id);
     if (existingIndex !== undefined) {
       mutated = true;
+      // Keep first-seen ordering stable, but let the earlier definition's
+      // explicit fields win so preset catalogs cannot overwrite user tweaks.
       next[existingIndex] = { ...normalized, ...next[existingIndex] };
       continue;
     }
@@ -144,6 +151,8 @@ function resolveProviderModelMergeState(
     ? normalizeProviderModelsForConfig(providerId, existingProvider.models)
     : [];
   if (existingProviderKey && existingProviderKey !== providerId) {
+    // Collapse provider aliases/case variants to the requested key so future
+    // writes do not leave duplicate provider blocks in config.
     delete providers[existingProviderKey];
   }
   return {
@@ -171,6 +180,8 @@ function buildProviderConfig(params: {
     ...existingProviderRest,
     baseUrl: params.baseUrl,
     api: params.api,
+    // Preserve an existing configured key, but do not write blank keys from
+    // onboarding presets back into config.
     ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
     models: params.mergedModels.length > 0 ? params.mergedModels : params.fallbackModels,
   };
@@ -226,6 +237,8 @@ function createProviderPresetAppliers<
       if (!resolved) {
         return cfg;
       }
+      // Full-config appliers request a primary model; provider-only appliers
+      // intentionally avoid changing the current agent default.
       return params.applyPreset(cfg, {
         ...(resolved as TParams),
         primaryModelRef: params.primaryModelRef,
