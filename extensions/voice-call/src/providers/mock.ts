@@ -100,6 +100,8 @@ export class MockProvider implements VoiceCallProvider {
         return {
           ...base,
           type: evt.type,
+          // Preserve explicit empty transcripts and false final flags so tests can
+          // model partial/falsy provider payloads without the mock rewriting them.
           transcript: payload.transcript ?? "",
           isFinal: payload.isFinal ?? true,
           confidence: payload.confidence,
@@ -138,6 +140,7 @@ export class MockProvider implements VoiceCallProvider {
         return {
           ...base,
           type: evt.type,
+          // Empty error strings are valid fixtures; only missing values get a default.
           error: payload.error ?? "unknown error",
           retryable: payload.retryable,
         };
@@ -177,6 +180,8 @@ export class MockProvider implements VoiceCallProvider {
 
   async getCallStatus(input: GetCallStatusInput): Promise<GetCallStatusResult> {
     const id = normalizeLowercaseStringOrEmpty(input.providerCallId);
+    // Let tests force restore/cleanup paths by embedding terminal-state words in
+    // the mock provider call id; all other ids behave like active calls.
     if (id.includes("stale") || id.includes("ended") || id.includes("completed")) {
       return { status: "completed", isTerminal: true };
     }
