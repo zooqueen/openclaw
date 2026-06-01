@@ -1306,6 +1306,8 @@ export class RealtimeCallHandler {
       if (forcedMatch.kind === "none") {
         const pending = coordinator.consumePending();
         if (pending) {
+          // A native provider consult arrived before the fallback delay fired;
+          // cancel that pending forced consult for this utterance.
           coordinator.remove(pending);
         }
       }
@@ -1377,6 +1379,8 @@ export class RealtimeCallHandler {
         );
         submitFinalToolResult(result);
         if (status === "ok") {
+          // Consume only after a successful consult so failed tool calls can be
+          // retried with the same caller transcript context.
           this.consumePartialUserTranscript(callId, state.partialUserTranscript);
         }
       } finally {
