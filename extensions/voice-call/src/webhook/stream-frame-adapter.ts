@@ -40,7 +40,8 @@ function tryParseJson(rawMessage: string): Record<string, unknown> | null {
       return parsed as Record<string, unknown>;
     }
   } catch {
-    // Malformed websocket frames are treated as ignored provider noise.
+    // Malformed provider frames are ignored, not fatal. The realtime handler
+    // keeps the socket open so one bad carrier frame does not end the call.
     /* fall through */
   }
   return null;
@@ -62,7 +63,8 @@ function normalizeBase64ForCompare(value: string): string {
 
 function isValidBase64Payload(value: string): boolean {
   const buffer = Buffer.from(value, "base64");
-  // Node's base64 decoder is permissive; round-trip to reject malformed media payloads.
+  // Node's base64 decoder is permissive; round-trip before forwarding audio so
+  // malformed provider payloads cannot reach the realtime bridge.
   return normalizeBase64ForCompare(buffer.toString("base64")) === normalizeBase64ForCompare(value);
 }
 
@@ -164,6 +166,8 @@ export class TwilioStreamFrameAdapter implements StreamFrameAdapter {
       if (!streamSid || !callSid) {
         return undefined;
       }
+      // Twilio requires streamSid on outbound media/mark/clear frames; capture
+      // it from the accepted start frame instead of trusting later media frames.
       this.streamSid = streamSid;
       return { kind: "start", streamId: streamSid, providerCallId: callSid };
     });
@@ -212,6 +216,8 @@ export class TelnyxStreamFrameAdapter implements StreamFrameAdapter {
           return undefined;
         }
         const errorData = readRecordField(msg, "payload");
+        // Telnyx reports stream failures as structured frames; surface them so
+        // callers can log carrier failures instead of treating them as noise.
         return {
           kind: "error",
           code:
