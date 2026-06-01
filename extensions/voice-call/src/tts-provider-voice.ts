@@ -21,7 +21,11 @@ function resolveProviderVoiceSetting(providerConfig: unknown): string | undefine
   );
 }
 
-/** Resolve the active TTS provider's preferred speaker voice from voice-call config. */
+/**
+ * Resolves the active telephony TTS provider's speaker hint for call metadata.
+ * Legacy `voice`/`voiceId` keys stay readable because provider configs predate
+ * the voice-call-specific `speakerVoice` fields.
+ */
 export function resolvePreferredTtsVoice(config: { tts?: VoiceCallTtsConfig }): string | undefined {
   const providerId = config.tts?.provider;
   if (!providerId) {
