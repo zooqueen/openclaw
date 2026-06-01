@@ -198,9 +198,7 @@ describe("bundled plugin install/uninstall probe", () => {
         "qa-channel",
       ),
     ).not.toThrow();
-    expect(() =>
-      runtimeSmoke.assertChannelVisible({}, "qa-channel", "qa-channel"),
-    ).toThrow(
+    expect(() => runtimeSmoke.assertChannelVisible({}, "qa-channel", "qa-channel")).toThrow(
       "Runtime channel status missing manifest channel qa-channel for qa-channel",
     );
   });
@@ -380,11 +378,15 @@ describe("bundled plugin install/uninstall probe", () => {
     );
 
     await expect(
-      runtimeSmoke.rpcCall("health", {}, {
-        entrypoint,
-        env: { OPENCLAW_TEST_RPC_STATE_PATH: statePath },
-        port: 19001,
-      }),
+      runtimeSmoke.rpcCall(
+        "health",
+        {},
+        {
+          entrypoint,
+          env: { OPENCLAW_TEST_RPC_STATE_PATH: statePath },
+          port: 19001,
+        },
+      ),
     ).resolves.toEqual({ status: "ok" });
 
     const rpcStateDir = fs.readFileSync(statePath, "utf8");
@@ -512,6 +514,28 @@ describe("bundled plugin install/uninstall probe", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(
       `admin-http-rpc\tadmin-http-rpc\t1\t${path.join(root, "dist-runtime", "extensions", "admin-http-rpc")}`,
+    );
+  });
+
+  it("treats channel env vars as runtime smoke config requirements", () => {
+    const root = makePackageRoot();
+    writePluginManifest(root, "dist-runtime/extensions/clickclack", {
+      id: "clickclack",
+      channelEnvVars: { clickclack: ["CLICKCLACK_BOT_TOKEN"] },
+    });
+    writePluginsList(root, [
+      {
+        id: "clickclack",
+        origin: "bundled",
+        rootDir: path.join(root, "dist-runtime", "extensions", "clickclack"),
+      },
+    ]);
+
+    const result = runProbe(root);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(
+      `clickclack\tclickclack\t1\t${path.join(root, "dist-runtime", "extensions", "clickclack")}`,
     );
   });
 
