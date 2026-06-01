@@ -18,20 +18,29 @@ type SessionHistoryMessage = Record<string, unknown> & {
 };
 
 type PaginatedSessionHistory = {
+  /** Preferred history array name for newer clients. */
   items: SessionHistoryMessage[];
+  /** Back-compatible alias for clients that still read messages. */
   messages: SessionHistoryMessage[];
+  /** Cursor for the next older page, when more history exists. */
   nextCursor?: string;
+  /** Whether an older page is available before the returned window. */
   hasMore: boolean;
 };
 
 type SessionHistorySnapshot = {
+  /** Display-projected, cursor-paginated history payload. */
   history: PaginatedSessionHistory;
+  /** Raw transcript sequence used to detect and stream later appends. */
   rawTranscriptSeq: number;
 };
 
 type InlineSessionHistoryAppend = {
+  /** Projected message ready to emit without a transcript reread. */
   message?: unknown;
+  /** Raw transcript sequence assigned to the emitted message. */
   messageSeq?: number;
+  /** Whether the stream must reread history instead of appending inline. */
   shouldRefresh?: boolean;
 };
 
