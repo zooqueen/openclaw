@@ -42,6 +42,8 @@ function sha256Hex(input: string): string {
 }
 
 function createSkippedVerificationReplayKey(provider: string, ctx: WebhookContext): string {
+  // Dev-mode skips still need deterministic replay identity so local retries do
+  // not exercise a different side-effect path than signed provider retries.
   return `${provider}:skip:${sha256Hex(`${ctx.method}\n${ctx.url}\n${ctx.rawBody}`)}`;
 }
 
@@ -440,6 +442,8 @@ function createTwilioReplayKey(params: {
   requestParams: URLSearchParams;
 }): string {
   const canonicalParams = buildCanonicalTwilioParamString(params.requestParams);
+  // Twilio's idempotency header is not signed. Bind replay identity to the URL,
+  // sorted signed params, and signature material that passed verification.
   return `twilio:req:${sha256Hex(
     `${params.verificationUrl}\n${canonicalParams}\n${params.signature}`,
   )}`;
@@ -641,8 +645,8 @@ export function verifyTwilioWebhook(
     return { ok: true, verificationUrl, isReplay, verifiedRequestKey: replayKey };
   }
 
-  // Twilio webhook signatures can differ in whether port is included.
-  // Retry a small, deterministic set of URL variants before failing closed.
+  // Keep fallback URL variants deterministic and tiny. They cover the known
+  // Twilio port ambiguity without trying unbounded proxy/header combinations.
   const variants = new Set<string>();
   variants.add(verificationUrl);
   variants.add(stripPortFromUrl(verificationUrl));
