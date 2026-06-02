@@ -37,7 +37,11 @@ function isOutboundDirection(direction: string | null): boolean {
   return direction?.startsWith("outbound") ?? false;
 }
 
-/** Extracts the Twilio webhook fields needed for TwiML response routing. */
+/**
+ * Extracts the Twilio webhook fields needed for TwiML response routing.
+ * The raw body carries Twilio form fields; the query string distinguishes
+ * OpenClaw status callbacks and one-shot TwiML requests.
+ */
 export function readTwimlRequestView(ctx: WebhookContext): TwimlRequestView {
   const params = new URLSearchParams(ctx.rawBody);
   const type = normalizeOptionalString(ctx.query?.type);
@@ -52,7 +56,11 @@ export function readTwimlRequestView(ctx: WebhookContext): TwimlRequestView {
   };
 }
 
-/** Chooses stored, streaming, pause, queue, or empty TwiML for a Twilio webhook. */
+/**
+ * Chooses stored, streaming, pause, queue, or empty TwiML for a Twilio webhook.
+ * Stored notify/pre-connect TwiML wins once, status callbacks never control
+ * media, and inbound streams are serialized until the WebSocket path accepts.
+ */
 export function decideTwimlResponse(input: TwimlPolicyInput): TwimlDecision {
   if (input.callIdFromQuery && !input.isStatusCallback) {
     if (input.hasStoredTwiml) {

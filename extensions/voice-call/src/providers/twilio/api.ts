@@ -25,8 +25,11 @@ function parseTwilioApiError(text: string): ParsedTwilioApiError {
 
 /** Twilio REST failure with structured status/code metadata for provider retry and race handling. */
 export class TwilioApiError extends Error {
+  /** HTTP status returned by Twilio. */
   readonly httpStatus: number;
+  /** Raw response body retained for diagnostics without reparsing at call sites. */
   readonly responseText: string;
+  /** Twilio-specific numeric error code, when the response body exposes one. */
   readonly twilioCode?: number;
 
   constructor(httpStatus: number, responseText: string) {
@@ -42,11 +45,17 @@ export class TwilioApiError extends Error {
 
 /** Sends a Twilio REST form request through the SSRF guard and releases the resolved-address pin. */
 export async function twilioApiRequest<T = unknown>(params: {
+  /** Twilio REST API origin; normally `https://api.twilio.com`. */
   baseUrl: string;
+  /** Account SID used for HTTP Basic auth. */
   accountSid: string;
+  /** Auth token paired with the account SID. */
   authToken: string;
+  /** API path beginning at the account-scoped resource endpoint. */
   endpoint: string;
+  /** Form body; array values are encoded as repeated Twilio form keys. */
   body: URLSearchParams | Record<string, string | string[]>;
+  /** Treat 404 as an idempotent missing resource instead of throwing. */
   allowNotFound?: boolean;
 }): Promise<T> {
   const bodyParams =
