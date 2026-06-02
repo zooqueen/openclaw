@@ -2644,9 +2644,13 @@ export class WorkboardStore {
       lifecycleStatusSourceUpdatedAt !== undefined &&
       shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt)
     ) {
-      // Lifecycle status writes can race with manual moves from other tabs; persisted
-      // state owns the freshness check so stale Gateway writes cannot survive reload.
-      return existing;
+      // Ignore stale lifecycle status writes, but still accept any non-status updates in the patch.
+      patch.status = undefined;
+      if (patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)) {
+        const { lifecycleStatusSourceUpdatedAt: _ignored, ...rest } =
+          patch.metadata as Record<string, unknown>;
+        patch.metadata = rest;
+      }
     }
     const status = normalizeStatus(patch.status, existing.status);
     const now = Date.now();
