@@ -21,11 +21,13 @@ export type DirectDmPreCryptoGuardPolicy = {
 export type DirectDmPreCryptoGuardPolicyOverrides = Partial<
   Omit<DirectDmPreCryptoGuardPolicy, "rateLimit">
 > & {
+  /** Partial rate-limit override; omitted or invalid fields keep hardened defaults. */
   rateLimit?: Partial<DirectDmPreCryptoGuardPolicy["rateLimit"]>;
 };
 
 /** Shared policy object for DM-style pre-crypto guardrails. */
 export function createDirectDmPreCryptoGuardPolicy(
+  /** Adapter-specific caps layered over the shared pre-crypto defaults. */
   overrides: DirectDmPreCryptoGuardPolicyOverrides = {},
 ): DirectDmPreCryptoGuardPolicy {
   const defaultMaxFutureSkewSec = 120;
@@ -35,6 +37,8 @@ export function createDirectDmPreCryptoGuardPolicy(
   const defaultMaxPerSenderPerWindow = 20;
   const defaultMaxGlobalPerWindow = 200;
   const defaultMaxTrackedSenderKeys = 4096;
+  // Every numeric override is clamped through resolveIntegerOption so a bad
+  // plugin/config value cannot disable pre-crypto size, skew, or rate limits.
   return {
     allowedKinds: overrides.allowedKinds ?? [4],
     maxFutureSkewSec: resolveIntegerOption(overrides.maxFutureSkewSec, defaultMaxFutureSkewSec, {
