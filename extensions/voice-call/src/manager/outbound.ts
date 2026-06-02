@@ -121,7 +121,13 @@ function validateDtmfDigits(digits: string): string | null {
     : "digits may only contain digits, *, #, comma, w, p";
 }
 
-/** Initiate an outbound call and register the local record before provider handoff. */
+/**
+ * Initiate an outbound call and register the local record before provider handoff.
+ *
+ * `options` accepts the current object shape plus the legacy string shorthand for
+ * an initial message. Conversation-mode DTMF is validated before any call record
+ * is created because the provider will execute those digits before webhook control returns.
+ */
 export async function initiateCall(
   ctx: InitiateContext,
   to: string,
@@ -261,7 +267,12 @@ export async function initiateCall(
   }
 }
 
-/** Speak TTS into a connected call and append the spoken text to the transcript. */
+/**
+ * Speak TTS into a connected call and append the spoken text to the transcript.
+ *
+ * The active number route selects the TTS voice, so transferred/restored calls
+ * keep route-specific speech settings even after provider callback handoff.
+ */
 export async function speak(
   ctx: SpeakContext,
   callId: CallId,
@@ -316,7 +327,10 @@ function shouldStartListeningAfterInitialMessage(ctx: ConversationContext): bool
   return streamAwareProvider.isConversationStreamConnectEnabled?.() !== true;
 }
 
-/** Send outbound DTMF digits through providers that expose live DTMF support. */
+/**
+ * Send outbound DTMF digits through providers that expose live DTMF support.
+ * Returns a typed failure instead of throwing for unsupported providers or invalid digits.
+ */
 export async function sendDtmf(
   ctx: SpeakContext,
   callId: CallId,
@@ -346,7 +360,10 @@ export async function sendDtmf(
   }
 }
 
-/** Plays the one-shot initial message, then enters notify hangup or conversation listening mode. */
+/**
+ * Plays the one-shot initial message, then enters notify hangup or conversation listening mode.
+ * Provider callbacks may race at answer/stream-connect time; this helper owns the in-flight guard.
+ */
 export async function speakInitialMessage(
   ctx: ConversationContext,
   providerCallId: string,
@@ -425,7 +442,10 @@ export async function speakInitialMessage(
   }
 }
 
-/** Speak a prompt, collect the caller's final transcript, and record turn latency. */
+/**
+ * Speak a prompt, collect the caller's final transcript, and record turn latency.
+ * Only one active turn per call is allowed because transcript waiters are keyed by call id.
+ */
 export async function continueCall(
   ctx: ConversationContext,
   callId: CallId,
@@ -498,7 +518,10 @@ export async function continueCall(
   }
 }
 
-/** Hang up a connected call and finalize local state exactly once. */
+/**
+ * Hang up a connected call and finalize local state exactly once.
+ * Already-terminal local records are treated as success to make repeated cleanup idempotent.
+ */
 export async function endCall(
   ctx: EndCallContext,
   callId: CallId,
