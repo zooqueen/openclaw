@@ -86,14 +86,7 @@ function markReplay(cache: ReplayCache, replayKey: string): boolean {
   return false;
 }
 
-/**
- * Validate Twilio webhook signature using HMAC-SHA1.
- *
- * Twilio signs requests by concatenating the URL with sorted POST params,
- * then computing HMAC-SHA1 with the auth token.
- *
- * @see https://www.twilio.com/docs/usage/webhooks/webhooks-security
- */
+/** Validates Twilio's URL-plus-sorted-form HMAC signature. */
 function validateTwilioSignature(
   authToken: string,
   signature: string | undefined,
@@ -106,13 +99,11 @@ function validateTwilioSignature(
 
   const dataToSign = buildTwilioDataToSign(url, params);
 
-  // HMAC-SHA1 with auth token, then base64 encode
   const expectedSignature = crypto
     .createHmac("sha1", authToken)
     .update(dataToSign)
     .digest("base64");
 
-  // Use timing-safe comparison to prevent timing attacks
   return timingSafeEqual(signature, expectedSignature);
 }
 
@@ -134,42 +125,19 @@ function buildCanonicalTwilioParamString(params: URLSearchParams): string {
     .join("&");
 }
 
-/**
- * Timing-safe string comparison to prevent timing attacks.
- */
 function timingSafeEqual(a: string, b: string): boolean {
   return safeEqualSecret(a, b);
 }
 
-/**
- * Configuration for secure URL reconstruction.
- */
+/** Controls when signature URL reconstruction may trust proxy-supplied headers. */
 interface WebhookUrlOptions {
-  /**
-   * Whitelist of allowed hostnames. If provided, only these hosts will be
-   * accepted from forwarding headers. This prevents host header injection attacks.
-   *
-   * SECURITY: You must provide this OR set trustForwardingHeaders=true to use
-   * X-Forwarded-Host headers. Without either, forwarding headers are ignored.
-   */
+  /** Host allowlist for forwarding headers; without this or explicit trust they are ignored. */
   allowedHosts?: string[];
-  /**
-   * Explicitly trust X-Forwarded-* headers without a whitelist.
-   * WARNING: Only set this to true if you trust your proxy configuration
-   * and understand the security implications.
-   *
-   * @default false
-   */
+  /** Trust X-Forwarded-* without a host allowlist when the deployment owns the proxy boundary. */
   trustForwardingHeaders?: boolean;
-  /**
-   * List of trusted proxy IP addresses. X-Forwarded-* headers will only be
-   * trusted if the request comes from one of these IPs.
-   * Requires remoteIP to be set for validation.
-   */
+  /** Optional source-IP allowlist required before forwarded headers affect signature URLs. */
   trustedProxyIPs?: string[];
-  /**
-   * The IP address of the incoming request (for proxy validation).
-   */
+  /** Incoming request IP used to evaluate trustedProxyIPs. */
   remoteIP?: string;
 }
 
@@ -247,34 +215,14 @@ function normalizeAllowedHosts(allowedHosts?: string[]): Set<string> | null {
   return normalized.size > 0 ? normalized : null;
 }
 
-/**
- * Reconstruct the public webhook URL from request headers.
- *
- * SECURITY: This function validates host headers to prevent host header
- * injection attacks. When using forwarding headers (X-Forwarded-Host, etc.),
- * always provide allowedHosts to whitelist valid hostnames.
- *
- * When behind a reverse proxy (Tailscale, nginx, ngrok), the original URL
- * used by Twilio differs from the local request URL. We use standard
- * forwarding headers to reconstruct it.
- *
- * Priority order:
- * 1. X-Forwarded-Proto + X-Forwarded-Host (standard proxy headers)
- * 2. X-Original-Host (nginx)
- * 3. Ngrok-Forwarded-Host (ngrok specific)
- * 4. Host header (direct connection)
- */
+/** Reconstructs the provider-visible webhook URL used by signature verification. */
 export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlOptions): string {
   const { headers } = ctx;
 
-  // SECURITY: Only trust forwarding headers if explicitly configured.
-  // Either allowedHosts must be set (for whitelist validation) or
-  // trustForwardingHeaders must be true (explicit opt-in to trust).
   const allowedHosts = normalizeAllowedHosts(options?.allowedHosts);
   const hasAllowedHosts = allowedHosts !== null;
   const explicitlyTrusted = options?.trustForwardingHeaders === true;
 
-  // Also check trusted proxy IPs if configured
   const trustedProxyIPs = options?.trustedProxyIPs?.filter(Boolean) ?? [];
   const hasTrustedProxyIPs = trustedProxyIPs.length > 0;
   const remoteIP = options?.remoteIP ?? ctx.remoteAddress;
@@ -287,7 +235,6 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
 
   const isAllowedForwardedHost = (host: string): boolean => !allowedHosts || allowedHosts.has(host);
 
-  // Determine protocol - only trust X-Forwarded-Proto from trusted proxies
   let proto = "https";
   if (shouldTrustForwardingHeaders) {
     const forwardedProto = getHeader(headers, "x-forwarded-proto");
@@ -296,11 +243,10 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
     }
   }
 
-  // Determine host - with security validation
   let host: string | null = null;
 
   if (shouldTrustForwardingHeaders) {
-    // Try forwarding headers in priority order
+    // Priority order mirrors common proxy stacks: standard, nginx, then ngrok.
     const forwardingHeaders = ["x-forwarded-host", "x-original-host", "ngrok-forwarded-host"];
 
     for (const headerName of forwardingHeaders) {
@@ -315,7 +261,6 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
     }
   }
 
-  // Fallback to Host header if no valid forwarding header found
   if (!host) {
     const hostHeader = getHeader(headers, "host");
     if (hostHeader) {
@@ -326,7 +271,6 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
     }
   }
 
-  // Last resort: try to extract from ctx.url
   if (!host) {
     try {
       const parsed = new URL(ctx.url);
@@ -335,7 +279,6 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
         host = extracted;
       }
     } catch {
-      // URL parsing failed - use empty string (will result in invalid URL)
       host = "";
     }
   }
@@ -344,14 +287,11 @@ export function reconstructWebhookUrl(ctx: WebhookContext, options?: WebhookUrlO
     host = "";
   }
 
-  // Extract path from the context URL (fallback to "/" on parse failure)
   let path = "/";
   try {
     const parsed = new URL(ctx.url);
     path = parsed.pathname + parsed.search;
-  } catch {
-    // URL parsing failed
-  }
+  } catch {}
 
   return `${proto}://${host}${path}`;
 }
@@ -411,15 +351,12 @@ function extractPortFromHostHeader(hostHeader?: string): string | undefined {
   }
 }
 
-/**
- * Result of Twilio webhook verification with detailed info.
- */
 interface TwilioVerificationResult {
   ok: boolean;
   reason?: string;
-  /** The URL that was used for verification (for debugging) */
+  /** Provider-visible URL that matched the signature, useful for diagnosing proxy config. */
   verificationUrl?: string;
-  /** Whether we're running behind ngrok free tier */
+  /** Whether the failed URL looked like an ngrok free-tier callback. */
   isNgrokFreeTier?: boolean;
   /** Request is cryptographically valid but was already processed recently. */
   isReplay?: boolean;
@@ -560,14 +497,12 @@ export function verifyTelnyxWebhook(
   }
 }
 
-/**
- * Verify Twilio webhook with full context and detailed result.
- */
+/** Verifies Twilio callbacks, including proxy URL reconstruction and replay identity. */
 export function verifyTwilioWebhook(
   ctx: WebhookContext,
   authToken: string,
   options?: {
-    /** Override the public URL (e.g., from config) */
+    /** Canonical external origin used when Twilio signs a URL different from the local request. */
     publicUrl?: string;
     /**
      * Allow ngrok free tier compatibility mode (loopback only).
@@ -577,31 +512,18 @@ export function verifyTwilioWebhook(
      * reconstruct the public ngrok URL that Twilio used for signing.
      */
     allowNgrokFreeTierLoopbackBypass?: boolean;
-    /** Skip verification entirely (only for development) */
+    /** Development-only bypass that still emits deterministic replay keys. */
     skipVerification?: boolean;
-    /**
-     * Whitelist of allowed hostnames for host header validation.
-     * Prevents host header injection attacks.
-     */
+    /** Host allowlist for forwarding headers used during signature URL reconstruction. */
     allowedHosts?: string[];
-    /**
-     * Explicitly trust X-Forwarded-* headers without a whitelist.
-     * WARNING: Only enable if you trust your proxy configuration.
-     * @default false
-     */
+    /** Trust X-Forwarded-* without a host allowlist when the deployment owns the proxy boundary. */
     trustForwardingHeaders?: boolean;
-    /**
-     * List of trusted proxy IP addresses. X-Forwarded-* headers will only
-     * be trusted from these IPs.
-     */
+    /** Optional source-IP allowlist required before forwarded headers affect signature URLs. */
     trustedProxyIPs?: string[];
-    /**
-     * The remote IP address of the request (for proxy validation).
-     */
+    /** Incoming request IP used to evaluate trustedProxyIPs. */
     remoteIP?: string;
   },
 ): TwilioVerificationResult {
-  // Allow skipping verification for development/testing
   if (options?.skipVerification) {
     const replayKey = createSkippedVerificationReplayKey("twilio", ctx);
     const isReplay = markReplay(twilioReplayCache, replayKey);
@@ -622,7 +544,6 @@ export function verifyTwilioWebhook(
   const isLoopback = isLoopbackHost(options?.remoteIP ?? ctx.remoteAddress ?? "");
   const allowLoopbackForwarding = options?.allowNgrokFreeTierLoopbackBypass && isLoopback;
 
-  // Reconstruct the URL Twilio used
   const verificationUrl = buildTwilioVerificationUrl(ctx, options?.publicUrl, {
     allowedHosts: options?.allowedHosts,
     trustForwardingHeaders: options?.trustForwardingHeaders || allowLoopbackForwarding,
@@ -630,7 +551,6 @@ export function verifyTwilioWebhook(
     remoteIP: options?.remoteIP,
   });
 
-  // Parse the body as URL-encoded params
   const params = new URLSearchParams(ctx.rawBody);
 
   const isValid = validateTwilioSignature(authToken, signature, verificationUrl, params);
@@ -684,7 +604,6 @@ export function verifyTwilioWebhook(
     return { ok: true, verificationUrl: candidateUrl, isReplay, verifiedRequestKey: replayKey };
   }
 
-  // Check if this is ngrok free tier - the URL might have different format
   const isNgrokFreeTier =
     verificationUrl.includes(".ngrok-free.app") || verificationUrl.includes(".ngrok.io");
 
@@ -696,18 +615,11 @@ export function verifyTwilioWebhook(
   };
 }
 
-// -----------------------------------------------------------------------------
-// Plivo webhook verification
-// -----------------------------------------------------------------------------
-
-/**
- * Result of Plivo webhook verification with detailed info.
- */
 interface PlivoVerificationResult {
   ok: boolean;
   reason?: string;
   verificationUrl?: string;
-  /** Signature version used for verification */
+  /** Signature algorithm version accepted for this request. */
   version?: "v3" | "v2";
   /** Request is cryptographically valid but was already processed recently. */
   isReplay?: boolean;
@@ -860,40 +772,22 @@ function validatePlivoV3Signature(params: {
   return false;
 }
 
-/**
- * Verify Plivo webhooks using V3 signature if present; fall back to V2.
- *
- * Header names (case-insensitive; Node provides lower-case keys):
- * - V3: X-Plivo-Signature-V3 / X-Plivo-Signature-V3-Nonce
- * - V2: X-Plivo-Signature-V2 / X-Plivo-Signature-V2-Nonce
- */
+/** Verifies Plivo callbacks, preferring V3 signatures and falling back to V2. */
 export function verifyPlivoWebhook(
   ctx: WebhookContext,
   authToken: string,
   options?: {
-    /** Override the public URL origin (host) used for verification */
+    /** Canonical external origin used when Plivo signs a URL different from the local request. */
     publicUrl?: string;
-    /** Skip verification entirely (only for development) */
+    /** Development-only bypass that still emits deterministic replay keys. */
     skipVerification?: boolean;
-    /**
-     * Whitelist of allowed hostnames for host header validation.
-     * Prevents host header injection attacks.
-     */
+    /** Host allowlist for forwarding headers used during signature URL reconstruction. */
     allowedHosts?: string[];
-    /**
-     * Explicitly trust X-Forwarded-* headers without a whitelist.
-     * WARNING: Only enable if you trust your proxy configuration.
-     * @default false
-     */
+    /** Trust X-Forwarded-* without a host allowlist when the deployment owns the proxy boundary. */
     trustForwardingHeaders?: boolean;
-    /**
-     * List of trusted proxy IP addresses. X-Forwarded-* headers will only
-     * be trusted from these IPs.
-     */
+    /** Optional source-IP allowlist required before forwarded headers affect signature URLs. */
     trustedProxyIPs?: string[];
-    /**
-     * The remote IP address of the request (for proxy validation).
-     */
+    /** Incoming request IP used to evaluate trustedProxyIPs. */
     remoteIP?: string;
   },
 ): PlivoVerificationResult {
