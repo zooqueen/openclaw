@@ -1,6 +1,10 @@
 import { log } from "../logger.js";
 
-/** Minimal active-session surface needed to steer queued user text and observe transcript commit. */
+/**
+ * Minimal active-session surface needed to steer queued user text and observe
+ * transcript commit. Tests use this shape to avoid depending on the full
+ * AgentSession runtime while still exercising queue cancellation behavior.
+ */
 export type EmbeddedAgentActiveSessionSteerTarget = {
   agent?: unknown;
   getSteeringMessages?(): readonly string[];
@@ -8,7 +12,11 @@ export type EmbeddedAgentActiveSessionSteerTarget = {
   subscribe(listener: (event: unknown) => void): () => void;
 };
 
-/** Default wait for a queued steering message to appear in transcript events. */
+/**
+ * Default wait for a queued steering message to appear in transcript events.
+ * Long enough for slow auto-retry/compaction handoff, but still bounded so
+ * delivery-sensitive source replies do not wait forever.
+ */
 export const DEFAULT_QUEUE_TRANSCRIPT_COMMIT_TIMEOUT_MS = 120_000;
 
 function extractQueuedUserMessageText(message: unknown): string | undefined {
@@ -157,6 +165,8 @@ export async function steerAndWaitForTranscriptCommit(
       if (terminalTimer) {
         return;
       }
+      // Give same-tick auto-retry/compaction continuation events a chance to
+      // arrive before treating agent_end as final and cancelling the queued text.
       terminalTimer = setTimeout(() => {
         terminalTimer = undefined;
         rejectAfterCancellation(

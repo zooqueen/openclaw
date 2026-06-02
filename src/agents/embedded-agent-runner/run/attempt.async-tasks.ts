@@ -14,7 +14,11 @@ export type AsyncStartedToolMeta = {
   asyncTaskId?: string;
 };
 
-/** Summary of completion-required async work observed before the attempt can finish. */
+/**
+ * Summary of completion-required async work observed before the attempt can
+ * finish. `waitedRunIds` records every run id claimed by this wait call so the
+ * outer attempt loop will not rediscover the same unfinished task forever.
+ */
 export type CompletionRequiredAsyncTaskWaitResult = {
   waitedRunIds: string[];
   timedOutRunIds: string[];
@@ -138,7 +142,11 @@ function findTerminalTasks(runIds: readonly string[]): {
   return { pendingRunIds, terminalTasks };
 }
 
-/** Returns whether this cron attempt has media work that must finish first. */
+/**
+ * Returns whether this cron attempt has media work that must finish first.
+ * Non-cron runs can surface async media later, but cron deliveries need the
+ * final payload before the scheduled message is sent.
+ */
 export function requiresCompletionRequiredAsyncTaskWait(params: {
   sessionKey: string | undefined;
   toolMetas: readonly AsyncStartedToolMeta[];
@@ -162,7 +170,11 @@ export function requiresCompletionRequiredAsyncTaskWait(params: {
   );
 }
 
-/** Waits for cron-owned media tasks that must finish before final delivery. */
+/**
+ * Waits for cron-owned media tasks that must finish before final delivery.
+ * Discovery is repeated after each completed batch because one media task can
+ * enqueue another completion-required task from a detached runtime.
+ */
 export async function waitForCompletionRequiredAsyncTasks(params: {
   getToolMetas: () => readonly AsyncStartedToolMeta[];
   sessionKey?: string;
