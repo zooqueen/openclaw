@@ -2634,6 +2634,11 @@ export class WorkboardStore {
       throw new Error(`card not found: ${id}`);
     }
     const lifecycleStatusSourceUpdatedAt = lifecycleStatusSourceUpdatedAtFromPatch(patch.metadata);
+    const existingLifecycleStatusSourceUpdatedAt =
+      existing.metadata?.lifecycleStatusSourceUpdatedAt;
+    const hasFreshLifecycleStatusSource =
+      lifecycleStatusSourceUpdatedAt !== undefined &&
+      lifecycleStatusSourceUpdatedAt !== existingLifecycleStatusSourceUpdatedAt;
     if (
       patch.status !== undefined &&
       lifecycleStatusSourceUpdatedAt !== undefined &&
@@ -2670,13 +2675,9 @@ export class WorkboardStore {
     let metadata = normalizeMetadata(patch.metadata, existing.metadata, {
       allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
     });
-    if (
-      status !== existing.status &&
-      (!patch.metadata ||
-        typeof patch.metadata !== "object" ||
-        Array.isArray(patch.metadata) ||
-        !Object.hasOwn(patch.metadata, "lifecycleStatusSourceUpdatedAt"))
-    ) {
+    if (status !== existing.status && !hasFreshLifecycleStatusSource) {
+      // Status patches often spread existing metadata. Only a newly supplied
+      // lifecycle source is provenance; copied markers must not survive a manual transition.
       metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: undefined };
     }
     const automationPatch: Record<string, unknown> = {};

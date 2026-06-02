@@ -388,6 +388,41 @@ describe("WorkboardStore", () => {
     );
   });
 
+  it("clears copied lifecycle provenance on manual status patches", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({ title: "Clear copied provenance" });
+    const lifecycleMoved = await store.update(card.id, {
+      status: "review",
+      metadata: {
+        lifecycleStatusSourceUpdatedAt: 1000,
+        stale: {
+          kind: "session",
+          status: "done",
+          updatedAt: 1000,
+          observedAt: 1000,
+        },
+      },
+    });
+
+    const manual = await store.update(card.id, {
+      status: "running",
+      metadata: {
+        ...lifecycleMoved.metadata,
+        stale: null,
+      },
+    });
+
+    expect(manual.status).toBe("running");
+    expect(manual.metadata?.lifecycleStatusSourceUpdatedAt).toBeUndefined();
+
+    const staleLifecycle = await store.update(card.id, {
+      status: "review",
+      metadata: { lifecycleStatusSourceUpdatedAt: 1000 },
+    });
+    expect(staleLifecycle.status).toBe("running");
+    expect(staleLifecycle.metadata?.lifecycleStatusSourceUpdatedAt).toBeUndefined();
+  });
+
   it("keeps execution session links aligned with edited card links", async () => {
     const store = new WorkboardStore(createMemoryStore());
     const card = await store.create({
