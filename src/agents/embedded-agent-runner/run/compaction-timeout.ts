@@ -1,5 +1,10 @@
 import type { AgentMessage } from "../../runtime/index.js";
 
+/**
+ * Timeout state sampled when an attempt exits. `isTimeout` is the trigger,
+ * while the compaction flags explain whether the timeout should be reported as
+ * compaction-related instead of a plain model/tool timeout.
+ */
 export type CompactionTimeoutSignal = {
   isTimeout: boolean;
   isCompactionPendingOrRetrying: boolean;
@@ -34,6 +39,11 @@ export function resolveRunTimeoutWithCompactionGraceMs(params: {
   return params.runTimeoutMs + params.compactionTimeoutMs;
 }
 
+/**
+ * Candidate transcript snapshots used when compaction times out mid-rewrite.
+ * The pre-compaction snapshot is preferred because the current transcript may
+ * include a partial summary or assistant tail that is unsafe for retry.
+ */
 export type SnapshotSelectionParams = {
   timedOutDuringCompaction: boolean;
   preCompactionSnapshot: AgentMessage[] | null;
@@ -42,6 +52,7 @@ export type SnapshotSelectionParams = {
   currentSessionId: string;
 };
 
+/** Transcript selected for retry after trimming to a continuable tail. */
 export type SnapshotSelection = {
   messagesSnapshot: AgentMessage[];
   sessionIdUsed: string;
