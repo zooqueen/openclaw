@@ -23,6 +23,7 @@ function parseTwilioApiError(text: string): ParsedTwilioApiError {
   }
 }
 
+/** Twilio REST failure with structured status/code metadata for provider retry and race handling. */
 export class TwilioApiError extends Error {
   readonly httpStatus: number;
   readonly responseText: string;
@@ -39,7 +40,7 @@ export class TwilioApiError extends Error {
   }
 }
 
-/** Sends a Twilio REST API form request through the SSRF guard and parses JSON responses. */
+/** Sends a Twilio REST form request through the SSRF guard and releases the resolved-address pin. */
 export async function twilioApiRequest<T = unknown>(params: {
   baseUrl: string;
   accountSid: string;
