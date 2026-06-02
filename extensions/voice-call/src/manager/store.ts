@@ -4,13 +4,17 @@ import type { PluginStateSyncKeyedStore } from "openclaw/plugin-sdk/plugin-state
 import { getOptionalVoiceCallStateRuntime } from "../runtime-state.js";
 import { CallRecordSchema, TerminalStates, type CallId, type CallRecord } from "../types.js";
 
+/** Keyed-store namespace for call snapshot metadata rows. */
 export const CALL_RECORD_EVENTS_NAMESPACE = "call-record-events";
+/** Keyed-store namespace for base64 chunks that hold serialized call snapshots. */
 export const CALL_RECORD_EVENT_CHUNKS_NAMESPACE = "call-record-event-chunks";
 /** Retain a bounded replay log of the newest call snapshots in plugin state. */
 export const MAX_CALL_RECORD_EVENTS = 1000;
+/** Metadata store capacity includes prune headroom so a write can land before old rows drop. */
 export const CALL_RECORD_EVENT_META_MAX_ENTRIES = MAX_CALL_RECORD_EVENTS + 100;
 /** Keep each persisted call within the per-record plugin-state chunk ceiling. */
 export const MAX_CHUNKS_PER_CALL_RECORD_EVENT = 48;
+/** Chunk store capacity covers all retained snapshots plus one in-flight over-capacity write. */
 export const CALL_RECORD_CHUNK_MAX_ENTRIES =
   MAX_CALL_RECORD_EVENTS * MAX_CHUNKS_PER_CALL_RECORD_EVENT + MAX_CHUNKS_PER_CALL_RECORD_EVENT;
 /** Raw bytes per chunk leave room for base64 overhead under keyed-store value limits. */
@@ -30,9 +34,13 @@ type CallRecordEventChunk = {
 };
 
 export type PersistedCallRecord = {
+  /** Parsed call snapshot payload. */
   call: CallRecord;
+  /** Snapshot write time used to replay records in canonical order. */
   persistedAt: number;
+  /** Same-millisecond tie-breaker assigned by this process. */
   sequence: number;
+  /** Deterministic final tie-breaker for migrated or malformed metadata. */
   orderKey: string;
 };
 
