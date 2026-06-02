@@ -202,6 +202,7 @@ function cloneWebhookResponsePayload(payload: WebhookResponsePayload): WebhookRe
   };
 }
 
+/** HTTP/WebSocket ingress for voice provider callbacks, media streams, and replay-safe replies. */
 export class VoiceCallWebhookServer {
   private server: http.Server | null = null;
   private listeningUrl: string | null = null;
@@ -216,7 +217,7 @@ export class VoiceCallWebhookServer {
   private stopStaleCallReaper: (() => void) | null = null;
   private readonly webhookInFlightLimiter = createWebhookInFlightLimiter();
 
-  /** Media stream handler for bidirectional audio (when streaming enabled) */
+  /** Optional STT media-stream bridge used by providers that connect by WebSocket. */
   private mediaStreamHandler: MediaStreamHandler | null = null;
   /** Delayed auto-hangup timers keyed by provider call ID after stream disconnect. */
   private pendingDisconnectHangups = new Map<string, ReturnType<typeof setTimeout>>();
@@ -248,17 +249,17 @@ export class VoiceCallWebhookServer {
     };
   }
 
-  /**
-   * Get the media stream handler (for wiring to provider).
-   */
+  /** Exposes the stream bridge so providers can attach carrier-specific media controls. */
   getMediaStreamHandler(): MediaStreamHandler | null {
     return this.mediaStreamHandler;
   }
 
+  /** Returns the realtime duplex handler when realtime voice mode is configured. */
   getRealtimeHandler(): RealtimeCallHandler | null {
     return this.realtimeHandler;
   }
 
+  /** Sends operator text into an active realtime voice call through the duplex handler. */
   speakRealtime(callId: string, instructions: string): { success: boolean; error?: string } {
     if (!this.realtimeHandler) {
       return { success: false, error: "Realtime voice handler is not configured" };
@@ -266,6 +267,7 @@ export class VoiceCallWebhookServer {
     return this.realtimeHandler.speak(callId, instructions);
   }
 
+  /** Installs a realtime handler created outside the server startup path. */
   setRealtimeHandler(handler: RealtimeCallHandler): void {
     this.realtimeHandler = handler;
   }
@@ -325,9 +327,7 @@ export class VoiceCallWebhookServer {
     return initialMessage.length > 0;
   }
 
-  /**
-   * Initialize media streaming with the selected realtime transcription provider.
-   */
+  /** Initializes provider-selected STT media streaming and binds callbacks into call state. */
   private async initializeMediaStreaming(): Promise<void> {
     const streaming = this.config.streaming;
     const pluginConfig =
@@ -409,12 +409,12 @@ export class VoiceCallWebhookServer {
           return;
         }
 
-        // Clear TTS queue on barge-in (user started speaking, interrupt current playback)
+        // Caller speech interrupts queued Twilio playback unless the initial greeting is protected.
         if (this.provider.name === "twilio") {
           (this.provider as TwilioProvider).clearTtsQueue(providerCallId);
         }
 
-        // Create a speech event and process it through the manager
+        // Media transcripts bypass provider webhooks, so synthesize the normalized event here.
         const event: NormalizedEvent = {
           id: `stream-transcript-${Date.now()}`,
           type: "call.speech",
@@ -426,7 +426,7 @@ export class VoiceCallWebhookServer {
         };
         this.manager.processEvent(event);
 
-        // Auto-respond in conversation mode (inbound always, outbound if mode is conversation)
+        // Notify-mode outbound calls record transcripts but do not trigger an agent reply.
         const callMode = call.metadata?.mode as string | undefined;
         const shouldRespond = call.direction === "inbound" || callMode === "conversation";
         if (shouldRespond) {
