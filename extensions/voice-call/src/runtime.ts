@@ -115,6 +115,7 @@ function loadRealtimeHandler(): Promise<RealtimeHandlerModule> {
   return realtimeHandlerPromise;
 }
 
+/** Resolves the agent consult session to the same phone/call scope used by classic responses. */
 function resolveVoiceCallConsultSessionKey(call: {
   config: VoiceCallConfig;
   sessionKey?: string;
@@ -134,6 +135,7 @@ function resolveVoiceCallConsultSessionKey(call: {
   });
 }
 
+/** Converts durable call transcript plus one optional live partial into consult-agent messages. */
 function mapVoiceCallConsultTranscript(
   call: {
     transcript?: Array<{ speaker: "user" | "bot"; text: string }>;
@@ -155,6 +157,7 @@ function mapVoiceCallConsultTranscript(
   return transcript;
 }
 
+/** Owns shutdown order for provider-facing exposure and the local webhook listener. */
 function createRuntimeResourceLifecycle(params: {
   config: VoiceCallConfig;
   webhookServer: VoiceCallWebhookServer;
@@ -200,6 +203,7 @@ function createRuntimeResourceLifecycle(params: {
   };
 }
 
+/** Instantiates the selected provider after config/env/default resolution has completed. */
 async function resolveProvider(config: VoiceCallConfig): Promise<VoiceCallProvider> {
   const allowNgrokFreeTierLoopbackBypass =
     config.tunnel?.provider === "ngrok" &&
