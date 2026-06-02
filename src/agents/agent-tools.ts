@@ -1122,6 +1122,7 @@ export function createOpenClawCodingTools(options?: {
     declaredToolAllowlist: buildDeclaredToolAllowlistContext({
       config: options?.config,
       workspaceDir: workspaceRoot,
+      toolDenylist: pluginToolDenylist,
     }),
   });
   if (shouldInheritEffectiveToolAllowlist) {

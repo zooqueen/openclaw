@@ -18,7 +18,11 @@ import {
   buildDefaultToolPolicyPipelineSteps,
   type ToolPolicyPipelineStep,
 } from "../tool-policy-pipeline.js";
-import { mergeAlsoAllowPolicy, resolveToolProfilePolicy } from "../tool-policy.js";
+import {
+  collectExplicitDenylist,
+  mergeAlsoAllowPolicy,
+  resolveToolProfilePolicy,
+} from "../tool-policy.js";
 import type { AnyAgentTool } from "../tools/common.js";
 
 /**
@@ -176,6 +180,9 @@ export function applyFinalEffectiveToolPolicy(
     warn: params.warn,
     steps: pipelineSteps,
     auditLogLevel: params.toolPolicyAuditLogLevel,
-    declaredToolAllowlist: buildDeclaredToolAllowlistContext({ config: params.config }),
+    declaredToolAllowlist: buildDeclaredToolAllowlistContext({
+      config: params.config,
+      toolDenylist: collectExplicitDenylist(pipelineSteps.map((step) => step.policy)),
+    }),
   });
 }
