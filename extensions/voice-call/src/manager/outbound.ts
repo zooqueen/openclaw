@@ -346,7 +346,7 @@ export async function sendDtmf(
   }
 }
 
-/** Play any initial outbound message, then continue with notify hangup or listening mode. */
+/** Plays the one-shot initial message, then enters notify hangup or conversation listening mode. */
 export async function speakInitialMessage(
   ctx: ConversationContext,
   providerCallId: string,
@@ -375,6 +375,8 @@ export async function speakInitialMessage(
     );
     return;
   }
+  // Answered and media-stream connected callbacks can both attempt startup
+  // speech; keep one playback active so the caller does not hear duplicates.
   ctx.initialMessageInFlight.add(call.callId);
 
   try {
@@ -395,6 +397,8 @@ export async function speakInitialMessage(
       const delaySec = ctx.config.outbound.notifyHangupDelaySec;
       const delayMs = resolveVoiceCallSecondsTimerDelayMs(delaySec, 0);
       console.log(`[voice-call] Notify mode: auto-hangup in ${delaySec}s for call ${call.callId}`);
+      // Notify hangup is intentionally not a max-duration timer; it is a short
+      // post-message grace period and rechecks active state before ending.
       setTimeout(() => {
         void (async () => {
           const currentCall = ctx.activeCalls.get(call.callId);
