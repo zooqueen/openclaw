@@ -6,11 +6,17 @@ const GATEWAY_ENV_TOKEN = "OPENCLAW_GATEWAY_TOKEN";
 const GATEWAY_SERVICE_KIND = "gateway";
 
 export type GatewayAuthTokenSourceConflict = {
+  /** Stable id shared by doctor, status, and security audit findings. */
   checkId: "gateway.env_token_overrides_config";
+  /** Short human-readable warning title. */
   title: string;
+  /** Explanation of how local clients and the managed service can diverge. */
   detail: string;
+  /** Operator action that makes the env/config token source canonical again. */
   remediation: string;
+  /** Preformatted doctor warning block. */
   warningLines: string[];
+  /** Single-line status/config diagnostic. */
   diagnostic: string;
 };
 
@@ -30,6 +36,8 @@ export function resolveGatewayAuthTokenSourceConflict(params: {
     return null;
   }
 
+  // Remote gateways do not compare the local config token against a locally
+  // managed service, so an ambient token cannot shadow the running service.
   if (params.cfg.gateway?.mode === "remote") {
     return null;
   }
@@ -44,6 +52,8 @@ export function resolveGatewayAuthTokenSourceConflict(params: {
     value: tokenInput,
     defaults: params.cfg.secrets?.defaults,
   });
+  // Config that explicitly points at OPENCLAW_GATEWAY_TOKEN has made the env
+  // var canonical, so matching by source is enough even before resolving it.
   if (ref?.source === "env" && ref.id === GATEWAY_ENV_TOKEN) {
     return null;
   }
