@@ -151,7 +151,7 @@ observation-only.
 - `gateway_start` / `gateway_stop` - start or stop plugin-owned services with the Gateway
 - `deactivate` - deprecated compatibility alias for `gateway_stop`; use `gateway_stop` in new plugins
 - `cron_changed` - observe gateway-owned cron lifecycle changes (added, updated, removed, started, finished, scheduled)
-- **`before_install`** - inspect skill or plugin install scans and optionally block
+- **`before_install`** - inspect plugin install scans and optionally block
 
 ## Debug runtime hooks
 
@@ -429,7 +429,7 @@ Decision rules:
 
 ## Install hooks
 
-`before_install` runs after the built-in scan for skill and plugin installs.
+`before_install` runs after the built-in scan for plugin installs.
 Return additional findings or `{ block: true, blockReason }` to stop the
 install.
 

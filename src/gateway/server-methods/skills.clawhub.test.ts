@@ -259,7 +259,7 @@ describe("skills gateway handlers (clawhub)", () => {
     expect(result?.version).toBe("1.2.3");
   });
 
-  it("forwards dangerous override for local skill installs", async () => {
+  it("keeps forwarding the dangerous override on local skill installs for compatibility", async () => {
     installSkillMock.mockResolvedValue({
       ok: true,
       message: "Installed",

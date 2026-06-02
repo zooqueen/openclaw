@@ -14,10 +14,6 @@ vi.mock("../../process/exec.js", () => ({
   runCommandWithTimeout: (...args: unknown[]) => runCommandWithTimeoutMock(...args),
 }));
 
-vi.mock("../../plugins/install-security-scan.js", () => ({
-  scanSkillInstallSource: vi.fn(async () => undefined),
-}));
-
 vi.mock("../loading/workspace.js", () => ({
   loadWorkspaceSkillEntries: skillsMocks.loadWorkspaceSkillEntries,
 }));

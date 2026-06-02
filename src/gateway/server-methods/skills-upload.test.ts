@@ -10,10 +10,6 @@ const agentScopeState = vi.hoisted(() => ({
   workspaceDir: "",
 }));
 
-const installSecurityScanState = vi.hoisted(() => ({
-  scanSkillInstallSource: vi.fn(),
-}));
-
 const replaceFileState = vi.hoisted(() => ({
   publishFailureTarget: "",
   publishFailures: 0,
@@ -28,10 +24,6 @@ vi.mock("../../agents/agent-scope.js", async (importOriginal) => {
     resolveDefaultAgentId: vi.fn(() => "main"),
   };
 });
-
-vi.mock("../../plugins/install-security-scan.js", () => ({
-  scanSkillInstallSource: installSecurityScanState.scanSkillInstallSource,
-}));
 
 vi.mock("../../infra/replace-file.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../infra/replace-file.js")>();
@@ -140,14 +132,6 @@ function expectError(result: CallResult, code: string, message: string): void {
   expect(result.error?.message).toBe(message);
 }
 
-function firstCallArg<T>(mock: { mock: { calls: unknown[][] } }, _type?: (value: T) => T): T {
-  const callLocal = mock.mock.calls.at(0);
-  if (!callLocal) {
-    throw new Error("Expected first mock call");
-  }
-  return callLocal[0] as T;
-}
-
 async function makeSkillArchive(params: {
   name?: string;
   description?: string;
@@ -219,8 +203,6 @@ describe("skill upload gateway handlers", () => {
     vi.unstubAllEnvs();
     replaceFileState.publishFailureTarget = "";
     replaceFileState.publishFailures = 0;
-    installSecurityScanState.scanSkillInstallSource.mockReset();
-    installSecurityScanState.scanSkillInstallSource.mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -459,37 +441,6 @@ describe("skill upload gateway handlers", () => {
       /escapes destination|absolute|extract archive/i,
     );
     await expectPathMissing(path.join(workspaceDir, "skills", "traversal-skill"));
-  });
-
-  it("treats security scan blocks as terminal invalid uploads", async () => {
-    const { handlers, stateDir } = await makeHarness();
-    installSecurityScanState.scanSkillInstallSource.mockResolvedValueOnce({
-      blocked: {
-        code: "security_scan_blocked",
-        reason:
-          'Skill "scan-blocked" installation blocked: blocked dependencies "plain-crypto-js" declared in package.json.',
-      },
-    });
-    const upload = await uploadArchive(handlers, {
-      archive: await makeSkillArchive({}),
-      slug: "scan-blocked",
-    });
-
-    const install = await call(handlers, "skills.install", {
-      source: "upload",
-      uploadId: upload.uploadId,
-      slug: "scan-blocked",
-    });
-
-    expect(install.ok).toBe(false);
-    expect(install.error?.code).toBe("INVALID_REQUEST");
-    expect(install.error?.message).toContain("blocked dependencies");
-    const scanInput = firstCallArg<{ origin?: string; skillName?: string }>(
-      installSecurityScanState.scanSkillInstallSource,
-    );
-    expect(scanInput.origin).toBe("skill-upload");
-    expect(scanInput.skillName).toBe("scan-blocked");
-    await expectPathMissing(path.join(stateDir, "tmp", "skill-uploads", upload.uploadId));
   });
 
   it("preserves existing installs unless force was bound at begin", async () => {
