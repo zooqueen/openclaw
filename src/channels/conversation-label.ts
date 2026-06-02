@@ -10,11 +10,15 @@ function extractConversationId(from?: string): string | undefined {
   if (!trimmed) {
     return undefined;
   }
+  // Channel From values are often provider:scope:id; the final segment is the only stable
+  // disambiguator shared across channels for generic group labels.
   const parts = trimmed.split(":").filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : trimmed;
 }
 
 function shouldAppendId(id: string): boolean {
+  // Append only ids that are opaque enough to disambiguate generic labels without making
+  // human-readable room names noisy.
   if (/^[0-9]+$/.test(id)) {
     return true;
   }
