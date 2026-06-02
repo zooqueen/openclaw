@@ -55,10 +55,12 @@ const MAX_EMBEDDING_TOTAL_CHARS = 65_536;
 const DEFAULT_MEMORY_EMBEDDING_PROVIDER = "openai";
 type EmbeddingProviderRequest = string;
 
+/** Coerces unknown JSON into the OpenAI-compatible embeddings request shape. */
 function coerceRequest(value: unknown): EmbeddingsRequest {
   return value && typeof value === "object" ? (value as EmbeddingsRequest) : {};
 }
 
+/** Accepts the OpenAI string-or-string-array input grammar. */
 function resolveInputTexts(input: unknown): string[] | null {
   if (typeof input === "string") {
     return [input];
@@ -72,11 +74,13 @@ function resolveInputTexts(input: unknown): string[] | null {
   return null;
 }
 
+/** Encodes float embeddings using the OpenAI base64 float32 format. */
 function encodeEmbeddingBase64(embedding: number[]): string {
   const float32 = Float32Array.from(embedding);
   return Buffer.from(float32.buffer).toString("base64");
 }
 
+/** Enforces Gateway-side input bounds before invoking embedding providers. */
 function validateInputTexts(texts: string[]): string | undefined {
   if (texts.length > MAX_EMBEDDING_INPUTS) {
     return `Too many inputs (max ${MAX_EMBEDDING_INPUTS}).`;
@@ -111,6 +115,8 @@ async function createConfiguredEmbeddingProvider(params: {
 }): Promise<MemoryEmbeddingProvider> {
   const providerId =
     params.provider === "auto" ? DEFAULT_MEMORY_EMBEDDING_PROVIDER : params.provider;
+  // Prefer memory-specific providers when present; fall back to generic
+  // embedding providers so configured OpenAI-compatible providers work here.
   const createWithAdapter = async (adapter: MemoryEmbeddingProviderAdapter) => {
     const result = await adapter.create({
       config: params.cfg,
@@ -179,6 +185,8 @@ function adaptGenericEmbeddingProvider(
     ...(typeof provider.maxInputTokens === "number"
       ? { maxInputTokens: provider.maxInputTokens }
       : {}),
+    // Memory search asks for query/document embeddings separately; generic
+    // providers use inputType options to preserve that distinction.
     embedQuery: async (text, options) =>
       await provider.embed(text, {
         ...options,
@@ -207,6 +215,8 @@ function resolveEmbeddingsTarget(params: {
     return { provider: configuredProvider, model: raw };
   }
 
+  // Provider-qualified overrides may only target the configured embedding
+  // provider for the resolved agent; cross-provider routing is rejected.
   const provider = normalizeLowercaseStringOrEmpty(raw.slice(0, slash));
   const model = raw.slice(slash + 1).trim();
   if (!model) {
@@ -222,6 +232,7 @@ function resolveEmbeddingsTarget(params: {
   return { provider: configuredProvider, model };
 }
 
+/** Handles the OpenAI-compatible /v1/embeddings endpoint. */
 export async function handleOpenAiEmbeddingsHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -290,6 +301,8 @@ export async function handleOpenAiEmbeddingsHttpRequest(
     normalizeOptionalString(getHeader(req, "x-openclaw-model")) ||
     normalizeOptionalString(memorySearch?.model) ||
     "";
+  // The request model selects the OpenClaw agent; x-openclaw-model or memory
+  // config selects the actual embedding provider/model for that agent.
   const target = resolveEmbeddingsTarget({
     requestModel: overrideModel,
     configuredProvider,
