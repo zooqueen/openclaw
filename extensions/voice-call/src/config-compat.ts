@@ -2,11 +2,15 @@ import { asOptionalRecord, readStringField } from "openclaw/plugin-sdk/string-co
 import type { VoiceCallConfig } from "./config.js";
 import { VoiceCallConfigSchema } from "./config.js";
 
+/** Release where doctor-only legacy voice-call config support is scheduled for removal. */
 export const VOICE_CALL_LEGACY_CONFIG_REMOVAL_VERSION = "2026.6.0";
 
 type VoiceCallLegacyConfigIssue = {
+  /** Legacy config path relative to the voice-call plugin config object. */
   path: string;
+  /** Canonical path or object that replaces the legacy key. */
   replacement: string;
+  /** Operator-facing explanation shown in warnings and doctor output. */
   message: string;
 };
 
@@ -110,8 +114,11 @@ export function collectVoiceCallLegacyConfigIssues(value: unknown): VoiceCallLeg
 
 /** Formats legacy-config warnings with the exact doctor command operators should run. */
 export function formatVoiceCallLegacyConfigWarnings(params: {
+  /** Raw voice-call plugin config value to inspect. */
   value: unknown;
+  /** Fully qualified config path shown in warning lines. */
   configPathPrefix: string;
+  /** Exact command operators can run to rewrite legacy keys. */
   doctorFixCommand: string;
 }): string[] {
   const issues = collectVoiceCallLegacyConfigIssues(params.value);
@@ -129,11 +136,16 @@ export function formatVoiceCallLegacyConfigWarnings(params: {
 
 /** Migrates the retired voice-call config shape into the canonical schema input. */
 export function migrateVoiceCallLegacyConfigInput(params: {
+  /** Raw voice-call plugin config value before schema parsing. */
   value: unknown;
+  /** Fully qualified config path used when reporting change lines. */
   configPathPrefix?: string;
 }): {
+  /** Canonical config-shaped object suitable for VoiceCallConfigSchema parsing. */
   config: Record<string, unknown>;
+  /** Doctor-style change log describing every rewrite/removal applied. */
   changes: string[];
+  /** Legacy issues detected before migration, for warnings and removal planning. */
   issues: VoiceCallLegacyConfigIssue[];
 } {
   const raw = asObject(params.value) ?? {};
