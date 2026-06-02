@@ -76,7 +76,9 @@ function mergeResolvedAllowlists(
 
 /** Removes dangerous mutable identifier matches unless policy explicitly enables them. */
 export function applyMutableIdentifierPolicy(
+  /** Resolved allowlist before mutable identifier filtering. */
   allowlist: ResolvedIngressAllowlist,
+  /** Ingress policy that may explicitly permit mutable identifier matches. */
   policy: ChannelIngressPolicyInput,
 ): ResolvedIngressAllowlist {
   if (policy.mutableIdentifierMatching === "enabled") {
@@ -114,9 +116,13 @@ export function applyMutableIdentifierPolicy(
 
 /** Resolves the effective group sender allowlist after fallback and route sender policy. */
 export function effectiveGroupSenderAllowlist(params: {
+  /** Resolved ingress state containing base group/DM allowlists and route facts. */
   state: ChannelIngressState;
+  /** Sender policy controlling DM fallback, route behavior, and mutable identifiers. */
   policy: ChannelIngressPolicyInput;
 }): ResolvedIngressAllowlist {
+  // Group fallback is the base allowlist only when no group entries exist; matched
+  // route policies then either inherit that base or replace it with route senders.
   let effective =
     params.policy.groupAllowFromFallbackToAllowFrom &&
     !params.state.allowlists.group.hasConfiguredEntries
