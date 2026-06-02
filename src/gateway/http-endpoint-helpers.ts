@@ -22,13 +22,17 @@ export async function handleGatewayPostJsonEndpoint(
   req: IncomingMessage,
   res: ServerResponse,
   opts: {
+    /** Exact path this helper owns; matching is host-independent. */
     pathname: string;
     auth: ResolvedGatewayAuth;
+    /** Per-route JSON body ceiling passed through to the bounded reader. */
     maxBodyBytes: number;
     trustedProxies?: string[];
     allowRealIpFallback?: boolean;
     rateLimiter?: AuthRateLimiter;
+    /** Optional operator method checked before any request body bytes are read. */
     requiredOperatorMethod?: "chat.send" | (string & Record<never, never>);
+    /** Route-specific scope resolver; defaults to trusted HTTP operator scopes. */
     resolveOperatorScopes?: (
       req: IncomingMessage,
       requestAuth: AuthorizedGatewayHttpRequest,
