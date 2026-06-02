@@ -65,6 +65,7 @@ import {
   findOpenAIStrictToolSchemaDiagnostics,
   normalizeOpenAIStrictToolParameters,
   resolveOpenAIStrictToolFlagForInventory,
+  snapshotOpenAIToolProjectionInputs,
 } from "./openai-tool-schema.js";
 import { resolveProviderRequestPolicyConfig } from "./provider-request-config.js";
 import {
@@ -203,6 +204,32 @@ type OpenAICompletionsOptions = BaseStreamOptions & {
   reasoningEffort?: OpenAIReasoningEffort;
 };
 
+function isToolChoiceCompatibleWithProjectedTools(
+  toolChoice: unknown,
+  toolNames: ReadonlySet<string>,
+): boolean {
+  if (!toolChoice) {
+    return false;
+  }
+  if (typeof toolChoice === "string") {
+    return toolNames.size > 0;
+  }
+  if (typeof toolChoice !== "object" || Array.isArray(toolChoice)) {
+    return false;
+  }
+  const choice = toolChoice as { type?: unknown; name?: unknown; function?: { name?: unknown } };
+  if (choice.type !== "function") {
+    return toolNames.size > 0;
+  }
+  const toolName =
+    typeof choice.name === "string"
+      ? choice.name
+      : typeof choice.function?.name === "string"
+        ? choice.function.name
+        : undefined;
+  return toolName ? toolNames.has(toolName) : false;
+}
+
 type OpenAIModeCompatInput = Omit<ModelCompatConfig, "thinkingFormat"> & {
   thinkingFormat?: string;
 };
@@ -210,6 +237,8 @@ type OpenAIModeCompatInput = Omit<ModelCompatConfig, "thinkingFormat"> & {
 type OpenAIModeModel = Omit<Model, "compat"> & {
   compat?: OpenAIModeCompatInput | null;
 };
+
+type OpenAIStrictToolInventory = Parameters<typeof resolveOpenAIStrictToolFlagForInventory>[0];
 
 type MutableAssistantOutput = {
   role: "assistant";
@@ -1273,11 +1302,12 @@ function convertResponsesTools(
   model: OpenAIModeModel,
   options?: { strict?: boolean | null },
 ): FunctionTool[] {
-  const strict = resolveOpenAIStrictToolFlagWithDiagnostics(tools, options?.strict, {
+  const projection = snapshotOpenAIToolProjectionInputs(tools);
+  const strict = resolveOpenAIStrictToolFlagWithDiagnostics(projection.tools, options?.strict, {
     transport: "responses",
     model,
   });
-  return sortTransportToolsByName(tools).map((tool): FunctionTool => {
+  return sortTransportToolsByName(projection.tools).map((tool): FunctionTool => {
     const result = {
       type: "function" as const,
       name: tool.name,
@@ -1296,7 +1326,7 @@ function convertResponsesTools(
 }
 
 function resolveOpenAIStrictToolFlagWithDiagnostics(
-  tools: NonNullable<Context["tools"]>,
+  tools: OpenAIStrictToolInventory,
   strictSetting: boolean | null | undefined,
   context: { transport: "responses" | "completions"; model: OpenAIModeModel },
 ): boolean | undefined {
@@ -2244,12 +2274,21 @@ export function buildOpenAIResponsesParams(
     params.service_tier = options.serviceTier;
   }
   if (context.tools) {
-    params.tools = convertResponsesTools(context.tools, model as OpenAIModeModel, {
+    const tools = convertResponsesTools(context.tools, model as OpenAIModeModel, {
       strict: resolveOpenAIStrictToolSetting(model as OpenAIModeModel, {
         transport: "stream",
       }),
     });
-    if (options?.toolChoice) {
+    if (tools.length > 0 || context.tools.length === 0) {
+      params.tools = tools;
+    }
+    if (
+      options?.toolChoice &&
+      isToolChoiceCompatibleWithProjectedTools(
+        options.toolChoice,
+        new Set(tools.map((tool) => tool.name)),
+      )
+    ) {
       params.tool_choice = options.toolChoice;
     }
   }
@@ -3607,8 +3646,9 @@ function convertTools(
   compat: ReturnType<typeof getCompat>,
   model: OpenAIModeModel,
 ) {
+  const projection = snapshotOpenAIToolProjectionInputs(tools);
   const strict = resolveOpenAIStrictToolFlagWithDiagnostics(
-    tools,
+    projection.tools,
     resolveOpenAIStrictToolSetting(model, {
       transport: "stream",
       supportsStrictMode: compat?.supportsStrictMode,
@@ -3618,7 +3658,7 @@ function convertTools(
       model,
     },
   );
-  return sortTransportToolsByName(tools).map((tool) => {
+  return sortTransportToolsByName(projection.tools).map((tool) => {
     const functionTool: {
       name: string;
       description: string | undefined;
@@ -4041,8 +4081,17 @@ export function buildOpenAICompletionsParams(
   }
   if (supportsModelTools(model)) {
     if (context.tools) {
-      params.tools = convertTools(context.tools, compat, model);
-      if (options?.toolChoice) {
+      const tools = convertTools(context.tools, compat, model);
+      if (tools.length > 0 || context.tools.length === 0) {
+        params.tools = tools;
+      }
+      if (
+        options?.toolChoice &&
+        isToolChoiceCompatibleWithProjectedTools(
+          options.toolChoice,
+          new Set(tools.map((tool) => tool.function.name)),
+        )
+      ) {
         params.tool_choice = options.toolChoice;
       } else if (
         compatDetection.capabilities.usesExplicitProxyLikeEndpoint &&

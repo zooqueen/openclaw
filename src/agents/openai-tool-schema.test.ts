@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearOpenAIToolSchemaCacheForTest,
+  findOpenAIStrictToolSchemaDiagnostics,
   isStrictOpenAIJsonSchemaCompatible,
   normalizeStrictOpenAIJsonSchema,
   resolveOpenAIStrictToolFlagForInventory,
+  snapshotOpenAIToolProjectionInputs,
 } from "./openai-tool-schema.js";
 
 describe("OpenAI strict tool schema normalization", () => {
@@ -90,5 +92,40 @@ describe("OpenAI strict tool schema normalization", () => {
         unsupportedToolSchemaKeywords: ["minimum"],
       }),
     ).toBe(third);
+  });
+
+  it("records unreadable tool projection fields as diagnostics instead of throwing", () => {
+    const unreadableTool = {
+      name: "bad_schema",
+      get parameters(): unknown {
+        throw new Error("boom");
+      },
+    };
+    const healthyTool = {
+      name: "healthy_lookup",
+      description: "Lookup",
+      parameters: {},
+    };
+
+    const snapshot = snapshotOpenAIToolProjectionInputs([unreadableTool, healthyTool]);
+
+    expect(snapshot.tools.map((tool) => tool.name)).toEqual(["healthy_lookup"]);
+    expect(snapshot.diagnostics).toEqual([
+      {
+        toolIndex: 0,
+        toolName: "bad_schema",
+        violations: ["bad_schema.unreadable: boom"],
+      },
+    ]);
+    expect(findOpenAIStrictToolSchemaDiagnostics([unreadableTool, healthyTool])).toEqual([
+      {
+        toolIndex: 0,
+        toolName: "bad_schema",
+        violations: ["bad_schema.unreadable: boom"],
+      },
+    ]);
+    expect(resolveOpenAIStrictToolFlagForInventory([unreadableTool, healthyTool], true)).toBe(
+      false,
+    );
   });
 });

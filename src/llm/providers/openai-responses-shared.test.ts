@@ -1,7 +1,7 @@
 import type { Tool as OpenAIResponsesTool } from "openai/resources/responses/responses.js";
 import { describe, expect, it } from "vitest";
 import type { Context, Model, Tool } from "../types.js";
-import { convertResponsesMessages } from "./openai-responses-shared.js";
+import { applyCommonResponsesParams, convertResponsesMessages } from "./openai-responses-shared.js";
 import { convertResponsesTools } from "./openai-responses-tools.js";
 
 type ResponsesFunctionTool = Extract<OpenAIResponsesTool, { type: "function" }>;
@@ -121,6 +121,60 @@ describe("convertResponsesTools", () => {
     expect(
       convertResponsesTools([zeta, alpha]).map((tool) => expectResponsesFunctionTool(tool).name),
     ).toEqual(["alpha", "zeta"]);
+  });
+
+  it("skips unreadable tool descriptors before Responses payload conversion", () => {
+    const unreadableNameTool = {
+      get name(): string {
+        throw new Error("boom name");
+      },
+      description: "Bad",
+      parameters: {},
+    } as Tool;
+    const unreadableParametersTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): Tool["parameters"] {
+        throw new Error("boom parameters");
+      },
+    } as Tool;
+    const healthyTool = {
+      name: "healthy_lookup",
+      description: "Lookup",
+      parameters: {},
+    } satisfies Tool;
+
+    const converted = convertResponsesTools(
+      [unreadableNameTool, healthyTool, unreadableParametersTool],
+      { model: nativeOpenAIModel },
+    );
+
+    expect(converted.map((tool) => expectResponsesFunctionTool(tool).name)).toEqual([
+      "healthy_lookup",
+    ]);
+  });
+
+  it("omits common Responses tools when every descriptor is unreadable", () => {
+    const unreadableTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): Tool["parameters"] {
+        throw new Error("boom parameters");
+      },
+    } as Tool;
+    const params = {
+      model: nativeOpenAIModel.id,
+      input: [],
+      stream: true as const,
+    };
+
+    applyCommonResponsesParams(params, nativeOpenAIModel, {
+      systemPrompt: "system",
+      messages: [],
+      tools: [unreadableTool],
+    });
+
+    expect(params).not.toHaveProperty("tools");
   });
 });
 

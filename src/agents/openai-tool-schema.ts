@@ -9,8 +9,18 @@ type ToolSchemaCompatInput = {
 
 type ToolWithParameters = {
   name?: unknown;
+  description?: unknown;
   parameters: unknown;
 };
+
+type OpenAIToolProjectionSnapshot = {
+  toolIndex: number;
+  name: string;
+  description?: string;
+  parameters: unknown;
+};
+
+type OpenAIToolProjectionSnapshotDiagnostic = OpenAIStrictToolSchemaDiagnostic;
 
 const MAX_STRICT_SCHEMA_CACHE_ENTRIES_PER_SCHEMA = 8;
 let strictOpenAISchemaCache = new WeakMap<object, Array<{ key: string; value: unknown }>>();
@@ -163,25 +173,69 @@ type OpenAIStrictToolSchemaDiagnostic = {
   violations: string[];
 };
 
+export function snapshotOpenAIToolProjectionInputs(tools: readonly ToolWithParameters[]): {
+  tools: OpenAIToolProjectionSnapshot[];
+  diagnostics: OpenAIToolProjectionSnapshotDiagnostic[];
+} {
+  const snapshots: OpenAIToolProjectionSnapshot[] = [];
+  const diagnostics: OpenAIToolProjectionSnapshotDiagnostic[] = [];
+  tools.forEach((tool, toolIndex) => {
+    const fallbackPath = `tool[${toolIndex}]`;
+    let toolName: string | undefined;
+    try {
+      if (!tool || typeof tool !== "object") {
+        diagnostics.push({ toolIndex, violations: [`${fallbackPath}.tool`] });
+        return;
+      }
+      const name = Reflect.get(tool, "name");
+      if (typeof name !== "string" || name.length === 0) {
+        diagnostics.push({ toolIndex, violations: [`${fallbackPath}.name`] });
+        return;
+      }
+      toolName = name;
+      const description = Reflect.get(tool, "description");
+      const parameters = Reflect.get(tool, "parameters");
+      snapshots.push({
+        toolIndex,
+        name,
+        ...(typeof description === "string" ? { description } : {}),
+        parameters,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      diagnostics.push({
+        toolIndex,
+        ...(toolName ? { toolName } : {}),
+        violations: [`${toolName ?? fallbackPath}.unreadable: ${message}`],
+      });
+    }
+  });
+  return { tools: snapshots, diagnostics };
+}
+
 export function findOpenAIStrictToolSchemaDiagnostics(
   tools: readonly ToolWithParameters[],
 ): OpenAIStrictToolSchemaDiagnostic[] {
-  return tools.flatMap((tool, toolIndex) => {
-    const violations = findStrictOpenAIJsonSchemaViolations(
-      normalizeStrictOpenAIJsonSchema(tool.parameters),
-      `${typeof tool.name === "string" && tool.name ? tool.name : `tool[${toolIndex}]`}.parameters`,
-    );
-    if (violations.length === 0) {
-      return [];
-    }
-    return [
-      {
-        toolIndex,
-        ...(typeof tool.name === "string" && tool.name ? { toolName: tool.name } : {}),
-        violations,
-      },
-    ];
-  });
+  const snapshot = snapshotOpenAIToolProjectionInputs(tools);
+  return [
+    ...snapshot.diagnostics,
+    ...snapshot.tools.flatMap((tool) => {
+      const violations = findStrictOpenAIJsonSchemaViolations(
+        normalizeStrictOpenAIJsonSchema(tool.parameters),
+        `${tool.name}.parameters`,
+      );
+      if (violations.length === 0) {
+        return [];
+      }
+      return [
+        {
+          toolIndex: tool.toolIndex,
+          toolName: tool.name,
+          violations,
+        },
+      ];
+    }),
+  ];
 }
 
 function isStrictOpenAIJsonSchemaCompatibleRecursive(schema: unknown): boolean {
@@ -304,5 +358,9 @@ export function resolveOpenAIStrictToolFlagForInventory(
   if (strict !== true) {
     return strict === false ? false : undefined;
   }
-  return tools.every((tool) => isStrictOpenAIJsonSchemaCompatible(tool.parameters));
+  const snapshot = snapshotOpenAIToolProjectionInputs(tools);
+  return (
+    snapshot.diagnostics.length === 0 &&
+    snapshot.tools.every((tool) => isStrictOpenAIJsonSchemaCompatible(tool.parameters))
+  );
 }

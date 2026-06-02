@@ -4573,6 +4573,207 @@ describe("openai transport stream", () => {
     expect(params.tools?.[0]).not.toHaveProperty("strict");
   });
 
+  it("skips unreadable tools before building OpenAI Responses params", () => {
+    const unreadableNameTool = {
+      get name(): string {
+        throw new Error("boom name");
+      },
+      description: "Bad",
+      parameters: {},
+    };
+    const unreadableParametersTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): unknown {
+        throw new Error("boom parameters");
+      },
+    };
+    const params = buildOpenAIResponsesParams(
+      {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-responses",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+      } satisfies Model<"openai-responses">,
+      {
+        systemPrompt: "system",
+        messages: [],
+        tools: [
+          unreadableNameTool,
+          {
+            name: "healthy_lookup",
+            description: "Lookup",
+            parameters: {},
+          },
+          unreadableParametersTool,
+        ],
+      } as never,
+      undefined,
+    ) as { tools?: Array<{ name?: string }> };
+
+    expect(params.tools?.map((tool) => tool.name)).toEqual(["healthy_lookup"]);
+  });
+
+  it("drops pinned OpenAI Responses tool choice when that tool is unreadable", () => {
+    const unreadablePinnedTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): unknown {
+        throw new Error("boom parameters");
+      },
+    };
+    const params = buildOpenAIResponsesParams(
+      {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-responses",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+      } satisfies Model<"openai-responses">,
+      {
+        systemPrompt: "system",
+        messages: [],
+        tools: [
+          unreadablePinnedTool,
+          {
+            name: "healthy_lookup",
+            description: "Lookup",
+            parameters: {},
+          },
+        ],
+      } as never,
+      {
+        toolChoice: { type: "function", name: "bad_parameters" },
+      },
+    ) as { tools?: Array<{ name?: string }>; tool_choice?: unknown };
+
+    expect(params.tools?.map((tool) => tool.name)).toEqual(["healthy_lookup"]);
+    expect(params.tool_choice).toBeUndefined();
+  });
+
+  it("drops forced OpenAI Responses tool choice when every tool is unreadable", () => {
+    const unreadableTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): unknown {
+        throw new Error("boom parameters");
+      },
+    };
+    const params = buildOpenAIResponsesParams(
+      {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-responses",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+      } satisfies Model<"openai-responses">,
+      {
+        systemPrompt: "system",
+        messages: [],
+        tools: [unreadableTool],
+      } as never,
+      {
+        toolChoice: "required",
+      },
+    ) as { tools?: unknown[]; tool_choice?: unknown };
+
+    expect(params.tools).toBeUndefined();
+    expect(params.tool_choice).toBeUndefined();
+  });
+
+  it("drops forced OpenAI completions tool choice when every tool is unreadable", () => {
+    const unreadableTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): unknown {
+        throw new Error("boom parameters");
+      },
+    };
+    const params = buildOpenAICompletionsParams(
+      {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-completions",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+      } satisfies Model<"openai-completions">,
+      {
+        systemPrompt: "system",
+        messages: [],
+        tools: [unreadableTool],
+      } as never,
+      {
+        toolChoice: "required",
+      },
+    ) as { tools?: unknown[]; tool_choice?: unknown };
+
+    expect(params.tools).toBeUndefined();
+    expect(params.tool_choice).toBeUndefined();
+  });
+
+  it("drops pinned OpenAI completions tool choice when that tool is unreadable", () => {
+    const unreadablePinnedTool = {
+      name: "bad_parameters",
+      description: "Bad",
+      get parameters(): unknown {
+        throw new Error("boom parameters");
+      },
+    };
+    const params = buildOpenAICompletionsParams(
+      {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-completions",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 8192,
+      } satisfies Model<"openai-completions">,
+      {
+        systemPrompt: "system",
+        messages: [],
+        tools: [
+          unreadablePinnedTool,
+          {
+            name: "healthy_lookup",
+            description: "Lookup",
+            parameters: {},
+          },
+        ],
+      } as never,
+      {
+        toolChoice: { type: "function", function: { name: "bad_parameters" } },
+      },
+    ) as { tools?: Array<{ function?: { name?: string } }>; tool_choice?: unknown };
+
+    expect(params.tools?.map((tool) => tool.function?.name)).toEqual(["healthy_lookup"]);
+    expect(params.tool_choice).toBeUndefined();
+  });
+
   it("still normalizes responses tool parameters when strict is omitted", () => {
     const params = buildOpenAIResponsesParams(
       {

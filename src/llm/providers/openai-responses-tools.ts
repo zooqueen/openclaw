@@ -5,6 +5,7 @@ import {
   findOpenAIStrictToolSchemaDiagnostics,
   normalizeOpenAIStrictToolParameters,
   resolveOpenAIStrictToolFlagForInventory,
+  snapshotOpenAIToolProjectionInputs,
 } from "../../agents/openai-tool-schema.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { Model, Tool } from "../types.js";
@@ -16,6 +17,7 @@ export interface ConvertResponsesToolsOptions {
 }
 
 type OpenAIToolSchemaCompat = Parameters<typeof normalizeOpenAIStrictToolParameters>[2];
+type OpenAIStrictToolInventory = Parameters<typeof resolveOpenAIStrictToolFlagForInventory>[0];
 type ResponsesFunctionTool = {
   type: "function";
   name: string;
@@ -32,9 +34,10 @@ export function convertResponsesTools(
   tools: Tool[],
   options?: ConvertResponsesToolsOptions,
 ): OpenAITool[] {
+  const projection = snapshotOpenAIToolProjectionInputs(tools);
   const strictSetting = resolveResponsesStrictToolSetting(options);
-  const strict = resolveResponsesStrictToolFlag(tools, strictSetting, options?.model);
-  return sortResponsesToolsByName(tools).map((tool) => {
+  const strict = resolveResponsesStrictToolFlag(projection.tools, strictSetting, options?.model);
+  return sortResponsesToolsByName(projection.tools).map((tool) => {
     const result: ResponsesFunctionTool = {
       type: "function",
       name: tool.name,
@@ -68,7 +71,7 @@ function resolveResponsesStrictToolSetting(
 }
 
 function resolveResponsesStrictToolFlag(
-  tools: Tool[],
+  tools: OpenAIStrictToolInventory,
   strictSetting: boolean | null | undefined,
   model: Model | undefined,
 ): boolean | undefined {

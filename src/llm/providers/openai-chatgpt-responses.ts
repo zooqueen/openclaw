@@ -508,7 +508,13 @@ function buildRequestBody(
   }
 
   if (context.tools && context.tools.length > 0) {
-    body.tools = convertResponsesTools(context.tools, { strict: null });
+    const tools = convertResponsesTools(context.tools, { strict: null });
+    if (tools.length > 0) {
+      body.tools = tools;
+    } else {
+      delete body.tool_choice;
+      delete body.parallel_tool_calls;
+    }
   }
 
   if (options?.reasoningEffort !== undefined) {

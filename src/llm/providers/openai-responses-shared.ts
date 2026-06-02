@@ -427,7 +427,10 @@ export function applyCommonResponsesParams<TApi extends Api>(
   }
 
   if (context.tools && context.tools.length > 0) {
-    params.tools = convertResponsesTools(context.tools, { model });
+    const tools = convertResponsesTools(context.tools, { model });
+    if (tools.length > 0) {
+      params.tools = tools;
+    }
   }
 
   if (!model.reasoning) {
