@@ -742,6 +742,13 @@ export async function emitGatewayBeforeResetPluginHook(params: {
     });
 }
 
+/**
+ * Resets a gateway session in place and returns the newly allocated session
+ * entry. This is the shared reset authority for Gateway RPCs, TUI commands, and
+ * stateful plugin targets, so it performs target validation, runtime cleanup,
+ * store mutation, transcript archival, plugin hooks, and lifecycle unbinding in
+ * one ordered path.
+ */
 export async function performGatewaySessionReset(params: {
   key: string;
   agentId?: string;
@@ -751,6 +758,9 @@ export async function performGatewaySessionReset(params: {
   | { ok: true; key: string; entry: SessionEntry; agentId: string }
   | { ok: false; error: ReturnType<typeof errorShape> }
 > {
+  // Resolve the canonical store target before mutating anything. Global store
+  // keys can carry an agent id inside the session key; mismatched explicit
+  // agent ids must fail before hooks or cleanup observe the request.
   const resetTarget = (() => {
     const cfg = getRuntimeConfig();
     const explicitAgentId = params.agentId ? normalizeAgentId(params.agentId) : undefined;
@@ -810,6 +820,9 @@ export async function performGatewaySessionReset(params: {
     },
   );
   await triggerInternalHook(hookEvent);
+  // Cleanup runs before the store write so ACP runtimes, plugin hosts, browser
+  // sessions, CLI bindings, and child runtimes stop observing the soon-to-be
+  // retired session id.
   const mutationCleanupError = await cleanupSessionBeforeMutation({
     cfg,
     key: params.key,
@@ -946,6 +959,9 @@ export async function performGatewaySessionReset(params: {
     return nextEntry;
   });
   if (pendingAcpResetMeta) {
+    // ACP metadata may be discovered while closing the old runtime; reattach it
+    // to the newly allocated session id before plugin hooks can inspect reset
+    // state.
     writeAcpSessionMetaForMigration({
       sessionKey: pendingAcpResetMeta.sessionKey,
       sessionId: next.sessionId,
@@ -968,6 +984,9 @@ export async function performGatewaySessionReset(params: {
     agentId: target.agentId,
     reason: "reset",
   });
+  // Ensure the new transcript file exists immediately so subsequent channel,
+  // plugin, or Gateway events append to the fresh session instead of reviving
+  // the archived transcript.
   fs.mkdirSync(path.dirname(next.sessionFile as string), { recursive: true });
   if (!fs.existsSync(next.sessionFile as string)) {
     const header = {
@@ -982,6 +1001,9 @@ export async function performGatewaySessionReset(params: {
       mode: 0o600,
     });
   }
+  // End/start hooks intentionally fire after the new entry exists and the old
+  // transcript has been archived; consumers receive both the retired and new
+  // session ids without racing the store mutation.
   emitGatewaySessionEndPluginHook({
     cfg,
     sessionKey: target.canonicalKey ?? params.key,
@@ -1003,6 +1025,9 @@ export async function performGatewaySessionReset(params: {
     agentId: target.agentId,
   });
   if (hadExistingEntry) {
+    // Binding lifecycle unbind is only meaningful for a reset of an existing
+    // session. Creating the first entry should not look like a channel
+    // detachment.
     await emitSessionUnboundLifecycleEvent({
       targetSessionKey: target.canonicalKey ?? params.key,
       reason: "session-reset",
