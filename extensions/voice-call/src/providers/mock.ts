@@ -29,10 +29,17 @@ import type { VoiceCallProvider } from "./base.js";
 export class MockProvider implements VoiceCallProvider {
   readonly name = "mock" as const;
 
+  /** Local fixtures are intentionally unsigned; manager auth checks still exercise provider selection. */
   verifyWebhook(_ctx: WebhookContext): WebhookVerificationResult {
     return { ok: true };
   }
 
+  /**
+   * Converts JSON fixture payloads into the same normalized event stream real providers return.
+   *
+   * Invalid JSON yields a 400 so webhook tests can cover request rejection
+   * without introducing a network-backed provider.
+   */
   parseWebhookEvent(
     ctx: WebhookContext,
     _options?: WebhookParseOptions,
@@ -151,6 +158,7 @@ export class MockProvider implements VoiceCallProvider {
     }
   }
 
+  /** Returns a stable synthetic provider id so tests can round-trip manager/provider state. */
   async initiateCall(input: InitiateCallInput): Promise<InitiateCallResult> {
     return {
       providerCallId: `mock-${input.callId}`,
@@ -158,26 +166,37 @@ export class MockProvider implements VoiceCallProvider {
     };
   }
 
+  /** Mock call-control methods deliberately acknowledge commands without side effects. */
   async hangupCall(_input: HangupCallInput): Promise<void> {
-    // No-op for mock
+    // No-op for mock.
   }
 
+  /** Mock media playback is synchronous from the manager's perspective. */
   async playTts(_input: PlayTtsInput): Promise<void> {
-    // No-op for mock
+    // No-op for mock.
   }
 
+  /** DTMF dispatch is accepted but not recorded; tests assert manager behavior instead. */
   async sendDtmf(_input: SendDtmfInput): Promise<void> {
-    // No-op for mock
+    // No-op for mock.
   }
 
+  /** Listening state is owned by the manager harness, not the mock provider. */
   async startListening(_input: StartListeningInput): Promise<void> {
-    // No-op for mock
+    // No-op for mock.
   }
 
+  /** Stop-listening acknowledgements keep provider cleanup paths available in tests. */
   async stopListening(_input: StopListeningInput): Promise<void> {
-    // No-op for mock
+    // No-op for mock.
   }
 
+  /**
+   * Simulates restore-time provider reconciliation from the synthetic provider id.
+   *
+   * Embedding terminal words in the id lets tests choose active vs completed
+   * calls without introducing mutable provider-side state.
+   */
   async getCallStatus(input: GetCallStatusInput): Promise<GetCallStatusResult> {
     const id = normalizeLowercaseStringOrEmpty(input.providerCallId);
     // Let tests force restore/cleanup paths by embedding terminal-state words in
