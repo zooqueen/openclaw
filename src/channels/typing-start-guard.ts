@@ -43,6 +43,8 @@ export function createTypingStartGuard(params: {
 
   const run: TypingStartGuard["run"] = async (start) => {
     if (isBlocked()) {
+      // "skipped" covers pre-existing blockers; callers should not treat it as a fresh adapter
+      // failure because no start attempt was made.
       return "skipped";
     }
     try {
