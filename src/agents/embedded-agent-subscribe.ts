@@ -158,6 +158,7 @@ export function subscribeEmbeddedAgentSession(params: SubscribeEmbeddedAgentSess
   const canShowReasoning = params.thinkingLevel !== "off";
   const toolResultFormat = params.toolResultFormat ?? "markdown";
   const useMarkdown = toolResultFormat === "markdown";
+  const trustedLocalMediaToolNames = params.trustedLocalMediaToolNames;
   const initialPendingToolMediaUrls = collectPendingMediaFromInternalEvents(params.internalEvents);
   const state: EmbeddedAgentSubscribeState = {
     assistantTexts: [],
@@ -613,7 +614,7 @@ export function subscribeEmbeddedAgentSession(params: SubscribeEmbeddedAgentSess
       toolName,
       mediaArtifact?.mediaUrls ?? [],
       result,
-      params.trustedLocalMediaToolNames,
+      trustedLocalMediaToolNames,
     );
     if (
       params.sourceReplyDeliveryMode === "message_tool_only" &&
@@ -1156,7 +1157,7 @@ export function subscribeEmbeddedAgentSession(params: SubscribeEmbeddedAgentSess
     blockChunker,
     hookRunner: params.hookRunner,
     builtinToolNames: params.builtinToolNames,
-    trustedLocalMediaToolNames: params.trustedLocalMediaToolNames,
+    trustedLocalMediaToolNames,
     noteLastAssistant,
     shouldEmitToolResult,
     shouldEmitToolOutput,
