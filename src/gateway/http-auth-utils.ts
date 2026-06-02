@@ -15,6 +15,7 @@ import { sendGatewayAuthFailure, sendMissingScopeForbidden } from "./http-common
 import { ADMIN_SCOPE, CLI_DEFAULT_OPERATOR_SCOPES } from "./method-scopes.js";
 import { authorizeOperatorScopesForMethod } from "./method-scopes.js";
 
+/** Reads a request header using Node's normalized lowercase header map. */
 export function getHeader(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers[normalizeLowercaseStringOrEmpty(name)];
   if (typeof raw === "string") {
@@ -26,6 +27,7 @@ export function getHeader(req: IncomingMessage, name: string): string | undefine
   return undefined;
 }
 
+/** Extracts a trimmed bearer token from Authorization, if the scheme matches. */
 export function getBearerToken(req: IncomingMessage): string | undefined {
   const raw = normalizeOptionalString(getHeader(req, "authorization")) ?? "";
   if (!normalizeLowercaseStringOrEmpty(raw).startsWith("bearer ")) {
@@ -35,11 +37,14 @@ export function getBearerToken(req: IncomingMessage): string | undefined {
 }
 
 type SharedSecretGatewayAuth = Pick<ResolvedGatewayAuth, "mode">;
+
+/** Auth facts carried from HTTP authentication into endpoint scope checks. */
 export type AuthorizedGatewayHttpRequest = {
   authMethod?: GatewayAuthResult["method"];
   trustDeclaredOperatorScopes: boolean;
 };
 
+/** Result shape for pure auth checks that should not write to the response. */
 export type GatewayHttpRequestAuthCheckResult =
   | {
       ok: true;
@@ -50,6 +55,7 @@ export type GatewayHttpRequestAuthCheckResult =
       authResult: GatewayAuthResult;
     };
 
+/** Builds browser-origin auth inputs from the request and runtime config. */
 export function resolveHttpBrowserOriginPolicy(
   req: IncomingMessage,
   cfg = getRuntimeConfig(),
@@ -84,6 +90,7 @@ function shouldTrustDeclaredHttpOperatorScopes(
   return !isGatewayBearerHttpRequest(req, authOrRequest);
 }
 
+/** Authenticates a Gateway HTTP request, writing the failure envelope on denial. */
 export async function authorizeGatewayHttpRequestOrReply(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -100,6 +107,7 @@ export async function authorizeGatewayHttpRequestOrReply(params: {
   return result.requestAuth;
 }
 
+/** Authenticates a Gateway HTTP request without mutating the response. */
 export async function checkGatewayHttpRequestAuth(params: {
   req: IncomingMessage;
   auth: ResolvedGatewayAuth;
@@ -138,6 +146,7 @@ export async function checkGatewayHttpRequestAuth(params: {
   };
 }
 
+/** Authenticates a Gateway HTTP request and enforces operator scopes for a method. */
 export async function authorizeScopedGatewayHttpRequestOrReply(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -178,6 +187,7 @@ export async function authorizeScopedGatewayHttpRequestOrReply(params: {
   return { cfg, requestAuth, operatorScopes };
 }
 
+/** Returns true when a request uses bearer auth against a shared gateway secret. */
 export function isGatewayBearerHttpRequest(
   req: IncomingMessage,
   auth?: SharedSecretGatewayAuth,
@@ -185,6 +195,7 @@ export function isGatewayBearerHttpRequest(
   return usesSharedSecretHttpAuth(auth) && Boolean(getBearerToken(req));
 }
 
+/** Resolves trusted operator scopes from HTTP headers or default CLI scopes. */
 export function resolveTrustedHttpOperatorScopes(
   req: IncomingMessage,
   authOrRequest?:
@@ -213,6 +224,7 @@ export function resolveTrustedHttpOperatorScopes(
     .filter((scope) => scope.length > 0);
 }
 
+/** Resolves operator scopes for OpenAI-compatible HTTP routes. */
 export function resolveOpenAiCompatibleHttpOperatorScopes(
   req: IncomingMessage,
   requestAuth: AuthorizedGatewayHttpRequest,
@@ -220,6 +232,7 @@ export function resolveOpenAiCompatibleHttpOperatorScopes(
   return resolveSharedSecretHttpOperatorScopes(req, requestAuth);
 }
 
+/** Resolves operator scopes for routes that opt into shared-secret trust. */
 export function resolveSharedSecretHttpOperatorScopes(
   req: IncomingMessage,
   requestAuth: AuthorizedGatewayHttpRequest,
@@ -234,6 +247,7 @@ export function resolveSharedSecretHttpOperatorScopes(
   return resolveTrustedHttpOperatorScopes(req, requestAuth);
 }
 
+/** Treats a trusted HTTP request as owner only when it carries admin scope. */
 export function resolveHttpSenderIsOwner(
   req: IncomingMessage,
   authOrRequest?:
@@ -243,6 +257,7 @@ export function resolveHttpSenderIsOwner(
   return resolveTrustedHttpOperatorScopes(req, authOrRequest).includes(ADMIN_SCOPE);
 }
 
+/** Resolves owner status for OpenAI-compatible HTTP routes. */
 export function resolveOpenAiCompatibleHttpSenderIsOwner(
   req: IncomingMessage,
   requestAuth: AuthorizedGatewayHttpRequest,
