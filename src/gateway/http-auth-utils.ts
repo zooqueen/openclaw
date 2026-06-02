@@ -40,7 +40,9 @@ type SharedSecretGatewayAuth = Pick<ResolvedGatewayAuth, "mode">;
 
 /** Auth facts carried from HTTP authentication into endpoint scope checks. */
 export type AuthorizedGatewayHttpRequest = {
+  /** Auth method that succeeded; shared-secret methods need explicit trust opt-in for scopes. */
   authMethod?: GatewayAuthResult["method"];
+  /** True only when route code may accept declared x-openclaw-scopes from the request. */
   trustDeclaredOperatorScopes: boolean;
 };
 
@@ -184,6 +186,8 @@ export async function authorizeScopedGatewayHttpRequestOrReply(params: {
     return null;
   }
 
+  // Return the same config snapshot used for auth inputs so route handlers do
+  // not re-read mutable runtime config after scope authorization succeeds.
   return { cfg, requestAuth, operatorScopes };
 }
 
