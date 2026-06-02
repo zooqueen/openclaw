@@ -1460,17 +1460,6 @@ function latestStatusTransitionAt(card: WorkboardCard): number | undefined {
   return undefined;
 }
 
-function shouldSkipLifecycleStatusSync(
-  host: WorkboardHost,
-  card: WorkboardCard,
-  lifecycle: WorkboardLifecycle,
-) {
-  if (!lifecycle.targetStatus) {
-    return false;
-  }
-  return shouldSkipLifecycleWrite(host, card, lifecycle);
-}
-
 function executionStatusForLifecycle(
   lifecycle: WorkboardLifecycle,
 ): WorkboardExecutionStatus | undefined {
@@ -1757,10 +1746,7 @@ export async function syncWorkboardLifecycle(params: {
     }
     const executionStatus = executionStatusForLifecycle(lifecycle);
     const patch: Record<string, unknown> = {};
-    if (
-      !shouldSkipLifecycleStatusSync(params.host, card, lifecycle) &&
-      shouldSyncCardStatus(card, lifecycle.targetStatus)
-    ) {
+    if (shouldSyncCardStatus(card, lifecycle.targetStatus)) {
       patch.status = lifecycle.targetStatus;
       if (lifecycle.sourceUpdatedAt !== undefined) {
         mergePatchMetadata(patch, {
