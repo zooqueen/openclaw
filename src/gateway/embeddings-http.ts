@@ -98,6 +98,7 @@ function validateInputTexts(texts: string[]): string | undefined {
   return undefined;
 }
 
+/** Creates the agent-scoped embedding provider, falling back from memory-specific to generic adapters. */
 async function createConfiguredEmbeddingProvider(params: {
   cfg: OpenClawConfig;
   agentDir: string;
@@ -176,6 +177,7 @@ async function createConfiguredEmbeddingProvider(params: {
   return provider;
 }
 
+/** Adapts a generic embedding provider to the memory query/document embedding contract. */
 function adaptGenericEmbeddingProvider(
   provider: GenericEmbeddingProvider,
 ): MemoryEmbeddingProvider {
@@ -201,6 +203,7 @@ function adaptGenericEmbeddingProvider(
   };
 }
 
+/** Resolves the concrete embedding provider/model after the request has selected an agent. */
 function resolveEmbeddingsTarget(params: {
   requestModel: string;
   configuredProvider: EmbeddingProviderRequest;
@@ -232,7 +235,7 @@ function resolveEmbeddingsTarget(params: {
   return { provider: configuredProvider, model };
 }
 
-/** Handles the OpenAI-compatible /v1/embeddings endpoint. */
+/** Handles the OpenAI-compatible /v1/embeddings endpoint for Gateway agents. */
 export async function handleOpenAiEmbeddingsHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -326,6 +329,8 @@ export async function handleOpenAiEmbeddingsHttpRequest(
       memorySearch: memorySearch
         ? {
             ...memorySearch,
+            // OpenAI's dimensions option is per-request, but only within the
+            // selected agent's configured embedding provider.
             outputDimensionality:
               typeof payload.dimensions === "number" && payload.dimensions > 0
                 ? Math.floor(payload.dimensions)
