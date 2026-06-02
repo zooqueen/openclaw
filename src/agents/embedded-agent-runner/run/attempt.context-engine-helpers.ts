@@ -20,7 +20,11 @@ export type AttemptBootstrapContext<TBootstrapFile = unknown, TContextFile = unk
   contextFiles: TContextFile[];
 };
 
-/** Resolves whether bootstrap/context files should be injected for this attempt. */
+/**
+ * Resolves bootstrap/context files and records whether this attempt should mark
+ * the bootstrap turn complete. The skip and record decisions intentionally
+ * share inputs so lightweight or continuation turns cannot poison future runs.
+ */
 export async function resolveAttemptBootstrapContext<TBootstrapFile, TContextFile>(params: {
   contextInjectionMode: "always" | "continuation-skip" | "never";
   bootstrapContextMode?: string;
@@ -63,7 +67,11 @@ export async function resolveAttemptBootstrapContext<TBootstrapFile, TContextFil
   };
 }
 
-/** Builds compact prompt-cache metadata for attempt results and after-turn hooks. */
+/**
+ * Builds compact prompt-cache metadata for attempt results and after-turn hooks.
+ * Empty inputs return undefined so callers do not persist placeholder cache
+ * objects in session metadata.
+ */
 export function buildContextEnginePromptCacheInfo(params: {
   retention?: "none" | "short" | "long";
   lastCallUsage?: NormalizedUsage;
@@ -109,7 +117,7 @@ export function buildContextEnginePromptCacheInfo(params: {
   return Object.keys(promptCache).length > 0 ? promptCache : undefined;
 }
 
-/** Finds the assistant message produced during the current attempt loop. */
+/** Finds the newest assistant message produced after the current attempt's prompt boundary. */
 export function findCurrentAttemptAssistantMessage(params: {
   messagesSnapshot: AgentMessage[];
   prePromptMessageCount: number;

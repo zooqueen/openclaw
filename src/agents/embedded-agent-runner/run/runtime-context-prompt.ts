@@ -30,7 +30,10 @@ export type RuntimeContextCustomMessage = {
 
 type EmptyTranscriptMode = "model-prompt" | "runtime-event";
 
-/** Returns current-turn context text, optionally using resumable backend-safe text. */
+/**
+ * Returns current-turn context text, optionally choosing resumable text for
+ * backends that need a replay-safe prompt after interruption.
+ */
 export function buildCurrentInboundPromptContextPrefix(
   context: CurrentInboundPromptContext | undefined,
   options?: { preferResumableText?: boolean },
@@ -42,7 +45,7 @@ export function buildCurrentInboundPromptContextPrefix(
   return text?.trim() ?? "";
 }
 
-/** Prepends current inbound context to the user prompt with the context joiner. */
+/** Prepends current inbound context to the user prompt with the context-owned joiner. */
 export function buildCurrentInboundPrompt(params: {
   context: CurrentInboundPromptContext | undefined;
   prompt: string;
@@ -73,6 +76,11 @@ function removeLastPromptOccurrence(text: string, prompt: string): string | null
     .trim();
 }
 
+/**
+ * Separates model-visible prompt text from hidden runtime context carried in
+ * transcript-aware prompts. Runtime-only events get a synthetic user prompt so
+ * provider calls remain valid while the real details stay in system context.
+ */
 export function resolveRuntimeContextPromptParts(params: {
   effectivePrompt: string;
   transcriptPrompt?: string;
