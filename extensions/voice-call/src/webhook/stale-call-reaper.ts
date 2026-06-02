@@ -5,7 +5,9 @@ const CHECK_INTERVAL_MS = 30_000;
 
 /** Start a periodic cleanup loop for outbound calls that never reach answered state. */
 export function startStaleCallReaper(params: {
+  /** Call manager that owns active-call enumeration and provider hangup/finalization. */
   manager: CallManager;
+  /** Maximum unanswered call age in seconds; missing or non-positive disables the loop. */
   staleCallReaperSeconds?: number;
 }): (() => void) | null {
   const maxAgeSeconds = params.staleCallReaperSeconds;
