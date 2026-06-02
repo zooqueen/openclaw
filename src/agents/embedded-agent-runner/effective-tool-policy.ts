@@ -12,6 +12,7 @@ import {
   isSubagentEnvelopeSession,
   resolveSubagentCapabilityStore,
 } from "../subagent-capabilities.js";
+import { buildDeclaredToolAllowlistContext } from "../tool-policy-declared-context.js";
 import {
   applyToolPolicyPipeline,
   buildDefaultToolPolicyPipelineSteps,
@@ -175,5 +176,6 @@ export function applyFinalEffectiveToolPolicy(
     warn: params.warn,
     steps: pipelineSteps,
     auditLogLevel: params.toolPolicyAuditLogLevel,
+    declaredToolAllowlist: buildDeclaredToolAllowlistContext({ config: params.config }),
   });
 }
