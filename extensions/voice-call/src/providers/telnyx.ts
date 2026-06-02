@@ -248,6 +248,7 @@ export class TelnyxProvider implements VoiceCallProvider {
     }
   }
 
+  /** Starts an outbound Telnyx call and embeds the OpenClaw call id in signed callback state. */
   async initiateCall(input: InitiateCallInput): Promise<InitiateCallResult> {
     const body: Record<string, unknown> = {
       connection_id: this.connectionId,
@@ -280,6 +281,7 @@ export class TelnyxProvider implements VoiceCallProvider {
     );
   }
 
+  /** Answers an inbound call, optionally attaching the bidirectional PCMU stream bridge. */
   async answerCall(input: AnswerCallInput): Promise<void> {
     const body: Record<string, unknown> = {
       // Stable command id makes answer retries idempotent for one OpenClaw call.
