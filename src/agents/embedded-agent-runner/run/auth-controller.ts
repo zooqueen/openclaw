@@ -45,7 +45,12 @@ type LogLike = {
   warn(message: string): void;
 };
 
-/** Builds the auth/profile controller used by an embedded run attempt loop. */
+/**
+ * Builds the auth/profile controller used by an embedded run attempt loop. The
+ * controller owns profile rotation, runtime credential preparation, and refresh
+ * timers; callers provide state accessors so retries can keep one canonical
+ * auth view across attempts.
+ */
 export function createEmbeddedRunAuthController(params: {
   config: RunEmbeddedAgentParams["config"];
   agentDir: string;

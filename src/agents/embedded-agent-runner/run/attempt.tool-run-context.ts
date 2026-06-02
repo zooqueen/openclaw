@@ -4,7 +4,11 @@ import {
 } from "../../../infra/diagnostic-trace-context.js";
 import type { EmbeddedRunTrigger } from "./params.js";
 
-/** Builds the immutable context passed into tools during one embedded attempt. */
+/**
+ * Builds the immutable context passed into tools during one embedded attempt.
+ * The diagnostic trace is frozen here so tool callbacks cannot mutate the
+ * request trace shared with provider/runtime diagnostics.
+ */
 export function buildEmbeddedAttemptToolRunContext(params: {
   trigger?: EmbeddedRunTrigger;
   jobId?: string;
