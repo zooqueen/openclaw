@@ -62,9 +62,13 @@ export function normalizeChannelCommandDefaults(
 export function resolveReadOnlyChannelCommandDefaults(
   channelId: string,
   options: {
+    /** Environment used for workspace/current-plugin snapshot resolution in CLI fast paths. */
     env?: NodeJS.ProcessEnv;
+    /** State root for installed-plugin index lookup without activating plugins. */
     stateDir?: string;
+    /** Workspace root allowed to contribute the current plugin snapshot. */
     workspaceDir?: string;
+    /** Runtime config that decides plugin enablement and scoped discovery. */
     config: OpenClawConfig;
   },
 ): ChannelCommandDefaults | undefined {
@@ -84,6 +88,8 @@ export function resolveReadOnlyChannelCommandDefaults(
     if (!record.channels.includes(normalizedChannelId)) {
       continue;
     }
+    // Disabled plugins must not leak command auto-enable defaults through the
+    // read-only path; the activated path applies the same installed-index gate.
     if (!isInstalledPluginEnabled(resolvedSnapshot.index, record.id, options.config)) {
       continue;
     }
@@ -100,6 +106,8 @@ export function resolveReadOnlyChannelCommandDefaults(
       record.channelCatalogMeta?.id === normalizedChannelId
         ? record.channelCatalogMeta.commands
         : undefined;
+    // Per-channel manifest config is more specific than catalog metadata, so it
+    // wins when both surfaces declare command defaults for the same channel id.
     const commands = normalizeChannelCommandDefaults(channelConfig?.commands ?? catalogCommands);
     if (commands) {
       return commands;
