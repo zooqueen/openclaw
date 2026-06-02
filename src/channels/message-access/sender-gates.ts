@@ -36,7 +36,9 @@ function senderGate(params: {
 
 /** Evaluates direct-message sender policy against configured and pairing-store allowlists. */
 export function senderGateForDirect(params: {
+  /** Resolved state with DM and pairing-store allowlists already normalized. */
   state: ChannelIngressState;
+  /** Direct-message policy and mutable-identifier setting for this event. */
   policy: ChannelIngressPolicyInput;
 }): AccessGraphGate {
   const dm = applyMutableIdentifierPolicy(params.state.allowlists.dm, params.policy);
@@ -83,6 +85,8 @@ export function senderGateForDirect(params: {
   if (dm.match.matched) {
     return allow("dm_policy_allowlisted");
   }
+  // Pairing-store entries authorize only pairing policy DMs; open/allowlist
+  // policies intentionally ignore them so stored pairing cannot widen access.
   if (params.policy.dmPolicy === "pairing" && pairingStore.match.matched) {
     return senderGate({
       id: "sender:dm",
@@ -107,7 +111,9 @@ export function senderGateForDirect(params: {
 
 /** Evaluates group/channel sender policy after route sender overrides are applied. */
 export function senderGateForGroup(params: {
+  /** Resolved state with group, DM fallback, and route sender allowlists. */
   state: ChannelIngressState;
+  /** Group sender policy plus fallback/route/mutable-identifier settings. */
   policy: ChannelIngressPolicyInput;
 }): AccessGraphGate {
   const group = effectiveGroupSenderAllowlist(params);
@@ -151,7 +157,9 @@ export function senderGateForGroup(params: {
 
 /** Converts sender blocks into ignored gates for event modes that authorize elsewhere. */
 export function applyEventAuthModeToSenderGate(params: {
+  /** Resolved event auth mode that may authorize outside sender gates. */
   state: ChannelIngressState;
+  /** Sender gate before event-mode-specific suppression. */
   senderGate: AccessGraphGate;
 }): AccessGraphGate {
   if (params.state.event.authMode === "inbound" || params.senderGate.allowed) {
