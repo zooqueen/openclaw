@@ -77,6 +77,9 @@ describe("WorkboardStore", () => {
         fileName: "large-proof.bin",
         contentBase64: Buffer.alloc(70 * 1024).toString("base64"),
       });
+      await store.update(card.id, {
+        metadata: { lifecycleStatusSourceUpdatedAt: 1234 },
+      });
       const attachmentId = attached.metadata?.attachments?.[0]?.id;
       const subscription = await store.subscribeNotifications({
         boardId: board.id,
@@ -118,6 +121,7 @@ describe("WorkboardStore", () => {
         labels: ["sqlite", "doctor"],
         metadata: {
           automation: { boardId: "planning" },
+          lifecycleStatusSourceUpdatedAt: 1234,
           comments: [expect.objectContaining({ body: "round trip" })],
           attachments: expect.arrayContaining([
             expect.objectContaining({ fileName: "proof.txt" }),
@@ -332,6 +336,26 @@ describe("WorkboardStore", () => {
     });
     expect(rolledBack.startedAt).toBeUndefined();
     expect(rolledBack.completedAt).toBeUndefined();
+  });
+
+  it("tracks lifecycle status provenance and clears it on manual status changes", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({ title: "Sync status provenance" });
+
+    const lifecycleMoved = await store.update(card.id, {
+      status: "running",
+      metadata: { lifecycleStatusSourceUpdatedAt: 1000 },
+    });
+    expect(lifecycleMoved.metadata?.lifecycleStatusSourceUpdatedAt).toBe(1000);
+
+    const newerLifecycle = await store.update(card.id, {
+      status: "review",
+      metadata: { lifecycleStatusSourceUpdatedAt: 3000 },
+    });
+    expect(newerLifecycle.metadata?.lifecycleStatusSourceUpdatedAt).toBe(3000);
+
+    const manual = await store.move(card.id, "running", 2000);
+    expect(manual.metadata?.lifecycleStatusSourceUpdatedAt).toBeUndefined();
   });
 
   it("keeps execution session links aligned with edited card links", async () => {

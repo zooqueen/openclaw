@@ -1640,6 +1640,57 @@ describe("workboard controller", () => {
     expect(state.cards[0]).toMatchObject({ title: "Renamed only", status: "review" });
   });
 
+  it("keeps lifecycle-created moves following newer linked session lifecycle sync", async () => {
+    const host = {};
+    const state = getWorkboardState(host);
+    const lifecycleMoved = {
+      ...sampleCard,
+      status: "running",
+      sessionKey: sampleSession.key,
+      updatedAt: 5,
+      metadata: { lifecycleStatusSourceUpdatedAt: 1 },
+      events: [
+        {
+          id: "move-1",
+          kind: "moved",
+          at: 5,
+          fromStatus: "todo",
+          toStatus: "running",
+        },
+      ],
+    } satisfies WorkboardCard;
+    state.loaded = true;
+    state.cards = [lifecycleMoved];
+    const client = createClient({
+      "workboard.cards.update": {
+        card: {
+          ...lifecycleMoved,
+          status: "review",
+          updatedAt: 6,
+          metadata: { lifecycleStatusSourceUpdatedAt: 3 },
+        },
+      },
+    });
+
+    await syncWorkboardLifecycle({
+      host,
+      client: client as never,
+      sessions: [{ ...sampleSession, hasActiveRun: false, status: "done", updatedAt: 3 }],
+    });
+
+    expect(client.request).toHaveBeenCalledWith("workboard.cards.update", {
+      id: "card-1",
+      patch: expect.objectContaining({
+        status: "review",
+        metadata: { lifecycleStatusSourceUpdatedAt: 3 },
+      }),
+    });
+    expect(state.cards[0]).toMatchObject({
+      status: "review",
+      metadata: { lifecycleStatusSourceUpdatedAt: 3 },
+    });
+  });
+
   it("removes stale dependency links from local cards after delete", async () => {
     const host = {};
     const parent: WorkboardCard = {
@@ -1834,7 +1885,12 @@ describe("workboard controller", () => {
     expect(client.request).toHaveBeenCalledOnce();
     expect(client.request).toHaveBeenCalledWith("workboard.cards.update", {
       id: "card-1",
-      patch: { status: "running" },
+      patch: expect.objectContaining({
+        status: "running",
+        metadata: expect.objectContaining({
+          lifecycleStatusSourceUpdatedAt: sampleSession.updatedAt,
+        }),
+      }),
     });
     expect(state.cards.find((card) => card.id === "card-review")?.status).toBe("review");
   });
@@ -1868,7 +1924,12 @@ describe("workboard controller", () => {
     expect(client.request).toHaveBeenNthCalledWith(1, "tasks.list", { limit: 500 });
     expect(client.request).toHaveBeenNthCalledWith(2, "workboard.cards.update", {
       id: "card-1",
-      patch: { status: "review" },
+      patch: expect.objectContaining({
+        status: "review",
+        metadata: expect.objectContaining({
+          lifecycleStatusSourceUpdatedAt: sampleTask.updatedAt,
+        }),
+      }),
     });
     expect(state.tasksByCardId.get("card-1")).toMatchObject({ status: "completed" });
   });

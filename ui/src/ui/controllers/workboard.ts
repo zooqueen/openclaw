@@ -251,6 +251,7 @@ export type WorkboardMetadata = {
   templateId?: WorkboardTemplateId;
   archivedAt?: number;
   stale?: WorkboardStaleState;
+  lifecycleStatusSourceUpdatedAt?: number;
   failureCount?: number;
 };
 
@@ -832,6 +833,11 @@ function normalizeMetadata(value: unknown): WorkboardMetadata | undefined {
       }
     : undefined;
   const automation = normalizeAutomation(value.automation);
+  const lifecycleStatusSourceUpdatedAt =
+    typeof value.lifecycleStatusSourceUpdatedAt === "number" &&
+    Number.isFinite(value.lifecycleStatusSourceUpdatedAt)
+      ? Math.max(0, Math.trunc(value.lifecycleStatusSourceUpdatedAt))
+      : undefined;
   const metadata: WorkboardMetadata = {
     ...(attempts.length ? { attempts } : {}),
     ...(comments.length ? { comments } : {}),
@@ -850,6 +856,7 @@ function normalizeMetadata(value: unknown): WorkboardMetadata | undefined {
       : {}),
     ...(typeof value.archivedAt === "number" ? { archivedAt: value.archivedAt } : {}),
     ...(stale ? { stale } : {}),
+    ...(lifecycleStatusSourceUpdatedAt !== undefined ? { lifecycleStatusSourceUpdatedAt } : {}),
     ...(typeof value.failureCount === "number" ? { failureCount: value.failureCount } : {}),
   };
   return Object.keys(metadata).length ? metadata : undefined;
@@ -1441,12 +1448,15 @@ function shouldSkipLifecycleStatusSync(
   if (pendingStatusTransitions.get(host)?.has(card.id)) {
     return true;
   }
+  if (lifecycle.sourceUpdatedAt === undefined) {
+    return false;
+  }
+  const lifecycleStatusSourceUpdatedAt = card.metadata?.lifecycleStatusSourceUpdatedAt;
+  if (lifecycleStatusSourceUpdatedAt !== undefined) {
+    return lifecycle.sourceUpdatedAt < lifecycleStatusSourceUpdatedAt;
+  }
   const statusTransitionAt = latestStatusTransitionAt(card);
-  return (
-    statusTransitionAt !== undefined &&
-    lifecycle.sourceUpdatedAt !== undefined &&
-    lifecycle.sourceUpdatedAt < statusTransitionAt
-  );
+  return statusTransitionAt !== undefined && lifecycle.sourceUpdatedAt < statusTransitionAt;
 }
 
 function executionStatusForLifecycle(
@@ -1503,6 +1513,13 @@ function getLifecycleSyncKeys(host: WorkboardHost): Map<string, string> {
     lifecycleSyncKeys.set(host, keys);
   }
   return keys;
+}
+
+function mergePatchMetadata(patch: Record<string, unknown>, metadata: Record<string, unknown>) {
+  patch.metadata = {
+    ...(isRecord(patch.metadata) ? patch.metadata : {}),
+    ...metadata,
+  };
 }
 
 function normalizeString(value: unknown): string | null {
@@ -1728,6 +1745,11 @@ export async function syncWorkboardLifecycle(params: {
       shouldSyncCardStatus(card, lifecycle.targetStatus)
     ) {
       patch.status = lifecycle.targetStatus;
+      if (lifecycle.sourceUpdatedAt !== undefined) {
+        mergePatchMetadata(patch, {
+          lifecycleStatusSourceUpdatedAt: lifecycle.sourceUpdatedAt,
+        });
+      }
     }
     if (shouldSyncExecutionStatus(card, executionStatus)) {
       patch.execution = {

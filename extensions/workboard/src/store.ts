@@ -1215,6 +1215,7 @@ function normalizeMetadata(
       : null;
   const hasArchivedAt = Object.hasOwn(record, "archivedAt");
   const hasStale = Object.hasOwn(record, "stale");
+  const hasLifecycleStatusSourceUpdatedAt = Object.hasOwn(record, "lifecycleStatusSourceUpdatedAt");
   const links = Array.isArray(record.links)
     ? record.links.map(normalizeLink).filter((link): link is WorkboardLink => link !== null)
     : undefined;
@@ -1311,6 +1312,9 @@ function normalizeMetadata(
           }
         : undefined
       : fallback.stale,
+    lifecycleStatusSourceUpdatedAt: hasLifecycleStatusSourceUpdatedAt
+      ? normalizeTimestamp(record.lifecycleStatusSourceUpdatedAt, 0) || undefined
+      : fallback.lifecycleStatusSourceUpdatedAt,
     failureCount:
       typeof record.failureCount === "number" && Number.isFinite(record.failureCount)
         ? Math.max(0, Math.trunc(record.failureCount))
@@ -1419,6 +1423,7 @@ function removeUndefinedMetadataFields(metadata: WorkboardMetadata): WorkboardMe
     "templateId",
     "archivedAt",
     "stale",
+    "lifecycleStatusSourceUpdatedAt",
     "failureCount",
   ] as const) {
     const value = next[key];
@@ -2613,6 +2618,15 @@ export class WorkboardStore {
     let metadata = normalizeMetadata(patch.metadata, existing.metadata, {
       allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
     });
+    if (
+      status !== existing.status &&
+      (!patch.metadata ||
+        typeof patch.metadata !== "object" ||
+        Array.isArray(patch.metadata) ||
+        !Object.hasOwn(patch.metadata, "lifecycleStatusSourceUpdatedAt"))
+    ) {
+      metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: undefined };
+    }
     const automationPatch: Record<string, unknown> = {};
     for (const key of [
       "tenant",
