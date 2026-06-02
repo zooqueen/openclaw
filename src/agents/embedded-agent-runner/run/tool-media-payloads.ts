@@ -7,7 +7,11 @@ import type { EmbeddedAgentRunResult } from "../types.js";
 
 type EmbeddedRunPayload = NonNullable<EmbeddedAgentRunResult["payloads"]>[number];
 
-/** Merges media emitted by tools into the user-visible embedded-run payload list. */
+/**
+ * Merges media emitted by tools into the first deliverable embedded-run payload.
+ * Reasoning-only payloads stay untouched, and message-tool transcript mirrors
+ * are not reused for external media delivery.
+ */
 export function mergeAttemptToolMediaPayloads(params: {
   payloads?: EmbeddedRunPayload[];
   toolMediaUrls?: string[];

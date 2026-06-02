@@ -1,5 +1,6 @@
 import { log } from "../logger.js";
 
+/** Minimal active-session surface needed to steer queued user text and observe transcript commit. */
 export type EmbeddedAgentActiveSessionSteerTarget = {
   agent?: unknown;
   getSteeringMessages?(): readonly string[];
@@ -77,6 +78,10 @@ function getAgentSteeringQueueMessages(agent: unknown): unknown[] | undefined {
   return Array.isArray(messages) ? messages : undefined;
 }
 
+/**
+ * Removes one queued steering message from both the runtime queue and UI mirror
+ * after delivery wait cancellation.
+ */
 export async function cancelQueuedSteeringMessage(
   activeSession: EmbeddedAgentActiveSessionSteerTarget,
   text: string,
@@ -85,8 +90,8 @@ export async function cancelQueuedSteeringMessage(
   if (!queuedMessages) {
     return false;
   }
-  // The session runtime exposes only all-queue clears publicly; mutate the exact pending message
-  // so unrelated queued messages keep their full payloads.
+  // The session runtime exposes only all-queue clears publicly; mutate the
+  // exact pending message so unrelated queued messages keep their payloads.
   const queueIndex = queuedMessages.findIndex(
     (message) => extractQueuedUserMessageText(message) === text,
   );
@@ -104,7 +109,10 @@ export async function cancelQueuedSteeringMessage(
   return true;
 }
 
-/** Steers a message and resolves only after the matching user message_end is observed. */
+/**
+ * Steers a message and resolves only after the matching user message_end is
+ * observed, so delivery-sensitive callers know the transcript owns the text.
+ */
 export async function steerAndWaitForTranscriptCommit(
   activeSession: EmbeddedAgentActiveSessionSteerTarget,
   text: string,

@@ -39,7 +39,7 @@ const defaultMessageMergeStrategy: MessageMergeStrategy = {
 
 let activeMessageMergeStrategy = defaultMessageMergeStrategy;
 
-/** Returns the currently installed message merge strategy. */
+/** Returns the active merge strategy used before retrying a transcript with a hostile tail. */
 export function resolveMessageMergeStrategy(): MessageMergeStrategy {
   return activeMessageMergeStrategy;
 }
