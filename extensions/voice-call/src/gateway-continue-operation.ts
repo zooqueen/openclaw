@@ -65,7 +65,12 @@ type VoiceCallContinueOperationRequest = {
   message: string;
 };
 
-/** Create a short-lived async operation store for gateway-driven continue-call requests. */
+/**
+ * Creates a short-lived async operation store for gateway-driven continue-call requests.
+ *
+ * `start` returns an operation id immediately while the call continues in the
+ * background; `read` returns pending state or consumes one terminal result.
+ */
 export function createVoiceCallContinueOperationStore(params: {
   /** Resolved voice-call config used as fallback for transcript and TTS polling windows. */
   config: VoiceCallConfig;
@@ -99,6 +104,7 @@ export function createVoiceCallContinueOperationStore(params: {
     timer.unref?.();
   };
 
+  /** Starts an async continue-call operation and returns the poll token plus timeout budget. */
   const start = (
     request: VoiceCallContinueOperationRequest,
   ): VoiceCallContinueOperationStartPayload => {
@@ -166,6 +172,7 @@ export function createVoiceCallContinueOperationStore(params: {
     return { operationId, status: "pending", pollTimeoutMs };
   };
 
+  /** Reads an operation state; completed/failed operations are removed after this call. */
   const read = (
     operationId: string,
   ):

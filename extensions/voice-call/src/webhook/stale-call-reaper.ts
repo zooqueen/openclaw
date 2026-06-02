@@ -3,7 +3,12 @@ import { TerminalStates } from "../types.js";
 
 const CHECK_INTERVAL_MS = 30_000;
 
-/** Start a periodic cleanup loop for outbound calls that never reach answered state. */
+/**
+ * Starts a periodic cleanup loop for outbound calls that never reach answered state.
+ *
+ * Returns a stop function when enabled, or null when the configured threshold
+ * disables stale-call cleanup.
+ */
 export function startStaleCallReaper(params: {
   /** Call manager that owns active-call enumeration and provider hangup/finalization. */
   manager: CallManager;
