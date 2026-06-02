@@ -64,17 +64,29 @@ function toLegacyDmReasonCode(reasonCode: string): DmGroupAccessReasonCode {
  * @deprecated Use `resolveChannelMessageIngress` from `openclaw/plugin-sdk/channel-ingress-runtime`.
  */
 export async function resolveInboundDirectDmAccessWithRuntime(params: {
+  /** Runtime config used for command access-group mode and allowlist expansion. */
   cfg: OpenClawConfig;
+  /** Channel id that owns the configured and pairing-store allowlists. */
   channel: ChannelId;
+  /** Account scope for pairing-store DM allowlist reads. */
   accountId: string;
+  /** Channel/account DM policy; omitted values preserve legacy pairing-by-default behavior. */
   dmPolicy?: string | null;
+  /** Configured DM allowlist before access-group expansion. */
   allowFrom?: Array<string | number> | null;
+  /** Raw inbound sender id checked against effective DM allowlists. */
   senderId: string;
+  /** Raw body used only to decide whether command authorization applies. */
   rawBody: string;
+  /** Channel-specific matcher for raw sender ids against normalized allowlist entries. */
   isSenderAllowed: (senderId: string, allowFrom: string[]) => boolean;
+  /** Optional access-group resolver shared by configured and pairing-store allowlists. */
   resolveAccessGroupMembership?: AccessGroupMembershipResolver;
+  /** Legacy command-authorization hooks injected by channel runtimes. */
   runtime: DirectDmCommandAuthorizationRuntime;
+  /** Compatibility mode used when command access groups are disabled. */
   modeWhenAccessGroupsOff?: "allow" | "deny" | "configured";
+  /** Test/channel seam for reading persisted pairing-store DM allowlists. */
   readStoreAllowFrom?: (provider: ChannelId, accountId: string) => Promise<string[]>;
 }): Promise<ResolvedInboundDirectDmAccess> {
   const dmPolicy = params.dmPolicy ?? "pairing";
