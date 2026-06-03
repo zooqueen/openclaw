@@ -2,7 +2,7 @@
 
 Docs: https://docs.openclaw.ai
 
-## 2026.6.1
+## 2026.6.3
 
 ### Highlights
 
