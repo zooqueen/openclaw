@@ -171,6 +171,43 @@ function listSetupProviderAuthChoiceCandidates(plugin: PluginManifestRecord) {
   });
 }
 
+function listManifestProviderAuthChoiceCandidatesForPlugin(params: {
+  plugin: PluginManifestRecord;
+  config?: OpenClawConfig;
+  normalizedConfig: ReturnType<typeof normalizePluginsConfig>;
+  includeUntrustedWorkspacePlugins?: boolean;
+}): ProviderAuthChoiceCandidate[] {
+  const { plugin } = params;
+  try {
+    if (
+      plugin.origin === "workspace" &&
+      params.includeUntrustedWorkspacePlugins === false &&
+      !resolveEffectiveEnableState({
+        id: plugin.id,
+        origin: plugin.origin,
+        config: params.normalizedConfig,
+        rootConfig: params.config,
+      }).enabled
+    ) {
+      return [];
+    }
+    const choices: ProviderAuthChoiceCandidate[] = [];
+    for (const choice of plugin.providerAuthChoices ?? []) {
+      choices.push(
+        toProviderAuthChoiceCandidate({
+          pluginId: plugin.id,
+          origin: plugin.origin,
+          choice,
+        }),
+      );
+    }
+    choices.push(...listSetupProviderAuthChoiceCandidates(plugin));
+    return choices;
+  } catch {
+    return [];
+  }
+}
+
 function stripChoiceOrigin(choice: ProviderAuthChoiceCandidate): ProviderAuthChoiceMetadata {
   const { origin: _origin, ...metadata } = choice;
   return metadata;
@@ -189,32 +226,14 @@ function resolveManifestProviderAuthChoiceCandidates(params?: {
   });
   const registry = metadataSnapshot.manifestRegistry;
   const normalizedConfig = normalizePluginsConfig(params?.config?.plugins);
-  return registry.plugins.flatMap((plugin) => {
-    if (
-      plugin.origin === "workspace" &&
-      params?.includeUntrustedWorkspacePlugins === false &&
-      !resolveEffectiveEnableState({
-        id: plugin.id,
-        origin: plugin.origin,
-        config: normalizedConfig,
-        rootConfig: params?.config,
-      }).enabled
-    ) {
-      return [];
-    }
-    const choices: ProviderAuthChoiceCandidate[] = [];
-    for (const choice of plugin.providerAuthChoices ?? []) {
-      choices.push(
-        toProviderAuthChoiceCandidate({
-          pluginId: plugin.id,
-          origin: plugin.origin,
-          choice,
-        }),
-      );
-    }
-    choices.push(...listSetupProviderAuthChoiceCandidates(plugin));
-    return choices;
-  });
+  return registry.plugins.flatMap((plugin) =>
+    listManifestProviderAuthChoiceCandidatesForPlugin({
+      plugin,
+      config: params?.config,
+      normalizedConfig,
+      includeUntrustedWorkspacePlugins: params?.includeUntrustedWorkspacePlugins,
+    }),
+  );
 }
 
 function pickPreferredManifestAuthChoice(

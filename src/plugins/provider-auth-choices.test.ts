@@ -58,6 +58,19 @@ function createProviderAuthChoice(overrides: Record<string, unknown>) {
   return overrides;
 }
 
+function createPoisonedManifestPlugin(
+  id: string,
+  field: "providerAuthChoices" | "setup",
+): Record<string, unknown> {
+  const plugin = { id };
+  Object.defineProperty(plugin, field, {
+    get() {
+      throw new Error(`provider auth choice ${field} metadata exploded`);
+    },
+  });
+  return plugin;
+}
+
 function setManifestPlugins(plugins: Array<Record<string, unknown>>) {
   pluginRegistryMocks.loadPluginManifestRegistryForInstalledIndex.mockReturnValue({
     plugins,
@@ -155,6 +168,32 @@ describe("provider auth choice manifest helpers", () => {
       ],
       resolvedProviderIds: { "openai-api-key": "openai" },
     });
+  });
+
+  it("skips unreadable auth choice metadata while resolving manifest choices", () => {
+    setManifestPlugins([
+      createPoisonedManifestPlugin("bad-provider-auth-choices", "providerAuthChoices"),
+      createPoisonedManifestPlugin("bad-setup-auth-choices", "setup"),
+      createManifestPlugin("openai", [
+        createProviderAuthChoice({
+          provider: "openai",
+          method: "api-key",
+          choiceId: "openai-api-key",
+          choiceLabel: "OpenAI API key",
+        }),
+      ]),
+    ]);
+
+    expect(resolveManifestProviderAuthChoices()).toEqual([
+      {
+        pluginId: "openai",
+        providerId: "openai",
+        methodId: "api-key",
+        choiceId: "openai-api-key",
+        choiceLabel: "OpenAI API key",
+      },
+    ]);
+    expect(resolveManifestProviderAuthChoice("openai-api-key")?.providerId).toBe("openai");
   });
 
   it.each([
