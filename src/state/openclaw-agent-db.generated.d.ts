@@ -19,6 +19,22 @@ export interface CacheEntries {
   value_json: string | null;
 }
 
+export interface Conversations {
+  account_id: string;
+  channel: string;
+  conversation_id: string;
+  created_at: number;
+  kind: string;
+  label: string | null;
+  metadata_json: string | null;
+  native_channel_id: string | null;
+  native_direct_user_id: string | null;
+  parent_conversation_id: string | null;
+  peer_id: string;
+  thread_id: string | null;
+  updated_at: number;
+}
+
 export interface SchemaMeta {
   agent_id: string | null;
   app_version: string | null;
@@ -29,6 +45,14 @@ export interface SchemaMeta {
   updated_at: number;
 }
 
+export interface SessionConversations {
+  conversation_id: string;
+  first_seen_at: number;
+  last_seen_at: number;
+  role: Generated<string>;
+  session_id: string;
+}
+
 export interface SessionEntries {
   entry_json: string;
   session_id: string;
@@ -36,10 +60,30 @@ export interface SessionEntries {
   updated_at: number;
 }
 
-export interface Sessions {
-  created_at: number;
+export interface SessionRoutes {
   session_id: string;
   session_key: string;
+  updated_at: number;
+}
+
+export interface Sessions {
+  account_id: string | null;
+  agent_harness_id: string | null;
+  channel: string | null;
+  chat_type: string | null;
+  created_at: number;
+  display_name: string | null;
+  ended_at: number | null;
+  model: string | null;
+  model_provider: string | null;
+  parent_session_key: string | null;
+  primary_conversation_id: string | null;
+  session_id: string;
+  session_key: string;
+  session_scope: Generated<string>;
+  spawned_by: string | null;
+  started_at: number | null;
+  status: string | null;
   updated_at: number;
 }
 
@@ -62,8 +106,11 @@ export interface TranscriptEvents {
 
 export interface DB {
   cache_entries: CacheEntries;
+  conversations: Conversations;
   schema_meta: SchemaMeta;
+  session_conversations: SessionConversations;
   session_entries: SessionEntries;
+  session_routes: SessionRoutes;
   sessions: Sessions;
   transcript_event_identities: TranscriptEventIdentities;
   transcript_events: TranscriptEvents;
