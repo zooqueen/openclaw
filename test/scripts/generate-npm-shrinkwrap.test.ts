@@ -231,6 +231,76 @@ describe("generate-npm-shrinkwrap", () => {
     });
   });
 
+  it("restores nested shrinkwrap resolutions when npm hoists an incompatible fork", () => {
+    const generated = {
+      packages: {
+        "": {},
+        "node_modules/parent": {
+          version: "1.0.0",
+          dependencies: {
+            forked: "^2.0.0",
+          },
+        },
+        "node_modules/forked": {
+          version: "1.0.0",
+        },
+        "node_modules/legacy/node_modules/parent": {
+          version: "1.0.0",
+          dependencies: {
+            forked: "^1.0.0",
+          },
+        },
+      },
+    };
+    const current = {
+      packages: {
+        "": {},
+        "node_modules/parent": generated.packages["node_modules/parent"],
+        "node_modules/forked": {
+          version: "2.0.0",
+        },
+        "node_modules/legacy/node_modules/parent":
+          generated.packages["node_modules/legacy/node_modules/parent"],
+        "node_modules/legacy/node_modules/forked": {
+          version: "1.0.0",
+        },
+      },
+    };
+    const pnpmPackages = new Set(["parent@1.0.0", "forked@1.0.0", "forked@2.0.0"]);
+
+    expect(restoreCurrentPnpmLockedPackages(generated, current, pnpmPackages)).toEqual(current);
+  });
+
+  it("removes generated nested resolutions when the current shrinkwrap climbs to a valid parent", () => {
+    const generated = {
+      packages: {
+        "": {},
+        "node_modules/@azure/msal-common": {
+          version: "16.6.2",
+        },
+        "node_modules/@azure/msal-node": {
+          version: "5.2.2",
+          dependencies: {
+            "@azure/msal-common": "16.6.2",
+          },
+        },
+        "node_modules/@azure/msal-node/node_modules/@azure/msal-common": {
+          version: "15.17.0",
+        },
+      },
+    };
+    const current = {
+      packages: {
+        "": {},
+        "node_modules/@azure/msal-common": generated.packages["node_modules/@azure/msal-common"],
+        "node_modules/@azure/msal-node": generated.packages["node_modules/@azure/msal-node"],
+      },
+    };
+    const pnpmPackages = new Set(["@azure/msal-common@16.6.2", "@azure/msal-node@5.2.2"]);
+
+    expect(restoreCurrentPnpmLockedPackages(generated, current, pnpmPackages)).toEqual(current);
+  });
+
   it("does not restore versions that no longer satisfy the dependency edge", () => {
     const generated = {
       packages: {
