@@ -2649,9 +2649,7 @@ export class WorkboardStore {
       if (patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)) {
         const metadataPatch = patch.metadata as Record<string, unknown>;
         const { lifecycleStatusSourceUpdatedAt: _ignored, ...rest } = metadataPatch;
-        patch.metadata = Object.values(rest).some((value) => value !== undefined)
-          ? rest
-          : undefined;
+        patch.metadata = Object.keys(rest).length > 0 ? rest : undefined;
       }
       const hasSemanticPatch = Object.entries(patch).some(
         ([key, value]) => key !== "status" && key !== "metadata" && value !== undefined,

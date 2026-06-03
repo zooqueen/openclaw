@@ -367,6 +367,7 @@ describe("WorkboardStore", () => {
       status: "review",
       metadata: { lifecycleStatusSourceUpdatedAt: 0 },
     });
+    expect(staleZeroLifecycle).toEqual(manual);
     expect(staleZeroLifecycle.status).toBe("running");
     expect(staleZeroLifecycle.metadata?.lifecycleStatusSourceUpdatedAt).toBeUndefined();
 
@@ -374,6 +375,7 @@ describe("WorkboardStore", () => {
       status: "review",
       metadata: { lifecycleStatusSourceUpdatedAt: 2000 },
     });
+    expect(staleLifecycle).toEqual(manual);
     expect(staleLifecycle.status).toBe("running");
     expect(staleLifecycle.updatedAt).toBe(manual.updatedAt);
     expect(staleLifecycle.events).toHaveLength(manual.events?.length ?? 0);
@@ -388,6 +390,74 @@ describe("WorkboardStore", () => {
     expect(freshLifecycle.metadata?.lifecycleStatusSourceUpdatedAt).toBe(
       freshLifecycleSourceUpdatedAt,
     );
+  });
+
+  it("keeps non-status fields from stale lifecycle patches", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({
+      title: "Keep stale sync details",
+      execution: {
+        id: "exec-1",
+        kind: "agent-session",
+        engine: "codex",
+        mode: "autonomous",
+        status: "running",
+        model: "openai/gpt-5.5",
+        sessionKey: "agent:main:dashboard:1",
+        runId: "run-1",
+        startedAt: 1,
+        updatedAt: 1000,
+      },
+    });
+    const lifecycleMoved = await store.update(card.id, {
+      status: "review",
+      metadata: {
+        lifecycleStatusSourceUpdatedAt: 1000,
+        stale: {
+          detectedAt: 1000,
+          lastSessionUpdatedAt: 1000,
+          reason: "Session has not reported recent activity.",
+        },
+      },
+    });
+    const manual = await store.update(card.id, {
+      status: "running",
+      metadata: lifecycleMoved.metadata,
+    });
+
+    const synced = await store.update(card.id, {
+      status: "review",
+      execution: {
+        id: "exec-1",
+        kind: "agent-session",
+        engine: "codex",
+        mode: "autonomous",
+        status: "done",
+        model: "openai/gpt-5.5",
+        sessionKey: "agent:main:dashboard:1",
+        runId: "run-1",
+        startedAt: 1,
+        updatedAt: 2000,
+      },
+      metadata: {
+        lifecycleStatusSourceUpdatedAt: 1000,
+        stale: null,
+      },
+    });
+
+    expect(manual.metadata?.stale).toBeDefined();
+    expect(synced.status).toBe("running");
+    expect(synced.execution).toMatchObject({
+      runId: "run-1",
+      status: "done",
+      updatedAt: 2000,
+    });
+    expect(synced.metadata?.stale).toBeUndefined();
+    expect(synced.metadata?.lifecycleStatusSourceUpdatedAt).toBeUndefined();
+    expect(synced.events?.at(-1)).toMatchObject({
+      kind: "attempt_updated",
+      runId: "run-1",
+    });
   });
 
   it("clears copied lifecycle provenance on manual status patches", async () => {
