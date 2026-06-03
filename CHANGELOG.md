@@ -6,6 +6,20 @@ Docs: https://docs.openclaw.ai
 
 ### Highlights
 
+- The unreleased 2026.6.3 train is limited to release metadata alignment and a Windows Parallels validation hardening fix; the broader 2026.6.1 release notes stay in the shipped 2026.6.1 release.
+
+### Changes
+
+- Release metadata: align the root package, publishable plugin manifests, generated shrinkwraps, iOS, Android, macOS, and Matrix plugin changelog with the 2026.6.3 unreleased train.
+
+### Fixes
+
+- Release/CI/E2E: retry Windows Parallels background log appends on transient file-lock errors so long-running Windows smoke lanes keep draining proof logs instead of failing on a locked log write.
+
+## 2026.6.1
+
+### Highlights
+
 - Agents and CLI-backed runtimes recover more cleanly from interrupted tool calls, stale session bindings, compaction handoffs, auth-profile failover, reasoning-tag cleanup, and media delivery retries. (#85798, #87484, #88129, #88136, #88141, #88162, #88182, #88924, #89220) Thanks @RomneyDa, @neeravmakwana, and @omarshahine.
 - Channels and mobile delivery are steadier across Telegram, WhatsApp, iMessage, Slack, Discord, Microsoft Teams, Google Chat, Google Meet, QQBot, and iOS realtime Talk. (#88096, #88105, #88183, #88749, #88866, #88948, #88984, #89015, #88231) Thanks @omarshahine, @Jensenwgd, and @sliverp.
 - Provider and plugin requests now bound more timers, retries, OAuth/device-code lifetimes, media downloads, local service probes, generated-content polling, provider-catalog failures, reasoning output, and model catalog paths before they can hang a run. (#88480, #88512, #88767, #88781, #88851, #88860, #89343, #89379, #89400) Thanks @vincentkoc, @charles-openclaw, @zz327455573, @849261680, and @XuZehan-iCenter.
