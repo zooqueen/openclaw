@@ -45,6 +45,24 @@ export type PluginManifestCommandAliasRegistry = {
     contracts?: { tools?: readonly string[] };
   }[];
 };
+type PluginManifestCommandAliasRegistryPlugin =
+  PluginManifestCommandAliasRegistry["plugins"][number];
+type PluginManifestToolOwnerRegistryRecord =
+  | {
+      ok: true;
+      id: string;
+      contracts?: { tools?: readonly string[] };
+    }
+  | { ok: false };
+type PluginManifestCommandAliasRegistryRecord =
+  | {
+      ok: true;
+      id: string;
+      enabledByDefault?: boolean;
+      commandAliases?: readonly PluginManifestCommandAlias[];
+    }
+  | { ok: false };
+type PluginManifestCommandAliasRegistryIdRead = { ok: true; id: string } | { ok: false };
 
 export function normalizeManifestCommandAliases(
   value: unknown,
@@ -80,6 +98,48 @@ export function normalizeManifestCommandAliases(
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function readToolOwnerRegistryPlugin(
+  plugin: PluginManifestCommandAliasRegistryPlugin,
+): PluginManifestToolOwnerRegistryRecord {
+  try {
+    return {
+      ok: true,
+      id: plugin.id,
+      contracts: plugin.contracts,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function readCommandAliasRegistryPlugin(
+  plugin: PluginManifestCommandAliasRegistryPlugin,
+): PluginManifestCommandAliasRegistryRecord {
+  try {
+    return {
+      ok: true,
+      id: plugin.id,
+      enabledByDefault: plugin.enabledByDefault,
+      commandAliases: plugin.commandAliases,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function readCommandAliasRegistryPluginId(
+  plugin: PluginManifestCommandAliasRegistryPlugin,
+): PluginManifestCommandAliasRegistryIdRead {
+  try {
+    return {
+      ok: true,
+      id: plugin.id,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export function resolveManifestToolOwnerInRegistry(params: {
   toolName: string | undefined;
   registry: PluginManifestCommandAliasRegistry;
@@ -88,7 +148,11 @@ export function resolveManifestToolOwnerInRegistry(params: {
   if (!normalizedToolName) {
     return undefined;
   }
-  for (const plugin of params.registry.plugins) {
+  for (const registryPlugin of params.registry.plugins) {
+    const plugin = readToolOwnerRegistryPlugin(registryPlugin);
+    if (!plugin.ok) {
+      continue;
+    }
     const tools = plugin.contracts?.tools;
     if (!tools || tools.length === 0) {
       continue;
@@ -112,11 +176,23 @@ export function resolveManifestCommandAliasOwnerInRegistry(params: {
     return undefined;
   }
 
-  const commandIsPluginId = params.registry.plugins.some(
-    (plugin) => normalizeOptionalLowercaseString(plugin.id) === normalizedCommand,
-  );
+  let commandIsPluginId = false;
+  for (const registryPlugin of params.registry.plugins) {
+    const idRead = readCommandAliasRegistryPluginId(registryPlugin);
+    if (!idRead.ok) {
+      continue;
+    }
+    if (normalizeOptionalLowercaseString(idRead.id) === normalizedCommand) {
+      commandIsPluginId = true;
+      break;
+    }
+  }
 
-  for (const plugin of params.registry.plugins) {
+  for (const registryPlugin of params.registry.plugins) {
+    const plugin = readCommandAliasRegistryPlugin(registryPlugin);
+    if (!plugin.ok) {
+      continue;
+    }
     const alias = plugin.commandAliases?.find(
       (entry) => normalizeOptionalLowercaseString(entry.name) === normalizedCommand,
     );
