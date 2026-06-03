@@ -33,7 +33,7 @@ function findPluginConfigEntry(
 export function isWorkspacePluginAllowedByConfig(params: {
   config: OpenClawConfig | undefined;
   isImplicitlyAllowed?: (pluginId: string) => boolean;
-  plugin: PluginManifestRecord;
+  plugin: Pick<PluginManifestRecord, "id">;
 }): boolean {
   const pluginsConfig = params.config?.plugins;
   if (pluginsConfig?.enabled === false) {

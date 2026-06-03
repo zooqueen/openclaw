@@ -45,8 +45,8 @@ import {
   clearCurrentPluginMetadataSnapshot,
   setCurrentPluginMetadataSnapshot,
 } from "../plugins/current-plugin-metadata-snapshot.js";
-import type { InstalledPluginIndexRecord } from "../plugins/installed-plugin-index.js";
 import { resolveInstalledPluginIndexPolicyHash } from "../plugins/installed-plugin-index-policy.js";
+import type { InstalledPluginIndexRecord } from "../plugins/installed-plugin-index.js";
 import type { PluginManifestRecord } from "../plugins/manifest-registry.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.types.js";
 import {
@@ -168,6 +168,32 @@ describe("provider auth aliases", () => {
     expect(resolveProviderIdForAuth("codex-cli", { metadataSnapshot })).toBe("openai");
     expect(resolveProviderIdForAuth("openai-chatgpt-import", { metadataSnapshot })).toBe("openai");
     expect(resolveProviderIdForAuth("openai", { metadataSnapshot })).toBe("openai");
+  });
+
+  it("keeps healthy auth aliases after unreadable plugin metadata", () => {
+    const unreadablePlugin = {
+      id: "broken",
+      get origin() {
+        throw new Error("provider auth alias plugin origin getter exploded");
+      },
+      providerAuthAliases: {
+        broken: "broken-target",
+      },
+    } as never;
+    const metadataSnapshot = {
+      plugins: [
+        unreadablePlugin,
+        createPluginManifestRecord({
+          id: "healthy",
+          origin: "bundled",
+          providerAuthAliases: {
+            healthy: "healthy-provider",
+          },
+        }),
+      ],
+    } as never;
+
+    expect(resolveProviderIdForAuth("healthy", { metadataSnapshot })).toBe("healthy-provider");
   });
 
   it("does not reuse aliases across env-resolved plugin roots", () => {
