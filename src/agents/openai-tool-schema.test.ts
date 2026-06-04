@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearOpenAIToolSchemaCacheForTest,
+  findOpenAIStrictToolSchemaDiagnostics,
   isStrictOpenAIJsonSchemaCompatible,
   normalizeStrictOpenAIJsonSchema,
   resolveOpenAIStrictToolFlagForInventory,
@@ -90,5 +91,27 @@ describe("OpenAI strict tool schema normalization", () => {
         unsupportedToolSchemaKeywords: ["minimum"],
       }),
     ).toBe(third);
+  });
+
+  it("reports unreadable strict tool parameters without throwing", () => {
+    const unreadable = {
+      name: "fuzzplugin_unreadable",
+      parameters: { type: "object", properties: {} },
+    };
+    Object.defineProperty(unreadable, "parameters", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin parameters getter exploded");
+      },
+    });
+
+    expect(resolveOpenAIStrictToolFlagForInventory([unreadable], true)).toBe(false);
+    expect(findOpenAIStrictToolSchemaDiagnostics([unreadable])).toEqual([
+      {
+        toolIndex: 0,
+        toolName: "fuzzplugin_unreadable",
+        violations: ["fuzzplugin_unreadable.parameters is unreadable"],
+      },
+    ]);
   });
 });
