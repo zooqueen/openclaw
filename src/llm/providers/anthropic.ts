@@ -1268,21 +1268,40 @@ function convertTools(
     return [];
   }
 
-  return tools.map((tool, index) => {
-    const schema = tool.parameters as { properties?: unknown; required?: string[] };
+  const converted = tools.flatMap((tool): Anthropic.Messages.Tool[] => {
+    let schema: { properties?: unknown; required?: string[] };
+    let properties: unknown;
+    let required: string[];
+    try {
+      schema = tool.parameters as { properties?: unknown; required?: string[] };
+      properties = schema.properties ?? {};
+      required = schema.required ?? [];
+    } catch {
+      return [];
+    }
 
-    return {
-      name: isOAuthTokenLocal ? toClaudeCodeName(tool.name) : tool.name,
-      description: tool.description,
-      ...(supportsEagerToolInputStreaming ? { eager_input_streaming: true } : {}),
-      input_schema: {
-        type: "object",
-        properties: schema.properties ?? {},
-        required: schema.required ?? [],
+    return [
+      {
+        name: isOAuthTokenLocal ? toClaudeCodeName(tool.name) : tool.name,
+        description: tool.description,
+        ...(supportsEagerToolInputStreaming ? { eager_input_streaming: true } : {}),
+        input_schema: {
+          type: "object",
+          properties,
+          required,
+        },
       },
-      ...(cacheControl && index === tools.length - 1 ? { cache_control: cacheControl } : {}),
-    };
+    ];
   });
+
+  if (cacheControl && converted.length > 0) {
+    converted[converted.length - 1] = {
+      ...converted[converted.length - 1],
+      cache_control: cacheControl,
+    };
+  }
+
+  return converted;
 }
 
 function mapStopReason(reason: string): StopReason {

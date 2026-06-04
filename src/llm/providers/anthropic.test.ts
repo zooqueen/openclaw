@@ -218,6 +218,74 @@ describe("Anthropic provider", () => {
     expect((capturedPayload as { stop_sequences?: unknown }).stop_sequences).toEqual(["STOP"]);
   });
 
+  it("skips unreadable tool schemas while preserving healthy Anthropic tools", async () => {
+    let capturedPayload: unknown;
+    const unreadableTool = {
+      name: "unreadable_schema",
+      description: "bad getter",
+    };
+    Object.defineProperty(unreadableTool, "parameters", {
+      get() {
+        throw new Error("parameters getter exploded");
+      },
+    });
+    const nestedSchema = { type: "object" };
+    Object.defineProperty(nestedSchema, "properties", {
+      get() {
+        throw new Error("properties getter exploded");
+      },
+      enumerable: true,
+    });
+
+    const stream = streamSimpleAnthropic(
+      makeAnthropicModel(),
+      {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        tools: [
+          unreadableTool,
+          {
+            name: "nested_schema",
+            description: "nested getter",
+            parameters: nestedSchema,
+          },
+          {
+            name: "healthy_tool",
+            description: "healthy",
+            parameters: {
+              type: "object",
+              properties: { value: { type: "string" } },
+              required: ["value"],
+            },
+          },
+        ] as never,
+      },
+      {
+        apiKey: "sk-ant-provider",
+        cacheRetention: "none",
+        onPayload: (payload) => {
+          capturedPayload = payload;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect((capturedPayload as { tools?: unknown }).tools).toEqual([
+      {
+        name: "healthy_tool",
+        description: "healthy",
+        eager_input_streaming: true,
+        input_schema: {
+          type: "object",
+          properties: { value: { type: "string" } },
+          required: ["value"],
+        },
+      },
+    ]);
+  });
+
   it("splits the system prompt cache boundary into cached and uncached Anthropic blocks", async () => {
     let capturedPayload: unknown;
     const stream = streamSimpleAnthropic(
