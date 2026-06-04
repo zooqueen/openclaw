@@ -1,4 +1,8 @@
 import type { ModelCatalogCost } from "@openclaw/model-catalog-core/model-catalog-types";
+import {
+  normalizeOptionalString,
+  resolvePrimaryStringValue,
+} from "../../packages/normalization-core/src/string-coerce.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
   buildModelAliasIndex,
@@ -26,7 +30,6 @@ import {
 } from "../plugins/plugin-metadata-snapshot.js";
 import type { PluginMetadataRegistryView } from "../plugins/plugin-metadata-snapshot.types.js";
 import type { PluginRegistrySnapshot } from "../plugins/plugin-registry.js";
-import { normalizeOptionalString, resolvePrimaryStringValue } from "../../packages/normalization-core/src/string-coerce.js";
 import {
   clearGatewayModelPricingCacheState,
   clearGatewayModelPricingFailures,
@@ -433,6 +436,45 @@ function normalizeExternalPricingPolicy(
   };
 }
 
+function listManifestModelPricingPolicies(
+  plugin: PluginManifestRecord,
+): Array<{ provider: string; policy: PluginManifestModelPricingProvider }> {
+  let providers: Record<string, PluginManifestModelPricingProvider> | undefined;
+  try {
+    providers = plugin.modelPricing?.providers;
+  } catch {
+    return [];
+  }
+  if (!providers || typeof providers !== "object") {
+    return [];
+  }
+  let providerIds: string[];
+  try {
+    providerIds = Object.keys(providers);
+  } catch {
+    return [];
+  }
+  return providerIds.flatMap((provider) => {
+    try {
+      const policy = providers[provider];
+      return policy ? [{ provider, policy }] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function normalizeManifestModelPricingPolicy(
+  value: PluginManifestModelPricingProvider,
+  options: PricingModelNormalizationOptions,
+): ExternalPricingPolicy | undefined {
+  try {
+    return normalizeExternalPricingPolicy(value, options);
+  } catch {
+    return undefined;
+  }
+}
+
 function filterActiveManifestRegistry(params: {
   registry: PluginManifestRegistry;
   index: PluginRegistrySnapshot;
@@ -504,8 +546,8 @@ function loadManifestPricingContext(
 } {
   const policies = new Map<string, ExternalPricingPolicy>();
   for (const plugin of registry.plugins) {
-    for (const [provider, rawPolicy] of Object.entries(plugin.modelPricing?.providers ?? {})) {
-      const policy = normalizeExternalPricingPolicy(rawPolicy, normalizationOptions);
+    for (const { provider, policy: rawPolicy } of listManifestModelPricingPolicies(plugin)) {
+      const policy = normalizeManifestModelPricingPolicy(rawPolicy, normalizationOptions);
       if (policy) {
         policies.set(provider, policy);
       }
