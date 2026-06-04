@@ -12,6 +12,40 @@ import type {
 
 export { cleanSchemaForGemini, GEMINI_UNSUPPORTED_SCHEMA_KEYWORDS, stripUnsupportedSchemaKeywords };
 
+type ProviderToolSchemaSnapshot = {
+  name: string;
+  parameters: unknown;
+};
+
+function readProviderToolSchemaSnapshot(
+  tool: AnyAgentTool,
+  toolIndex: number,
+): ProviderToolSchemaSnapshot | undefined {
+  try {
+    const rawName = tool.name;
+    const name = typeof rawName === "string" && rawName.trim() ? rawName : `tool[${toolIndex}]`;
+    return { name, parameters: tool.parameters };
+  } catch {
+    return undefined;
+  }
+}
+
+function isSchemaRecord(schema: unknown): schema is Record<string, unknown> {
+  return Boolean(schema) && typeof schema === "object" && !Array.isArray(schema);
+}
+
+function findUnsupportedSchemaKeywordsSafe(
+  schema: unknown,
+  path: string,
+  unsupportedKeywords: ReadonlySet<string>,
+): string[] | undefined {
+  try {
+    return findUnsupportedSchemaKeywords(schema, path, unsupportedKeywords);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Finds unsupported JSON-schema keywords and reports their nested schema paths.
  */
@@ -67,14 +101,19 @@ export function normalizeGeminiToolSchemas(
   /** Provider tool-schema normalization context containing the active tool list. */
   ctx: ProviderNormalizeToolSchemasContext,
 ): AnyAgentTool[] {
-  return ctx.tools.map((tool) => {
-    if (!tool.parameters || typeof tool.parameters !== "object") {
+  return ctx.tools.map((tool, toolIndex) => {
+    const snapshot = readProviderToolSchemaSnapshot(tool, toolIndex);
+    if (!snapshot || !isSchemaRecord(snapshot.parameters)) {
       return tool;
     }
-    return {
-      ...tool,
-      parameters: cleanSchemaForGemini(tool.parameters),
-    };
+    try {
+      return {
+        ...tool,
+        parameters: cleanSchemaForGemini(snapshot.parameters),
+      };
+    } catch {
+      return tool;
+    }
   });
 }
 
@@ -86,15 +125,19 @@ export function inspectGeminiToolSchemas(
   ctx: ProviderNormalizeToolSchemasContext,
 ): ProviderToolSchemaDiagnostic[] {
   return ctx.tools.flatMap((tool, toolIndex) => {
-    const violations = findUnsupportedSchemaKeywords(
-      tool.parameters,
-      `${tool.name}.parameters`,
-      GEMINI_UNSUPPORTED_SCHEMA_KEYWORDS,
-    );
-    if (violations.length === 0) {
+    const snapshot = readProviderToolSchemaSnapshot(tool, toolIndex);
+    if (!snapshot) {
       return [];
     }
-    return [{ toolName: tool.name, toolIndex, violations }];
+    const violations = findUnsupportedSchemaKeywordsSafe(
+      snapshot.parameters,
+      `${snapshot.name}.parameters`,
+      GEMINI_UNSUPPORTED_SCHEMA_KEYWORDS,
+    );
+    if (!violations || violations.length === 0) {
+      return [];
+    }
+    return [{ toolName: snapshot.name, toolIndex, violations }];
   });
 }
 
@@ -108,20 +151,28 @@ export function normalizeOpenAIToolSchemas(
   if (!shouldApplyOpenAIToolCompat(ctx)) {
     return ctx.tools;
   }
-  return ctx.tools.map((tool) => {
-    if (tool.parameters == null) {
+  return ctx.tools.map((tool, toolIndex) => {
+    const snapshot = readProviderToolSchemaSnapshot(tool, toolIndex);
+    if (!snapshot) {
+      return tool;
+    }
+    if (snapshot.parameters == null) {
       return {
         ...tool,
         parameters: normalizeOpenAIStrictCompatSchema({}),
       };
     }
-    if (typeof tool.parameters !== "object") {
+    if (!isSchemaRecord(snapshot.parameters)) {
       return tool;
     }
-    return {
-      ...tool,
-      parameters: normalizeOpenAIStrictCompatSchema(tool.parameters),
-    };
+    try {
+      return {
+        ...tool,
+        parameters: normalizeOpenAIStrictCompatSchema(snapshot.parameters),
+      };
+    } catch {
+      return tool;
+    }
   });
 }
 
@@ -503,12 +554,18 @@ export function normalizeDeepSeekToolSchemas(
   /** Provider tool-schema normalization context containing the active tool list. */
   ctx: ProviderNormalizeToolSchemasContext,
 ): AnyAgentTool[] {
-  return ctx.tools.map((tool) => {
-    if (!tool.parameters || typeof tool.parameters !== "object") {
+  return ctx.tools.map((tool, toolIndex) => {
+    const snapshot = readProviderToolSchemaSnapshot(tool, toolIndex);
+    if (!snapshot || !isSchemaRecord(snapshot.parameters)) {
       return tool;
     }
-    const parameters = normalizeDeepSeekSchema(tool.parameters);
-    return parameters === tool.parameters
+    let parameters: unknown;
+    try {
+      parameters = normalizeDeepSeekSchema(snapshot.parameters);
+    } catch {
+      return tool;
+    }
+    return parameters === snapshot.parameters
       ? tool
       : {
           ...tool,
@@ -525,15 +582,19 @@ export function inspectDeepSeekToolSchemas(
   ctx: ProviderNormalizeToolSchemasContext,
 ): ProviderToolSchemaDiagnostic[] {
   return ctx.tools.flatMap((tool, toolIndex) => {
-    const violations = findUnsupportedSchemaKeywords(
-      tool.parameters,
-      `${tool.name}.parameters`,
-      DEEPSEEK_UNSUPPORTED_SCHEMA_KEYWORDS,
-    );
-    if (violations.length === 0) {
+    const snapshot = readProviderToolSchemaSnapshot(tool, toolIndex);
+    if (!snapshot) {
       return [];
     }
-    return [{ toolName: tool.name, toolIndex, violations }];
+    const violations = findUnsupportedSchemaKeywordsSafe(
+      snapshot.parameters,
+      `${snapshot.name}.parameters`,
+      DEEPSEEK_UNSUPPORTED_SCHEMA_KEYWORDS,
+    );
+    if (!violations || violations.length === 0) {
+      return [];
+    }
+    return [{ toolName: snapshot.name, toolIndex, violations }];
   });
 }
 
