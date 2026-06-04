@@ -8,6 +8,7 @@ type AnthropicToolPayloadCompatibilityOptions = {
   toolSchemaMode?: AnthropicToolSchemaMode;
   toolChoiceMode?: AnthropicToolChoiceMode;
 };
+type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
 
 function hasOpenAiAnthropicToolPayloadCompatFlag(model: { compat?: unknown }): boolean {
   if (!model.compat || typeof model.compat !== "object" || Array.isArray(model.compat)) {
@@ -67,36 +68,70 @@ function normalizeOpenAiFunctionAnthropicToolDefinition(
   }
 
   const toolObj = tool as Record<string, unknown>;
-  if (toolObj.function && typeof toolObj.function === "object") {
+  const functionField = readPayloadField(toolObj, "function");
+  if (!functionField.ok) {
+    return undefined;
+  }
+  if (functionField.value && typeof functionField.value === "object") {
     return toolObj;
   }
 
-  const rawName = normalizeOptionalString(toolObj.name) ?? "";
+  const nameField = readPayloadField(toolObj, "name");
+  if (!nameField.ok) {
+    return undefined;
+  }
+  const rawName = normalizeOptionalString(nameField.value) ?? "";
   if (!rawName) {
     return toolObj;
   }
 
+  const inputSchemaField = readPayloadField(toolObj, "input_schema");
+  if (!inputSchemaField.ok) {
+    return undefined;
+  }
+  const inputSchema = inputSchemaField.value;
+  let parameters: unknown = { type: "object", properties: {} };
+  if (inputSchema && typeof inputSchema === "object") {
+    parameters = inputSchema;
+  } else {
+    const parametersField = readPayloadField(toolObj, "parameters");
+    if (!parametersField.ok) {
+      return undefined;
+    }
+    if (parametersField.value && typeof parametersField.value === "object") {
+      parameters = parametersField.value;
+    }
+  }
   const functionSpec: Record<string, unknown> = {
     name: rawName,
-    parameters:
-      toolObj.input_schema && typeof toolObj.input_schema === "object"
-        ? toolObj.input_schema
-        : toolObj.parameters && typeof toolObj.parameters === "object"
-          ? toolObj.parameters
-          : { type: "object", properties: {} },
+    parameters,
   };
 
-  if (typeof toolObj.description === "string" && toolObj.description.trim()) {
-    functionSpec.description = toolObj.description;
+  const descriptionField = readPayloadField(toolObj, "description");
+  if (
+    descriptionField.ok &&
+    typeof descriptionField.value === "string" &&
+    descriptionField.value.trim()
+  ) {
+    functionSpec.description = descriptionField.value;
   }
-  if (typeof toolObj.strict === "boolean") {
-    functionSpec.strict = toolObj.strict;
+  const strictField = readPayloadField(toolObj, "strict");
+  if (strictField.ok && typeof strictField.value === "boolean") {
+    functionSpec.strict = strictField.value;
   }
 
   return {
     type: "function",
     function: functionSpec,
   };
+}
+
+function readPayloadField(record: Record<string, unknown>, field: string): PayloadFieldRead {
+  try {
+    return { ok: true, value: Reflect.get(record, field) };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function normalizeOpenAiStringModeAnthropicToolChoice(toolChoice: unknown): unknown {
