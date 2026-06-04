@@ -76,6 +76,17 @@ describe("createClackPrompter", () => {
     expect(result).toBe("");
   });
 
+  it("preserves string clack text results without trimming", async () => {
+    vi.mocked(text).mockResolvedValueOnce("  Alice  ");
+    const prompter = createClackPrompter();
+
+    const result = await prompter.text({
+      message: "Name",
+    });
+
+    expect(result).toBe("  Alice  ");
+  });
+
   it("normalizes non-string clack password results to empty strings", async () => {
     vi.mocked(password).mockResolvedValueOnce({ cancelled: true } as never);
     const prompter = createClackPrompter();
