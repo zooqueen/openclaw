@@ -1,7 +1,7 @@
 import type { ChatCompletionChunk } from "openai/resources/chat/completions.js";
 import { describe, expect, it, vi } from "vitest";
 import { SYSTEM_PROMPT_CACHE_BOUNDARY } from "../../agents/system-prompt-cache-boundary.js";
-import type { Context, Model } from "../types.js";
+import type { Context, Model, Tool } from "../types.js";
 
 type DeepPartial<T> = { [P in keyof T]?: DeepPartial<T[P]> };
 type OpenAICompatibleDelta = DeepPartial<ChatCompletionChunk["choices"][number]["delta"]> & {
@@ -117,6 +117,60 @@ function makeFinishChunk(
 }
 
 describe("OpenAI-compatible completions params", () => {
+  it("skips unreadable tool schemas while preserving healthy tools", async () => {
+    const unreadableSchemaTool = {
+      name: "bad_schema",
+      description: "Bad schema",
+      get parameters(): never {
+        throw new Error("parameters getter exploded");
+      },
+    } satisfies Tool;
+    const healthyTool = {
+      name: "lookup",
+      description: "Lookup",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    } satisfies Tool;
+    let capturedTools: unknown;
+
+    const stream = streamOpenAICompletions(
+      createModel(32_000),
+      {
+        messages: [{ role: "user", content: "lookup", timestamp: 1 }],
+        tools: [unreadableSchemaTool, healthyTool],
+      } satisfies Context,
+      {
+        apiKey: "sk-test",
+        onPayload(payload) {
+          capturedTools = (payload as { tools?: unknown }).tools;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect(capturedTools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: "lookup",
+          description: "Lookup",
+          strict: false,
+          parameters: {
+            type: "object",
+            properties: { query: { type: "string" } },
+            required: ["query"],
+          },
+        },
+      },
+    ]);
+  });
+
   it("clamps requested max tokens to the model output cap", async () => {
     let capturedMaxTokens: unknown;
     const stream = streamOpenAICompletions(createModel(32_000), context, {

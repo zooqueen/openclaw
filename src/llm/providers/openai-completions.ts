@@ -1155,16 +1155,26 @@ function convertTools(
   tools: Tool[],
   compat: ResolvedOpenAICompletionsCompat,
 ): OpenAI.Chat.Completions.ChatCompletionTool[] {
-  return tools.map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters as Record<string, unknown>, // TypeBox already generates JSON Schema
-      // Only include strict if provider supports it. Some reject unknown fields.
-      ...(compat.supportsStrictMode && { strict: false }),
-    },
-  }));
+  return tools.flatMap((tool) => {
+    let parameters: Record<string, unknown>;
+    try {
+      parameters = tool.parameters as Record<string, unknown>; // TypeBox already generates JSON Schema
+    } catch {
+      return [];
+    }
+    return [
+      {
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters,
+          // Only include strict if provider supports it. Some reject unknown fields.
+          ...(compat.supportsStrictMode && { strict: false }),
+        },
+      },
+    ];
+  });
 }
 
 function parseChunkUsage(
