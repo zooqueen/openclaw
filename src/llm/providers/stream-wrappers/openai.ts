@@ -40,6 +40,7 @@ type OpenClawSimpleStreamOptions = SimpleStreamOptions & {
 type OpenAIResponsesReplayOptions = Parameters<StreamFn>[2] & {
   replayResponsesItemIds?: boolean;
 };
+type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
 export { resolveOpenAITextVerbosity };
 
 function resolveOpenAITextVerbosityForModel(
@@ -236,6 +237,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function readPayloadField(record: Record<string, unknown>, field: string): PayloadFieldRead {
+  try {
+    return { ok: true, value: Reflect.get(record, field) };
+  } catch {
+    return { ok: false };
+  }
+}
+
 function hasResponsesWebSearchTool(tools: unknown): boolean {
   if (!Array.isArray(tools)) {
     return false;
@@ -244,14 +253,23 @@ function hasResponsesWebSearchTool(tools: unknown): boolean {
     if (!isRecord(tool)) {
       return false;
     }
-    if (tool.type === "web_search") {
+    const type = readPayloadField(tool, "type");
+    if (!type.ok) {
+      return false;
+    }
+    if (type.value === "web_search") {
       return true;
     }
-    if (tool.type === "function" && tool.name === "web_search") {
+    const name = readPayloadField(tool, "name");
+    if (name.ok && type.value === "function" && name.value === "web_search") {
       return true;
     }
-    const fn = tool.function;
-    return isRecord(fn) && fn.name === "web_search";
+    const fn = readPayloadField(tool, "function");
+    if (!fn.ok || !isRecord(fn.value)) {
+      return false;
+    }
+    const functionName = readPayloadField(fn.value, "name");
+    return functionName.ok && functionName.value === "web_search";
   });
 }
 

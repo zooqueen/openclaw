@@ -485,6 +485,80 @@ describe("createOpenAIThinkingLevelWrapper", () => {
     expect(payloads[0]?.reasoning).toEqual({ effort: "low", summary: "auto" });
   });
 
+  it("skips unreadable payload tools while detecting web_search reasoning needs", () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const baseStreamFn: StreamFn = (model, context, options) => {
+      const payload: Record<string, unknown> = {
+        reasoning: { effort: "minimal", summary: "auto" },
+        tools: [
+          {
+            type: "function",
+            get function(): never {
+              throw new Error("payload tool function getter exploded");
+            },
+          },
+          { type: "function", name: "web_search" },
+        ],
+      };
+      options?.onPayload?.(payload, model);
+      payloads.push({ reasoning: payload.reasoning });
+      return createAssistantMessageEventStream();
+    };
+    const wrapped = createOpenAIThinkingLevelWrapper(baseStreamFn, "minimal");
+
+    expect(
+      () =>
+        void wrapped(
+          {
+            api: "openai-responses",
+            provider: "openai",
+            id: "gpt-5",
+            baseUrl: "http://127.0.0.1:19191/v1",
+          } as Model<"openai-responses">,
+          { messages: [] },
+          {},
+        ),
+    ).not.toThrow();
+    expect(payloads[0]?.reasoning).toEqual({ effort: "low", summary: "auto" });
+  });
+
+  it("detects nested web_search when the top-level payload tool name is unreadable", () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const baseStreamFn: StreamFn = (model, context, options) => {
+      const payload: Record<string, unknown> = {
+        reasoning: { effort: "minimal", summary: "auto" },
+        tools: [
+          {
+            type: "function",
+            get name(): never {
+              throw new Error("payload tool name getter exploded");
+            },
+            function: { name: "web_search" },
+          },
+        ],
+      };
+      options?.onPayload?.(payload, model);
+      payloads.push({ reasoning: payload.reasoning });
+      return createAssistantMessageEventStream();
+    };
+    const wrapped = createOpenAIThinkingLevelWrapper(baseStreamFn, "minimal");
+
+    expect(
+      () =>
+        void wrapped(
+          {
+            api: "openai-responses",
+            provider: "openai",
+            id: "gpt-5",
+            baseUrl: "http://127.0.0.1:19191/v1",
+          } as Model<"openai-responses">,
+          { messages: [] },
+          {},
+        ),
+    ).not.toThrow();
+    expect(payloads[0]?.reasoning).toEqual({ effort: "low", summary: "auto" });
+  });
+
   it.each([
     {
       api: "openai-responses",
