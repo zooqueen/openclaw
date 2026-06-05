@@ -16,13 +16,31 @@ type OpenAIReasoningCompatModel = {
 // efforts up unless provider metadata supplies a more specific compat map.
 const OPENAI_MEDIUM_ONLY_REASONING_MODEL_IDS = new Set(["gpt-5.1-codex-mini"]);
 
+function readObjectField(object: unknown, key: string): unknown {
+  if (!object || typeof object !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(object, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readStringField(object: unknown, key: string): string | undefined {
+  const value = readObjectField(object, key);
+  return typeof value === "string" ? value : undefined;
+}
+
 // Provider metadata can remap reasoning effort names. Keep only string pairs so
 // malformed compat data cannot poison request parameters.
 function readCompatReasoningEffortMap(compat: unknown): Record<string, string> {
   if (!compat || typeof compat !== "object") {
     return {};
   }
-  const rawMap = (compat as { reasoningEffortMap?: unknown }).reasoningEffortMap;
+  const rawMap = readObjectField(compat, "reasoningEffortMap");
   if (!rawMap || typeof rawMap !== "object") {
     return {};
   }
@@ -39,8 +57,8 @@ export function resolveOpenAIReasoningEffortMap(
   model: OpenAIReasoningCompatModel,
   fallbackMap: Record<string, string> = {},
 ): Record<string, string> {
-  const provider = normalizeLowercaseStringOrEmpty(model.provider ?? "");
-  const id = normalizeLowercaseStringOrEmpty(model.id ?? "");
+  const provider = normalizeLowercaseStringOrEmpty(readStringField(model, "provider") ?? "");
+  const id = normalizeLowercaseStringOrEmpty(readStringField(model, "id") ?? "");
   const builtinMap: Record<string, string> =
     provider === "openai" && OPENAI_MEDIUM_ONLY_REASONING_MODEL_IDS.has(id)
       ? { minimal: "medium", low: "medium" }
@@ -48,6 +66,6 @@ export function resolveOpenAIReasoningEffortMap(
   return {
     ...fallbackMap,
     ...builtinMap,
-    ...readCompatReasoningEffortMap(model.compat),
+    ...readCompatReasoningEffortMap(readObjectField(model, "compat")),
   };
 }

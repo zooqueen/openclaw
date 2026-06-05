@@ -1,5 +1,6 @@
 // Verifies model-specific OpenAI reasoning-effort normalization and disablement.
 import { describe, expect, it } from "vitest";
+import { resolveOpenAIReasoningEffortMap } from "./openai-reasoning-compat.js";
 import {
   resolveOpenAIReasoningEffortForModel,
   resolveOpenAISupportedReasoningEfforts,
@@ -100,5 +101,63 @@ describe("OpenAI reasoning effort support", () => {
 
     expect(resolveOpenAIReasoningEffortForModel({ model, effort: "none" })).toBeUndefined();
     expect(resolveOpenAIReasoningEffortForModel({ model, effort: "high" })).toBe("high");
+  });
+
+  it("ignores unreadable model metadata while resolving supported efforts", () => {
+    const model = Object.defineProperties(
+      {},
+      {
+        id: {
+          get() {
+            throw new Error("id getter should not be invoked");
+          },
+        },
+        compat: {
+          get() {
+            throw new Error("compat getter should not be invoked");
+          },
+        },
+      },
+    );
+
+    expect(resolveOpenAISupportedReasoningEfforts(model)).toEqual(["low", "medium", "high"]);
+    expect(resolveOpenAIReasoningEffortForModel({ model, effort: "minimal" })).toBe("low");
+  });
+
+  it("ignores unreadable compat effort metadata", () => {
+    const compat = Object.defineProperties(
+      {},
+      {
+        supportsReasoningEffort: {
+          get() {
+            throw new Error("supportsReasoningEffort getter should not be invoked");
+          },
+        },
+        supportedReasoningEfforts: {
+          get() {
+            throw new Error("supportedReasoningEfforts getter should not be invoked");
+          },
+        },
+      },
+    );
+
+    expect(
+      resolveOpenAISupportedReasoningEfforts({ provider: "openai", id: "gpt-5", compat }),
+    ).toEqual(["minimal", "low", "medium", "high"]);
+  });
+
+  it("ignores unreadable compat reasoning maps", () => {
+    const compat = Object.defineProperty({}, "reasoningEffortMap", {
+      get() {
+        throw new Error("reasoningEffortMap getter should not be invoked");
+      },
+    });
+    const model = { provider: "openai", id: "gpt-5.1-codex-mini", compat };
+
+    expect(resolveOpenAIReasoningEffortMap(model, { high: "high" })).toEqual({
+      high: "high",
+      minimal: "medium",
+      low: "medium",
+    });
   });
 });

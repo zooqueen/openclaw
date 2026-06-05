@@ -35,9 +35,27 @@ function normalizeModelId(id: string | null | undefined): string {
   return normalizeLowercaseStringOrEmpty(id ?? "").replace(/-\d{4}-\d{2}-\d{2}$/u, "");
 }
 
+function readObjectField(object: unknown, key: string): unknown {
+  if (!object || typeof object !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(object, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelString(model: OpenAIReasoningModel, key: string): string | undefined {
+  const value = readObjectField(model, key);
+  return typeof value === "string" ? value : undefined;
+}
+
 /** Return whether a model is the GPT-5.4 mini family. */
 export function isOpenAIGpt54MiniModel(model: OpenAIReasoningModel): boolean {
-  const id = normalizeModelId(typeof model.id === "string" ? model.id : undefined);
+  const id = normalizeModelId(readModelString(model, "id"));
   return /^gpt-5\.4-mini(?:-|$)/u.test(id);
 }
 
@@ -50,10 +68,10 @@ function readCompatReasoningEfforts(compat: unknown): OpenAIApiReasoningEffort[]
   if (!compat || typeof compat !== "object") {
     return undefined;
   }
-  if ((compat as { supportsReasoningEffort?: unknown }).supportsReasoningEffort === false) {
+  if (readObjectField(compat, "supportsReasoningEffort") === false) {
     return [];
   }
-  const raw = (compat as { supportedReasoningEfforts?: unknown }).supportedReasoningEfforts;
+  const raw = readObjectField(compat, "supportedReasoningEfforts");
   if (!Array.isArray(raw)) {
     return undefined;
   }
@@ -71,12 +89,12 @@ function isDisabledReasoningEffort(effort: string): boolean {
 export function resolveOpenAISupportedReasoningEfforts(
   model: OpenAIReasoningModel,
 ): readonly OpenAIApiReasoningEffort[] {
-  const compatEfforts = readCompatReasoningEfforts(model.compat);
+  const compatEfforts = readCompatReasoningEfforts(readObjectField(model, "compat"));
   if (compatEfforts) {
     return compatEfforts;
   }
 
-  const id = normalizeModelId(typeof model.id === "string" ? model.id : undefined);
+  const id = normalizeModelId(readModelString(model, "id"));
   if (id === "gpt-5.1-codex-mini") {
     return GPT_51_CODEX_MINI_REASONING_EFFORTS;
   }
