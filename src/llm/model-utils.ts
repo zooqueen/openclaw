@@ -1,17 +1,6 @@
 // Provides model selection, usage, and thinking-level utility helpers.
 import type { Api, Model, ModelThinkingLevel, Usage } from "./types.js";
 
-/** Calculates and stores model cost fields from token usage and per-million pricing. */
-export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
-  usage.cost.input = (model.cost.input / 1000000) * usage.input;
-  usage.cost.output = (model.cost.output / 1000000) * usage.output;
-  usage.cost.cacheRead = (model.cost.cacheRead / 1000000) * usage.cacheRead;
-  usage.cost.cacheWrite = (model.cost.cacheWrite / 1000000) * usage.cacheWrite;
-  usage.cost.total =
-    usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;
-  return usage.cost;
-}
-
 const EXTENDED_THINKING_LEVELS: ModelThinkingLevel[] = [
   "off",
   "minimal",
@@ -48,11 +37,28 @@ function readModelStringField<TApi extends Api>(model: Model<TApi>, key: string)
   return typeof value === "string" ? value : "";
 }
 
+function readNumberField(value: unknown, key: string): number {
+  const field = readObjectField(value, key);
+  return typeof field === "number" && Number.isFinite(field) ? field : 0;
+}
+
 function readThinkingLevelMapValue<TApi extends Api>(
   model: Model<TApi>,
   level: ModelThinkingLevel,
 ): unknown {
   return readObjectField(readModelField(model, "thinkingLevelMap"), level);
+}
+
+/** Calculates and stores model cost fields from token usage and per-million pricing. */
+export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
+  const cost = readModelField(model, "cost");
+  usage.cost.input = (readNumberField(cost, "input") / 1000000) * usage.input;
+  usage.cost.output = (readNumberField(cost, "output") / 1000000) * usage.output;
+  usage.cost.cacheRead = (readNumberField(cost, "cacheRead") / 1000000) * usage.cacheRead;
+  usage.cost.cacheWrite = (readNumberField(cost, "cacheWrite") / 1000000) * usage.cacheWrite;
+  usage.cost.total =
+    usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;
+  return usage.cost;
 }
 
 /** Returns thinking levels exposed by a reasoning-capable model. */
