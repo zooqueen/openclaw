@@ -4,7 +4,10 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBundleMcpJsonSchemaValidator } from "./agent-bundle-mcp-runtime.js";
+import {
+  createBundleMcpJsonSchemaValidator,
+  snapshotListedMcpToolsForCatalog,
+} from "./agent-bundle-mcp-runtime.js";
 import { cleanupBundleMcpHarness } from "./agent-bundle-mcp-test-harness.js";
 import {
   testing,
@@ -281,6 +284,57 @@ function makeRuntime(
 
 afterEach(async () => {
   await cleanupBundleMcpHarness();
+});
+
+describe("snapshotListedMcpToolsForCatalog", () => {
+  it("skips malformed listed MCP tools while preserving healthy siblings", () => {
+    const healthySchema = { type: "object", properties: { query: { type: "string" } } };
+    const unreadableName = { inputSchema: { type: "object" } };
+    Object.defineProperty(unreadableName, "name", {
+      get: () => {
+        throw new Error("boom");
+      },
+    });
+    const unreadableSchema = { name: "bad_schema" };
+    Object.defineProperty(unreadableSchema, "inputSchema", {
+      get: () => {
+        throw new Error("boom");
+      },
+    });
+    const healthyTool = {
+      name: " safe_lookup ",
+      get title() {
+        throw new Error("boom");
+      },
+      get description() {
+        throw new Error("boom");
+      },
+      inputSchema: healthySchema,
+    };
+
+    const snapshot = snapshotListedMcpToolsForCatalog([
+      unreadableName,
+      { name: "   ", inputSchema: { type: "object" } },
+      { name: 42, inputSchema: { type: "object" } },
+      unreadableSchema,
+      healthyTool,
+    ]);
+
+    expect(snapshot.tools).toEqual([
+      {
+        name: "safe_lookup",
+        title: undefined,
+        description: undefined,
+        inputSchema: healthySchema,
+      },
+    ]);
+    expect(snapshot.diagnostics.map((diagnostic) => diagnostic.message)).toEqual([
+      "skipped malformed MCP tool catalog entry 0: missing readable name",
+      "skipped malformed MCP tool catalog entry 1: missing readable name",
+      "skipped malformed MCP tool catalog entry 2: missing readable name",
+      "skipped malformed MCP tool catalog entry 3: missing readable inputSchema",
+    ]);
+  });
 });
 
 describe("session MCP runtime", () => {

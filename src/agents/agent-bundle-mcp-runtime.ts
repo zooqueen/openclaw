@@ -66,6 +66,18 @@ type McpToolSelection = {
   exclude?: readonly string[];
 };
 
+export type ListedMcpToolSnapshot = {
+  name: string;
+  title?: string;
+  description?: string;
+  inputSchema: McpCatalogTool["inputSchema"];
+};
+
+export type ListedMcpToolSnapshotDiagnostic = {
+  index: number;
+  message: string;
+};
+
 type McpServerBackoffState = {
   failures: number;
   retryAfterMs?: number;
@@ -342,6 +354,60 @@ function shouldExposeMcpTool(selection: McpToolSelection, toolName: string): boo
     return false;
   }
   return !exclude.some((pattern) => globMatches(pattern, toolName));
+}
+
+function readListedMcpToolField(tool: unknown, key: string): unknown {
+  try {
+    return (tool as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function readListedMcpToolString(tool: unknown, key: string): string | undefined {
+  const value = readListedMcpToolField(tool, key);
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readListedMcpToolInputSchema(tool: unknown): McpCatalogTool["inputSchema"] | undefined {
+  const value = readListedMcpToolField(tool, "inputSchema");
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as McpCatalogTool["inputSchema"];
+}
+
+export function snapshotListedMcpToolsForCatalog(tools: readonly unknown[]): {
+  tools: ListedMcpToolSnapshot[];
+  diagnostics: ListedMcpToolSnapshotDiagnostic[];
+} {
+  const snapshots: ListedMcpToolSnapshot[] = [];
+  const diagnostics: ListedMcpToolSnapshotDiagnostic[] = [];
+  tools.forEach((tool, index) => {
+    const name = readListedMcpToolString(tool, "name")?.trim();
+    if (!name) {
+      diagnostics.push({
+        index,
+        message: `skipped malformed MCP tool catalog entry ${index}: missing readable name`,
+      });
+      return;
+    }
+    const inputSchema = readListedMcpToolInputSchema(tool);
+    if (!inputSchema) {
+      diagnostics.push({
+        index,
+        message: `skipped malformed MCP tool catalog entry ${index}: missing readable inputSchema`,
+      });
+      return;
+    }
+    snapshots.push({
+      name,
+      title: readListedMcpToolString(tool, "title"),
+      description: readListedMcpToolString(tool, "description"),
+      inputSchema,
+    });
+  });
+  return { tools: snapshots, diagnostics };
 }
 
 function sanitizeMcpMetadataText(value: string | undefined): string | undefined {
@@ -644,8 +710,17 @@ export function createSessionMcpRuntime(params: {
             });
             failIfDisposed();
             const selection = getMcpToolSelection(rawServer);
-            const exposedTools = listedTools.filter((tool) =>
-              shouldExposeMcpTool(selection, tool.name.trim()),
+            const listedToolSnapshots = snapshotListedMcpToolsForCatalog(listedTools);
+            diagnostics.push(
+              ...listedToolSnapshots.diagnostics.map((diagnostic) => ({
+                serverName,
+                safeServerName,
+                launchSummary: resolved.description,
+                message: diagnostic.message,
+              })),
+            );
+            const exposedTools = listedToolSnapshots.tools.filter((tool) =>
+              shouldExposeMcpTool(selection, tool.name),
             );
             servers[serverName] = {
               serverName,
@@ -676,14 +751,10 @@ export function createSessionMcpRuntime(params: {
                 : {}),
             };
             for (const tool of exposedTools) {
-              const toolName = tool.name.trim();
-              if (!toolName) {
-                continue;
-              }
               tools.push({
                 serverName,
                 safeServerName,
-                toolName,
+                toolName: tool.name,
                 title: tool.title,
                 description: sanitizeMcpMetadataText(tool.description),
                 inputSchema: tool.inputSchema,
