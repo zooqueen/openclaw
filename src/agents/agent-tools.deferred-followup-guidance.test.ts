@@ -45,4 +45,40 @@ describe("createOpenClawCodingTools deferred follow-up guidance", () => {
       "Manage running exec sessions for commands already started: list, poll, log, write, send-keys, submit, paste, kill. Use poll/log when you need status, logs, quiet-success confirmation, or completion confirmation when automatic completion wake is unavailable. Use poll/log also for input-wait hints. Use write/send-keys/submit/paste/kill for input or intervention.",
     );
   });
+
+  it("skips unreadable tool names while preserving healthy cron guidance", () => {
+    const hostileTool = Object.defineProperty({ description: "hostile" }, "name", {
+      get() {
+        throw new Error("revoked tool name");
+      },
+    }) as AnyAgentTool;
+
+    const tools = applyDeferredFollowupToolDescriptions([
+      hostileTool,
+      { name: "exec", description: "exec base" },
+      { name: "process", description: "process base" },
+      { name: "cron", description: "cron base" },
+    ] as AnyAgentTool[]);
+
+    expect(tools[0]).toBe(hostileTool);
+    expect(tools[1]?.description).toContain("use cron instead");
+    expect(tools[2]?.description).toContain("use cron for scheduled follow-ups");
+  });
+
+  it("does not enumerate hostile exec metadata while replacing descriptions", () => {
+    const execTool = new Proxy(
+      { name: "exec", description: "exec base" },
+      {
+        ownKeys() {
+          throw new Error("metadata enumeration revoked");
+        },
+      },
+    ) as AnyAgentTool;
+
+    const [tool] = applyDeferredFollowupToolDescriptions([execTool]);
+
+    expect(Object.is(tool, execTool)).toBe(false);
+    expect(tool?.name).toBe("exec");
+    expect(tool?.description).toContain("Use process whenever");
+  });
 });
