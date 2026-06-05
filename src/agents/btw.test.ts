@@ -987,6 +987,47 @@ describe("runBtwSideQuestion", () => {
     expect(result).toBeUndefined();
   });
 
+  it("strips unreadable configurable tools fields from BTW payloads before sending", async () => {
+    mockDoneAnswer("Final answer.");
+
+    await runSideQuestion();
+
+    const options = mockArg(streamSimpleMock, 0, 2);
+    const onPayload = (options as { onPayload?: (payload: unknown) => void })?.onPayload;
+    const payloadWithUnreadableTools: Record<string, unknown> = { messages: [] };
+    Object.defineProperty(payloadWithUnreadableTools, "tools", {
+      configurable: true,
+      get() {
+        throw new Error("tools getter failed");
+      },
+    });
+
+    const result = onPayload?.(payloadWithUnreadableTools);
+
+    expect(payloadWithUnreadableTools).not.toHaveProperty("tools");
+    expect(result).toBeUndefined();
+  });
+
+  it("fails closed when BTW payload tools cannot be removed", async () => {
+    mockDoneAnswer("Final answer.");
+
+    await runSideQuestion();
+
+    const options = mockArg(streamSimpleMock, 0, 2);
+    const onPayload = (options as { onPayload?: (payload: unknown) => void })?.onPayload;
+    const payloadWithUnreadableTools: Record<string, unknown> = { messages: [] };
+    Object.defineProperty(payloadWithUnreadableTools, "tools", {
+      configurable: false,
+      get() {
+        throw new Error("tools getter failed");
+      },
+    });
+
+    expect(() => onPayload?.(payloadWithUnreadableTools)).toThrow(
+      "BTW payload tools field could not be removed",
+    );
+  });
+
   it("allows Bedrock /btw runs to proceed without a static api key in aws-sdk mode", async () => {
     resolveModelWithRegistryMock.mockReturnValue({
       provider: "amazon-bedrock",

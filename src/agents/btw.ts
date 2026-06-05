@@ -103,6 +103,25 @@ function buildBtwQuestionPrompt(question: string, inFlightPrompt?: string): stri
   return lines.join("\n");
 }
 
+type BtwPayloadFieldRead = { ok: true; value: unknown } | { ok: false };
+
+function readBtwPayloadField(record: Record<string, unknown>, key: string): BtwPayloadFieldRead {
+  try {
+    return { ok: true, value: record[key] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function deleteBtwPayloadField(record: Record<string, unknown>, key: string): boolean {
+  try {
+    delete record[key];
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeBtwContentBlocks(content: unknown): unknown[] | undefined {
   if (Array.isArray(content)) {
     return content;
@@ -570,8 +589,11 @@ export async function runBtwSideQuestion(
     (payloadObj) => {
       // BTW is intentionally tool-less. Some OpenAI-compatible providers reject
       // the empty tools arrays injected for generic tool-history replay.
-      if (Array.isArray(payloadObj.tools) && payloadObj.tools.length === 0) {
-        delete payloadObj.tools;
+      const tools = readBtwPayloadField(payloadObj, "tools");
+      if (!tools.ok || (Array.isArray(tools.value) && tools.value.length === 0)) {
+        if (!deleteBtwPayloadField(payloadObj, "tools")) {
+          throw new Error("BTW payload tools field could not be removed");
+        }
       }
     },
   );
