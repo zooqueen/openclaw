@@ -183,6 +183,49 @@ describe("convertResponsesTools", () => {
     expect(tool.name).toBe("lookup_weather");
     expect(tool.strict).toBe(true);
   });
+
+  it("ignores unreadable model metadata while converting Responses tools", () => {
+    const model = Object.defineProperties(
+      { ...nativeOpenAIModel },
+      {
+        provider: {
+          get() {
+            throw new Error("provider getter should be caught");
+          },
+        },
+        api: {
+          get() {
+            throw new Error("api getter should be caught");
+          },
+        },
+        baseUrl: {
+          get() {
+            throw new Error("baseUrl getter should be caught");
+          },
+        },
+        id: {
+          get() {
+            throw new Error("id getter should be caught");
+          },
+        },
+        compat: {
+          get() {
+            throw new Error("compat getter should be caught");
+          },
+        },
+      },
+    ) as Model<"openai-responses">;
+
+    const converted = convertResponsesTools(
+      [{ name: "lookup_weather", description: "Get forecast", parameters: {} }],
+      { model },
+    );
+
+    expect(converted).toHaveLength(1);
+    const tool = expectResponsesFunctionTool(converted[0]);
+    expect(tool.name).toBe("lookup_weather");
+    expect(tool).not.toHaveProperty("strict");
+  });
 });
 
 describe("convertResponsesMessages", () => {

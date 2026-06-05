@@ -21,18 +21,32 @@ type OpenAIStrictToolModel = {
 
 const optionalString = readStringValue;
 
+function readModelField(model: OpenAIStrictToolModel, key: string): unknown {
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, key);
+  } catch {
+    return undefined;
+  }
+  try {
+    return descriptor && "value" in descriptor ? descriptor.value : descriptor?.get?.call(model);
+  } catch {
+    return undefined;
+  }
+}
+
 function resolvesToNativeOpenAIStrictTools(
   model: OpenAIStrictToolModel,
   transport: OpenAITransportKind,
 ): boolean {
   const capabilities = resolveProviderRequestCapabilities({
-    provider: optionalString(model.provider),
-    api: optionalString(model.api),
-    baseUrl: optionalString(model.baseUrl),
+    provider: optionalString(readModelField(model, "provider")),
+    api: optionalString(readModelField(model, "api")),
+    baseUrl: optionalString(readModelField(model, "baseUrl")),
     capability: "llm",
     transport,
-    modelId: optionalString(model.id),
-    compat: model.compat,
+    modelId: optionalString(readModelField(model, "id")),
+    compat: readModelField(model, "compat"),
   });
   if (!capabilities.usesKnownNativeOpenAIRoute) {
     return false;

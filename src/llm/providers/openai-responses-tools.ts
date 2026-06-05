@@ -38,6 +38,25 @@ const log = createSubsystemLogger("llm/openai-responses");
 const MAX_STRICT_TOOL_DOWNGRADE_DIAGNOSTIC_KEYS = 64;
 const loggedStrictToolDowngradeDiagnosticKeys = new Set<string>();
 
+function readModelField(model: Model, key: string): unknown {
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, key);
+  } catch {
+    return undefined;
+  }
+  try {
+    return descriptor && "value" in descriptor ? descriptor.value : descriptor?.get?.call(model);
+  } catch {
+    return undefined;
+  }
+}
+
+function readModelStringField(model: Model, key: string): string {
+  const value = readModelField(model, key);
+  return typeof value === "string" ? value : "";
+}
+
 /** Converts tools to deterministic OpenAI Responses function tool definitions. */
 export function convertResponsesTools(
   tools: Tool[],
@@ -58,7 +77,9 @@ export function convertResponsesTools(
       parameters = normalizeOpenAIStrictToolParameters(
         tool.parameters,
         strict === true,
-        options?.model?.compat as OpenAIToolSchemaCompat,
+        (options?.model ? readModelField(options.model, "compat") : undefined) as
+          | OpenAIToolSchemaCompat
+          | undefined,
       ) as Record<string, unknown>;
     } catch {
       continue;
@@ -151,18 +172,20 @@ function resolveResponsesStrictToolFlag(
   const strict = resolveOpenAIStrictToolFlagForInventory(tools, strictSetting);
   if (strictSetting === true && strict === false && model && log.isEnabled("debug", "any")) {
     const diagnostics = findOpenAIStrictToolSchemaDiagnostics(tools);
-    if (shouldLogStrictToolDowngradeDiagnostic(diagnostics, model)) {
+    const modelProvider = readModelStringField(model, "provider");
+    const modelId = readModelStringField(model, "id");
+    if (shouldLogStrictToolDowngradeDiagnostic(diagnostics, modelProvider, modelId)) {
       const sample = diagnostics.slice(0, 5).map((entry) => ({
         tool: entry.toolName ?? `tool[${entry.toolIndex}]`,
         violations: entry.violations.slice(0, 8),
       }));
       log.debug(
         `OpenAI responses tool schema strict mode downgraded to strict=false for ` +
-          `${model.provider ?? "unknown"}/${model.id ?? "unknown"} because ` +
+          `${modelProvider || "unknown"}/${modelId || "unknown"} because ` +
           `${diagnostics.length} tool schema(s) are not strict-compatible`,
         {
-          provider: model.provider,
-          model: model.id,
+          provider: modelProvider,
+          model: modelId,
           incompatibleToolCount: diagnostics.length,
           sample,
         },
@@ -174,14 +197,15 @@ function resolveResponsesStrictToolFlag(
 
 function shouldLogStrictToolDowngradeDiagnostic(
   diagnostics: ReturnType<typeof findOpenAIStrictToolSchemaDiagnostics>,
-  model: Model,
+  provider: string,
+  model: string,
 ): boolean {
   // Strict downgrade diagnostics can repeat per turn; hash details and cap memory.
   const key = createHash("sha256")
     .update(
       JSON.stringify({
-        provider: model.provider,
-        model: model.id,
+        provider,
+        model,
         diagnostics: diagnostics.map((entry) => ({
           toolIndex: entry.toolIndex,
           toolName: entry.toolName ?? null,
