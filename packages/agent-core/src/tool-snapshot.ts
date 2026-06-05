@@ -1,3 +1,4 @@
+import { formatAgentFailureErrorMessage } from "./failure-message.js";
 import type { AgentTool } from "./types.js";
 
 const AGENT_TOOL_SCHEMA_MAX_DEPTH = 24;
@@ -23,7 +24,7 @@ function describeAgentToolSnapshotError(error: unknown): string {
   if (error instanceof InvalidAgentToolSnapshotError) {
     return error.message;
   }
-  return error instanceof Error ? error.message : String(error);
+  return formatAgentFailureErrorMessage(error);
 }
 
 function readToolStringField(
