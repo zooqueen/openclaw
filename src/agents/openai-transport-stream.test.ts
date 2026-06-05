@@ -498,12 +498,28 @@ describe("openai transport stream", () => {
     const previous = process.env.OPENCLAW_DEBUG_MODEL_PAYLOAD;
     process.env.OPENCLAW_DEBUG_MODEL_PAYLOAD = "tools";
     try {
+      const unreadableToolName = {
+        type: "function",
+        get name(): string {
+          throw new Error("revoked name");
+        },
+      };
+      const unreadableFunctionName = {
+        type: "function",
+        function: {
+          get name(): string {
+            throw new Error("revoked function name");
+          },
+        },
+      };
       expect(
         testing.summarizeResponsesTools([
+          unreadableToolName,
           { type: "function", name: "exec" },
+          unreadableFunctionName,
           { type: "function", function: { name: "wait" } },
         ]),
-      ).toBe("count=2 names=exec,wait");
+      ).toBe("count=4 names=function,exec,function,wait");
     } finally {
       if (previous === undefined) {
         delete process.env.OPENCLAW_DEBUG_MODEL_PAYLOAD;
@@ -537,10 +553,26 @@ describe("openai transport stream", () => {
   });
 
   it("enforces the code mode responses tool surface before requests leave OpenClaw", () => {
+    const unreadableToolName = {
+      type: "function",
+      get name(): string {
+        throw new Error("revoked name");
+      },
+    };
+    const unreadableFunctionName = {
+      type: "function",
+      function: {
+        get name(): string {
+          throw new Error("revoked function name");
+        },
+      },
+    };
     const payload = {
       tools: [
+        unreadableToolName,
         { type: "function", name: "exec" },
         { type: "web_search_preview" },
+        unreadableFunctionName,
         { type: "function", function: { name: "wait" } },
       ],
     };

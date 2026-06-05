@@ -367,14 +367,19 @@ function readResponsesToolDisplayName(tool: unknown): string {
     return "";
   }
   const record = tool as Record<string, unknown>;
-  if (typeof record.name === "string") {
-    return record.name;
+  const name = readResponsesPayloadToolField(record, "name");
+  if (typeof name === "string") {
+    return name;
   }
-  const fn = record.function;
-  if (fn && typeof fn === "object" && typeof (fn as Record<string, unknown>).name === "string") {
-    return (fn as Record<string, unknown>).name as string;
+  const fn = readResponsesPayloadToolField(record, "function");
+  if (fn && typeof fn === "object") {
+    const functionName = readResponsesPayloadToolField(fn as Record<string, unknown>, "name");
+    if (typeof functionName === "string") {
+      return functionName;
+    }
   }
-  return typeof record.type === "string" ? record.type : "";
+  const type = readResponsesPayloadToolField(record, "type");
+  return typeof type === "string" ? type : "";
 }
 
 function summarizeResponsesTools(tools: unknown): string {
@@ -393,11 +398,24 @@ function responsesPayloadToolName(tool: unknown): string | undefined {
   if (!isRecord(tool)) {
     return undefined;
   }
-  if (typeof tool.name === "string") {
-    return tool.name;
+  const name = readResponsesPayloadToolField(tool, "name");
+  if (typeof name === "string") {
+    return name;
   }
-  const fn = tool.function;
-  return isRecord(fn) && typeof fn.name === "string" ? fn.name : undefined;
+  const fn = readResponsesPayloadToolField(tool, "function");
+  if (!isRecord(fn)) {
+    return undefined;
+  }
+  const functionName = readResponsesPayloadToolField(fn, "name");
+  return typeof functionName === "string" ? functionName : undefined;
+}
+
+function readResponsesPayloadToolField(tool: Record<string, unknown>, field: string): unknown {
+  try {
+    return tool[field];
+  } catch {
+    return undefined;
+  }
 }
 
 function enforceCodeModeResponsesToolSurface(payload: unknown): void {
