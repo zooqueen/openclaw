@@ -179,14 +179,45 @@ type OpenAIStrictToolSchemaDiagnostic = {
   violations: string[];
 };
 
+function readOpenAIToolDiagnosticName(tool: ToolWithParameters): string | undefined {
+  try {
+    const name = tool.name;
+    return typeof name === "string" && name ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readOpenAIToolParameters(
+  tool: ToolWithParameters,
+): { ok: true; parameters: unknown } | { ok: false } {
+  try {
+    return { ok: true, parameters: tool.parameters };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** Returns strict-schema violation paths for each incompatible tool definition. */
 export function findOpenAIStrictToolSchemaDiagnostics(
   tools: readonly ToolWithParameters[],
 ): OpenAIStrictToolSchemaDiagnostic[] {
   return tools.flatMap((tool, toolIndex) => {
+    const toolName = readOpenAIToolDiagnosticName(tool);
+    const toolLabel = toolName ?? `tool[${toolIndex}]`;
+    const parameters = readOpenAIToolParameters(tool);
+    if (!parameters.ok) {
+      return [
+        {
+          toolIndex,
+          ...(toolName ? { toolName } : {}),
+          violations: [`${toolLabel}.parameters is unreadable`],
+        },
+      ];
+    }
     const violations = findStrictOpenAIJsonSchemaViolations(
-      normalizeStrictOpenAIJsonSchema(tool.parameters),
-      `${typeof tool.name === "string" && tool.name ? tool.name : `tool[${toolIndex}]`}.parameters`,
+      normalizeStrictOpenAIJsonSchema(parameters.parameters),
+      `${toolLabel}.parameters`,
     );
     if (violations.length === 0) {
       return [];
@@ -194,7 +225,7 @@ export function findOpenAIStrictToolSchemaDiagnostics(
     return [
       {
         toolIndex,
-        ...(typeof tool.name === "string" && tool.name ? { toolName: tool.name } : {}),
+        ...(toolName ? { toolName } : {}),
         violations,
       },
     ];
@@ -322,5 +353,8 @@ export function resolveOpenAIStrictToolFlagForInventory(
   if (strict !== true) {
     return strict === false ? false : undefined;
   }
-  return tools.every((tool) => isStrictOpenAIJsonSchemaCompatible(tool.parameters));
+  return tools.every((tool) => {
+    const parameters = readOpenAIToolParameters(tool);
+    return parameters.ok && isStrictOpenAIJsonSchemaCompatible(parameters.parameters);
+  });
 }

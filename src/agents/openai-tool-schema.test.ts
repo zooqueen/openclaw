@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearOpenAIToolSchemaCacheForTest,
+  findOpenAIStrictToolSchemaDiagnostics,
   isStrictOpenAIJsonSchemaCompatible,
   normalizeStrictOpenAIJsonSchema,
   resolveOpenAIStrictToolFlagForInventory,
@@ -58,6 +59,53 @@ describe("OpenAI strict tool schema normalization", () => {
     expect(
       resolveOpenAIStrictToolFlagForInventory([{ name: "write", parameters: schema }], true),
     ).toBe(false);
+  });
+
+  it("keeps strict-schema diagnostics stable when a tool name is unreadable", () => {
+    const tool = {
+      parameters: {
+        type: "object",
+        properties: {
+          metadata: { type: "object" },
+        },
+        required: ["metadata"],
+      },
+    };
+    Object.defineProperty(tool, "name", {
+      get: () => {
+        throw new Error("revoked name");
+      },
+    });
+
+    expect(findOpenAIStrictToolSchemaDiagnostics([tool])).toEqual([
+      {
+        toolIndex: 0,
+        violations: [
+          "tool[0].parameters.properties.metadata.additionalProperties",
+          "tool[0].parameters.properties.metadata.required",
+        ],
+      },
+    ]);
+  });
+
+  it("treats unreadable tool parameters as strict-schema incompatible", () => {
+    const tool = {
+      name: "broken_schema",
+    } as { name: string; parameters: unknown };
+    Object.defineProperty(tool, "parameters", {
+      get: () => {
+        throw new Error("revoked parameters");
+      },
+    });
+
+    expect(resolveOpenAIStrictToolFlagForInventory([tool], true)).toBe(false);
+    expect(findOpenAIStrictToolSchemaDiagnostics([tool])).toEqual([
+      {
+        toolIndex: 0,
+        toolName: "broken_schema",
+        violations: ["broken_schema.parameters is unreadable"],
+      },
+    ]);
   });
 
   it("normalizes truly empty MCP tool schema {} for strict mode", () => {
