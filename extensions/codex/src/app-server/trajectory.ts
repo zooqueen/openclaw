@@ -28,9 +28,11 @@ type CodexTrajectoryInit = {
   cwd: string;
   developerInstructions?: string;
   prompt?: string;
-  tools?: Array<{ name?: string; description?: string; inputSchema?: unknown }>;
+  tools?: TrajectoryToolInput[];
   env?: NodeJS.ProcessEnv;
 };
+
+type TrajectoryToolInput = { name?: unknown; description?: unknown; inputSchema?: unknown };
 
 const SENSITIVE_FIELD_RE = /(?:authorization|cookie|credential|key|password|passwd|secret|token)/iu;
 const PRIVATE_PAYLOAD_FIELD_RE = /(?:image|screenshot|attachment|fileData|dataUri)/iu;
@@ -298,26 +300,57 @@ function resolveContainedPath(baseDir: string, fileName: string): string {
 }
 
 function toTrajectoryToolDefinitions(
-  tools: Array<{ name?: string; description?: string; inputSchema?: unknown }> | undefined,
+  tools: TrajectoryToolInput[] | undefined,
 ): Array<{ name: string; description?: string; parameters?: unknown }> | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
   }
   return tools
     .flatMap((tool) => {
-      const name = tool.name?.trim();
+      const name = readTrajectoryToolName(tool);
       if (!name) {
         return [];
       }
+      const description = readTrajectoryToolDescription(tool);
+      const inputSchema = readTrajectoryToolField(tool, "inputSchema");
       return [
         {
           name,
-          description: tool.description,
-          parameters: sanitizeValue(tool.inputSchema),
+          ...(description ? { description } : {}),
+          parameters: sanitizeTrajectoryToolSchema(inputSchema),
         },
       ];
     })
     .toSorted((left, right) => left.name.localeCompare(right.name));
+}
+
+function readTrajectoryToolField(
+  tool: TrajectoryToolInput,
+  field: keyof TrajectoryToolInput,
+): unknown {
+  try {
+    return tool[field];
+  } catch {
+    return undefined;
+  }
+}
+
+function readTrajectoryToolName(tool: TrajectoryToolInput): string {
+  const name = readTrajectoryToolField(tool, "name");
+  return typeof name === "string" ? name.trim() : "";
+}
+
+function readTrajectoryToolDescription(tool: TrajectoryToolInput): string {
+  const description = readTrajectoryToolField(tool, "description");
+  return typeof description === "string" ? description : "";
+}
+
+function sanitizeTrajectoryToolSchema(value: unknown): unknown {
+  try {
+    return sanitizeValue(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function sanitizeValue(value: unknown, depth = 0, key = ""): unknown {

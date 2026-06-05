@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createCodexTrajectoryRecorder,
+  recordCodexTrajectoryContext,
   resolveCodexTrajectoryAppendFlags,
   resolveCodexTrajectoryPointerFlags,
 } from "./trajectory.js";
@@ -118,6 +119,70 @@ describe("Codex trajectory recorder", () => {
     expect(parsed.provider).toBe("openai");
     expect(parsed.modelApi).toBe("openai-chatgpt-responses");
     expect(parsed.modelId).toBe("gpt-5.5");
+  });
+
+  it("records context tool definitions without trusting tool metadata getters", async () => {
+    const tmpDir = makeTempDir();
+    const sessionFile = path.join(tmpDir, "session.jsonl");
+    const recorder = createCodexTrajectoryRecorder({
+      cwd: tmpDir,
+      attempt: {
+        sessionFile,
+        sessionId: "session-1",
+        sessionKey: "agent:main:session-1",
+        runId: "run-1",
+        provider: "codex",
+        modelId: "gpt-5.4",
+        model: { api: "responses" },
+      } as never,
+      env: {},
+    });
+    const unreadableNameTool = {
+      get name(): string {
+        throw new Error("name exploded");
+      },
+      description: "hidden",
+      inputSchema: { type: "object" },
+    };
+    const unreadableMetadataTool = {
+      name: "safe-tool",
+      get description(): string {
+        throw new Error("description exploded");
+      },
+      get inputSchema(): unknown {
+        throw new Error("schema exploded");
+      },
+    };
+    const healthyTool = {
+      name: "message",
+      description: "Send a message",
+      inputSchema: { type: "object", properties: { text: { type: "string" } } },
+    };
+
+    const trajectoryRecorder = expectTrajectoryRecorder(recorder);
+    recordCodexTrajectoryContext(trajectoryRecorder, {
+      cwd: tmpDir,
+      attempt: {
+        sessionFile,
+        sessionId: "session-1",
+        sessionKey: "agent:main:session-1",
+        runId: "run-1",
+        provider: "codex",
+        modelId: "gpt-5.4",
+        model: { api: "responses" },
+        prompt: "hello",
+      } as never,
+      tools: [unreadableNameTool, unreadableMetadataTool, healthyTool],
+    });
+    await trajectoryRecorder.flush();
+
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, "session.trajectory.jsonl"), "utf8"),
+    );
+    expect(parsed.data?.tools).toStrictEqual([
+      { name: "message", description: "Send a message", parameters: healthyTool.inputSchema },
+      { name: "safe-tool" },
+    ]);
   });
 
   it("sanitizes session ids when resolving an override directory", async () => {
