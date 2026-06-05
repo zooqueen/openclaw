@@ -52,6 +52,17 @@ export interface ResourceLoader {
   reload(): Promise<void>;
 }
 
+function describeResourceLoaderError(error: unknown, fallback: string): string {
+  try {
+    if (error instanceof Error) {
+      return error.message || error.name || fallback;
+    }
+    return String(error);
+  } catch {
+    return fallback;
+  }
+}
+
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {
   if (!input) {
     return undefined;
@@ -895,7 +906,7 @@ export class DefaultResourceLoader implements ResourceLoader {
         );
         extensions.push(extension);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "failed to load extension";
+        const message = describeResourceLoaderError(error, "failed to load extension");
         errors.push({ path: extensionPath, error: message });
       }
     }

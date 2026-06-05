@@ -34,4 +34,42 @@ describe("DefaultResourceLoader", () => {
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  it("reports hostile inline extension factory failures without crashing reload", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openclaw-resource-loader-"));
+    try {
+      const hostileError = new Error("inline factory failed");
+      Object.defineProperty(hostileError, "message", {
+        get() {
+          throw new Error("message denied");
+        },
+      });
+      const loader = new DefaultResourceLoader({
+        cwd: root,
+        agentDir: root,
+        noExtensions: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+        noContextFiles: true,
+        extensionFactories: [
+          () => {
+            throw hostileError;
+          },
+        ],
+      });
+
+      await loader.reload();
+
+      expect(loader.getExtensions().extensions).toEqual([]);
+      expect(loader.getExtensions().errors).toEqual([
+        {
+          path: "<inline:1>",
+          error: "failed to load extension",
+        },
+      ]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
 });
