@@ -36,27 +36,48 @@ export function filterToolNamesByMessageProvider(
   return toolNames.filter((toolName) => !deniedSet.has(toolName));
 }
 
+function snapshotReadableToolNames<TTool extends { name: string }>(
+  tools: readonly TTool[],
+): Array<{ tool: TTool; name: string }> {
+  const snapshots: Array<{ tool: TTool; name: string }> = [];
+  for (const tool of tools) {
+    let name: unknown;
+    try {
+      name = tool.name;
+    } catch {
+      continue;
+    }
+    if (typeof name === "string") {
+      snapshots.push({ tool, name });
+    }
+  }
+  return snapshots;
+}
+
 /** Applies message-provider filtering while preserving duplicate tool entries. */
 export function filterToolsByMessageProvider<TTool extends { name: string }>(
   tools: readonly TTool[],
   messageProvider?: string,
 ): TTool[] {
+  const readableTools = snapshotReadableToolNames(tools);
   const filteredToolNames = filterToolNamesByMessageProvider(
-    tools.map((tool) => tool.name),
+    readableTools.map((tool) => tool.name),
     messageProvider,
   );
   const remainingCounts = new Map<string, number>();
   for (const toolName of filteredToolNames) {
     remainingCounts.set(toolName, (remainingCounts.get(toolName) ?? 0) + 1);
   }
-  return tools.filter((tool) => {
+  const filteredTools: TTool[] = [];
+  for (const { tool, name } of readableTools) {
     // Counted matching preserves the original order and duplicate instances
     // after name-level policy filtering.
-    const remaining = remainingCounts.get(tool.name) ?? 0;
+    const remaining = remainingCounts.get(name) ?? 0;
     if (remaining <= 0) {
-      return false;
+      continue;
     }
-    remainingCounts.set(tool.name, remaining - 1);
-    return true;
-  });
+    remainingCounts.set(name, remaining - 1);
+    filteredTools.push(tool);
+  }
+  return filteredTools;
 }
