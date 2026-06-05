@@ -10,6 +10,28 @@ export function resolveNonNegativeMaxTokensParam(value: unknown): number | undef
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function readMaxTokensParamValue(
+  params: Record<string, unknown>,
+  key: (typeof MAX_TOKENS_PARAM_KEYS)[number],
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(params, key);
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function removeMaxTokensParam(
+  params: Record<string, unknown>,
+  key: (typeof MAX_TOKENS_PARAM_KEYS)[number],
+): void {
+  try {
+    delete params[key];
+  } catch {
+    throw new Error(`max-token parameter could not be removed: ${key}`);
+  }
+  if (Object.hasOwn(params, key)) {
+    throw new Error(`max-token parameter could not be removed: ${key}`);
+  }
+}
+
 /** Resolve the first supported max-token parameter present in a params object. */
 export function resolveMaxTokensParam(
   params: Record<string, unknown> | undefined,
@@ -18,7 +40,7 @@ export function resolveMaxTokensParam(
     return undefined;
   }
   for (const key of MAX_TOKENS_PARAM_KEYS) {
-    const resolved = resolveNonNegativeMaxTokensParam(params[key]);
+    const resolved = resolveNonNegativeMaxTokensParam(readMaxTokensParamValue(params, key));
     if (resolved !== undefined) {
       return resolved;
     }
@@ -47,7 +69,12 @@ export function canonicalizeMaxTokensParam(params: {
   // Delete every spelling before writing the canonical key so callers cannot
   // send conflicting provider aliases in one payload.
   for (const key of MAX_TOKENS_PARAM_KEYS) {
-    delete params.merged[key];
+    removeMaxTokensParam(params.merged, key);
   }
-  params.merged.maxTokens = resolved;
+  Object.defineProperty(params.merged, "maxTokens", {
+    configurable: true,
+    enumerable: true,
+    value: resolved,
+    writable: true,
+  });
 }
