@@ -15,6 +15,7 @@ import {
   type VoiceModelCapabilities,
   type VoiceModelProvider,
 } from "../../packages/speech-core/voice-models.js";
+import { formatErrorMessage } from "../infra/errors.js";
 import type { PluginDiagnostic } from "./manifest-types.js";
 import { projectProviderCatalogResultToUnifiedTextRows } from "./provider-catalog-unified-text.js";
 import type { PluginRecord, PluginRegistry } from "./registry-types.js";
@@ -59,6 +60,22 @@ function mergeModelCatalogHooks(
   };
 }
 
+function snapshotModelCatalogProvider(params: {
+  provider: UnifiedModelCatalogProviderPlugin;
+  providerId: string;
+  kinds: readonly UnifiedModelCatalogProviderPlugin["kinds"][number][];
+}): UnifiedModelCatalogProviderPlugin {
+  const { provider, providerId, kinds } = params;
+  const staticCatalog = provider.staticCatalog;
+  const liveCatalog = provider.liveCatalog;
+  return {
+    provider: providerId,
+    kinds,
+    ...(staticCatalog ? { staticCatalog: (ctx) => staticCatalog.call(provider, ctx) } : {}),
+    ...(liveCatalog ? { liveCatalog: (ctx) => liveCatalog.call(provider, ctx) } : {}),
+  };
+}
+
 /** Creates handlers that register plugin model catalog providers into a registry. */
 export function createModelCatalogRegistrationHandlers(params: {
   registry: PluginRegistry;
@@ -68,7 +85,27 @@ export function createModelCatalogRegistrationHandlers(params: {
     record: PluginRecord,
     provider: UnifiedModelCatalogProviderPlugin,
   ) => {
-    const providerId = normalizeOptionalString(provider.provider) ?? "";
+    let providerId = "";
+    let kinds: readonly UnifiedModelCatalogProviderPlugin["kinds"][number][] | undefined;
+    let providerSnapshot: UnifiedModelCatalogProviderPlugin | undefined;
+    try {
+      const rawProviderId = provider.provider;
+      const rawKinds = provider.kinds;
+      providerId = normalizeOptionalString(rawProviderId) ?? "";
+      kinds = Array.isArray(rawKinds) ? uniqueValues(rawKinds) : undefined;
+      providerSnapshot =
+        providerId && kinds && kinds.length > 0
+          ? snapshotModelCatalogProvider({ provider, providerId, kinds })
+          : undefined;
+    } catch (error) {
+      params.pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `model catalog provider registration has unreadable fields: ${formatErrorMessage(error)}`,
+      });
+      return;
+    }
     if (!providerId) {
       params.pushDiagnostic({
         level: "error",
@@ -78,7 +115,7 @@ export function createModelCatalogRegistrationHandlers(params: {
       });
       return;
     }
-    if (!provider.kinds || provider.kinds.length === 0) {
+    if (!kinds || kinds.length === 0 || !providerSnapshot) {
       params.pushDiagnostic({
         level: "error",
         pluginId: record.id,
@@ -99,28 +136,27 @@ export function createModelCatalogRegistrationHandlers(params: {
       });
       return;
     }
-    const normalizedKinds = uniqueValues(provider.kinds);
     const samePluginOverlapping = params.registry.modelCatalogProviders.find(
       (entry) =>
         entry.provider.provider === providerId &&
         entry.pluginId === record.id &&
-        entry.provider.kinds.some((kind) => normalizedKinds.includes(kind)),
+        entry.provider.kinds.some((kind) => kinds.includes(kind)),
     );
     if (samePluginOverlapping) {
       samePluginOverlapping.provider = {
         ...samePluginOverlapping.provider,
-        ...provider,
+        ...providerSnapshot,
         provider: providerId,
-        kinds: uniqueValues([...samePluginOverlapping.provider.kinds, ...normalizedKinds]),
+        kinds: uniqueValues([...samePluginOverlapping.provider.kinds, ...kinds]),
         staticCatalog: mergeModelCatalogHooks(
           "static",
           samePluginOverlapping.provider.staticCatalog,
-          provider.staticCatalog,
+          providerSnapshot.staticCatalog,
         ),
         liveCatalog: mergeModelCatalogHooks(
           "live",
           samePluginOverlapping.provider.liveCatalog,
-          provider.liveCatalog,
+          providerSnapshot.liveCatalog,
         ),
       };
       return;
@@ -128,11 +164,7 @@ export function createModelCatalogRegistrationHandlers(params: {
     params.registry.modelCatalogProviders.push({
       pluginId: record.id,
       pluginName: record.name,
-      provider: {
-        ...provider,
-        provider: providerId,
-        kinds: normalizedKinds,
-      },
+      provider: providerSnapshot,
       source: record.source,
       rootDir: record.rootDir,
     });
