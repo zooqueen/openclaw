@@ -79,6 +79,25 @@ const RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS = [
   "tui.editor.deleteToLineEnd",
 ] as const;
 
+function describeExtensionThrownValue(err: unknown): string {
+  try {
+    if (err instanceof Error) {
+      return err.message || err.name || "Unknown extension error";
+    }
+    return String(err);
+  } catch {
+    return "Unknown extension error";
+  }
+}
+
+function readExtensionErrorStack(err: unknown): string | undefined {
+  try {
+    return err instanceof Error ? err.stack : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type BuiltInKeyBindings = Partial<Record<KeyId, { keybinding: string; restrictOverride: boolean }>>;
 
 const buildBuiltinKeybindings = (resolvedKeybindings: KeybindingsConfig): BuiltInKeyBindings => {
@@ -335,8 +354,8 @@ export class ExtensionRunner {
         this.emitError({
           extensionPath,
           event: "register_provider",
-          error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
+          error: describeExtensionThrownValue(err),
+          stack: readExtensionErrorStack(err),
         });
       }
     }
@@ -734,13 +753,11 @@ export class ExtensionRunner {
             }
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: event.type,
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -782,13 +799,11 @@ export class ExtensionRunner {
           currentMessage = handlerResult.message;
           modified = true;
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "message_end",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -830,13 +845,11 @@ export class ExtensionRunner {
             modified = true;
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "tool_result",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -864,13 +877,26 @@ export class ExtensionRunner {
       }
 
       for (const handler of handlers) {
-        const handlerResult = await handler(event, ctx);
+        try {
+          const handlerResult = await handler(event, ctx);
 
-        if (handlerResult) {
-          result = handlerResult as ToolCallEventResult;
-          if (result.block) {
-            return result;
+          if (handlerResult) {
+            result = handlerResult as ToolCallEventResult;
+            if (result.block) {
+              return result;
+            }
           }
+        } catch (err) {
+          this.emitError({
+            extensionPath: ext.path,
+            event: "tool_call",
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
+          });
+          return {
+            block: true,
+            reason: "Extension failed, blocking execution",
+          };
         }
       }
     }
@@ -894,13 +920,11 @@ export class ExtensionRunner {
             return handlerResult as UserBashEventResult;
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "user_bash",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -928,13 +952,11 @@ export class ExtensionRunner {
             currentMessages = (handlerResult as ContextEventResult).messages!;
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "context",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -964,13 +986,11 @@ export class ExtensionRunner {
             currentPayload = handlerResult;
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "before_provider_request",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -1025,13 +1045,11 @@ export class ExtensionRunner {
             }
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "before_agent_start",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -1088,13 +1106,11 @@ export class ExtensionRunner {
             );
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const stack = err instanceof Error ? err.stack : undefined;
           this.emitError({
             extensionPath: ext.path,
             event: "resources_discover",
-            error: message,
-            stack,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
@@ -1134,8 +1150,8 @@ export class ExtensionRunner {
           this.emitError({
             extensionPath: ext.path,
             event: "input",
-            error: err instanceof Error ? err.message : String(err),
-            stack: err instanceof Error ? err.stack : undefined,
+            error: describeExtensionThrownValue(err),
+            stack: readExtensionErrorStack(err),
           });
         }
       }
