@@ -2190,6 +2190,38 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     });
   };
 
+  const readTrustedToolPolicyFields = (
+    record: PluginRecord,
+    policy: PluginTrustedToolPolicyRegistration,
+  ):
+    | {
+        id: unknown;
+        description: unknown;
+        evaluate: unknown;
+      }
+    | undefined => {
+    let id: unknown;
+    try {
+      id = policy.id;
+      return {
+        id,
+        description: policy.description,
+        evaluate: policy.evaluate,
+      };
+    } catch (error) {
+      const normalizedId = normalizeOptionalHostHookString(id);
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message:
+          `trusted tool policy registration has unreadable fields` +
+          `${normalizedId ? `: ${normalizedId}` : ""}: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
   const registerTrustedToolPolicy = (
     record: PluginRecord,
     policy: PluginTrustedToolPolicyRegistration,
@@ -2203,9 +2235,14 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       });
       return;
     }
-    const id = normalizeHostHookString(policy.id);
-    const description = normalizeHostHookString(policy.description);
-    if (!id || !description || typeof policy.evaluate !== "function") {
+    const fields = readTrustedToolPolicyFields(record, policy);
+    if (!fields) {
+      return;
+    }
+    const id = normalizeHostHookString(fields.id);
+    const description = normalizeHostHookString(fields.description);
+    const evaluate = fields.evaluate;
+    if (!id || !description || typeof evaluate !== "function") {
       pushDiagnostic({
         level: "error",
         pluginId: record.id,
@@ -2228,9 +2265,9 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       pluginId: record.id,
       pluginName: record.name,
       policy: {
-        ...policy,
         id,
         description,
+        evaluate: evaluate as PluginTrustedToolPolicyRegistration["evaluate"],
       },
       source: record.source,
       rootDir: record.rootDir,
