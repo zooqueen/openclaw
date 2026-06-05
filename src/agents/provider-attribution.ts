@@ -137,7 +137,13 @@ function readCompatBoolean(
   if (!compat || typeof compat !== "object") {
     return undefined;
   }
-  return asBoolean((compat as Record<string, unknown>)[key]);
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(compat, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? asBoolean(descriptor.value) : undefined;
 }
 
 const OPENCLAW_ATTRIBUTION_PRODUCT = "OpenClaw";

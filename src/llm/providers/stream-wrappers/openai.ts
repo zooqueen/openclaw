@@ -43,13 +43,57 @@ type OpenAIResponsesReplayOptions = Parameters<StreamFn>[2] & {
 };
 export { resolveOpenAITextVerbosity };
 
+function readModelField(model: unknown, field: string): unknown {
+  if (!model || typeof model !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, field);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelString(model: unknown, field: string): string | undefined {
+  return readStringValue(readModelField(model, field));
+}
+
+function readNormalizedModelString(model: unknown, field: string): string | undefined {
+  return normalizeOptionalLowercaseString(readModelField(model, field));
+}
+
+function readModelCompat(model: unknown): Record<string, unknown> | undefined {
+  const compat = readModelField(model, "compat");
+  return compat && typeof compat === "object" ? (compat as Record<string, unknown>) : undefined;
+}
+
+function readCompatField(model: unknown, field: string): unknown {
+  const compat = readModelCompat(model);
+  if (!compat) {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(compat, field);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function formatModelRef(model: unknown): string {
+  return `${readModelString(model, "provider") ?? "unknown"}/${readModelString(model, "id") ?? "unknown"}`;
+}
+
 function resolveOpenAITextVerbosityForModel(
   model: { api?: unknown; id?: unknown; provider?: unknown },
   verbosity: OpenAITextVerbosity,
 ): OpenAITextVerbosity {
-  const api = normalizeOptionalLowercaseString(model.api);
-  const provider = normalizeOptionalLowercaseString(model.provider);
-  const id = normalizeOptionalLowercaseString(model.id);
+  const api = readNormalizedModelString(model, "api");
+  const provider = readNormalizedModelString(model, "provider");
+  const id = readNormalizedModelString(model, "id");
   if (api === "openai-responses" && provider === "openai" && id === "chat-latest") {
     return "medium";
   }
@@ -62,14 +106,11 @@ function resolveOpenAIRequestCapabilities(model: {
   baseUrl?: unknown;
   compat?: unknown;
 }) {
-  const compat =
-    model.compat && typeof model.compat === "object"
-      ? (model.compat as { supportsStore?: boolean })
-      : undefined;
+  const compat = readModelCompat(model);
   return resolveProviderRequestPolicyConfig({
-    provider: readStringValue(model.provider),
-    api: readStringValue(model.api),
-    baseUrl: readStringValue(model.baseUrl),
+    provider: readModelString(model, "provider"),
+    api: readModelString(model, "api"),
+    baseUrl: readModelString(model, "baseUrl"),
     compat,
     capability: "llm",
     transport: "stream",
@@ -91,7 +132,7 @@ function shouldUseCodexNativeTransport(model: {
   baseUrl?: unknown;
   compat?: unknown;
 }): boolean {
-  const api = readStringValue(model.api);
+  const api = readModelString(model, "api");
   if (api !== "openai-chatgpt-responses") {
     return false;
   }
@@ -209,8 +250,8 @@ function shouldApplyOpenAIReasoningCompatibility(model: {
   provider?: unknown;
   baseUrl?: unknown;
 }): boolean {
-  const api = readStringValue(model.api);
-  const provider = readStringValue(model.provider);
+  const api = readModelString(model, "api");
+  const provider = readModelString(model, "provider");
   if (!api || !provider) {
     return false;
   }
@@ -221,30 +262,27 @@ function shouldFlattenOpenAICompletionMessages(model: {
   api?: unknown;
   compat?: unknown;
 }): boolean {
-  const compat =
-    model.compat && typeof model.compat === "object"
-      ? (model.compat as { requiresStringContent?: unknown })
-      : undefined;
-  return model.api === "openai-completions" && compat?.requiresStringContent === true;
+  return (
+    readModelString(model, "api") === "openai-completions" &&
+    readCompatField(model, "requiresStringContent") === true
+  );
 }
 
 function shouldStripOpenAICompletionTools(model: { api?: unknown; compat?: unknown }): boolean {
-  const compat =
-    model.compat && typeof model.compat === "object"
-      ? (model.compat as { supportsTools?: unknown })
-      : undefined;
-  return model.api === "openai-completions" && compat?.supportsTools === false;
+  return (
+    readModelString(model, "api") === "openai-completions" &&
+    readCompatField(model, "supportsTools") === false
+  );
 }
 
 function shouldStripOpenAICompletionMessageKeys(model: {
   api?: unknown;
   compat?: unknown;
 }): boolean {
-  const compat =
-    model.compat && typeof model.compat === "object"
-      ? (model.compat as { strictMessageKeys?: unknown })
-      : undefined;
-  return model.api === "openai-completions" && compat?.strictMessageKeys === true;
+  return (
+    readModelString(model, "api") === "openai-completions" &&
+    readCompatField(model, "strictMessageKeys") === true
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -551,11 +589,13 @@ export function createOpenAIThinkingLevelWrapper(
 export function createOpenAIFastModeWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
+    const api = readModelString(model, "api");
+    const provider = readModelString(model, "provider");
     if (
-      (model.api !== "openai-responses" &&
-        model.api !== "openai-chatgpt-responses" &&
-        model.api !== "azure-openai-responses") ||
-      model.provider !== "openai"
+      (api !== "openai-responses" &&
+        api !== "openai-chatgpt-responses" &&
+        api !== "azure-openai-responses") ||
+      provider !== "openai"
     ) {
       return underlying(model, context, options);
     }
@@ -600,12 +640,13 @@ export function createOpenAITextVerbosityWrapper(
 ): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
-    if (model.api !== "openai-responses" && model.api !== "openai-chatgpt-responses") {
+    const api = readModelString(model, "api");
+    if (api !== "openai-responses" && api !== "openai-chatgpt-responses") {
       return underlying(model, context, options);
     }
     const resolvedVerbosity = resolveOpenAITextVerbosityForModel(model, verbosity);
     const shouldOverrideExistingVerbosity =
-      model.api === "openai-chatgpt-responses" || resolvedVerbosity !== verbosity;
+      api === "openai-chatgpt-responses" || resolvedVerbosity !== verbosity;
     const originalOnPayload = options?.onPayload;
     return underlying(model, context, {
       ...options,
@@ -638,9 +679,7 @@ export function createCodexNativeWebSearchWrapper(
     ) {
       emitModelTransportDebug(
         log,
-        `skipping Codex native web search because code mode owns the model tool surface for ${
-          model.provider ?? "unknown"
-        }/${model.id ?? "unknown"}`,
+        `skipping Codex native web search because code mode owns the model tool surface for ${formatModelRef(model)}`,
       );
       const originalOnPayload = options?.onPayload;
       const codeModeOptions: OpenClawSimpleStreamOptions = {
@@ -662,26 +701,22 @@ export function createCodexNativeWebSearchWrapper(
 
     const activation = resolveCodexNativeSearchActivation({
       config: params.config,
-      modelProvider: readStringValue(model.provider),
-      modelApi: readStringValue(model.api),
+      modelProvider: readModelString(model, "provider"),
+      modelApi: readModelString(model, "api"),
       agentDir: params.agentDir,
     });
 
     if (activation.state !== "native_active") {
       if (activation.codexNativeEnabled) {
         log.debug(
-          `skipping Codex native web search (${activation.inactiveReason ?? "inactive"}) for ${
-            model.provider ?? "unknown"
-          }/${model.id ?? "unknown"}`,
+          `skipping Codex native web search (${activation.inactiveReason ?? "inactive"}) for ${formatModelRef(model)}`,
         );
       }
       return underlying(model, context, options);
     }
 
     log.debug(
-      `activating Codex native web search (${activation.codexMode}) for ${
-        model.provider ?? "unknown"
-      }/${model.id ?? "unknown"}`,
+      `activating Codex native web search (${activation.codexMode}) for ${formatModelRef(model)}`,
     );
 
     const originalOnPayload = options?.onPayload;
@@ -739,8 +774,8 @@ export function createOpenAIAttributionHeadersWrapper(
       ...options,
       headers: resolveProviderRequestPolicyConfig({
         provider: attributionProvider,
-        api: readStringValue(model.api),
-        baseUrl: readStringValue(model.baseUrl),
+        api: readModelString(model, "api"),
+        baseUrl: readModelString(model, "baseUrl"),
         capability: "llm",
         transport: "stream",
         callerHeaders: options?.headers,

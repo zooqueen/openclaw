@@ -6,6 +6,28 @@ import { isOpenRouterAnthropicModelRef } from "../../llm/providers/stream-wrappe
 import { testing as extraParamsTesting, applyExtraParamsToAgent } from "./extra-params.js";
 import { resolveCacheRetention } from "./prompt-cache-retention.js";
 
+function createEmptyStreamResult(): ReturnType<StreamFn> {
+  return {
+    push: vi.fn(),
+    result: vi.fn(async () => undefined),
+    [Symbol.asyncIterator]: vi.fn(async function* () {
+      // empty stream
+    }),
+  };
+}
+
+function createOptionsCaptureAgent(): {
+  agent: { streamFn: StreamFn };
+  calls: Array<Record<string, unknown> | undefined>;
+} {
+  const calls: Array<Record<string, unknown> | undefined> = [];
+  const streamFn = vi.fn((_model, _context, options) => {
+    calls.push(options);
+    return createEmptyStreamResult();
+  }) as unknown as StreamFn;
+  return { agent: { streamFn }, calls };
+}
+
 function applyAndExpectWrapped(params: {
   cfg?: Parameters<typeof applyExtraParamsToAgent>[1];
   extraParamsOverride?: Parameters<typeof applyExtraParamsToAgent>[4];
@@ -168,6 +190,131 @@ describe("cacheRetention default behavior", () => {
       modelId: "claude-3-sonnet",
       provider: "anthropic",
     });
+  });
+
+  it("ignores hostile setup-time model metadata while resolving cache retention", () => {
+    const model = {};
+    Object.defineProperty(model, "api", {
+      enumerable: true,
+      get() {
+        throw new Error("model api getter should not run");
+      },
+    });
+    Object.defineProperty(model, "id", {
+      enumerable: true,
+      get() {
+        throw new Error("model id getter should not run");
+      },
+    });
+
+    applyAndExpectWrapped({
+      cfg: {
+        agents: {
+          defaults: {
+            models: {
+              "anthropic/claude-3-sonnet": {
+                params: {
+                  cacheRetention: "long" as const,
+                },
+              },
+            },
+          },
+        },
+      },
+      modelId: "claude-3-sonnet",
+      model: model as Parameters<typeof applyExtraParamsToAgent>[8],
+      provider: "anthropic",
+    });
+  });
+
+  it("ignores hostile call-time model api/id accessors while resolving cache retention", () => {
+    const { agent, calls } = createOptionsCaptureAgent();
+
+    applyExtraParamsToAgent(
+      agent,
+      {
+        agents: {
+          defaults: {
+            models: {
+              "anthropic/claude-3-sonnet": {
+                params: {
+                  cacheRetention: "long" as const,
+                },
+              },
+            },
+          },
+        },
+      },
+      "anthropic",
+      "claude-3-sonnet",
+    );
+
+    const model = { provider: "anthropic" };
+    Object.defineProperty(model, "api", {
+      enumerable: true,
+      get() {
+        throw new Error("call model api getter should not run");
+      },
+    });
+    Object.defineProperty(model, "id", {
+      enumerable: true,
+      get() {
+        throw new Error("call model id getter should not run");
+      },
+    });
+
+    void agent.streamFn(model as never, { messages: [], tools: [] } as never, undefined);
+
+    expect(calls[0]?.cacheRetention).toBe("long");
+  });
+
+  it("ignores hostile supportsPromptCacheKey accessors without crashing", () => {
+    const { agent, calls } = createOptionsCaptureAgent();
+
+    applyExtraParamsToAgent(
+      agent,
+      {
+        agents: {
+          defaults: {
+            models: {
+              "omlx-local/local_model": {
+                params: {
+                  cacheRetention: "long" as const,
+                },
+              },
+            },
+          },
+        },
+      },
+      "omlx-local",
+      "local_model",
+    );
+
+    const compat = {};
+    Object.defineProperty(compat, "supportsPromptCacheKey", {
+      enumerable: true,
+      get() {
+        throw new Error("supportsPromptCacheKey getter should not run");
+      },
+    });
+    const model = {
+      api: "openai-completions",
+      compat,
+      id: "local_model",
+      provider: "omlx-local",
+    };
+
+    void agent.streamFn(
+      model as never,
+      { messages: [], tools: [] } as never,
+      {
+        sessionId: "session-compat",
+      } as never,
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.cacheRetention).toBeUndefined();
+    expect(calls[0]?.sessionId).toBe("session-compat");
   });
 
   it("respects cacheRetention for custom provider with anthropic-messages API", () => {

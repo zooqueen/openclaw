@@ -143,6 +143,66 @@ describe("openai responses payload policy", () => {
     expect(payload).not.toHaveProperty("prompt_cache_retention");
   });
 
+  it("ignores dynamic compat capability accessors", () => {
+    const compat = {};
+    Object.defineProperty(compat, "supportsPromptCacheKey", {
+      enumerable: true,
+      get() {
+        throw new Error("supportsPromptCacheKey getter should not run");
+      },
+    });
+    Object.defineProperty(compat, "supportsStore", {
+      enumerable: true,
+      get() {
+        throw new Error("supportsStore getter should not run");
+      },
+    });
+    const policy = resolveOpenAIResponsesPayloadPolicy(
+      {
+        api: "openai-responses",
+        provider: "openai",
+        baseUrl: "https://proxy.example.com/v1",
+        compat,
+      },
+      {
+        enablePromptCacheStripping: true,
+        storeMode: "provider-policy",
+      },
+    );
+    const payload = {
+      prompt_cache_key: "session-123",
+      prompt_cache_retention: "24h",
+      store: false,
+    } satisfies Record<string, unknown>;
+
+    applyOpenAIResponsesPayloadPolicy(payload, policy);
+
+    expect(payload).not.toHaveProperty("prompt_cache_key");
+    expect(payload).not.toHaveProperty("prompt_cache_retention");
+    expect(payload).toHaveProperty("store", false);
+  });
+
+  it("ignores dynamic model compat accessors", () => {
+    const model = {
+      api: "openai-responses",
+      provider: "openai",
+      baseUrl: "https://proxy.example.com/v1",
+    };
+    Object.defineProperty(model, "compat", {
+      enumerable: true,
+      get() {
+        throw new Error("model compat getter should not run");
+      },
+    });
+
+    const policy = resolveOpenAIResponsesPayloadPolicy(model, {
+      enablePromptCacheStripping: true,
+      storeMode: "provider-policy",
+    });
+
+    expect(policy.shouldStripPromptCache).toBe(true);
+  });
+
   it("keeps disabled reasoning payloads on native OpenAI responses models that support none", () => {
     const payload = {
       reasoning: {

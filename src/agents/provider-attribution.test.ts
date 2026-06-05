@@ -1006,6 +1006,37 @@ describe("provider attribution", () => {
     );
   });
 
+  it("ignores dynamic compat capability accessors", () => {
+    const compat = {};
+    Object.defineProperty(compat, "supportsPromptCacheKey", {
+      enumerable: true,
+      get() {
+        throw new Error("supportsPromptCacheKey getter should not run");
+      },
+    });
+    Object.defineProperty(compat, "supportsStore", {
+      enumerable: true,
+      get() {
+        throw new Error("supportsStore getter should not run");
+      },
+    });
+
+    expectRecordFields(
+      resolveProviderRequestCapabilities({
+        provider: "custom-proxy",
+        api: "openai-responses",
+        baseUrl: "https://proxy.example.com/v1",
+        capability: "llm",
+        transport: "stream",
+        compat,
+      }),
+      {
+        shouldStripResponsesPromptCache: true,
+        supportsResponsesStoreField: true,
+      },
+    );
+  });
+
   it("resolves shared compat families and native streaming-usage gates", () => {
     expectRecordFields(
       resolveProviderRequestCapabilities({

@@ -220,16 +220,39 @@ function readCompatPayloadBoolean(
   if (!compat || typeof compat !== "object") {
     return undefined;
   }
-  return asBoolean((compat as Record<string, unknown>)[key]);
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(compat, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? asBoolean(descriptor.value) : undefined;
+}
+
+function readModelField(model: OpenAIResponsesPayloadModel, key: string): unknown {
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelString(model: OpenAIResponsesPayloadModel, key: string): string | undefined {
+  const value = readModelField(model, key);
+  return typeof value === "string" ? value : undefined;
 }
 
 function resolveOpenAIResponsesPayloadCapabilities(
   model: OpenAIResponsesPayloadModel,
 ): OpenAIResponsesPayloadCapabilities {
-  const provider = normalizeLowercaseString(model.provider);
-  const api = normalizeLowercaseString(model.api);
+  const provider = normalizeLowercaseString(readModelString(model, "provider"));
+  const api = normalizeLowercaseString(readModelString(model, "api"));
   const isOpenAIProvider = provider === "openai";
-  const endpointClass = resolveBundledOpenAIResponsesEndpointClass(model.baseUrl);
+  const endpointClass = resolveBundledOpenAIResponsesEndpointClass(
+    readModelString(model, "baseUrl"),
+  );
   const isResponsesApi = isOpenAIResponsesApi(api);
   const usesConfiguredBaseUrl = endpointClass !== "default";
   const usesKnownNativeOpenAIEndpoint =
@@ -239,7 +262,8 @@ function resolveOpenAIResponsesPayloadCapabilities(
   const usesKnownNativeOpenAIRoute =
     endpointClass === "default" ? provider === "openai" : usesKnownNativeOpenAIEndpoint;
   const usesExplicitProxyLikeEndpoint = usesConfiguredBaseUrl && !usesKnownNativeOpenAIEndpoint;
-  const promptCacheKeySupport = readCompatPayloadBoolean(model.compat, "supportsPromptCacheKey");
+  const compat = readModelField(model, "compat");
+  const promptCacheKeySupport = readCompatPayloadBoolean(compat, "supportsPromptCacheKey");
   const shouldStripResponsesPromptCache =
     promptCacheKeySupport === true
       ? false
@@ -247,7 +271,7 @@ function resolveOpenAIResponsesPayloadCapabilities(
         ? isResponsesApi
         : isResponsesApi && usesExplicitProxyLikeEndpoint;
   const supportsResponsesStoreField =
-    readCompatPayloadBoolean(model.compat, "supportsStore") !== false && isResponsesApi;
+    readCompatPayloadBoolean(compat, "supportsStore") !== false && isResponsesApi;
 
   return {
     allowsOpenAIServiceTier:
@@ -281,8 +305,8 @@ function parsePositiveInteger(value: unknown): number | undefined {
   return undefined;
 }
 
-function resolveOpenAIResponsesCompactThreshold(model: { contextWindow?: unknown }): number {
-  const contextWindow = parsePositiveInteger(model.contextWindow);
+function resolveOpenAIResponsesCompactThreshold(model: OpenAIResponsesPayloadModel): number {
+  const contextWindow = parsePositiveInteger(readModelField(model, "contextWindow"));
   if (contextWindow) {
     return Math.max(1_000, Math.floor(contextWindow * 0.7));
   }
@@ -342,7 +366,9 @@ export function resolveOpenAIResponsesPayloadPolicy(
         : capabilities.allowsResponsesStore
           ? true
           : undefined;
-  const isResponsesApi = isOpenAIResponsesApi(normalizeLowercaseString(model.api));
+  const isResponsesApi = isOpenAIResponsesApi(
+    normalizeLowercaseString(readModelString(model, "api")),
+  );
   const shouldStripDisabledReasoningPayload =
     isResponsesApi &&
     (!capabilities.usesKnownNativeOpenAIRoute || !supportsOpenAIReasoningEffort(model, "none"));
@@ -358,13 +384,13 @@ export function resolveOpenAIResponsesPayloadPolicy(
       options.enablePromptCacheStripping === true && capabilities.shouldStripResponsesPromptCache,
     shouldStripStore:
       explicitStore !== true &&
-      readCompatPayloadBoolean(model.compat, "supportsStore") === false &&
+      readCompatPayloadBoolean(readModelField(model, "compat"), "supportsStore") === false &&
       isResponsesApi,
     useServerCompaction:
       options.enableServerCompaction === true &&
       shouldEnableOpenAIResponsesServerCompaction(
         explicitStore,
-        model.provider,
+        readModelString(model, "provider"),
         options.extraParams,
       ),
   };

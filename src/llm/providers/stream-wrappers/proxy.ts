@@ -25,6 +25,23 @@ function resolveKilocodeAppHeaders(): Record<string, string> {
   return { [KILOCODE_FEATURE_HEADER]: feature };
 }
 
+function readModelField(model: unknown, field: string): unknown {
+  if (!model || typeof model !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, field);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelString(model: unknown, field: string): string | undefined {
+  return readStringValue(readModelField(model, field));
+}
+
 function readExtraParam(
   extraParams: Record<string, unknown> | undefined,
   keys: readonly string[],
@@ -74,11 +91,11 @@ function resolveOpenRouterResponseCacheTtlSeconds(value: unknown): string | unde
 }
 
 function shouldApplyOpenRouterResponseCacheHeaders(model: Parameters<StreamFn>[0]): boolean {
-  const provider = readStringValue(model.provider);
+  const provider = readModelString(model, "provider");
   const endpointClass = resolveProviderRequestPolicy({
     provider,
-    api: readStringValue(model.api),
-    baseUrl: readStringValue(model.baseUrl),
+    api: readModelString(model, "api"),
+    baseUrl: readModelString(model, "baseUrl"),
     capability: "llm",
     transport: "stream",
   }).endpointClass;
@@ -165,14 +182,14 @@ export function createOpenRouterSystemCacheWrapper(
 ): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
-    const provider = readStringValue(model.provider);
-    const modelId = readStringValue(model.id);
+    const provider = readModelString(model, "provider");
+    const modelId = readModelString(model, "id");
     // Keep OpenRouter-specific cache markers on verified OpenRouter routes
     // (or the provider's default route), but not on arbitrary OpenAI proxies.
     const endpointClass = resolveProviderRequestPolicy({
       provider,
-      api: readStringValue(model.api),
-      baseUrl: readStringValue(model.baseUrl),
+      api: readModelString(model, "api"),
+      baseUrl: readModelString(model, "baseUrl"),
       capability: "llm",
       transport: "stream",
     }).endpointClass;
@@ -198,8 +215,10 @@ export function createOpenRouterSystemCacheWrapper(
       (payloadObj) => {
         applyAnthropicEphemeralCacheControlMarkers(
           payloadObj,
-          resolveAnthropicEphemeralCacheControl(readStringValue(model.baseUrl), cacheRetention) ??
-            null,
+          resolveAnthropicEphemeralCacheControl(
+            readModelString(model, "baseUrl"),
+            cacheRetention,
+          ) ?? null,
         );
       },
     );
@@ -228,9 +247,9 @@ export function createOpenRouterWrapper(
   return (model, context, options) => {
     const providerHeaders = resolveOpenRouterResponseCacheHeaders(model, extraParams);
     const headers = resolveProviderRequestPolicyConfig({
-      provider: readStringValue(model.provider) ?? "openrouter",
-      api: readStringValue(model.api),
-      baseUrl: readStringValue(model.baseUrl),
+      provider: readModelString(model, "provider") ?? "openrouter",
+      api: readModelString(model, "api"),
+      baseUrl: readModelString(model, "baseUrl"),
       capability: "llm",
       transport: "stream",
       callerHeaders: options?.headers,
@@ -267,9 +286,9 @@ export function createKilocodeWrapper(
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
     const headers = resolveProviderRequestPolicyConfig({
-      provider: readStringValue(model.provider) ?? "kilocode",
-      api: readStringValue(model.api),
-      baseUrl: readStringValue(model.baseUrl),
+      provider: readModelString(model, "provider") ?? "kilocode",
+      api: readModelString(model, "api"),
+      baseUrl: readModelString(model, "baseUrl"),
       capability: "llm",
       transport: "stream",
       callerHeaders: options?.headers,

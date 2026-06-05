@@ -13,11 +13,48 @@ function resolveMinimaxFastModelId(modelId: unknown): string | undefined {
   return MINIMAX_FAST_MODEL_IDS.get(modelId.trim());
 }
 
+function readModelField(model: unknown, key: string): unknown {
+  if (!model || typeof model !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelString(model: unknown, key: string): string | undefined {
+  const value = readModelField(model, key);
+  return typeof value === "string" ? value : undefined;
+}
+
+function cloneModelWithId(model: Parameters<StreamFn>[0], id: string): Parameters<StreamFn>[0] {
+  try {
+    const clone = Object.create(Object.getPrototypeOf(model)) as Record<string, unknown>;
+    Object.defineProperties(clone, Object.getOwnPropertyDescriptors(model));
+    Object.defineProperty(clone, "id", {
+      configurable: true,
+      enumerable: true,
+      value: id,
+      writable: true,
+    });
+    return clone as unknown as Parameters<StreamFn>[0];
+  } catch {
+    return {
+      api: readModelString(model, "api"),
+      id,
+      provider: readModelString(model, "provider"),
+    } as Parameters<StreamFn>[0];
+  }
+}
+
 function isMinimaxAnthropicMessagesModel(model: { api?: unknown; provider?: unknown }): boolean {
-  return (
-    model.api === "anthropic-messages" &&
-    (model.provider === "minimax" || model.provider === "minimax-portal")
-  );
+  const api = readModelString(model, "api");
+  const provider = readModelString(model, "provider");
+  return api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-portal");
 }
 
 type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
@@ -52,20 +89,22 @@ export function createMinimaxFastModeWrapper(
 ): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
+    const api = readModelString(model, "api");
+    const provider = readModelString(model, "provider");
     if (
       !fastMode ||
-      model.api !== "anthropic-messages" ||
-      (model.provider !== "minimax" && model.provider !== "minimax-portal")
+      api !== "anthropic-messages" ||
+      (provider !== "minimax" && provider !== "minimax-portal")
     ) {
       return underlying(model, context, options);
     }
 
-    const fastModelId = resolveMinimaxFastModelId(model.id);
+    const fastModelId = resolveMinimaxFastModelId(readModelField(model, "id"));
     if (!fastModelId) {
       return underlying(model, context, options);
     }
 
-    return underlying({ ...model, id: fastModelId }, context, options);
+    return underlying(cloneModelWithId(model, fastModelId), context, options);
   };
 }
 

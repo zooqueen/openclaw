@@ -72,6 +72,26 @@ describe("createMinimaxThinkingDisabledWrapper", () => {
     ).toBeUndefined();
   });
 
+  it("ignores hostile model metadata accessors while checking applicability", () => {
+    let called = false;
+    const baseStreamFn: StreamFn = () => {
+      called = true;
+      return {} as ReturnType<StreamFn>;
+    };
+    const model = { provider: "minimax" };
+    Object.defineProperty(model, "api", {
+      enumerable: true,
+      get() {
+        throw new Error("model api getter should not run");
+      },
+    });
+
+    const wrapped = createMinimaxThinkingDisabledWrapper(baseStreamFn);
+    expect(() => wrapped(model as never, { messages: [] } as Context, {})).not.toThrow();
+
+    expect(called).toBe(true);
+  });
+
   it("preserves an already-set thinking value", () => {
     let capturedThinking: unknown = undefined;
     const baseStreamFn: StreamFn = (model, context, options) => {
@@ -221,6 +241,30 @@ describe("createMinimaxFastModeWrapper", () => {
       { messages: [] } as Context,
       {},
     );
+
+    expect(capturedId).toBe("MiniMax-M2.7-highspeed");
+  });
+
+  it("does not invoke hostile model accessors while cloning fast-mode metadata", () => {
+    let capturedId = "";
+    const baseStreamFn: StreamFn = (model) => {
+      capturedId = model.id;
+      return {} as ReturnType<StreamFn>;
+    };
+    const model = {
+      api: "anthropic-messages",
+      id: "MiniMax-M2.7",
+      provider: "minimax",
+    };
+    Object.defineProperty(model, "name", {
+      enumerable: true,
+      get() {
+        throw new Error("model name getter should not run");
+      },
+    });
+
+    const wrapped = createMinimaxFastModeWrapper(baseStreamFn, true);
+    expect(() => wrapped(model as never, { messages: [] } as Context, {})).not.toThrow();
 
     expect(capturedId).toBe("MiniMax-M2.7-highspeed");
   });

@@ -182,23 +182,22 @@ function fingerprintPreparedExtraParamsModel(model?: ProviderRuntimeModel): unkn
   if (!model) {
     return null;
   }
-  const record = model as unknown as Record<string, unknown>;
   return {
-    api: model.api,
-    provider: model.provider,
-    id: model.id,
-    name: model.name,
-    baseUrl: model.baseUrl,
-    reasoning: model.reasoning,
-    input: model.input,
-    cost: model.cost,
-    compat: record.compat ?? null,
-    contextWindow: model.contextWindow,
-    contextTokens: model.contextTokens ?? null,
-    headers: record.headers ?? null,
-    maxTokens: model.maxTokens,
-    params: model.params ?? null,
-    requestTimeoutMs: model.requestTimeoutMs ?? null,
+    api: readOwnDataProperty(model, "api"),
+    provider: readOwnDataProperty(model, "provider"),
+    id: readOwnDataProperty(model, "id"),
+    name: readOwnDataProperty(model, "name"),
+    baseUrl: readOwnDataProperty(model, "baseUrl"),
+    reasoning: readOwnDataProperty(model, "reasoning"),
+    input: readOwnDataProperty(model, "input"),
+    cost: readOwnDataProperty(model, "cost"),
+    compat: readOwnDataProperty(model, "compat") ?? null,
+    contextWindow: readOwnDataProperty(model, "contextWindow"),
+    contextTokens: readOwnDataProperty(model, "contextTokens") ?? null,
+    headers: readOwnDataProperty(model, "headers") ?? null,
+    maxTokens: readOwnDataProperty(model, "maxTokens"),
+    params: readOwnDataProperty(model, "params") ?? null,
+    requestTimeoutMs: readOwnDataProperty(model, "requestTimeoutMs") ?? null,
   };
 }
 
@@ -485,6 +484,25 @@ function normalizeStopSequences(value: unknown): string[] | undefined {
   return sequences.length > 0 ? sequences : undefined;
 }
 
+function readOwnDataProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(value, key);
+  } catch {
+    log.warn(`ignoring unreadable model metadata: ${key}`);
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readOwnStringProperty(value: unknown, key: string): string | undefined {
+  const resolved = readOwnDataProperty(value, key);
+  return typeof resolved === "string" ? resolved : undefined;
+}
+
 function createStreamFnWithExtraParams(
   baseStreamFn: StreamFn | undefined,
   extraParams: Record<string, unknown> | undefined,
@@ -567,18 +585,20 @@ function createStreamFnWithExtraParams(
   }
 
   const readSupportsPromptCacheKey = (m: unknown): boolean => {
-    const compat = (m as { compat?: unknown })?.compat;
+    const compat = readOwnDataProperty(m, "compat");
     if (!compat || typeof compat !== "object") {
       return false;
     }
-    return (compat as Record<string, unknown>).supportsPromptCacheKey === true;
+    return readOwnDataProperty(compat, "supportsPromptCacheKey") === true;
   };
 
+  const initialModelApi = readOwnStringProperty(model, "api");
+  const initialModelId = readOwnStringProperty(model, "id");
   const initialCacheRetention = resolveCacheRetention(
     safeExtraParams,
     provider,
-    typeof model?.api === "string" ? model.api : undefined,
-    typeof model?.id === "string" ? model.id : undefined,
+    initialModelApi,
+    initialModelId,
     readSupportsPromptCacheKey(model),
   );
   if (Object.keys(streamParams).length > 0 || initialCacheRetention) {
@@ -590,11 +610,13 @@ function createStreamFnWithExtraParams(
 
   const underlying = baseStreamFn ?? streamSimple;
   const wrappedStreamFn: StreamFn = (callModel, context, options) => {
+    const callModelApi = readOwnStringProperty(callModel, "api");
+    const callModelId = readOwnStringProperty(callModel, "id");
     const cacheRetention = resolveCacheRetention(
       safeExtraParams,
       provider,
-      typeof callModel.api === "string" ? callModel.api : undefined,
-      typeof callModel.id === "string" ? callModel.id : undefined,
+      callModelApi,
+      callModelId,
       readSupportsPromptCacheKey(callModel),
     );
     const hasStreamParams = Object.keys(streamParams).length > 0 || cacheRetention;
@@ -698,12 +720,13 @@ function createParallelToolCallsWrapper(
 ): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) => {
-    if (!supportsGptParallelToolCallsPayload(model.api)) {
+    const api = readOwnStringProperty(model, "api");
+    if (!supportsGptParallelToolCallsPayload(api)) {
       return underlying(model, context, options);
     }
-    log.debug(
-      `applying parallel_tool_calls=${enabled} for ${model.provider ?? "unknown"}/${model.id ?? "unknown"} api=${model.api}`,
-    );
+    const provider = readOwnStringProperty(model, "provider") ?? "unknown";
+    const modelId = readOwnStringProperty(model, "id") ?? "unknown";
+    log.debug(`applying parallel_tool_calls=${enabled} for ${provider}/${modelId} api=${api}`);
     return streamWithPayloadPatch(underlying, model, context, options, (payloadObj) => {
       payloadObj.parallel_tool_calls = enabled;
     });
@@ -711,17 +734,17 @@ function createParallelToolCallsWrapper(
 }
 
 function shouldStripOpenAICompletionsStore(model: ProviderRuntimeModel): boolean {
-  if (model.api !== "openai-completions") {
+  const api = readOwnStringProperty(model, "api");
+  if (api !== "openai-completions") {
     return false;
   }
+  const rawCompat = readOwnDataProperty(model, "compat");
   const compat =
-    model.compat && typeof model.compat === "object"
-      ? (model.compat as Record<string, unknown>)
-      : undefined;
+    rawCompat && typeof rawCompat === "object" ? (rawCompat as Record<string, unknown>) : undefined;
   const capabilities = resolveProviderRequestPolicyConfig({
-    provider: typeof model.provider === "string" ? model.provider : undefined,
-    api: model.api,
-    baseUrl: typeof model.baseUrl === "string" ? model.baseUrl : undefined,
+    provider: readOwnStringProperty(model, "provider"),
+    api,
+    baseUrl: readOwnStringProperty(model, "baseUrl"),
     compat,
     capability: "llm",
     transport: "stream",
@@ -973,10 +996,10 @@ function normalizeDeepSeekV4CandidateId(modelId: unknown): string | undefined {
 }
 
 function isDeepSeekV4OpenAICompatibleModel(model: Parameters<StreamFn>[0]): boolean {
-  const normalizedModelId = normalizeDeepSeekV4CandidateId(model.id);
+  const normalizedModelId = normalizeDeepSeekV4CandidateId(readOwnDataProperty(model, "id"));
   return (
-    model.api === "openai-completions" &&
-    model.provider !== "microsoft-foundry" &&
+    readOwnStringProperty(model, "api") === "openai-completions" &&
+    readOwnStringProperty(model, "provider") !== "microsoft-foundry" &&
     (normalizedModelId === "deepseek-v4-flash" || normalizedModelId === "deepseek-v4-pro")
   );
 }
@@ -991,9 +1014,9 @@ const MIMO_REASONING_OPENAI_COMPATIBLE_MODEL_IDS = new Set([
 const MIMO_REASONING_AS_VISIBLE_TEXT_MODEL_IDS = new Set(["mimo-v2-pro", "mimo-v2-omni"]);
 
 function isMiMoReasoningOpenAICompatibleModel(model: Parameters<StreamFn>[0]): boolean {
-  const normalizedModelId = normalizeDeepSeekV4CandidateId(model.id);
+  const normalizedModelId = normalizeDeepSeekV4CandidateId(readOwnDataProperty(model, "id"));
   return (
-    model.api === "openai-completions" &&
+    readOwnStringProperty(model, "api") === "openai-completions" &&
     normalizedModelId !== undefined &&
     MIMO_REASONING_OPENAI_COMPATIBLE_MODEL_IDS.has(normalizedModelId)
   );
@@ -1002,9 +1025,9 @@ function isMiMoReasoningOpenAICompatibleModel(model: Parameters<StreamFn>[0]): b
 function isMiMoReasoningAsVisibleTextOpenAICompatibleModel(
   model: Parameters<StreamFn>[0],
 ): boolean {
-  const normalizedModelId = normalizeDeepSeekV4CandidateId(model.id);
+  const normalizedModelId = normalizeDeepSeekV4CandidateId(readOwnDataProperty(model, "id"));
   return (
-    model.api === "openai-completions" &&
+    readOwnStringProperty(model, "api") === "openai-completions" &&
     normalizedModelId !== undefined &&
     MIMO_REASONING_AS_VISIBLE_TEXT_MODEL_IDS.has(normalizedModelId)
   );
