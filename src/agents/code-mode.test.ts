@@ -5,7 +5,10 @@ import { setPluginToolMeta } from "../plugins/tools.js";
 import {
   clearCodeModeNamespacesForPlugin,
   clearCodeModeNamespacesForTest,
+  createCodeModeApiVirtualFiles,
+  createCodeModeNamespaceRuntime,
   createCodeModeNamespaceTool,
+  describeCodeModeNamespacesForPrompt,
   type CodeModeNamespaceRegistration,
   listCodeModeNamespaces,
   registerCodeModeNamespaceForPlugin,
@@ -777,6 +780,106 @@ describe("Code Mode", () => {
     });
     expect(details.output).toEqual([{ type: "text", text: "created" }]);
     expect(ticket.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips malformed MCP namespace catalog rows while preserving healthy siblings", async () => {
+    const malformedIdentity = Object.defineProperty(
+      {
+        source: "mcp",
+        name: "broken__identity",
+        parameters: {},
+        mcp: {
+          serverName: "broken",
+          safeServerName: "broken",
+          toolName: "identity",
+          operation: "tool",
+        },
+      },
+      "id",
+      {
+        enumerable: true,
+        get: () => {
+          throw new Error("mcp catalog id getter exploded");
+        },
+      },
+    );
+    const malformedSchema = {
+      id: "mcp:bundle-mcp:broken__schema",
+      source: "mcp",
+      name: "broken__schema",
+      description: "Broken schema",
+      parameters: Object.defineProperty({ type: "object" }, "properties", {
+        enumerable: true,
+        get: () => {
+          throw new Error("mcp catalog schema getter exploded");
+        },
+      }),
+      mcp: {
+        serverName: "broken",
+        safeServerName: "broken",
+        toolName: "schema",
+        operation: "tool",
+      },
+    };
+    const healthy = {
+      id: "mcp:bundle-mcp:github__create_issue",
+      source: "mcp",
+      sourceName: "bundle-mcp",
+      name: "github__create_issue",
+      description: "Create issue",
+      parameters: {
+        type: "object",
+        properties: {
+          owner: { type: "string" },
+          repo: { type: "string" },
+          title: { type: "string" },
+        },
+        required: ["owner", "repo", "title"],
+      },
+      mcp: {
+        serverName: "github",
+        safeServerName: "github",
+        toolName: "create_issue",
+        operation: "tool",
+      },
+    };
+    const catalog = [malformedIdentity, malformedSchema, healthy] as never;
+
+    const prompt = describeCodeModeNamespacesForPrompt({}, catalog);
+    const apiFiles = createCodeModeApiVirtualFiles(catalog);
+    const runtime = await createCodeModeNamespaceRuntime({}, catalog);
+    const executeTool = vi.fn(async (params: unknown) => ({ params }));
+    const result = await runtime.invoke(
+      "mcp",
+      ["github", "createIssue"],
+      [{ owner: "openclaw", repo: "openclaw", title: "safe" }],
+      executeTool,
+    );
+
+    expect(prompt).toContain("visible servers: github");
+    expect(prompt).not.toContain("broken");
+    expect(apiFiles.map((file) => file.path)).toEqual(["mcp/index.d.ts", "mcp/github.d.ts"]);
+    expect(apiFiles.map((file) => file.content).join("\n")).toContain("function createIssue(");
+    expect(apiFiles.map((file) => file.content).join("\n")).not.toContain("broken");
+    expect(runtime.descriptors).toHaveLength(1);
+    expect(executeTool).toHaveBeenCalledWith({
+      pluginId: "bundle-mcp",
+      toolName: "github__create_issue",
+      catalogId: "mcp:bundle-mcp:github__create_issue",
+      input: { owner: "openclaw", repo: "openclaw", title: "safe" },
+      namespaceId: "mcp",
+      path: ["github", "createIssue"],
+    });
+    expect(result).toEqual({
+      params: {
+        pluginId: "bundle-mcp",
+        toolName: "github__create_issue",
+        catalogId: "mcp:bundle-mcp:github__create_issue",
+        input: { owner: "openclaw", repo: "openclaw", title: "safe" },
+        namespaceId: "mcp",
+        path: ["github", "createIssue"],
+      },
+    });
   });
 
   it("exposes MCP tools only through the MCP namespace", async () => {

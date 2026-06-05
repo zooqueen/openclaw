@@ -115,6 +115,9 @@ type CodeModeNamespaceCatalogEntry = {
   };
 };
 
+type CatalogEntryReadResult = { ok: true; value: unknown } | { ok: false };
+type JsonLikeSnapshotResult = { ok: true; value: unknown } | { ok: false };
+
 /** Runtime dispatcher for invoking callable namespace paths. */
 export type CodeModeNamespaceRuntime = {
   descriptors: CodeModeNamespaceDescriptor[];
@@ -317,6 +320,157 @@ function promptForRegistration(
   return typeof prompt === "string" && prompt.trim() ? prompt.trim() : undefined;
 }
 
+function readCatalogEntryProperty(entry: unknown, key: string): CatalogEntryReadResult {
+  if (!isRecord(entry)) {
+    return { ok: false };
+  }
+  try {
+    return { ok: true, value: entry[key] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function readCatalogEntryString(entry: unknown, key: string): string | undefined {
+  const result = readCatalogEntryProperty(entry, key);
+  return result.ok && typeof result.value === "string" && result.value.trim()
+    ? result.value
+    : undefined;
+}
+
+function snapshotJsonLikeValue(
+  value: unknown,
+  stack = new WeakSet<object>(),
+): JsonLikeSnapshotResult {
+  if (value === null || value === undefined) {
+    return { ok: true, value };
+  }
+  switch (typeof value) {
+    case "undefined":
+      return { ok: true, value };
+    case "string":
+    case "number":
+    case "boolean":
+      return { ok: true, value };
+    case "bigint":
+    case "function":
+    case "symbol":
+      return { ok: false };
+    case "object":
+      break;
+  }
+  if (stack.has(value)) {
+    return { ok: false };
+  }
+  stack.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const items: unknown[] = [];
+      for (const item of value) {
+        const snapshot = snapshotJsonLikeValue(item, stack);
+        if (!snapshot.ok) {
+          return { ok: false };
+        }
+        items.push(snapshot.value);
+      }
+      return { ok: true, value: items };
+    }
+    if (!isRecord(value)) {
+      return { ok: false };
+    }
+    let entries: [string, unknown][];
+    try {
+      entries = Object.entries(value);
+    } catch {
+      return { ok: false };
+    }
+    const object = Object.create(null) as Record<string, unknown>;
+    for (const [key, child] of entries) {
+      const snapshot = snapshotJsonLikeValue(child, stack);
+      if (!snapshot.ok) {
+        return { ok: false };
+      }
+      object[key] = snapshot.value;
+    }
+    return { ok: true, value: object };
+  } finally {
+    stack.delete(value);
+  }
+}
+
+function readMcpOperation(
+  value: unknown,
+): NonNullable<CodeModeNamespaceCatalogEntry["mcp"]>["operation"] | undefined {
+  return value === "tool" ||
+    value === "resources_list" ||
+    value === "resources_read" ||
+    value === "prompts_list" ||
+    value === "prompts_get"
+    ? value
+    : undefined;
+}
+
+function snapshotCatalogMcpMeta(value: unknown): CodeModeNamespaceCatalogEntry["mcp"] | undefined {
+  const serverName = readCatalogEntryString(value, "serverName");
+  const toolName = readCatalogEntryString(value, "toolName");
+  const operationResult = readCatalogEntryProperty(value, "operation");
+  const operation = readMcpOperation(operationResult.ok ? operationResult.value : undefined);
+  if (!serverName?.trim() || !toolName?.trim() || !operation) {
+    return undefined;
+  }
+  return {
+    serverName,
+    safeServerName: readCatalogEntryString(value, "safeServerName") ?? serverName,
+    toolName,
+    operation,
+  };
+}
+
+function snapshotCodeModeNamespaceCatalogEntry(
+  entry: unknown,
+): CodeModeNamespaceCatalogEntry | undefined {
+  const name = readCatalogEntryString(entry, "name");
+  if (!name) {
+    return undefined;
+  }
+  const parametersResult = readCatalogEntryProperty(entry, "parameters");
+  if (!parametersResult.ok) {
+    return undefined;
+  }
+  const parameters = snapshotJsonLikeValue(parametersResult.value ?? {});
+  if (!parameters.ok) {
+    return undefined;
+  }
+  const mcpResult = readCatalogEntryProperty(entry, "mcp");
+  const id = readCatalogEntryString(entry, "id");
+  const source = readCatalogEntryString(entry, "source");
+  const sourceName = readCatalogEntryString(entry, "sourceName");
+  const description = readCatalogEntryString(entry, "description");
+  const mcp = mcpResult.ok && mcpResult.value ? snapshotCatalogMcpMeta(mcpResult.value) : undefined;
+  return {
+    ...(id ? { id } : {}),
+    ...(source ? { source } : {}),
+    name,
+    ...(sourceName ? { sourceName } : {}),
+    ...(description ? { description } : {}),
+    parameters: parameters.value,
+    ...(mcp ? { mcp } : {}),
+  };
+}
+
+function snapshotCodeModeNamespaceCatalog(
+  catalog: readonly unknown[],
+): CodeModeNamespaceCatalogEntry[] {
+  const entries: CodeModeNamespaceCatalogEntry[] = [];
+  for (const entry of catalog) {
+    const snapshot = snapshotCodeModeNamespaceCatalogEntry(entry);
+    if (snapshot) {
+      entries.push(snapshot);
+    }
+  }
+  return entries;
+}
+
 function registrationHasVisibleRequiredTools(
   registration: RegisteredCodeModeNamespace,
   catalog: readonly CodeModeNamespaceCatalogEntry[],
@@ -376,27 +530,45 @@ function readSchemaRecord(schema: unknown): Record<string, unknown> | undefined 
   return isRecord(schema) ? schema : undefined;
 }
 
+function readRecordProperty(record: Record<string, unknown> | undefined, key: string): unknown {
+  try {
+    return record?.[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function safeObjectKeys(record: Record<string, unknown>): string[] {
+  try {
+    return Object.keys(record);
+  } catch {
+    return [];
+  }
+}
+
 function readSchemaProperties(schema: unknown): Record<string, unknown> {
   const record = readSchemaRecord(schema);
-  return isRecord(record?.properties) ? record.properties : {};
+  const properties = readRecordProperty(record, "properties");
+  return isRecord(properties) ? properties : {};
 }
 
 function readSchemaString(schema: unknown, key: string): string | undefined {
   const record = readSchemaRecord(schema);
-  const value = record?.[key];
+  const value = readRecordProperty(record, key);
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function readRequiredKeys(schema: unknown): string[] {
   const record = readSchemaRecord(schema);
-  return Array.isArray(record?.required)
-    ? record.required.filter((entry): entry is string => typeof entry === "string")
+  const required = readRecordProperty(record, "required");
+  return Array.isArray(required)
+    ? required.filter((entry): entry is string => typeof entry === "string")
     : [];
 }
 
 function orderedSchemaKeys(schema: unknown): string[] {
   const required = readRequiredKeys(schema);
-  const properties = Object.keys(readSchemaProperties(schema));
+  const properties = safeObjectKeys(readSchemaProperties(schema));
   return [...new Set([...required, ...properties])];
 }
 
@@ -405,11 +577,13 @@ function applySchemaDefaults(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...input };
-  for (const [key, descriptor] of Object.entries(readSchemaProperties(schema))) {
+  const properties = readSchemaProperties(schema);
+  for (const key of safeObjectKeys(properties)) {
+    const descriptor = readRecordProperty(properties, key);
     if (!isRecord(descriptor) || !("default" in descriptor) || result[key] !== undefined) {
       continue;
     }
-    result[key] = descriptor.default;
+    result[key] = readRecordProperty(descriptor, "default");
   }
   return result;
 }
@@ -490,8 +664,9 @@ function schemaType(schema: unknown): string {
   if (!record) {
     return "unknown";
   }
-  const enumValues = Array.isArray(record.enum)
-    ? record.enum.filter(
+  const rawEnum = readRecordProperty(record, "enum");
+  const enumValues = Array.isArray(rawEnum)
+    ? rawEnum.filter(
         (entry): entry is string | number | boolean =>
           typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean",
       )
@@ -499,13 +674,15 @@ function schemaType(schema: unknown): string {
   if (enumValues.length > 0 && enumValues.length <= 16) {
     return enumValues.map((entry) => JSON.stringify(entry)).join(" | ");
   }
-  const oneOf = Array.isArray(record.oneOf) ? record.oneOf : undefined;
-  const anyOf = Array.isArray(record.anyOf) ? record.anyOf : undefined;
+  const rawOneOf = readRecordProperty(record, "oneOf");
+  const rawAnyOf = readRecordProperty(record, "anyOf");
+  const oneOf = Array.isArray(rawOneOf) ? rawOneOf : undefined;
+  const anyOf = Array.isArray(rawAnyOf) ? rawAnyOf : undefined;
   const union = oneOf ?? anyOf;
   if (union && union.length > 0 && union.length <= 8) {
     return union.map((entry) => schemaType(entry)).join(" | ");
   }
-  const type = record.type;
+  const type = readRecordProperty(record, "type");
   if (Array.isArray(type)) {
     return type.map((entry) => schemaType({ ...record, type: entry })).join(" | ");
   }
@@ -518,7 +695,7 @@ function schemaType(schema: unknown): string {
     case "boolean":
       return "boolean";
     case "array":
-      return `${schemaType(record.items)}[]`;
+      return `${schemaType(readRecordProperty(record, "items"))}[]`;
     case "object":
       return renderInlineObjectType(record);
     case "null":
@@ -536,7 +713,7 @@ function tsPropertyName(name: string): string {
 
 function renderInlineObjectType(schema: unknown): string {
   const properties = readSchemaProperties(schema);
-  const keys = Object.keys(properties);
+  const keys = safeObjectKeys(properties);
   if (keys.length === 0) {
     return "Record<string, unknown>";
   }
@@ -544,7 +721,7 @@ function renderInlineObjectType(schema: unknown): string {
   return `{ ${keys
     .map(
       (key) =>
-        `${tsPropertyName(key)}${required.has(key) ? "" : "?"}: ${schemaType(properties[key])}`,
+        `${tsPropertyName(key)}${required.has(key) ? "" : "?"}: ${schemaType(readRecordProperty(properties, key))}`,
     )
     .join("; ")} }`;
 }
@@ -582,8 +759,9 @@ export type CodeModeApiVirtualFile = {
 
 function buildMcpParamDocs(schema: unknown): McpApiParamDoc[] {
   const required = new Set(readRequiredKeys(schema));
+  const properties = readSchemaProperties(schema);
   return orderedSchemaKeys(schema).map((key) => {
-    const descriptor = readSchemaProperties(schema)[key];
+    const descriptor = readRecordProperty(properties, key);
     const doc: McpApiParamDoc = {
       name: key,
       required: required.has(key),
@@ -872,7 +1050,7 @@ function createMcpNamespaceScope(
 export function createCodeModeApiVirtualFiles(
   catalog: readonly CodeModeNamespaceCatalogEntry[] = [],
 ): CodeModeApiVirtualFile[] {
-  const model = createMcpNamespaceModel(catalog);
+  const model = createMcpNamespaceModel(snapshotCodeModeNamespaceCatalog(catalog));
   if (!model) {
     return [];
   }
@@ -950,8 +1128,9 @@ export function describeCodeModeNamespacesForPrompt(
   if (!catalog) {
     return "";
   }
-  const registrations = filterRegistrationsByVisibleTools(catalog);
-  const mcpPrompt = describeMcpNamespaceForPrompt(catalog);
+  const safeCatalog = snapshotCodeModeNamespaceCatalog(catalog);
+  const registrations = filterRegistrationsByVisibleTools(safeCatalog);
+  const mcpPrompt = describeMcpNamespaceForPrompt(safeCatalog);
   if (registrations.length === 0 && mcpPrompt.length === 0) {
     return "";
   }
@@ -1090,13 +1269,14 @@ export async function createCodeModeNamespaceRuntime(
   ctx: CodeModeNamespaceContext,
   catalog: readonly CodeModeNamespaceCatalogEntry[] = [],
 ): Promise<CodeModeNamespaceRuntime> {
+  const safeCatalog = snapshotCodeModeNamespaceCatalog(catalog);
   const entries: CodeModeNamespaceRuntimeEntry[] = [];
-  const mcpEntry = createMcpNamespaceEntry(catalog);
+  const mcpEntry = createMcpNamespaceEntry(safeCatalog);
   if (mcpEntry) {
     entries.push(mcpEntry);
   }
   for (const registration of listCodeModeNamespaces()) {
-    if (!registrationHasVisibleRequiredTools(registration, catalog)) {
+    if (!registrationHasVisibleRequiredTools(registration, safeCatalog)) {
       continue;
     }
     const scope = readScope(await registration.createScope(ctx), registration.id);
