@@ -15,7 +15,7 @@ import {
   type EmbeddedRunAttemptResult,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { resolveAgentWorkspaceDir } from "openclaw/plugin-sdk/agent-runtime";
-import type { CodexDynamicToolSpec, JsonValue } from "./protocol.js";
+import type { CodexDynamicToolSpec } from "./protocol.js";
 import { isJsonObject } from "./protocol.js";
 import type { CodexAppServerThreadBinding } from "./session-binding.js";
 import { readCodexMirroredSessionHistoryMessages } from "./session-history.js";
@@ -276,7 +276,9 @@ export function buildCodexSystemPromptReport(params: {
   skillsPrompt: string;
   tools: CodexDynamicToolSpec[];
 }): CodexSystemPromptReport {
-  const toolEntries = params.tools.map(buildCodexToolReportEntry);
+  const toolEntries = params.tools
+    .map(buildCodexToolReportEntry)
+    .filter((entry): entry is CodexToolReportEntry => Boolean(entry));
   const schemaChars = toolEntries.reduce((sum, tool) => sum + tool.schemaChars, 0);
   const skillsPrompt = params.skillsPrompt.trim();
   const bootstrapMaxChars = readPositiveNumber(
@@ -340,11 +342,33 @@ function buildCodexSkillReportEntries(
     .filter((entry) => entry.blockChars > 0);
 }
 
-function buildCodexToolReportEntry(tool: CodexDynamicToolSpec): CodexToolReportEntry {
-  const summary = tool.description.trim();
-  if (tool.deferLoading === true) {
+function buildCodexToolReportEntry(tool: CodexDynamicToolSpec): CodexToolReportEntry | undefined {
+  let name: unknown;
+  let description: unknown;
+  let inputSchema: unknown;
+  let deferLoading: boolean;
+  try {
+    name = tool.name;
+  } catch {
+    return undefined;
+  }
+  if (typeof name !== "string" || name.length === 0) {
+    return undefined;
+  }
+  try {
+    description = tool.description;
+  } catch {
+    description = undefined;
+  }
+  try {
+    deferLoading = tool.deferLoading === true;
+  } catch {
+    deferLoading = false;
+  }
+  const summary = typeof description === "string" ? description.trim() : "";
+  if (deferLoading) {
     return {
-      name: tool.name,
+      name,
       summaryChars: summary.length,
       summaryHash: sha256Text(summary),
       schemaChars: 0,
@@ -352,16 +376,21 @@ function buildCodexToolReportEntry(tool: CodexDynamicToolSpec): CodexToolReportE
       propertiesCount: null,
     };
   }
+  try {
+    inputSchema = tool.inputSchema;
+  } catch {
+    inputSchema = undefined;
+  }
   return {
-    name: tool.name,
+    name,
     summaryChars: summary.length,
     summaryHash: sha256Text(summary),
-    ...buildCodexToolSchemaStats(tool.inputSchema),
+    ...buildCodexToolSchemaStats(inputSchema),
   };
 }
 
 function buildCodexToolSchemaStats(
-  schema: JsonValue,
+  schema: unknown,
 ): Pick<CodexToolReportEntry, "schemaChars" | "schemaHash" | "propertiesCount"> {
   const schemaChars = (() => {
     try {
@@ -370,8 +399,13 @@ function buildCodexToolSchemaStats(
       return 0;
     }
   })();
-  const properties =
-    isJsonObject(schema) && isJsonObject(schema.properties) ? schema.properties : null;
+  const properties = (() => {
+    try {
+      return isJsonObject(schema) && isJsonObject(schema.properties) ? schema.properties : null;
+    } catch {
+      return null;
+    }
+  })();
   return {
     schemaChars,
     schemaHash: stableJsonHash(schema),
@@ -389,17 +423,25 @@ function normalizeForStableHash(value: unknown): unknown {
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.keys(record)
-        .toSorted((left, right) => left.localeCompare(right))
-        .map((key) => [key, normalizeForStableHash(record[key])]),
-    );
+    try {
+      return Object.fromEntries(
+        Object.keys(record)
+          .toSorted((left, right) => left.localeCompare(right))
+          .map((key) => [key, normalizeForStableHash(record[key])]),
+      );
+    } catch {
+      return null;
+    }
   }
   return value;
 }
 
-function stableJsonHash(value: JsonValue): string {
-  return sha256Text(JSON.stringify(normalizeForStableHash(value)) ?? "null");
+function stableJsonHash(value: unknown): string {
+  try {
+    return sha256Text(JSON.stringify(normalizeForStableHash(value)) ?? "null");
+  } catch {
+    return sha256Text("null");
+  }
 }
 
 function buildCodexBootstrapInjectionStats(params: {
