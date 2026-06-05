@@ -3,6 +3,7 @@
 import { request } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getFreePortBlockWithPermissionFallback } from "../test-utils/ports.js";
+import { handleMcpJsonRpc } from "./mcp-http.handlers.js";
 import { buildMcpToolSchema } from "./mcp-http.schema.js";
 
 type MockGatewayTool = {
@@ -494,6 +495,43 @@ describe("buildMcpToolSchema", () => {
         ])[0]?.inputSchema,
       ).toEqual(testCase.expected);
     }
+  });
+});
+
+describe("handleMcpJsonRpc", () => {
+  it("skips unreadable advertised schema names before executing healthy tools", async () => {
+    const unreadableSchema = {};
+    Object.defineProperty(unreadableSchema, "name", {
+      enumerable: true,
+      get() {
+        throw new Error("fuzzplugin schema name getter exploded");
+      },
+    });
+    const messageExecute = vi.fn<MockGatewayTool["execute"]>(async () => ({
+      content: [{ type: "text", text: "MESSAGE_EXECUTED" }],
+    }));
+
+    const response = await handleMcpJsonRpc({
+      message: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "message", arguments: { body: "hello" } },
+      },
+      tools: [makeMessageTool({ execute: messageExecute })] as never,
+      toolSchema: [
+        unreadableSchema as never,
+        { name: "message", description: "send a message", inputSchema: {} },
+      ],
+    });
+
+    expect(messageExecute).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      result: {
+        content: [{ type: "text", text: "MESSAGE_EXECUTED" }],
+        isError: false,
+      },
+    });
   });
 });
 

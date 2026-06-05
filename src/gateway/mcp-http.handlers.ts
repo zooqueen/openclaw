@@ -40,6 +40,20 @@ function normalizeToolCallContent(result: unknown): McpTextContent[] {
   ];
 }
 
+function readMcpToolSchemaName(tool: McpToolSchemaEntry): string | undefined {
+  let value: unknown;
+  try {
+    value = (tool as unknown as { name?: unknown }).name;
+  } catch {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const name = value.trim();
+  return name || undefined;
+}
+
 /** Handles one MCP loopback JSON-RPC message and returns a response or notification null. */
 export async function handleMcpJsonRpc(params: {
   message: JsonRpcRequest;
@@ -81,7 +95,7 @@ export async function handleMcpJsonRpc(params: {
           isError: true,
         });
       }
-      if (!params.toolSchema.some((tool) => tool.name === toolName)) {
+      if (!params.toolSchema.some((tool) => readMcpToolSchemaName(tool) === toolName)) {
         return jsonRpcResult(id, {
           content: [{ type: "text", text: `Tool not available: ${toolName}` }],
           isError: true,
