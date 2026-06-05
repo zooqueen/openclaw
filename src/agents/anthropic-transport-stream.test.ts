@@ -192,6 +192,54 @@ describe("anthropic transport stream", () => {
     guardedFetchMock.mockResolvedValue(createSseResponse());
   });
 
+  it("keeps unreadable output and setup identity inside the stream error path", async () => {
+    const model = makeAnthropicTransportModel();
+    Object.defineProperties(model, {
+      provider: {
+        enumerable: true,
+        get() {
+          throw new Error("revoked provider");
+        },
+      },
+      id: {
+        enumerable: true,
+        get() {
+          throw new Error("revoked model id");
+        },
+      },
+      baseUrl: {
+        enumerable: true,
+        get() {
+          throw new Error("revoked baseUrl");
+        },
+      },
+    });
+    const onPayload = vi.fn();
+    const streamFn = createAnthropicMessagesTransportStreamFn();
+
+    const stream = await Promise.resolve(
+      streamFn(
+        model,
+        {
+          messages: [{ role: "user", content: "hello" }],
+        } as AnthropicStreamContext,
+        {
+          apiKey: "sk-ant-api",
+          onPayload,
+        } as AnthropicStreamOptions,
+      ),
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect(result.provider).toBe("unknown");
+    expect(result.model).toBe("unknown");
+    expect(result.errorMessage).toBe("revoked baseUrl");
+    expect(onPayload).not.toHaveBeenCalled();
+    expect(guardedFetchMock).not.toHaveBeenCalled();
+  });
+
   it("uses the guarded fetch transport for api-key Anthropic requests", async () => {
     const model = makeAnthropicTransportModel({
       headers: { "X-Provider": "anthropic" },

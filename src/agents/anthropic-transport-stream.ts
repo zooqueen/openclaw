@@ -1191,7 +1191,7 @@ function resolveAnthropicTransportOptions(
 /** Create the stream function used by Anthropic Messages transport models. */
 export function createAnthropicMessagesTransportStreamFn(): StreamFn {
   return (rawModel, context, rawOptions) => {
-    const model = withEffectiveAnthropicBaseUrl(rawModel as AnthropicTransportModel);
+    const inputModel = rawModel as AnthropicTransportModel;
     const options = rawOptions as AnthropicTransportOptions | undefined;
     const { eventStream, stream } = createWritableTransportEventStream();
     void (async () => {
@@ -1199,13 +1199,14 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
         role: "assistant",
         content: [],
         api: "anthropic-messages",
-        provider: model.provider,
-        model: model.id,
+        provider: readAnthropicTransportOutputString(inputModel, "provider"),
+        model: readAnthropicTransportOutputString(inputModel, "id"),
         usage: createEmptyTransportUsage(),
         stopReason: "stop",
         timestamp: Date.now(),
       };
       try {
+        const model = withEffectiveAnthropicBaseUrl(inputModel);
         const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
         if (!apiKey) {
           throw new Error(`No API key for provider: ${model.provider}`);
@@ -1656,6 +1657,18 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
     })();
     return eventStream as ReturnType<StreamFn>;
   };
+}
+
+function readAnthropicTransportOutputString(
+  model: AnthropicTransportModel,
+  key: "id" | "provider",
+): string {
+  try {
+    const value = model[key];
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 function toLintErrorObject(value: unknown, fallbackMessage: string): Error {
