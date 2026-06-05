@@ -10,6 +10,24 @@ type AnthropicToolPayloadCompatibilityOptions = {
   toolChoiceMode?: AnthropicToolChoiceMode;
 };
 
+type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
+
+function readPayloadField(record: Record<string, unknown>, key: string): PayloadFieldRead {
+  try {
+    return { ok: true, value: record[key] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function deletePayloadField(record: Record<string, unknown>, key: string): void {
+  try {
+    delete record[key];
+  } catch {
+    // Best-effort compatibility cleanup must not abort the provider turn.
+  }
+}
+
 function hasOpenAiAnthropicToolPayloadCompatFlag(model: { compat?: unknown }): boolean {
   if (!model.compat || typeof model.compat !== "object" || Array.isArray(model.compat)) {
     return false;
@@ -63,12 +81,23 @@ function usesOpenAiStringModeAnthropicToolChoiceForModel(
 function normalizeOpenAiFunctionAnthropicToolDefinition(
   tool: unknown,
 ): Record<string, unknown> | undefined {
+  try {
+    return normalizeOpenAiFunctionAnthropicToolDefinitionUnsafe(tool);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeOpenAiFunctionAnthropicToolDefinitionUnsafe(
+  tool: unknown,
+): Record<string, unknown> | undefined {
   if (!tool || typeof tool !== "object" || Array.isArray(tool)) {
     return undefined;
   }
 
   const toolObj = tool as Record<string, unknown>;
-  if (toolObj.function && typeof toolObj.function === "object") {
+  const existingFunction = toolObj.function;
+  if (existingFunction && typeof existingFunction === "object") {
     return toolObj;
   }
 
@@ -76,22 +105,26 @@ function normalizeOpenAiFunctionAnthropicToolDefinition(
   if (!rawName) {
     return toolObj;
   }
+  const inputSchema = toolObj.input_schema;
+  const parameters = toolObj.parameters;
+  const description = toolObj.description;
+  const strict = toolObj.strict;
 
   const functionSpec: Record<string, unknown> = {
     name: rawName,
     parameters:
-      toolObj.input_schema && typeof toolObj.input_schema === "object"
-        ? toolObj.input_schema
-        : toolObj.parameters && typeof toolObj.parameters === "object"
-          ? toolObj.parameters
+      inputSchema && typeof inputSchema === "object"
+        ? inputSchema
+        : parameters && typeof parameters === "object"
+          ? parameters
           : { type: "object", properties: {} },
   };
 
-  if (typeof toolObj.description === "string" && toolObj.description.trim()) {
-    functionSpec.description = toolObj.description;
+  if (typeof description === "string" && description.trim()) {
+    functionSpec.description = description;
   }
-  if (typeof toolObj.strict === "boolean") {
-    functionSpec.strict = toolObj.strict;
+  if (typeof strict === "boolean") {
+    functionSpec.strict = strict;
   }
 
   return {
@@ -101,24 +134,34 @@ function normalizeOpenAiFunctionAnthropicToolDefinition(
 }
 
 function normalizeOpenAiStringModeAnthropicToolChoice(toolChoice: unknown): unknown {
+  try {
+    return normalizeOpenAiStringModeAnthropicToolChoiceUnsafe(toolChoice);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeOpenAiStringModeAnthropicToolChoiceUnsafe(toolChoice: unknown): unknown {
   if (!toolChoice || typeof toolChoice !== "object" || Array.isArray(toolChoice)) {
     return toolChoice;
   }
 
   const choice = toolChoice as Record<string, unknown>;
-  if (choice.type === "auto") {
+  const type = choice.type;
+  if (type === "auto") {
     return "auto";
   }
-  if (choice.type === "none") {
+  if (type === "none") {
     return "none";
   }
-  if (choice.type === "required" || choice.type === "any") {
+  if (type === "required" || type === "any") {
     return "required";
   }
-  if (choice.type === "tool" && typeof choice.name === "string" && choice.name.trim()) {
+  const name = choice.name;
+  if (type === "tool" && typeof name === "string" && name.trim()) {
     return {
       type: "function",
-      function: { name: choice.name.trim() },
+      function: { name: name.trim() },
     };
   }
 
@@ -142,18 +185,27 @@ export function createAnthropicToolPayloadCompatibilityWrapper(
           requiresAnthropicToolPayloadCompatibilityForModel(model, options)
         ) {
           const payloadObj = payload as Record<string, unknown>;
+          const tools = readPayloadField(payloadObj, "tools");
           if (
-            Array.isArray(payloadObj.tools) &&
+            tools.ok &&
+            Array.isArray(tools.value) &&
             usesOpenAiFunctionAnthropicToolSchemaForModel(model, options)
           ) {
-            payloadObj.tools = payloadObj.tools
+            payloadObj.tools = tools.value
               .map((tool) => normalizeOpenAiFunctionAnthropicToolDefinition(tool))
               .filter((tool): tool is Record<string, unknown> => Boolean(tool));
+          } else if (!tools.ok) {
+            deletePayloadField(payloadObj, "tools");
           }
           if (usesOpenAiStringModeAnthropicToolChoiceForModel(model, options)) {
-            payloadObj.tool_choice = normalizeOpenAiStringModeAnthropicToolChoice(
-              payloadObj.tool_choice,
-            );
+            const toolChoice = readPayloadField(payloadObj, "tool_choice");
+            if (toolChoice.ok) {
+              payloadObj.tool_choice = normalizeOpenAiStringModeAnthropicToolChoice(
+                toolChoice.value,
+              );
+            } else {
+              deletePayloadField(payloadObj, "tool_choice");
+            }
           }
         }
         return originalOnPayload?.(payload, model);
