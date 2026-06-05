@@ -254,6 +254,58 @@ describe("xai stream wrappers", () => {
     expect(payload.tools[0]?.function).not.toHaveProperty("strict");
   });
 
+  it("drops unreadable tool payload rows while stripping healthy strict flags", () => {
+    const unreadableFunction = {};
+    Object.defineProperty(unreadableFunction, "function", {
+      enumerable: true,
+      get() {
+        throw new Error("raw function getter");
+      },
+    });
+    const unreadableStrict = {
+      type: "function",
+      function: Object.defineProperty(
+        {
+          name: "poisoned",
+          parameters: { type: "object", properties: {} },
+        },
+        "strict",
+        {
+          enumerable: true,
+          get() {
+            throw new Error("raw strict getter");
+          },
+        },
+      ),
+    };
+    const payload = {
+      tools: [
+        unreadableFunction,
+        unreadableStrict,
+        {
+          type: "function",
+          function: {
+            name: "write",
+            parameters: { type: "object", properties: {} },
+            strict: true,
+          },
+        },
+      ],
+    };
+
+    runXaiToolPayloadWrapper({ payload });
+
+    expect(payload.tools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: "write",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    ]);
+  });
+
   it("strips unsupported reasoning controls from non-reasoning xai payloads", () => {
     const payload: Record<string, unknown> = {
       reasoning: { effort: "high" },

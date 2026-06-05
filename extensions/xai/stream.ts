@@ -30,22 +30,71 @@ function resolveXaiFastModelId(modelId: unknown): string | undefined {
   return XAI_FAST_MODEL_IDS.get(modelId.trim());
 }
 
-function stripUnsupportedStrictFlag(tool: unknown): unknown {
+function clonePayloadObjectExcept(
+  value: Record<string, unknown>,
+  excludedKey: string,
+): Record<string, unknown> | undefined {
+  try {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      if (key === excludedKey) {
+        continue;
+      }
+      result[key] = value[key];
+    }
+    return result;
+  } catch {
+    return undefined;
+  }
+}
+
+function stripUnsupportedStrictFlag(
+  tool: unknown,
+): { keep: true; tool: unknown } | { keep: false } {
   if (!tool || typeof tool !== "object") {
-    return tool;
+    return { keep: true, tool };
   }
   const toolObj = tool as Record<string, unknown>;
-  const fn = toolObj.function;
+  let fn: unknown;
+  try {
+    fn = toolObj.function;
+  } catch {
+    return { keep: false };
+  }
   if (!fn || typeof fn !== "object") {
-    return tool;
+    return { keep: true, tool };
   }
   const fnObj = fn as Record<string, unknown>;
-  if (typeof fnObj.strict !== "boolean") {
-    return tool;
+  let strict: unknown;
+  try {
+    strict = fnObj.strict;
+  } catch {
+    return { keep: false };
   }
-  const nextFunction = { ...fnObj };
-  delete nextFunction.strict;
-  return { ...toolObj, function: nextFunction };
+  if (typeof strict !== "boolean") {
+    return { keep: true, tool };
+  }
+  const nextFunction = clonePayloadObjectExcept(fnObj, "strict");
+  if (!nextFunction) {
+    return { keep: false };
+  }
+  const nextTool = clonePayloadObjectExcept(toolObj, "function");
+  if (!nextTool) {
+    return { keep: false };
+  }
+  nextTool.function = nextFunction;
+  return { keep: true, tool: nextTool };
+}
+
+function stripUnsupportedStrictFlags(tools: unknown[]): unknown[] {
+  const stripped: unknown[] = [];
+  for (const tool of tools) {
+    const nextTool = stripUnsupportedStrictFlag(tool);
+    if (nextTool.keep) {
+      stripped.push(nextTool.tool);
+    }
+  }
+  return stripped;
 }
 
 function supportsExplicitImageInput(model: { input?: unknown }): boolean {
@@ -259,7 +308,7 @@ export function createXaiToolPayloadCompatibilityWrapper(
         if (payload && typeof payload === "object") {
           const payloadObj = payload as Record<string, unknown>;
           if (Array.isArray(payloadObj.tools)) {
-            payloadObj.tools = payloadObj.tools.map((tool) => stripUnsupportedStrictFlag(tool));
+            payloadObj.tools = stripUnsupportedStrictFlags(payloadObj.tools);
           }
           normalizeXaiResponsesToolResultPayload(payloadObj, model);
           if (!supportsReasoningControls(model)) {
