@@ -2404,7 +2404,26 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     record: PluginRecord,
     lifecycle: PluginRuntimeLifecycleRegistration,
   ) => {
-    const id = normalizePluginHostHookId(lifecycle.id);
+    let rawId: unknown;
+    let description: unknown;
+    let cleanup: unknown;
+    try {
+      rawId = lifecycle.id;
+      description = lifecycle.description;
+      cleanup = lifecycle.cleanup;
+    } catch (error) {
+      const normalizedId = normalizeOptionalHostHookString(rawId);
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message:
+          `runtime lifecycle registration has unreadable fields` +
+          `${normalizedId ? `: ${normalizedId}` : ""}: ${formatErrorMessage(error)}`,
+      });
+      return;
+    }
+    const id = normalizePluginHostHookId(typeof rawId === "string" ? rawId : undefined);
     if (!id) {
       pushDiagnostic({
         level: "error",
@@ -2426,7 +2445,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       });
       return;
     }
-    if (lifecycle.cleanup !== undefined && typeof lifecycle.cleanup !== "function") {
+    if (cleanup !== undefined && typeof cleanup !== "function") {
       pushDiagnostic({
         level: "error",
         pluginId: record.id,
@@ -2438,7 +2457,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     (registry.runtimeLifecycles ??= []).push({
       pluginId: record.id,
       pluginName: record.name,
-      lifecycle: { ...lifecycle, id },
+      lifecycle: {
+        id,
+        ...(description !== undefined ? { description: description as string } : {}),
+        ...(cleanup !== undefined
+          ? { cleanup: cleanup as PluginRuntimeLifecycleRegistration["cleanup"] }
+          : {}),
+      },
       source: record.source,
       rootDir: record.rootDir,
     });
