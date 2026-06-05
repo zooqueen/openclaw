@@ -55,6 +55,30 @@ describe("Mistral provider", () => {
     expect((mistralMockState.payloads[0] as { stop?: unknown }).stop).toEqual(["STOP"]);
   });
 
+  it("keeps stream errors reachable when output identity metadata is unreadable", async () => {
+    const hostileModel = makeMistralModel();
+    for (const key of ["api", "provider", "id"] as const) {
+      Object.defineProperty(hostileModel, key, {
+        enumerable: true,
+        get() {
+          throw new Error(`revoked ${key}`);
+        },
+      });
+    }
+
+    const stream = streamMistral(hostileModel, context, {
+      apiKey: "sk-mistral-provider",
+    });
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect(result.api).toBe("mistral-conversations");
+    expect(result.provider).toBe("unknown");
+    expect(result.model).toBe("unknown");
+    expect(mistralMockState.payloads).toHaveLength(0);
+  });
+
   it("skips unreadable tools when building Mistral request payloads", async () => {
     const revokedTool = Object.create(null) as {
       name: string;

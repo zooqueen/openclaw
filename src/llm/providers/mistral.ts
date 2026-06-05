@@ -150,9 +150,9 @@ function createOutput(model: Model<"mistral-conversations">): AssistantMessage {
   return {
     role: "assistant",
     content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
+    api: readMistralOutputApi(model),
+    provider: readMistralOutputString(model, "provider"),
+    model: readMistralOutputString(model, "id"),
     usage: {
       input: 0,
       output: 0,
@@ -164,6 +164,28 @@ function createOutput(model: Model<"mistral-conversations">): AssistantMessage {
     stopReason: "stop",
     timestamp: Date.now(),
   };
+}
+
+function readMistralOutputApi(
+  model: Model<"mistral-conversations">,
+): Model<"mistral-conversations">["api"] {
+  try {
+    return model.api === "mistral-conversations" ? model.api : "mistral-conversations";
+  } catch {
+    return "mistral-conversations";
+  }
+}
+
+function readMistralOutputString(
+  model: Model<"mistral-conversations">,
+  key: "id" | "provider",
+): string {
+  try {
+    const value = model[key];
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 function createMistralToolCallIdNormalizer(): (id: string) => string {
