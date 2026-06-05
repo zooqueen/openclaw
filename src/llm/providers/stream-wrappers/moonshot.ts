@@ -23,14 +23,42 @@ export function shouldApplySiliconFlowThinkingOffCompat(params: {
   );
 }
 
+type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
+
+function readPayloadField(record: Record<string, unknown>, key: string): PayloadFieldRead {
+  try {
+    return { ok: true, value: record[key] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function forcePayloadField(record: Record<string, unknown>, key: string, value: unknown): boolean {
+  try {
+    Object.defineProperty(record, key, {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true,
+    });
+    const next = readPayloadField(record, key);
+    return next.ok && next.value === value;
+  } catch {
+    return false;
+  }
+}
+
 /** Wraps Moonshot-compatible requests to rewrite SiliconFlow thinking-off payloads. */
 export function createSiliconFlowThinkingWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
   const underlying = baseStreamFn ?? streamSimple;
   return (model, context, options) =>
     streamWithPayloadPatch(underlying, model, context, options, (payloadObj) => {
       // SiliconFlow rejects the string "off" for these models but accepts null.
-      if (payloadObj.thinking === "off") {
-        payloadObj.thinking = null;
+      const thinking = readPayloadField(payloadObj, "thinking");
+      if (!thinking.ok || thinking.value === "off") {
+        if (!forcePayloadField(payloadObj, "thinking", null)) {
+          throw new Error("SiliconFlow thinking payload patch failed");
+        }
       }
     });
 }
