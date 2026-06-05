@@ -26,15 +26,25 @@ vi.mock("../../plugins/tools.js", () => ({
   buildPluginToolMetadataKey: (pluginId: string, toolName: string) =>
     JSON.stringify([pluginId, toolName]),
   ensureStandalonePluginToolRegistryLoaded: vi.fn(),
-  resolvePluginTools: vi.fn(() => [
-    { name: "voice_call", label: "voice_call", description: "Plugin calling tool" },
-    {
-      name: "matrix_room",
-      label: "matrix_room",
-      displaySummary: "Summarized Matrix room helper.",
-      description: "Matrix room helper\n\nACTIONS:\n- join\n- leave",
-    },
-  ]),
+  resolvePluginTools: vi.fn(() => {
+    const unreadableTool = {};
+    Object.defineProperty(unreadableTool, "name", {
+      get() {
+        throw new Error("bad tool name");
+      },
+    });
+    return [
+      unreadableTool,
+      { name: 42, label: "bad_number_name", description: "Bad tool" },
+      { name: "voice_call", label: "voice_call", description: "Plugin calling tool" },
+      {
+        name: "matrix_room",
+        label: "matrix_room",
+        displaySummary: "Summarized Matrix room helper.",
+        description: "Matrix room helper\n\nACTIONS:\n- join\n- leave",
+      },
+    ];
+  }),
   getPluginToolMeta: vi.fn((tool: { name: string }) => pluginToolMetaState.get(tool.name)),
 }));
 
@@ -167,6 +177,17 @@ describe("tools.catalog handler", () => {
       .flatMap((group) => group.tools)
       .find((tool) => tool.id === "matrix_room");
     expect(matrixRoom?.description).toBe("Summarized Matrix room helper.");
+  });
+
+  it("skips malformed plugin tool descriptors while building catalog groups", async () => {
+    const { respond, invoke } = createInvokeParams({});
+    await invoke();
+    const payload = expectCatalogPayload(respond);
+    const pluginToolIds = payload.groups
+      .filter((group) => group.source === "plugin")
+      .flatMap((group) => group.tools.map((tool) => tool.id));
+
+    expect(pluginToolIds).toEqual(["matrix_room", "voice_call"]);
   });
 
   it("opts plugin tool catalog loads into gateway subagent binding", async () => {

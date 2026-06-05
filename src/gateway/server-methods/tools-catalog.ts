@@ -49,6 +49,52 @@ type ToolCatalogGroup = {
   tools: ToolCatalogEntry[];
 };
 
+type PluginCatalogToolSnapshot = {
+  name: string;
+  label?: string;
+  description?: string;
+  displaySummary?: string;
+};
+
+function readOptionalStringField(read: () => unknown): string | undefined {
+  try {
+    const value = read();
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function snapshotPluginCatalogTool(tool: unknown): PluginCatalogToolSnapshot | undefined {
+  if (!tool || typeof tool !== "object") {
+    return undefined;
+  }
+  const record = tool as {
+    name?: unknown;
+    label?: unknown;
+    description?: unknown;
+    displaySummary?: unknown;
+  };
+  const name = readOptionalStringField(() => record.name);
+  if (!name) {
+    return undefined;
+  }
+  return {
+    name,
+    label: readOptionalStringField(() => record.label),
+    description: readOptionalStringField(() => record.description),
+    displaySummary: readOptionalStringField(() => record.displaySummary),
+  };
+}
+
+function readPluginToolMeta(tool: unknown): ReturnType<typeof getPluginToolMeta> | undefined {
+  try {
+    return getPluginToolMeta(tool as Parameters<typeof getPluginToolMeta>[0]);
+  } catch {
+    return undefined;
+  }
+}
+
 function buildCoreGroups(): ToolCatalogGroup[] {
   // Core catalog rows come from static tool sections so profile chips remain
   // stable even before any runtime agent session exists.
@@ -107,7 +153,11 @@ function buildPluginGroups(params: {
   );
   const seenToolIds = new Set<string>();
   for (const tool of pluginTools) {
-    const meta = getPluginToolMeta(tool);
+    const toolSnapshot = snapshotPluginCatalogTool(tool);
+    if (!toolSnapshot) {
+      continue;
+    }
+    const meta = readPluginToolMeta(tool);
     const pluginId = meta?.pluginId ?? "plugin";
     const groupId = `plugin:${pluginId}`;
     const existing =
@@ -120,19 +170,18 @@ function buildPluginGroups(params: {
         tools: [],
       } as ToolCatalogGroup);
     const ownedMetadata = meta?.pluginId
-      ? pluginToolMetadata.get(buildPluginToolMetadataKey(meta.pluginId, tool.name))
+      ? pluginToolMetadata.get(buildPluginToolMetadataKey(meta.pluginId, toolSnapshot.name))
       : undefined;
     existing.tools.push({
-      id: tool.name,
+      id: toolSnapshot.name,
       label:
         normalizeOptionalString(ownedMetadata?.displayName) ??
-        normalizeOptionalString(tool.label) ??
-        tool.name,
+        normalizeOptionalString(toolSnapshot.label) ??
+        toolSnapshot.name,
       description: summarizeToolDescriptionText({
         rawDescription:
-          ownedMetadata?.description ??
-          (typeof tool.description === "string" ? tool.description : undefined),
-        displaySummary: tool.displaySummary,
+          ownedMetadata?.description ?? normalizeOptionalString(toolSnapshot.description),
+        displaySummary: toolSnapshot.displaySummary,
       }),
       source: "plugin",
       pluginId,
@@ -141,7 +190,7 @@ function buildPluginGroups(params: {
       tags: ownedMetadata?.tags,
       defaultProfiles: [],
     });
-    seenToolIds.add(tool.name);
+    seenToolIds.add(toolSnapshot.name);
     groups.set(groupId, existing);
   }
   for (const entry of activeRegistry?.tools ?? []) {
