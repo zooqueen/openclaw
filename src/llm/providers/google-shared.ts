@@ -168,6 +168,14 @@ function readModelStringField<T extends GoogleApiType>(model: Model<T>, key: str
   return typeof value === "string" ? value : "";
 }
 
+function readModelStringArrayField<T extends GoogleApiType>(
+  model: Model<T>,
+  key: string,
+): string[] {
+  const value = readModelField(model, key);
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
+}
+
 /**
  * Convert internal messages to Gemini Content[] format.
  */
@@ -176,8 +184,11 @@ export function convertMessages<T extends GoogleApiType>(
   context: Context,
 ): Content[] {
   const contents: Content[] = [];
+  const modelId = readModelStringField(model, "id");
+  const modelProvider = readModelStringField(model, "provider");
+  const modelInput = readModelStringArrayField(model, "input");
   const normalizeToolCallId = (id: string): string => {
-    if (!requiresToolCallId(model.id)) {
+    if (!requiresToolCallId(modelId)) {
       return id;
     }
     return id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
@@ -215,7 +226,7 @@ export function convertMessages<T extends GoogleApiType>(
     } else if (msg.role === "assistant") {
       const parts: Part[] = [];
       // Check if message is from same provider and model - only then keep thinking blocks
-      const isSameProviderAndModel = msg.provider === model.provider && msg.model === model.id;
+      const isSameProviderAndModel = msg.provider === modelProvider && msg.model === modelId;
 
       for (const block of msg.content) {
         if (block.type === "text") {
@@ -262,7 +273,7 @@ export function convertMessages<T extends GoogleApiType>(
             functionCall: {
               name: block.name,
               args: block.arguments ?? {},
-              ...(requiresToolCallId(model.id) ? { id: block.id } : {}),
+              ...(requiresToolCallId(modelId) ? { id: block.id } : {}),
             },
             ...(thoughtSignature && { thoughtSignature }),
           };
@@ -281,7 +292,7 @@ export function convertMessages<T extends GoogleApiType>(
       // Extract text and image content
       const textContent = msg.content.filter((c): c is TextContent => c.type === "text");
       const textResult = textContent.map((c) => c.text).join("\n");
-      const imageContent = model.input.includes("image")
+      const imageContent = modelInput.includes("image")
         ? msg.content.filter((c): c is ImageContent => c.type === "image")
         : [];
 
@@ -291,7 +302,7 @@ export function convertMessages<T extends GoogleApiType>(
       // Gemini 3+ models support multimodal function responses with images nested inside
       // functionResponse.parts. Claude and other non-Gemini models behind Cloud Code Assist /
       // Gemini < 3 still needs a separate user image turn.
-      const modelSupportsMultimodalFunctionResponse = supportsMultimodalFunctionResponse(model.id);
+      const modelSupportsMultimodalFunctionResponse = supportsMultimodalFunctionResponse(modelId);
 
       // Use "output" key for success, "error" key for errors as per SDK documentation
       const responseValue = hasText
@@ -307,7 +318,7 @@ export function convertMessages<T extends GoogleApiType>(
         },
       }));
 
-      const includeId = requiresToolCallId(model.id);
+      const includeId = requiresToolCallId(modelId);
       const functionResponsePart: Part = {
         functionResponse: {
           name: msg.toolName,
@@ -535,14 +546,14 @@ export function mapToolChoice(choice: string): FunctionCallingConfigMode {
 
 export function createGoogleAssistantOutput<T extends GoogleApiType>(
   model: Model<T>,
-  api: Api = model.api,
+  api?: Api,
 ): AssistantMessage {
   return {
     role: "assistant",
     content: [],
-    api,
-    provider: model.provider,
-    model: model.id,
+    api: api ?? (readModelStringField(model, "api") as Api),
+    provider: readModelStringField(model, "provider"),
+    model: readModelStringField(model, "id"),
     usage: {
       input: 0,
       output: 0,
@@ -668,7 +679,7 @@ export function buildGoogleGenerateContentParams<T extends GoogleApiType>(
   }
 
   return {
-    model: model.id,
+    model: readModelStringField(model, "id"),
     contents,
     config,
   };

@@ -5,6 +5,7 @@ import {
   buildGoogleGenerateContentParams,
   convertMessages,
   convertTools,
+  createGoogleAssistantOutput,
 } from "./google-shared.js";
 import {
   asRecord,
@@ -539,5 +540,98 @@ describe("google-shared convertMessages", () => {
 
     expect(asRecord(toolCall.functionCall).id).toBeUndefined();
     expect(asRecord(toolResponse.functionResponse).id).toBeUndefined();
+  });
+
+  it("ignores unreadable model metadata while converting Google messages", () => {
+    const model = Object.defineProperties(
+      { ...makeModel("gemini-3-pro"), reasoning: false },
+      {
+        id: {
+          get() {
+            throw new Error("id getter should not be invoked");
+          },
+        },
+        provider: {
+          get() {
+            throw new Error("provider getter should not be invoked");
+          },
+        },
+        api: {
+          get() {
+            throw new Error("api getter should not be invoked");
+          },
+        },
+        input: {
+          get() {
+            throw new Error("input getter should not be invoked");
+          },
+        },
+      },
+    ) as ReturnType<typeof makeModel>;
+    const context: Context = {
+      messages: [
+        makeGoogleAssistantMessage("gemini-3-pro", [
+          { type: "thinking", thinking: "private thought", thinkingSignature: "dGhpbms=" },
+          { type: "toolCall", id: "call:1", name: "lookup", arguments: {} },
+        ]),
+        {
+          role: "toolResult",
+          toolCallId: "call:1",
+          toolName: "lookup",
+          isError: false,
+          content: [
+            { type: "text", text: "ok" },
+            { type: "image", mimeType: "image/png", data: "ZmFrZQ==" },
+          ],
+          timestamp: 0,
+        },
+      ],
+    };
+
+    const contents = convertMessagesForTest(model, context);
+
+    const assistantParts = contents[0]?.parts ?? [];
+    expect(assistantParts[0]).toEqual({ text: "private thought" });
+    expect(assistantParts[1]).toEqual({ functionCall: { name: "lookup", args: {} } });
+    const functionResponse = asRecord(asRecord(contents[1]?.parts?.[0]).functionResponse);
+    expect(functionResponse).toEqual({
+      name: "lookup",
+      response: { output: "ok\n(tool image omitted: model does not support images)" },
+    });
+
+    const params = buildGoogleGenerateContentParams(model, context);
+    expect(params.model).toBe("");
+    expect(params.contents).toEqual(contents);
+  });
+});
+
+describe("google-shared assistant output metadata", () => {
+  it("uses explicit api and ignores unreadable optional model metadata", () => {
+    const model = Object.defineProperties(
+      { ...makeModel("gemini-3-pro") },
+      {
+        api: {
+          get() {
+            throw new Error("api getter should not be invoked");
+          },
+        },
+        provider: {
+          get() {
+            throw new Error("provider getter should not be invoked");
+          },
+        },
+        id: {
+          get() {
+            throw new Error("id getter should not be invoked");
+          },
+        },
+      },
+    ) as ReturnType<typeof makeModel>;
+
+    expect(createGoogleAssistantOutput(model, "google-generative-ai")).toMatchObject({
+      api: "google-generative-ai",
+      provider: "",
+      model: "",
+    });
   });
 });

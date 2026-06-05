@@ -36,11 +36,31 @@ function replaceImagesWithPlaceholder(
   return result;
 }
 
+function readModelField<TApi extends Api>(model: Model<TApi>, key: string): unknown {
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(model, key);
+  } catch {
+    return undefined;
+  }
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function readModelStringField<TApi extends Api>(model: Model<TApi>, key: string): string {
+  const value = readModelField(model, key);
+  return typeof value === "string" ? value : "";
+}
+
+function readModelStringArrayField<TApi extends Api>(model: Model<TApi>, key: string): string[] {
+  const value = readModelField(model, key);
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
+}
+
 function downgradeUnsupportedImages<TApi extends Api>(
   messages: Message[],
   model: Model<TApi>,
 ): Message[] {
-  if (model.input.includes("image")) {
+  if (readModelStringArrayField(model, "input").includes("image")) {
     return messages;
   }
 
@@ -76,6 +96,9 @@ export function transformMessages<TApi extends Api>(
   // Build a map of original tool call IDs to normalized IDs
   const toolCallIdMap = new Map<string, string>();
   const imageAwareMessages = downgradeUnsupportedImages(messages, model);
+  const modelProvider = readModelStringField(model, "provider");
+  const modelApi = readModelStringField(model, "api");
+  const modelId = readModelStringField(model, "id");
 
   // First pass: transform messages (unsupported image downgrade, thinking blocks, tool call ID normalization)
   const transformed = imageAwareMessages.map((msg) => {
@@ -97,9 +120,9 @@ export function transformMessages<TApi extends Api>(
     if (msg.role === "assistant") {
       const assistantMsg = msg;
       const isSameModel =
-        assistantMsg.provider === model.provider &&
-        assistantMsg.api === model.api &&
-        assistantMsg.model === model.id;
+        assistantMsg.provider === modelProvider &&
+        assistantMsg.api === modelApi &&
+        assistantMsg.model === modelId;
 
       const transformedContent = assistantMsg.content.flatMap((block) => {
         if (block.type === "thinking") {
