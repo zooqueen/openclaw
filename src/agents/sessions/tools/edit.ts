@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { toErrorObject } from "../../../infra/errors.js";
 import { renderDiff } from "../../modes/interactive/components/diff.js";
 import type { AgentTool } from "../../runtime/index.js";
 import type { ToolDefinition } from "../extensions/types.js";
@@ -436,7 +437,7 @@ export function createEditToolDefinition(
             },
           };
         } catch (error: unknown) {
-          const normalizedError = error instanceof Error ? error : new Error(String(error));
+          const normalizedError = toErrorObject(error, "Edit tool error");
           const currentContent = await ops
             .readFile(absolutePath)
             .then((current) => current.toString("utf-8"))

@@ -9,6 +9,7 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { toErrorObject } from "../../../infra/errors.js";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.js";
 import type { AgentTool } from "../../runtime/index.js";
 import { ensureTool } from "../../utils/tools-manager.js";
@@ -369,7 +370,7 @@ export function createFindToolDefinition(
               settle(() => reject(new Error("Operation aborted")));
               return;
             }
-            const error = e instanceof Error ? e : new Error(String(e));
+            const error = toErrorObject(e, "Find tool error");
             settle(() => reject(error));
           }
         })();

@@ -10,6 +10,23 @@ function operations(results: string[]): FindOperations {
   };
 }
 
+function createHostileThrownValue(): unknown {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("property denied");
+      },
+      getPrototypeOf() {
+        throw new Error("prototype denied");
+      },
+      ownKeys() {
+        throw new Error("keys denied");
+      },
+    },
+  );
+}
+
 function textContent(
   result: Awaited<ReturnType<ReturnType<typeof createFindToolDefinition>["execute"]>>,
 ): string {
@@ -52,5 +69,20 @@ describe("find tool", () => {
 
     expect(textContent(result)).toBe("a.ts\nb.ts");
     expect(result.details).toBeUndefined();
+  });
+
+  it("rejects hostile search backend failures without stringifying them", async () => {
+    const tool = createFindToolDefinition("/workspace", {
+      operations: {
+        exists: () => true,
+        glob: () => {
+          throw createHostileThrownValue();
+        },
+      },
+    });
+
+    await expect(
+      tool.execute("call-1", { pattern: "*.ts" }, undefined, undefined, {} as never),
+    ).rejects.toThrow("Find tool error");
   });
 });

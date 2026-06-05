@@ -13,6 +13,23 @@ const testTheme = {
   fg: (_name: string, text: string) => text,
 } as Theme;
 
+function createHostileThrownValue(): unknown {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("property denied");
+      },
+      getPrototypeOf() {
+        throw new Error("prototype denied");
+      },
+      ownKeys() {
+        throw new Error("keys denied");
+      },
+    },
+  );
+}
+
 describe("edit tool", () => {
   let tmpDir = "";
 
@@ -103,6 +120,31 @@ describe("edit tool", () => {
         undefined,
       ),
     ).rejects.toThrow("Simulated write failure");
+  });
+
+  it("rejects hostile write failures without stringifying them", async () => {
+    const filePath = await createTempFile("old value");
+    const operations: EditOperations = {
+      access: async (absolutePath) => {
+        await fs.access(absolutePath);
+      },
+      readFile: (absolutePath) => fs.readFile(absolutePath),
+      writeFile: async () => {
+        throw createHostileThrownValue();
+      },
+    };
+    const tool = createEditTool(tmpDir, { operations });
+
+    await expect(
+      tool.execute(
+        "call-1",
+        {
+          path: filePath,
+          edits: [{ oldText: "old", newText: "new" }],
+        },
+        undefined,
+      ),
+    ).rejects.toThrow("Edit tool error");
   });
 
   it("recovers multi-edit post-write failures", async () => {
