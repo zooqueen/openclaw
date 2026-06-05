@@ -1814,8 +1814,52 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     });
   };
 
+  const readServiceIdField = (record: PluginRecord, service: OpenClawPluginService): unknown => {
+    try {
+      return service.id;
+    } catch (error) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `service registration has unreadable id: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
+  const readServiceLifecycleFields = (
+    record: PluginRecord,
+    service: OpenClawPluginService,
+    id: string,
+  ):
+    | {
+        start: unknown;
+        stop: unknown;
+      }
+    | undefined => {
+    try {
+      return {
+        start: service.start,
+        stop: service.stop,
+      };
+    } catch (error) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `service registration has unreadable lifecycle fields: ${id}: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
   const registerService = (record: PluginRecord, service: OpenClawPluginService) => {
-    const id = service.id.trim();
+    const idField = readServiceIdField(record, service);
+    if (idField === undefined) {
+      return;
+    }
+    const id = normalizeOptionalString(idField) ?? "";
     if (!id) {
       return;
     }
@@ -1834,11 +1878,44 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       });
       return;
     }
+    const fields = readServiceLifecycleFields(record, service, id);
+    if (!fields) {
+      return;
+    }
+    const start = fields.start;
+    if (typeof start !== "function") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `service registration missing start handler: ${id}`,
+      });
+      return;
+    }
+    const stop = fields.stop;
+    if (stop !== undefined && typeof stop !== "function") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `service registration stop handler must be a function: ${id}`,
+      });
+      return;
+    }
     record.services.push(id);
     registry.services.push({
       pluginId: record.id,
       pluginName: record.name,
-      service,
+      service: {
+        id,
+        start: (ctx) => (start as OpenClawPluginService["start"]).call(service, ctx),
+        ...(stop
+          ? {
+              stop: (ctx) =>
+                (stop as NonNullable<OpenClawPluginService["stop"]>).call(service, ctx),
+            }
+          : {}),
+      },
       source: record.source,
       origin: record.origin,
       trustedOfficialInstall: record.trustedOfficialInstall,
