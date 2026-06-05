@@ -1535,9 +1535,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     kindLabel: string;
     registrations: Array<PluginOwnedProviderRegistration<T>>;
     ownedIds: string[];
-  }): boolean => {
-    const id = params.provider.id.trim();
+    snapshotFields: readonly string[];
+  }): T | undefined => {
     const { record, kindLabel } = params;
+    const id = readProviderLikeId(record, kindLabel, params.provider);
+    if (id === undefined) {
+      return undefined;
+    }
     const missingLabel = `${kindLabel} registration missing id`;
     const duplicateLabel = `${kindLabel} already registered: ${id}`;
     if (!id) {
@@ -1547,7 +1551,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
         source: record.source,
         message: missingLabel,
       });
-      return false;
+      return undefined;
     }
     const existing = params.registrations.find((entry) => entry.provider.id === id);
     if (existing) {
@@ -1557,7 +1561,17 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
         source: record.source,
         message: `${duplicateLabel} (${existing.pluginId})`,
       });
-      return false;
+      return undefined;
+    }
+    const snapshot = snapshotProviderLike(
+      record,
+      kindLabel,
+      params.provider,
+      id,
+      params.snapshotFields,
+    );
+    if (!snapshot) {
+      return undefined;
     }
     if (!params.ownedIds.includes(id)) {
       params.ownedIds.push(id);
@@ -1565,12 +1579,259 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     params.registrations.push({
       pluginId: record.id,
       pluginName: record.name,
-      provider: params.provider,
+      provider: snapshot,
       source: record.source,
       rootDir: record.rootDir,
     });
-    return true;
+    return snapshot;
   };
+
+  const readProviderLikeId = (
+    record: PluginRecord,
+    kindLabel: string,
+    provider: { id: string },
+  ): string | undefined => {
+    try {
+      const rawId = provider.id;
+      return typeof rawId === "string" ? rawId.trim() : "";
+    } catch (error) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `${kindLabel} registration has unreadable id: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
+  const snapshotProviderLike = <T extends { id: string }>(
+    record: PluginRecord,
+    kindLabel: string,
+    provider: T,
+    id: string,
+    snapshotFields: readonly string[],
+  ): T | undefined => {
+    const snapshot: Record<PropertyKey, unknown> = { id };
+    try {
+      collectProviderLikeSnapshotFields(provider, snapshot, snapshotFields);
+      return snapshot as T;
+    } catch (error) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `${kindLabel} registration has unreadable fields: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
+  const collectProviderLikeSnapshotFields = (
+    provider: { id: string },
+    snapshot: Record<PropertyKey, unknown>,
+    snapshotFields: readonly string[],
+  ): void => {
+    const seen = new Set<PropertyKey>(["id"]);
+    const providerRecord = provider as Record<string, unknown>;
+    for (const field of snapshotFields) {
+      if (field === "id" || seen.has(field)) {
+        continue;
+      }
+      seen.add(field);
+      snapshot[field] = snapshotProviderLikeValue(provider, providerRecord[field]);
+    }
+    let current: object | null = provider;
+    while (current && current !== Object.prototype) {
+      for (const key of Reflect.ownKeys(current)) {
+        if (key === "constructor" || seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        const descriptor = Object.getOwnPropertyDescriptor(current, key);
+        if (!descriptor) {
+          continue;
+        }
+        if ("value" in descriptor) {
+          snapshot[key] = snapshotProviderLikeValue(provider, descriptor.value);
+          continue;
+        }
+        if (descriptor.get) {
+          snapshot[key] = snapshotProviderLikeValue(provider, descriptor.get.call(provider));
+        }
+      }
+      current = Object.getPrototypeOf(current);
+    }
+  };
+
+  const snapshotProviderLikeValue = (provider: { id: string }, value: unknown): unknown => {
+    if (typeof value === "function") {
+      return (...args: unknown[]) => Reflect.apply(value, provider, args);
+    }
+    if (Array.isArray(value)) {
+      return [...value];
+    }
+    return value;
+  };
+
+  const speechProviderSnapshotFields = [
+    "label",
+    "aliases",
+    "autoSelectOrder",
+    "defaultTimeoutMs",
+    "defaultModel",
+    "models",
+    "voices",
+    "resolveConfig",
+    "parseDirectiveToken",
+    "resolveTalkConfig",
+    "resolveTalkOverrides",
+    "prepareSynthesis",
+    "isConfigured",
+    "synthesize",
+    "streamSynthesize",
+    "synthesizeTelephony",
+    "listVoices",
+  ] as const;
+
+  const realtimeTranscriptionProviderSnapshotFields = [
+    "label",
+    "aliases",
+    "defaultModel",
+    "models",
+    "autoSelectOrder",
+    "resolveConfig",
+    "isConfigured",
+    "createSession",
+  ] as const;
+
+  const realtimeVoiceProviderSnapshotFields = [
+    "label",
+    "aliases",
+    "defaultModel",
+    "models",
+    "autoSelectOrder",
+    "capabilities",
+    "resolveConfig",
+    "isConfigured",
+    "createBridge",
+    "createBrowserSession",
+  ] as const;
+
+  const mediaUnderstandingProviderSnapshotFields = [
+    "capabilities",
+    "defaultModels",
+    "autoPriority",
+    "nativeDocumentInputs",
+    "documentModels",
+    "resolveAuth",
+    "resolveSyntheticAuth",
+    "transcribeAudio",
+    "describeVideo",
+    "describeImage",
+    "describeImages",
+    "extractStructured",
+  ] as const;
+
+  const transcriptSourceProviderSnapshotFields = [
+    "aliases",
+    "name",
+    "sourceKinds",
+    "start",
+    "stop",
+    "status",
+    "importTranscript",
+  ] as const;
+
+  const imageGenerationProviderSnapshotFields = [
+    "aliases",
+    "label",
+    "defaultModel",
+    "defaultTimeoutMs",
+    "models",
+    "capabilities",
+    "isConfigured",
+    "generateImage",
+  ] as const;
+
+  const videoGenerationProviderSnapshotFields = [
+    "aliases",
+    "label",
+    "defaultModel",
+    "defaultTimeoutMs",
+    "models",
+    "capabilities",
+    "isConfigured",
+    "resolveModelCapabilities",
+    "generateVideo",
+  ] as const;
+
+  const musicGenerationProviderSnapshotFields = [
+    "aliases",
+    "label",
+    "defaultModel",
+    "models",
+    "capabilities",
+    "isConfigured",
+    "generateMusic",
+  ] as const;
+
+  const webFetchProviderSnapshotFields = [
+    "label",
+    "hint",
+    "requiresCredential",
+    "credentialLabel",
+    "envVars",
+    "placeholder",
+    "signupUrl",
+    "docsUrl",
+    "autoDetectOrder",
+    "credentialPath",
+    "inactiveSecretPaths",
+    "getCredentialValue",
+    "setCredentialValue",
+    "getConfiguredCredentialValue",
+    "setConfiguredCredentialValue",
+    "getConfiguredCredentialFallback",
+    "applySelectionConfig",
+    "resolveRuntimeMetadata",
+    "createTool",
+  ] as const;
+
+  const webSearchProviderSnapshotFields = [
+    "label",
+    "hint",
+    "onboardingScopes",
+    "requiresCredential",
+    "credentialLabel",
+    "envVars",
+    "authProviderId",
+    "placeholder",
+    "signupUrl",
+    "docsUrl",
+    "credentialNote",
+    "autoDetectOrder",
+    "credentialPath",
+    "inactiveSecretPaths",
+    "getCredentialValue",
+    "setCredentialValue",
+    "getConfiguredCredentialValue",
+    "setConfiguredCredentialValue",
+    "getConfiguredCredentialFallback",
+    "applySelectionConfig",
+    "runSetup",
+    "resolveRuntimeMetadata",
+    "createTool",
+  ] as const;
+
+  const migrationProviderSnapshotFields = [
+    "label",
+    "description",
+    "detect",
+    "prepareApply",
+    "plan",
+    "apply",
+  ] as const;
 
   const registerSpeechProvider = (record: PluginRecord, provider: SpeechProviderPlugin) => {
     const registered = registerUniqueProviderLike({
@@ -1579,11 +1840,12 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "speech provider",
       registrations: registry.speechProviders,
       ownedIds: record.speechProviderIds,
+      snapshotFields: speechProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedVoiceModelCatalogProvider({
         record,
-        provider,
+        provider: registered,
         capabilities: { tts: true },
         modes: ["tts"],
       });
@@ -1600,11 +1862,12 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "realtime transcription provider",
       registrations: registry.realtimeTranscriptionProviders,
       ownedIds: record.realtimeTranscriptionProviderIds,
+      snapshotFields: realtimeTranscriptionProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedVoiceModelCatalogProvider({
         record,
-        provider,
+        provider: registered,
         capabilities: { realtime_transcription: true },
         modes: ["realtime_transcription"],
       });
@@ -1621,11 +1884,12 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "realtime voice provider",
       registrations: registry.realtimeVoiceProviders,
       ownedIds: record.realtimeVoiceProviderIds,
+      snapshotFields: realtimeVoiceProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedVoiceModelCatalogProvider({
         record,
-        provider,
+        provider: registered,
         capabilities: { realtime_voice: true },
         modes: ["realtime_voice"],
       });
@@ -1642,6 +1906,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "media provider",
       registrations: registry.mediaUnderstandingProviders,
       ownedIds: record.mediaUnderstandingProviderIds,
+      snapshotFields: mediaUnderstandingProviderSnapshotFields,
     });
   };
 
@@ -1655,6 +1920,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "transcripts source provider",
       registrations: registry.transcriptSourceProviders,
       ownedIds: record.transcriptSourceProviderIds,
+      snapshotFields: transcriptSourceProviderSnapshotFields,
     });
   };
 
@@ -1668,12 +1934,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "image-generation provider",
       registrations: registry.imageGenerationProviders,
       ownedIds: record.imageGenerationProviderIds,
+      snapshotFields: imageGenerationProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedMediaModelCatalogProvider({
         record,
         kind: "image_generation",
-        provider,
+        provider: registered,
       });
     }
   };
@@ -1688,12 +1955,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "video-generation provider",
       registrations: registry.videoGenerationProviders,
       ownedIds: record.videoGenerationProviderIds,
+      snapshotFields: videoGenerationProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedMediaModelCatalogProvider({
         record,
         kind: "video_generation",
-        provider,
+        provider: registered,
       });
     }
   };
@@ -1708,12 +1976,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "music-generation provider",
       registrations: registry.musicGenerationProviders,
       ownedIds: record.musicGenerationProviderIds,
+      snapshotFields: musicGenerationProviderSnapshotFields,
     });
     if (registered) {
       registerSynthesizedMediaModelCatalogProvider({
         record,
         kind: "music_generation",
-        provider,
+        provider: registered,
       });
     }
   };
@@ -1725,6 +1994,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "web fetch provider",
       registrations: registry.webFetchProviders,
       ownedIds: record.webFetchProviderIds,
+      snapshotFields: webFetchProviderSnapshotFields,
     });
   };
 
@@ -1735,6 +2005,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "web search provider",
       registrations: registry.webSearchProviders,
       ownedIds: record.webSearchProviderIds,
+      snapshotFields: webSearchProviderSnapshotFields,
     });
   };
 
@@ -1745,6 +2016,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       kindLabel: "migration provider",
       registrations: registry.migrationProviders,
       ownedIds: record.migrationProviderIds,
+      snapshotFields: migrationProviderSnapshotFields,
     });
   };
 
