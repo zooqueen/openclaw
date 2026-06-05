@@ -213,7 +213,15 @@ export function resolveGatewayScopedTools(params: {
     ...(Array.isArray(gatewayToolsCfg?.deny) ? gatewayToolsCfg.deny : []),
     ...excludedToolNames,
   ]);
-  const tools = policyFiltered.filter((tool) => !gatewayDenySet.has(tool.name));
+  const tools = policyFiltered.filter((tool) => {
+    let name: unknown;
+    try {
+      name = tool.name;
+    } catch {
+      return false;
+    }
+    return typeof name === "string" && !gatewayDenySet.has(name);
+  });
   if (shouldInheritEffectiveToolAllowlist) {
     replaceWithEffectiveToolAllowlist(inheritedToolAllowlist, tools);
   }

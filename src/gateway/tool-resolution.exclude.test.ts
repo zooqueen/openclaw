@@ -65,6 +65,46 @@ describe("resolveGatewayScopedTools excludeToolNames", () => {
     expect(args.inheritedToolDenylist).toEqual([]);
   });
 
+  it("skips unreadable names during gateway exclusion filtering", () => {
+    const unreadableTool = {};
+    Object.defineProperty(unreadableTool, "name", {
+      get() {
+        throw new Error("bad tool name");
+      },
+    });
+    type MockTool = ReturnType<typeof hoisted.createOpenClawToolsMock>[number];
+    hoisted.createOpenClawToolsMock.mockReturnValueOnce([
+      {
+        name: "read",
+        description: "Read files",
+        parameters: { type: "object", properties: {} },
+        execute: vi.fn(),
+      },
+      unreadableTool as MockTool,
+      {
+        name: 42,
+        description: "Bad tool",
+        parameters: { type: "object", properties: {} },
+        execute: vi.fn(),
+      } as unknown as MockTool,
+      {
+        name: "sessions_spawn",
+        description: "Spawn sessions",
+        parameters: { type: "object", properties: {} },
+        execute: vi.fn(),
+      },
+    ]);
+
+    const result = resolveGatewayScopedTools({
+      cfg: {} as OpenClawConfig,
+      sessionKey: "agent:main:direct:test",
+      surface: "loopback",
+      excludeToolNames: ["read"],
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toEqual(["sessions_spawn"]);
+  });
+
   it("keeps real gateway deny policy inheritable while excluding native dedup tools", () => {
     resolveGatewayScopedTools({
       cfg: {
