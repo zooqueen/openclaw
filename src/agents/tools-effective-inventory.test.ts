@@ -114,6 +114,7 @@ vi.mock("../plugins/provider-runtime.js", () => ({
 
 let resolveEffectiveToolInventory: typeof import("./tools-effective-inventory.js").resolveEffectiveToolInventory;
 let buildEffectiveToolInventoryEntries: typeof import("./tools-effective-inventory-build.js").buildEffectiveToolInventoryEntries;
+let buildRuntimeCompatibleMcpToolInventory: typeof import("./tools-effective-mcp-inventory.js").buildRuntimeCompatibleMcpToolInventory;
 
 async function loadHarness(options?: {
   tools?: AnyAgentTool[];
@@ -150,6 +151,8 @@ describe("resolveEffectiveToolInventory", () => {
   beforeAll(async () => {
     ({ resolveEffectiveToolInventory } = await import("./tools-effective-inventory.js"));
     ({ buildEffectiveToolInventoryEntries } = await import("./tools-effective-inventory-build.js"));
+    ({ buildRuntimeCompatibleMcpToolInventory } =
+      await import("./tools-effective-mcp-inventory.js"));
   });
 
   beforeEach(() => {
@@ -372,6 +375,61 @@ describe("resolveEffectiveToolInventory", () => {
         description: "Tool",
         rawDescription: "",
         source: "core",
+      },
+    ]);
+  });
+
+  it("guards bundled MCP inventory display metadata", () => {
+    const unreadableName = Object.defineProperty(
+      {
+        execute: vi.fn(),
+        parameters: { type: "object", properties: {} },
+      },
+      "name",
+      {
+        get() {
+          throw new Error("broken MCP inventory tool name");
+        },
+      },
+    ) as AnyAgentTool;
+    const hostileDisplayFields = Object.defineProperties(
+      {
+        execute: vi.fn(),
+        name: "mcp_lookup",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        description: {
+          get() {
+            throw new Error("broken MCP inventory description");
+          },
+        },
+        displaySummary: {
+          get() {
+            throw new Error("broken MCP inventory summary");
+          },
+        },
+        label: {
+          get() {
+            throw new Error("broken MCP inventory label");
+          },
+        },
+      },
+    ) as AnyAgentTool;
+
+    expect(
+      buildRuntimeCompatibleMcpToolInventory({
+        tools: [unreadableName, hostileDisplayFields],
+        cfg: {},
+      }).entries,
+    ).toEqual([
+      {
+        id: "mcp_lookup",
+        label: "Mcp Lookup",
+        description: "Tool",
+        rawDescription: "Tool",
+        source: "mcp",
+        pluginId: "bundle-mcp",
       },
     ]);
   });

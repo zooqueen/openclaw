@@ -25,25 +25,56 @@ import type { AnyAgentTool } from "./tools/common.js";
 
 const BUNDLE_MCP_PLUGIN_ID = "bundle-mcp";
 
-function resolveMcpToolLabel(tool: AnyAgentTool): string {
-  const rawLabel = normalizeOptionalString(tool.label) ?? "";
+type McpToolInventorySnapshot = {
+  name: string;
+  label?: string;
+  description?: string;
+  displaySummary?: string;
+};
+
+function readMcpToolStringField(
+  tool: AnyAgentTool,
+  key: "name" | "label" | "description" | "displaySummary",
+): string | undefined {
+  try {
+    return normalizeOptionalString((tool as Record<string, unknown>)[key]) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function snapshotMcpTool(tool: AnyAgentTool): McpToolInventorySnapshot | undefined {
+  const name = readMcpToolStringField(tool, "name")?.trim();
+  if (!name) {
+    return undefined;
+  }
+  return {
+    name,
+    label: readMcpToolStringField(tool, "label"),
+    description: readMcpToolStringField(tool, "description"),
+    displaySummary: readMcpToolStringField(tool, "displaySummary"),
+  };
+}
+
+function resolveMcpToolLabel(snapshot: McpToolInventorySnapshot): string {
+  const rawLabel = snapshot.label ?? "";
   if (
     rawLabel &&
-    normalizeLowercaseStringOrEmpty(rawLabel) !== normalizeLowercaseStringOrEmpty(tool.name)
+    normalizeLowercaseStringOrEmpty(rawLabel) !== normalizeLowercaseStringOrEmpty(snapshot.name)
   ) {
     return rawLabel;
   }
-  return resolveToolDisplay({ name: tool.name }).title;
+  return resolveToolDisplay({ name: snapshot.name }).title;
 }
 
-function resolveRawToolDescription(tool: AnyAgentTool): string {
-  return normalizeOptionalString(tool.description) ?? "";
+function resolveRawToolDescription(snapshot: McpToolInventorySnapshot): string {
+  return snapshot.description ?? "";
 }
 
-function summarizeToolDescription(tool: AnyAgentTool): string {
+function summarizeToolDescription(snapshot: McpToolInventorySnapshot): string {
   return summarizeToolDescriptionText({
-    rawDescription: resolveRawToolDescription(tool),
-    displaySummary: tool.displaySummary,
+    rawDescription: resolveRawToolDescription(snapshot),
+    displaySummary: snapshot.displaySummary,
   });
 }
 
@@ -79,17 +110,23 @@ function buildMcpToolInventoryEntries(
 ): EffectiveToolInventoryEntry[] {
   return disambiguateLabels(
     tools
-      .map(
-        (tool) =>
-          ({
-            id: tool.name,
-            label: resolveMcpToolLabel(tool),
-            description: summarizeToolDescription(tool),
-            rawDescription: resolveRawToolDescription(tool) || summarizeToolDescription(tool),
+      .flatMap((tool) => {
+        const snapshot = snapshotMcpTool(tool);
+        if (!snapshot) {
+          return [];
+        }
+        return [
+          {
+            id: snapshot.name,
+            label: resolveMcpToolLabel(snapshot),
+            description: summarizeToolDescription(snapshot),
+            rawDescription:
+              resolveRawToolDescription(snapshot) || summarizeToolDescription(snapshot),
             source: "mcp",
             pluginId: BUNDLE_MCP_PLUGIN_ID,
-          }) satisfies EffectiveToolInventoryEntry,
-      )
+          } satisfies EffectiveToolInventoryEntry,
+        ];
+      })
       .toSorted((a, b) => a.label.localeCompare(b.label)),
   );
 }
