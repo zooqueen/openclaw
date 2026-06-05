@@ -16,7 +16,6 @@ import { getEnvApiKey } from "../env-api-keys.js";
 import { calculateCost, clampThinkingLevel } from "../model-utils.js";
 import type {
   AnthropicMessagesCompat,
-  Api,
   AssistantMessage,
   CacheRetention,
   Context,
@@ -452,9 +451,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
     const output: AssistantMessage = {
       role: "assistant",
       content: [],
-      api: model.api as Api,
-      provider: model.provider,
-      model: model.id,
+      api: readAnthropicOutputApi(model),
+      provider: readAnthropicOutputString(model, "provider"),
+      model: readAnthropicOutputString(model, "id"),
       usage: {
         input: 0,
         output: 0,
@@ -730,6 +729,28 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 
   return stream;
 };
+
+function readAnthropicOutputApi(
+  model: Model<"anthropic-messages">,
+): Model<"anthropic-messages">["api"] {
+  try {
+    return model.api === "anthropic-messages" ? model.api : "anthropic-messages";
+  } catch {
+    return "anthropic-messages";
+  }
+}
+
+function readAnthropicOutputString(
+  model: Model<"anthropic-messages">,
+  key: "id" | "provider",
+): string {
+  try {
+    const value = model[key];
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 /**
  * Check if a model supports adaptive thinking (Opus 4.6+, Sonnet 4.6)

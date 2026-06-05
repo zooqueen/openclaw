@@ -219,6 +219,39 @@ describe("Anthropic provider", () => {
     expect((capturedPayload as { stop_sequences?: unknown }).stop_sequences).toEqual(["STOP"]);
   });
 
+  it("keeps stream errors reachable when output identity metadata is unreadable", async () => {
+    const hostileModel = makeAnthropicModel();
+    for (const key of ["api", "provider", "id"] as const) {
+      Object.defineProperty(hostileModel, key, {
+        enumerable: true,
+        get() {
+          throw new Error(`revoked ${key}`);
+        },
+      });
+    }
+    let sawPayload = false;
+    const stream = streamAnthropic(
+      hostileModel,
+      {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+      },
+      {
+        apiKey: "sk-ant-provider",
+        onPayload: () => {
+          sawPayload = true;
+        },
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(sawPayload).toBe(false);
+    expect(result.stopReason).toBe("error");
+    expect(result.api).toBe("anthropic-messages");
+    expect(result.provider).toBe("unknown");
+    expect(result.model).toBe("unknown");
+  });
+
   it("skips unreadable tools when building Anthropic request payloads", async () => {
     const revokedTool = Object.create(null) as {
       name: string;
