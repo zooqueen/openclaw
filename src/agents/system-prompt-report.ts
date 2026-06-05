@@ -49,7 +49,7 @@ function parseSkillBlocks(skillsPrompt: string): Array<{ name: string; blockChar
 }
 
 function buildToolSchemaStats(
-  parameters: AgentTool["parameters"],
+  parameters: unknown,
 ): Pick<ToolReportEntry, "propertiesCount" | "schemaChars" | "schemaHash"> {
   if (!parameters || typeof parameters !== "object") {
     return { schemaChars: 0, schemaHash: sha256(""), propertiesCount: null };
@@ -68,12 +68,16 @@ function buildToolSchemaStats(
     schemaChars: schemaJson.length,
     schemaHash: sha256(schemaJson),
     propertiesCount: (() => {
-      const schema = parameters as Record<string, unknown>;
-      const props = typeof schema.properties === "object" ? schema.properties : null;
-      if (!props || typeof props !== "object") {
+      try {
+        const schema = parameters as Record<string, unknown>;
+        const props = typeof schema.properties === "object" ? schema.properties : null;
+        if (!props || typeof props !== "object") {
+          return null;
+        }
+        return Object.keys(props as Record<string, unknown>).length;
+      } catch {
         return null;
       }
-      return Object.keys(props as Record<string, unknown>).length;
     })(),
   };
   // Tool parameter objects are reused across runs; cache their stable size/hash
@@ -83,19 +87,53 @@ function buildToolSchemaStats(
 }
 
 function buildToolsEntries(tools: AgentTool[]): SessionSystemPromptReport["tools"]["entries"] {
-  return tools.map((tool) => {
+  const entries: SessionSystemPromptReport["tools"]["entries"] = [];
+  for (const tool of tools) {
+    if (!tool || (typeof tool !== "object" && typeof tool !== "function")) {
+      continue;
+    }
     const cached = toolReportEntryCache.get(tool);
     if (cached) {
-      return cached;
+      entries.push(cached);
+      continue;
     }
-    const name = tool.name;
-    const summary = tool.description?.trim() || tool.label?.trim() || "";
+    let name: unknown;
+    let description: unknown;
+    let label: unknown;
+    let parameters: unknown;
+    try {
+      name = tool.name;
+    } catch {
+      continue;
+    }
+    if (typeof name !== "string" || name.length === 0) {
+      continue;
+    }
+    try {
+      description = tool.description;
+    } catch {
+      description = undefined;
+    }
+    try {
+      label = tool.label;
+    } catch {
+      label = undefined;
+    }
+    try {
+      parameters = tool.parameters;
+    } catch {
+      parameters = undefined;
+    }
+    const summary =
+      (typeof description === "string" ? description.trim() : "") ||
+      (typeof label === "string" ? label.trim() : "");
     const summaryChars = summary.length;
-    const schemaStats = buildToolSchemaStats(tool.parameters);
+    const schemaStats = buildToolSchemaStats(parameters);
     const entry = { name, summaryChars, summaryHash: sha256(summary), ...schemaStats };
     toolReportEntryCache.set(tool, entry);
-    return entry;
-  });
+    entries.push(entry);
+  }
+  return entries;
 }
 
 function measureRenderedProjectContextChars(systemPrompt: string): number {

@@ -220,4 +220,92 @@ describe("buildSystemPromptReport", () => {
     });
     expect(report.tools.entries[0]?.schemaHash).toMatch(/^[a-f0-9]{64}$/u);
   });
+
+  it("skips unreadable tool descriptors while building prompt metadata", () => {
+    const file = makeBootstrapFile({ path: "/tmp/workspace/AGENTS.md" });
+    const brokenTool = Object.defineProperty({}, "name", {
+      enumerable: true,
+      get() {
+        throw new Error("name exploded");
+      },
+    });
+
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [file],
+      injectedFiles: [],
+      skillsPrompt: "",
+      tools: [brokenTool] as never,
+    });
+
+    expect(report.tools.entries).toEqual([]);
+  });
+
+  it("keeps reporting when optional tool metadata is unreadable", () => {
+    const file = makeBootstrapFile({ path: "/tmp/workspace/AGENTS.md" });
+    const tool = {
+      name: "guarded",
+      label: "Safe fallback",
+      get description() {
+        throw new Error("description exploded");
+      },
+      get parameters() {
+        throw new Error("parameters exploded");
+      },
+    };
+
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [file],
+      injectedFiles: [],
+      skillsPrompt: "",
+      tools: [tool] as never,
+    });
+
+    expect(report.tools.entries[0]).toMatchObject({
+      name: "guarded",
+      summaryChars: "Safe fallback".length,
+      schemaChars: 0,
+      propertiesCount: null,
+    });
+  });
+
+  it("keeps reporting when a schema properties getter throws", () => {
+    const file = makeBootstrapFile({ path: "/tmp/workspace/AGENTS.md" });
+    const parameters = Object.defineProperty({ type: "object" }, "properties", {
+      enumerable: true,
+      get() {
+        throw new Error("properties exploded");
+      },
+    });
+
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [file],
+      injectedFiles: [],
+      skillsPrompt: "",
+      tools: [
+        {
+          name: "guarded",
+          description: "Guarded schema",
+          parameters,
+        },
+      ] as never,
+    });
+
+    expect(report.tools.entries[0]).toMatchObject({
+      name: "guarded",
+      schemaChars: 0,
+      propertiesCount: null,
+    });
+  });
 });
