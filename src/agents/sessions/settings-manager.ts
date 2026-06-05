@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
+import { toErrorObject } from "../../infra/errors.js";
 import type { Transport } from "../../llm/types.js";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.js";
@@ -336,7 +337,7 @@ export class SettingsManager {
     try {
       return { settings: SettingsManager.loadFromStorage(storage, scope), error: null };
     } catch (error) {
-      return { settings: {}, error: error as Error };
+      return { settings: {}, error: toErrorObject(error, "Settings load error") };
     }
   }
 
@@ -473,7 +474,7 @@ export class SettingsManager {
   }
 
   private recordError(scope: SettingsScope, error: unknown): void {
-    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    const normalizedError = toErrorObject(error, "Settings error");
     this.errors.push({ scope, error: normalizedError });
   }
 

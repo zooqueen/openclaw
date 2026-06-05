@@ -3,6 +3,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AuthStorageBackend } from "./auth-storage.js";
 
 // auth-storage.ts persists via the named import `writeFileSync` from node:fs,
 // and replaceFileAtomicSync (in @openclaw/fs-safe) writes its temp file via the
@@ -36,6 +37,37 @@ vi.mock("node:fs", async (importOriginal) => {
 
 const fs = await import("node:fs");
 const { AuthStorage } = await import("./auth-storage.js");
+
+function createHostileThrownValue(): unknown {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("property denied");
+      },
+      getPrototypeOf() {
+        throw new Error("prototype denied");
+      },
+      ownKeys() {
+        throw new Error("keys denied");
+      },
+    },
+  );
+}
+
+class ThrowingAuthStorageBackend implements AuthStorageBackend {
+  constructor(private readonly error: unknown) {}
+
+  withLock<T>(_fn: (current: string | undefined) => { result: T; next?: string | undefined }): T {
+    throw this.error;
+  }
+
+  async withLockAsync<T>(
+    _fn: (current: string | undefined) => Promise<{ result: T; next?: string | undefined }>,
+  ): Promise<T> {
+    throw this.error;
+  }
+}
 
 describe("auth-storage survives an interrupted write during persist (atomic write)", () => {
   let tmpDir: string | undefined;
@@ -115,5 +147,17 @@ describe("auth-storage survives an interrupted write during persist (atomic writ
 
     expect(fs.statSync(tmpDir).mode & 0o777).toBe(0o755);
     expect(fs.statSync(authPath).mode & 0o777).toBe(0o600);
+  });
+
+  it("records hostile backend load errors without crashing", () => {
+    const storage = AuthStorage.fromStorage(
+      new ThrowingAuthStorageBackend(createHostileThrownValue()),
+    );
+
+    const errors = storage.drainErrors();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toBe("Auth storage error");
+    expect(Object.hasOwn(errors[0], "cause")).toBe(false);
   });
 });

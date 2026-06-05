@@ -9,6 +9,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
+import { toErrorObject } from "../../infra/errors.js";
 import { replaceFileAtomicSync } from "../../infra/replace-file.js";
 import { findEnvKeys, getEnvApiKey } from "../../llm/env-api-keys.js";
 import {
@@ -265,9 +266,10 @@ export class AuthStorage {
     this.fallbackResolver = resolver;
   }
 
-  private recordError(error: unknown): void {
-    const normalizedError = error instanceof Error ? error : new Error(String(error));
+  private recordError(error: unknown): Error {
+    const normalizedError = toErrorObject(error, "Auth storage error");
     this.errors.push(normalizedError);
+    return normalizedError;
   }
 
   private parseStorageData(content: string | undefined): AuthStorageData {
@@ -290,8 +292,7 @@ export class AuthStorage {
       this.data = this.parseStorageData(content);
       this.loadError = null;
     } catch (error) {
-      this.loadError = error as Error;
-      this.recordError(error);
+      this.loadError = this.recordError(error);
     }
   }
 
