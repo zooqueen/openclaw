@@ -13,7 +13,7 @@ import {
   type CommandGroupDescriptorSpec,
 } from "./command-group-descriptors.js";
 import { removeCommandByName } from "./command-tree.js";
-import { loadPrivateQaCliModule } from "./private-qa-cli.js";
+import { loadExperimentalQaCliModule } from "./private-qa-cli.js";
 import {
   registerCommandGroupByName,
   registerCommandGroups,
@@ -182,7 +182,7 @@ const entrySpecs: readonly CommandGroupDescriptorSpec<SubCliRegistrar>[] = [
     },
     {
       commandNames: ["qa"],
-      loadModule: loadPrivateQaCliModule,
+      loadModule: loadExperimentalQaCliModule,
       exportName: "registerQaLabCli",
     },
     {

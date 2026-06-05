@@ -234,12 +234,44 @@ export type QaReportScenario = {
 
 export {
   LIVE_TRANSPORT_BASELINE_STANDARD_SCENARIO_IDS,
+  LIVE_TRANSPORT_STANDARD_SCENARIOS,
   collectLiveTransportStandardScenarioCoverage,
   findMissingLiveTransportStandardScenarios,
+  planLiveTransportStandardScenarios,
   selectLiveTransportScenarios,
+  type LiveTransportScenarioCapabilityId,
   type LiveTransportScenarioDefinition,
+  type LiveTransportStandardScenarioDefinition,
   type LiveTransportStandardScenarioId,
+  type LiveTransportStandardScenarioPlan,
+  type LiveTransportStandardScenarioPlanEntry,
+  type LiveTransportStandardScenarioSkipReason,
 } from "./qa-live-transport-scenarios.js";
+
+export {
+  QA_USER_FLOW_STANDARD_CAPABILITIES,
+  QA_USER_FLOW_STANDARD_FLOWS,
+  QA_USER_FLOW_SURFACES,
+  assertKnownQaStandardUserFlowIds,
+  collectQaUserFlowCapabilities,
+  collectQaUserFlowSupportedFlowIds,
+  planQaStandardUserFlows,
+  planQaUserFlows,
+  type QaStandardUserFlowCapabilityId,
+  type QaStandardUserFlowId,
+  type QaUserFlowActionDescriptor,
+  type QaUserFlowCapabilityDefinition,
+  type QaUserFlowCapabilityMapping,
+  type QaUserFlowContractFamily,
+  type QaUserFlowContractRef,
+  type QaUserFlowDefinition,
+  type QaUserFlowExecutionDescriptor,
+  type QaUserFlowExecutionTarget,
+  type QaUserFlowPlan,
+  type QaUserFlowPlanEntry,
+  type QaUserFlowSkipReason,
+  type QaUserFlowSurfaceId,
+} from "./qa-user-flows.js";
 
 /** Docker command runner abstraction used by QA Docker helpers and tests. */
 export type QaDockerRunCommand = (

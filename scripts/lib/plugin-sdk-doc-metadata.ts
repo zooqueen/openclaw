@@ -108,7 +108,22 @@ export const pluginSdkDocMetadata = {
   "runtime-store": {
     category: "runtime",
   },
+  "qa-channel": {
+    category: "utilities",
+  },
+  "qa-channel-protocol": {
+    category: "utilities",
+  },
+  "qa-lab": {
+    category: "utilities",
+  },
+  "qa-runtime": {
+    category: "utilities",
+  },
   "qa-live-transport-scenarios": {
+    category: "utilities",
+  },
+  "qa-user-flows": {
     category: "utilities",
   },
   "agent-runtime": {

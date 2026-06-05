@@ -1412,7 +1412,7 @@ export async function runNodeMain(params = {}) {
   deps.privateQaRequiredDistEntries = resolvePrivateQaRequiredDistEntries(deps.distRoot);
   if (deps.args[0] === "qa") {
     deps.env.OPENCLAW_BUILD_PRIVATE_QA = "1";
-    deps.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
+    deps.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = "1";
     deps.env.OPENCLAW_DISABLE_BUNDLED_PLUGINS ??= "0";
   }
   deps.outputTee = createRunNodeOutputTee(deps);

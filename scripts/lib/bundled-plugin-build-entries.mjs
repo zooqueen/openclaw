@@ -10,8 +10,8 @@ import {
 import { shouldBuildBundledCluster } from "./optional-bundled-clusters.mjs";
 
 const TOP_LEVEL_PUBLIC_SURFACE_EXTENSIONS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs"]);
-/** Bundled plugin directories built with core but not packaged as standalone npm plugins. */
-export const NON_PACKAGED_BUNDLED_PLUGIN_DIRS = new Set(["qa-channel", "qa-lab", "qa-matrix"]);
+/** Bundled plugin directories built with core but not packaged in the root npm package. */
+export const NON_PACKAGED_BUNDLED_PLUGIN_DIRS = new Set(["qa-matrix"]);
 const EXCLUDED_CORE_BUNDLED_PLUGIN_DIRS = new Set(["qqbot", "whatsapp"]);
 const BUNDLED_PLUGIN_BUILD_IDS_ENV = "OPENCLAW_BUNDLED_PLUGIN_BUILD_IDS";
 const TOP_LEVEL_PRIVATE_TEST_SURFACE_RE =

@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 
 export function enablePrivateQaScriptEnv(env: NodeJS.ProcessEnv = process.env) {
   env.OPENCLAW_BUILD_PRIVATE_QA = "1";
-  env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
+  env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = "1";
   env.OPENCLAW_DISABLE_BUNDLED_PLUGINS = "0";
 }
 

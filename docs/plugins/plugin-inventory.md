@@ -180,10 +180,10 @@ commands.
 | [zalo](/plugins/reference/zalo)                                     | OpenClaw Zalo channel plugin for bot and webhook chats.                                                         | `@openclaw/zalo`<br />npm; ClawHub                                                               | channels: zalo                                                               |
 | [zalouser](/plugins/reference/zalouser)                             | OpenClaw Zalo Personal Account plugin via native zca-js integration.                                            | `@openclaw/zalouser`<br />npm; ClawHub                                                           | channels: zalouser; contracts: tools                                         |
 
-## Source checkout only
+## QA Tooling
 
-| Plugin                                      | Description                                                              | Distribution                                     | Surface              |
-| ------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ | -------------------- |
-| [qa-channel](/plugins/reference/qa-channel) | Adds the QA Channel surface for sending and receiving OpenClaw messages. | `@openclaw/qa-channel`<br />source checkout only | channels: qa-channel |
-| [qa-lab](/plugins/reference/qa-lab)         | OpenClaw QA lab plugin with private debugger UI and scenario runner.     | `@openclaw/qa-lab`<br />source checkout only     | plugin               |
-| [qa-matrix](/plugins/reference/qa-matrix)   | Matrix QA transport runner and substrate.                                | `@openclaw/qa-matrix`<br />source checkout only  | plugin               |
+| Plugin                                      | Description                                                              | Distribution                                    | Surface              |
+| ------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------- | -------------------- |
+| [qa-channel](/plugins/reference/qa-channel) | Adds the QA Channel surface for sending and receiving OpenClaw messages. | bundled in OpenClaw                             | channels: qa-channel |
+| [qa-lab](/plugins/reference/qa-lab)         | OpenClaw QA lab plugin with private debugger UI and scenario runner.     | bundled in OpenClaw; experimental CLI gate      | plugin               |
+| [qa-matrix](/plugins/reference/qa-matrix)   | Matrix QA transport runner and substrate.                                | `@openclaw/qa-matrix`<br />source checkout only | plugin               |

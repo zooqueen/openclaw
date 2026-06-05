@@ -9,7 +9,7 @@ import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
 export function resolvePrivateQaBundledPluginsEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv | undefined {
-  if (env.OPENCLAW_ENABLE_PRIVATE_QA_CLI !== "1") {
+  if (env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI !== "1") {
     return undefined;
   }
   const packageRoot = resolveOpenClawPackageRootSync({

@@ -9,35 +9,10 @@ export { LOCAL_BUILD_METADATA_DIST_PATHS } from "../../scripts/lib/local-build-m
 
 export const PACKAGE_DIST_INVENTORY_RELATIVE_PATH = "dist/postinstall-inventory.json";
 const PACKAGE_DIST_INVENTORY_SCAN_CONCURRENCY = 32;
-const LEGACY_QA_CHANNEL_DIR = ["qa", "channel"].join("-");
-const LEGACY_QA_LAB_DIR = ["qa", "lab"].join("-");
-const OMITTED_QA_EXTENSION_PREFIXES = [
-  `dist/extensions/${LEGACY_QA_CHANNEL_DIR}/`,
-  `dist/extensions/${LEGACY_QA_LAB_DIR}/`,
-  "dist/extensions/qa-matrix/",
-];
-const OMITTED_PRIVATE_QA_PLUGIN_SDK_PREFIXES = [
-  `dist/plugin-sdk/extensions/${LEGACY_QA_CHANNEL_DIR}/`,
-  `dist/plugin-sdk/extensions/${LEGACY_QA_LAB_DIR}/`,
-];
-const OMITTED_PRIVATE_QA_PLUGIN_SDK_FILES = new Set([
-  `dist/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}.d.ts`,
-  `dist/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}.js`,
-  `dist/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}-protocol.d.ts`,
-  `dist/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}-protocol.js`,
-  `dist/plugin-sdk/${LEGACY_QA_LAB_DIR}.d.ts`,
-  `dist/plugin-sdk/${LEGACY_QA_LAB_DIR}.js`,
-  "dist/plugin-sdk/qa-runtime.d.ts",
-  "dist/plugin-sdk/qa-runtime.js",
-  `dist/plugin-sdk/src/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}.d.ts`,
-  `dist/plugin-sdk/src/plugin-sdk/${LEGACY_QA_CHANNEL_DIR}-protocol.d.ts`,
-  `dist/plugin-sdk/src/plugin-sdk/${LEGACY_QA_LAB_DIR}.d.ts`,
-  "dist/plugin-sdk/src/plugin-sdk/qa-runtime.d.ts",
-]);
+const OMITTED_QA_EXTENSION_PREFIXES = ["dist/extensions/qa-matrix/"];
 // The build keeps source-shaped SDK declarations for local boundary projects,
 // but the npm package ships flat declarations and must not inventory the old tree.
 const OMITTED_DEEP_PLUGIN_SDK_DECLARATION_PREFIX = "dist/plugin-sdk/src/";
-const OMITTED_PRIVATE_QA_DIST_PREFIXES = ["dist/qa-runtime-"];
 const OMITTED_PLUGIN_SDK_TEST_FILES = new Set([
   "dist/plugin-sdk/agent-runtime-test-contracts.d.ts",
   "dist/plugin-sdk/agent-runtime-test-contracts.js",
@@ -77,8 +52,6 @@ const OMITTED_DIST_SUBTREE_PATTERNS = [
   /^dist\/extensions\/[^/]+\/node_modules(?:\/|$)/u,
   /^dist\/extensions\/qa-matrix(?:\/|$)/u,
   /^dist\/plugin-sdk\/src(?:\/|$)/u,
-  new RegExp(`^dist/plugin-sdk/extensions/${LEGACY_QA_CHANNEL_DIR}(?:/|$)`, "u"),
-  new RegExp(`^dist/plugin-sdk/extensions/${LEGACY_QA_LAB_DIR}(?:/|$)`, "u"),
 ] as const;
 const INSTALL_STAGE_DEBRIS_DIR_PATTERN = /^\.openclaw-install-stage(?:-[^/]+)?$/iu;
 type ExternalizedBundledExtensionIds = ReadonlySet<string>;
@@ -312,13 +285,6 @@ function isPackagedDistPath(relativePath: string, rules: PackageDistInventoryRul
     return false;
   }
   if (relativePath.startsWith(OMITTED_DEEP_PLUGIN_SDK_DECLARATION_PREFIX)) {
-    return false;
-  }
-  if (
-    OMITTED_PRIVATE_QA_PLUGIN_SDK_PREFIXES.some((prefix) => relativePath.startsWith(prefix)) ||
-    OMITTED_PRIVATE_QA_PLUGIN_SDK_FILES.has(relativePath) ||
-    OMITTED_PRIVATE_QA_DIST_PREFIXES.some((prefix) => relativePath.startsWith(prefix))
-  ) {
     return false;
   }
   if (OMITTED_QA_EXTENSION_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {

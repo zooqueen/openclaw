@@ -333,7 +333,7 @@ gh workflow run package-acceptance.yml --ref main \
   - Starts only the local AIMock provider server for direct protocol smoke
     testing.
 - `pnpm openclaw qa matrix`
-  - Runs the Matrix live QA lane against a disposable Docker-backed Tuwunel homeserver. Source-checkout only - packaged installs do not ship `qa-lab`.
+  - Runs the Matrix live QA lane against a disposable Docker-backed Tuwunel homeserver. Source-checkout only - packaged installs do not ship `qa-matrix` and its Docker-backed fixtures.
   - Full CLI, profile/scenario catalog, env vars, and artifact layout: [Matrix QA](/concepts/qa-matrix).
 - `pnpm openclaw qa telegram`
   - Runs the Telegram live QA lane against a real private group using the driver and SUT bot tokens from env.

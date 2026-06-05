@@ -1,18 +1,17 @@
-// Private QA CLI loader, enabled only from source checkouts and explicit env opt-in.
+// Experimental QA CLI loader, enabled by explicit env opt-in.
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveOpenClawPackageRootSync } from "../../infra/openclaw-root.js";
 
-const PRIVATE_QA_DIST_RELATIVE_PATH = path.join("dist", "plugin-sdk", "qa-lab.js");
-const SOURCE_CHECKOUT_MARKER_RELATIVE_PATHS = [".git", "pnpm-workspace.yaml"] as const;
+const QA_LAB_DIST_RELATIVE_PATH = path.join("dist", "plugin-sdk", "qa-lab.js");
 
-/** Return true when private QA CLI routes should be exposed. */
-export function isPrivateQaCliEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.OPENCLAW_ENABLE_PRIVATE_QA_CLI === "1";
+/** Return true when experimental QA CLI routes should be exposed. */
+export function isExperimentalQaCliEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI === "1";
 }
 
-function resolvePrivateQaSourceModuleSpecifier(params?: {
+function resolveQaLabModuleSpecifier(params?: {
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   argv1?: string;
@@ -21,7 +20,7 @@ function resolvePrivateQaSourceModuleSpecifier(params?: {
   existsSync?: typeof fs.existsSync;
 }): string | null {
   const env = params?.env ?? process.env;
-  if (!isPrivateQaCliEnabled(env)) {
+  if (!isExperimentalQaCliEnabled(env)) {
     return null;
   }
   const resolvePackageRootSync = params?.resolvePackageRootSync ?? resolveOpenClawPackageRootSync;
@@ -34,28 +33,21 @@ function resolvePrivateQaSourceModuleSpecifier(params?: {
     return null;
   }
   const existsSync = params?.existsSync ?? fs.existsSync;
-  const sourceModulePath = path.join(packageRoot, PRIVATE_QA_DIST_RELATIVE_PATH);
-  const hasSourceCheckoutMarker = SOURCE_CHECKOUT_MARKER_RELATIVE_PATHS.some((relativePath) =>
-    existsSync(path.join(packageRoot, relativePath)),
-  );
-  if (
-    !hasSourceCheckoutMarker ||
-    !existsSync(path.join(packageRoot, "src")) ||
-    !existsSync(sourceModulePath)
-  ) {
+  const modulePath = path.join(packageRoot, QA_LAB_DIST_RELATIVE_PATH);
+  if (!existsSync(modulePath)) {
     return null;
   }
-  return pathToFileURL(sourceModulePath).href;
+  return pathToFileURL(modulePath).href;
 }
 
-async function dynamicImportPrivateQaCliModule(
+async function dynamicImportExperimentalQaCliModule(
   specifier: string,
 ): Promise<Record<string, unknown>> {
   return (await import(specifier)) as Record<string, unknown>;
 }
 
-/** Load the private QA module from a source checkout or throw a user-facing availability error. */
-export function loadPrivateQaCliModule(params?: {
+/** Load the experimental QA module or throw a user-facing availability error. */
+export function loadExperimentalQaCliModule(params?: {
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   argv1?: string;
@@ -64,9 +56,11 @@ export function loadPrivateQaCliModule(params?: {
   existsSync?: typeof fs.existsSync;
   importModule?: (specifier: string) => Promise<Record<string, unknown>>;
 }): Promise<Record<string, unknown>> {
-  const specifier = resolvePrivateQaSourceModuleSpecifier(params);
+  const specifier = resolveQaLabModuleSpecifier(params);
   if (!specifier) {
-    throw new Error("Private QA CLI is only available from an OpenClaw source checkout.");
+    throw new Error(
+      "Experimental QA CLI requires OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI=1 and a bundled QA Lab CLI module.",
+    );
   }
-  return (params?.importModule ?? dynamicImportPrivateQaCliModule)(specifier);
+  return (params?.importModule ?? dynamicImportExperimentalQaCliModule)(specifier);
 }

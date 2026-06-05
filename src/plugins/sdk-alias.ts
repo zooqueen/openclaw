@@ -1368,7 +1368,7 @@ function resolveWorkspacePackageAliasMap(params: {
 }
 
 function shouldIncludePrivateLocalOnlyPluginSdkSubpaths() {
-  return process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI === "1";
+  return process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI === "1";
 }
 
 function isBundledPluginModulePath(params: {

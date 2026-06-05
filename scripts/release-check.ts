@@ -104,41 +104,18 @@ const forbiddenPrefixes = [
   ...LOCAL_BUILD_METADATA_DIST_PATHS,
   "dist-runtime/",
   "dist/OpenClaw.app/",
-  "dist/extensions/qa-channel/",
-  "dist/extensions/qa-lab/",
-  "dist/plugin-sdk/extensions/qa-channel/",
-  "dist/plugin-sdk/extensions/qa-lab/",
-  "dist/plugin-sdk/qa-channel.",
-  "dist/plugin-sdk/qa-channel-protocol.",
-  "dist/plugin-sdk/qa-lab.",
-  "dist/plugin-sdk/qa-runtime.",
   "dist/plugin-sdk/src/",
-  "dist/plugin-sdk/src/plugin-sdk/qa-channel.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-channel-protocol.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-lab.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-runtime.d.ts",
   ...listPrivateLocalOnlyPluginSdkDistArtifacts(),
-  "dist/qa-runtime-",
   "dist/plugin-sdk/.tsbuildinfo",
   "docs/.generated/",
-  "docs/channels/qa-channel.md",
-  "qa/",
 ];
-const forbiddenPrivateQaContentMarkers = [
-  "//#region extensions/qa-lab/",
-  "qa-channel/runtime-api.js",
-  "qa-channel.js",
-  "qa-channel-protocol.js",
-  "qa-lab/cli.js",
-  "qa-lab/runtime-api.js",
-] as const;
 const forbiddenPrivatePluginSdkDeclarationMarkers = [
   "//#region src/agents/test-helpers/",
   "//#region src/plugin-sdk/test-helpers/",
   "//#region src/test-helpers/",
   "//#region src/test-utils/",
 ] as const;
-const forbiddenPrivateQaContentScanPrefixes = ["dist/"] as const;
+const forbiddenPackContentScanPrefixes = ["dist/"] as const;
 const forbiddenPluginSdkRootAliasMinifiedExportPattern = /\bmod\.[A-Za-z_$]\b/u;
 const appcastPath = resolve("appcast.xml");
 const laneBuildMin = 1_000_000_000;
@@ -924,7 +901,7 @@ export function collectForbiddenPackContentPaths(
   const textPathPattern = /\.(?:[cm]?js|d\.ts|json|md|mjs|cjs)$/u;
   return [...paths]
     .filter((packedPath) => {
-      if (!forbiddenPrivateQaContentScanPrefixes.some((prefix) => packedPath.startsWith(prefix))) {
+      if (!forbiddenPackContentScanPrefixes.some((prefix) => packedPath.startsWith(prefix))) {
         return false;
       }
       if (!textPathPattern.test(packedPath)) {
@@ -936,10 +913,7 @@ export function collectForbiddenPackContentPaths(
       } catch {
         return false;
       }
-      return (
-        forbiddenPrivateQaContentMarkers.some((marker) => content.includes(marker)) ||
-        forbiddenPrivatePluginSdkDeclarationMarkers.some((marker) => content.includes(marker))
-      );
+      return forbiddenPrivatePluginSdkDeclarationMarkers.some((marker) => content.includes(marker));
     })
     .toSorted((left, right) => left.localeCompare(right));
 }
@@ -1202,7 +1176,7 @@ async function main() {
       }
     }
     if (forbiddenContent.length > 0) {
-      console.error("release-check: forbidden private QA markers in npm pack:");
+      console.error("release-check: forbidden package content markers in npm pack:");
       for (const path of forbiddenContent) {
         console.error(`  - ${path}`);
       }

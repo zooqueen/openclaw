@@ -1060,7 +1060,7 @@ describe("run-node script", () => {
         | undefined;
       expect(postBuildParams?.cwd).toBe(tmp);
       expect(postBuildParams?.env?.OPENCLAW_BUILD_PRIVATE_QA).toBe("1");
-      expect(postBuildParams?.env?.OPENCLAW_ENABLE_PRIVATE_QA_CLI).toBe("1");
+      expect(postBuildParams?.env?.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI).toBe("1");
       expect(postBuildParams?.env?.OPENCLAW_DISABLE_BUNDLED_PLUGINS).toBe("0");
     });
   });

@@ -11,8 +11,8 @@ Adds the QA Channel surface for sending and receiving OpenClaw messages.
 
 ## Distribution
 
-- Package: `@openclaw/qa-channel`
-- Install route: source checkout only
+- Package: bundled in OpenClaw as `@openclaw/qa-channel`
+- Install route: included with OpenClaw for QA scenarios and experimental user-flow execution
 
 ## Surface
 

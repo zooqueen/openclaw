@@ -15,6 +15,7 @@ import {
 } from "./providers/live-frontier/parity.js";
 import type { QaProviderMode, QaProviderModeInput } from "./run-config.js";
 import { hasQaScenarioPack } from "./scenario-catalog.js";
+import { registerQaUserFlowCli } from "./user-flow-cli.js";
 
 type QaLabCliRuntime = typeof import("./cli.runtime.js");
 
@@ -285,6 +286,7 @@ export function registerQaLabCli(program: Command) {
     .command("qa")
     .description("Run private QA automation flows and launch the QA debugger");
   registerMantisCli(qa);
+  registerQaUserFlowCli(qa, { runSuite: runQaSuite });
 
   qa.command("run")
     .description("Run the bundled QA self-check and write a Markdown report")

@@ -5,9 +5,9 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupTempDirs,
-  expectPrivateQaLabRuntimeSurfaceLoad,
+  expectExperimentalQaLabRuntimeSurfaceLoad,
   expectQaLabRuntimeSurfaceLoad,
-  restorePrivateQaCliEnv,
+  restoreExperimentalQaCliEnv,
 } from "./qa-runtime.test-helpers.js";
 
 const loadBundledPluginPublicSurfaceModuleSync = vi.hoisted(() => vi.fn());
@@ -23,17 +23,17 @@ vi.mock("../infra/openclaw-root.js", () => ({
 
 describe("plugin-sdk qa-runtime", () => {
   const tempDirs: string[] = [];
-  const originalPrivateQaCli = process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+  const originalExperimentalQaCli = process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
 
   beforeEach(() => {
     loadBundledPluginPublicSurfaceModuleSync.mockReset();
     resolveOpenClawPackageRootSync.mockReset().mockReturnValue(null);
-    delete process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+    delete process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
   });
 
   afterEach(() => {
     cleanupTempDirs(tempDirs);
-    restorePrivateQaCliEnv(originalPrivateQaCli);
+    restoreExperimentalQaCliEnv(originalExperimentalQaCli);
   });
 
   it("stays cold until the runtime seam is used", async () => {
@@ -51,8 +51,8 @@ describe("plugin-sdk qa-runtime", () => {
     });
   });
 
-  it("uses the source bundled tree for qa-lab runtime loading in private qa mode", async () => {
-    await expectPrivateQaLabRuntimeSurfaceLoad({
+  it("uses the source bundled tree for qa-lab runtime loading with the experimental QA source override", async () => {
+    await expectExperimentalQaLabRuntimeSurfaceLoad({
       tempDirs,
       importRuntime: () => import("./qa-runtime.js"),
       loadBundledPluginPublicSurfaceModuleSync,
@@ -149,6 +149,107 @@ describe("plugin-sdk qa-runtime", () => {
         expectedStandardScenarioIds: module.LIVE_TRANSPORT_BASELINE_STANDARD_SCENARIO_IDS,
       }),
     ).toEqual(["allowlist-block", "top-level-reply-shape"]);
+
+    expect(
+      module.LIVE_TRANSPORT_STANDARD_SCENARIOS.find((scenario) => scenario.id === "canary"),
+    ).toMatchObject({
+      requiredCapabilities: ["inbound-message", "outbound-final-reply"],
+      userFlowId: "messaging.direct-reply",
+    });
+  });
+
+  it("re-exports the shared QA user-flow planner surface for QA Lab callers", async () => {
+    const module = await import("./qa-runtime.js");
+
+    expect(module.QA_USER_FLOW_SURFACES).toContain("messaging");
+    expect(
+      module.QA_USER_FLOW_STANDARD_FLOWS.find((flow) => flow.id === "tool.call-followthrough"),
+    ).toMatchObject({
+      requiredCapabilities: ["tool.call", "model.final-response"],
+    });
+    expect(
+      module
+        .planQaStandardUserFlows({
+          availableCapabilities: ["tool.call", "model.final-response"],
+          requestedFlowIds: ["tool.call-followthrough"],
+        })
+        .selected.map((flow) => flow.id),
+    ).toEqual(["tool.call-followthrough"]);
+  });
+
+  it("plans standard live transport scenarios from capabilities and driver support", async () => {
+    const module = await import("./qa-runtime.js");
+
+    const plan = module.planLiveTransportStandardScenarios({
+      availableCapabilities: [
+        "inbound-message",
+        "mention-gating",
+        "outbound-final-reply",
+        "sender-allowlist",
+        "top-level-reply",
+      ],
+      driverSupportedScenarioIds: [
+        "canary",
+        "mention-gating",
+        "allowlist-block",
+        "top-level-reply-shape",
+        "thread-follow-up",
+      ],
+      requestedScenarioIds: [
+        "canary",
+        "allowlist-block",
+        "top-level-reply-shape",
+        "thread-follow-up",
+      ],
+    });
+
+    expect(plan.selected.map((scenario) => scenario.id)).toEqual([
+      "canary",
+      "allowlist-block",
+      "top-level-reply-shape",
+    ]);
+    expect(
+      plan.skipped.map((scenario) => ({
+        id: scenario.id,
+        reason: scenario.reason,
+        missingCapabilities: scenario.missingCapabilities,
+      })),
+    ).toEqual([
+      { id: "mention-gating", reason: "not-requested", missingCapabilities: [] },
+      { id: "restart-resume", reason: "not-requested", missingCapabilities: ["runtime-restart"] },
+      {
+        id: "thread-follow-up",
+        reason: "missing-capability",
+        missingCapabilities: ["inbound-thread", "outbound-thread-reply"],
+      },
+      {
+        id: "thread-isolation",
+        reason: "not-requested",
+        missingCapabilities: ["inbound-thread"],
+      },
+      {
+        id: "reaction-observation",
+        reason: "not-requested",
+        missingCapabilities: ["inbound-reaction"],
+      },
+      { id: "help-command", reason: "not-requested", missingCapabilities: ["native-help-command"] },
+    ]);
+  });
+
+  it("reports driver gaps before capability gaps in live transport plans", async () => {
+    const module = await import("./qa-runtime.js");
+
+    const plan = module.planLiveTransportStandardScenarios({
+      availableCapabilities: [],
+      driverSupportedScenarioIds: [],
+      requestedScenarioIds: ["thread-follow-up"],
+    });
+
+    expect(plan.selected).toEqual([]);
+    expect(plan.skipped.find((scenario) => scenario.id === "thread-follow-up")).toMatchObject({
+      reason: "driver-not-implemented",
+      missingCapabilities: ["inbound-message", "inbound-thread", "outbound-thread-reply"],
+    });
   });
 
   it("registers shared live transport QA CLI options", async () => {

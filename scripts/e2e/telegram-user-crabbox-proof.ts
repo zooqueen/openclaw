@@ -450,7 +450,7 @@ function childProcessBaseEnv() {
     "LC_ALL",
     "NODE_OPTIONS",
     "OPENCLAW_BUILD_PRIVATE_QA",
-    "OPENCLAW_ENABLE_PRIVATE_QA_CLI",
+    "OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI",
     "PATH",
     "PNPM_HOME",
     "SHELL",

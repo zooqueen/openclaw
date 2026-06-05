@@ -162,6 +162,76 @@ describe("qa cli registration", () => {
     expect(commandNames).toContain("mantis");
     expect(commandNames).toContain("credentials");
     expect(commandNames).toContain("coverage");
+    expect(commandNames).toContain("user-flows");
+  });
+
+  it("runs selected user flows through existing QA suite scenarios", async () => {
+    const stdoutChunks: string[] = [];
+    const stdoutWrite = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stdoutChunks.push(String(chunk));
+        return true;
+      });
+    try {
+      await program.parseAsync([
+        "node",
+        "openclaw",
+        "qa",
+        "user-flows",
+        "run",
+        "--flow",
+        "messaging.direct-reply",
+        "--capability",
+        "messaging.inbound-message",
+        "--capability",
+        "messaging.outbound-final-reply",
+        "--repo-root",
+        "/tmp/openclaw-repo",
+        "--output-dir",
+        ".artifacts/qa-user-flows",
+        "--transport",
+        "qa-channel",
+        "--provider-mode",
+        "mock-openai",
+        "--concurrency",
+        "1",
+        "--allow-failures",
+        "--json",
+      ]);
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+
+    expect(runQaSuiteCommand).toHaveBeenCalledWith({
+      repoRoot: "/tmp/openclaw-repo",
+      outputDir: ".artifacts/qa-user-flows",
+      transportId: "qa-channel",
+      providerMode: "mock-openai",
+      primaryModel: undefined,
+      alternateModel: undefined,
+      fastMode: false,
+      allowFailures: true,
+      concurrency: 1,
+      scenarioIds: ["channel-chat-baseline", "dm-chat-baseline"],
+    });
+    const output = JSON.parse(stdoutChunks.join("")) as {
+      execution: { runner: string; scenarioIds: string[] };
+      plan: { selected: Array<{ id: string }>; skipped: Array<{ id: string; reason: string }> };
+      status: string;
+    };
+    expect(output).toMatchObject({
+      status: "pass",
+      execution: {
+        runner: "qa-suite",
+        scenarioIds: ["channel-chat-baseline", "dm-chat-baseline"],
+      },
+    });
+    expect(output.plan.selected.map((flow) => flow.id)).toEqual(["messaging.direct-reply"]);
+    expect(output.plan.skipped.find((flow) => flow.id === "memory.scoped-recall")).toMatchObject({
+      id: "memory.scoped-recall",
+      reason: "not-requested",
+    });
   });
 
   it("does not expose a control-ui token flag on qa ui", () => {

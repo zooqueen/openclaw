@@ -99,8 +99,6 @@
     "!dist/extensions/nostr/**",
     "!dist/extensions/qqbot/**",
     "!dist/extensions/pixverse/**",
-    "!dist/extensions/qa-channel/**",
-    "!dist/extensions/qa-lab/**",
     "!dist/extensions/qa-matrix/**",
     "!dist/extensions/openshell/**",
     "!dist/extensions/slack/**",
@@ -112,25 +110,15 @@
     "!dist/extensions/whatsapp/**",
     "!dist/extensions/zalo/**",
     "!dist/extensions/zalouser/**",
-    "!dist/plugin-sdk/extensions/qa-channel/**",
-    "!dist/plugin-sdk/extensions/qa-lab/**",
-    "!dist/plugin-sdk/qa-channel.*",
-    "!dist/plugin-sdk/qa-channel-protocol.*",
-    "!dist/plugin-sdk/qa-lab.*",
-    "!dist/plugin-sdk/qa-runtime.*",
     "!dist/plugin-sdk/src/**",
-    "!dist/plugin-sdk/src/plugin-sdk/qa-channel.d.ts",
-    "!dist/plugin-sdk/src/plugin-sdk/qa-channel-protocol.d.ts",
-    "!dist/plugin-sdk/src/plugin-sdk/qa-lab.d.ts",
-    "!dist/plugin-sdk/src/plugin-sdk/qa-runtime.d.ts",
-    "!dist/qa-runtime-*.js",
     "docs/",
     "!docs/.generated/**",
-    "!docs/channels/qa-channel.md",
     "!docs/assets/**",
     "!docs/images/**",
     "!docs/**/*.jpg",
     "!docs/**/*.png",
+    "qa/scenarios.md",
+    "qa/scenarios/",
     "src/agents/templates/",
     "scripts/crabbox-wrapper.mjs",
     "patches/",
@@ -1073,6 +1061,22 @@
       "types": "./dist/plugin-sdk/keyed-async-queue.d.ts",
       "default": "./dist/plugin-sdk/keyed-async-queue.js"
     },
+    "./plugin-sdk/qa-channel": {
+      "types": "./dist/plugin-sdk/qa-channel.d.ts",
+      "default": "./dist/plugin-sdk/qa-channel.js"
+    },
+    "./plugin-sdk/qa-channel-protocol": {
+      "types": "./dist/plugin-sdk/qa-channel-protocol.d.ts",
+      "default": "./dist/plugin-sdk/qa-channel-protocol.js"
+    },
+    "./plugin-sdk/qa-lab": {
+      "types": "./dist/plugin-sdk/qa-lab.d.ts",
+      "default": "./dist/plugin-sdk/qa-lab.js"
+    },
+    "./plugin-sdk/qa-runtime": {
+      "types": "./dist/plugin-sdk/qa-runtime.d.ts",
+      "default": "./dist/plugin-sdk/qa-runtime.js"
+    },
     "./plugin-sdk/qa-runner-runtime": {
       "types": "./dist/plugin-sdk/qa-runner-runtime.d.ts",
       "default": "./dist/plugin-sdk/qa-runner-runtime.js"
@@ -1080,6 +1084,10 @@
     "./plugin-sdk/qa-live-transport-scenarios": {
       "types": "./dist/plugin-sdk/qa-live-transport-scenarios.d.ts",
       "default": "./dist/plugin-sdk/qa-live-transport-scenarios.js"
+    },
+    "./plugin-sdk/qa-user-flows": {
+      "types": "./dist/plugin-sdk/qa-user-flows.d.ts",
+      "default": "./dist/plugin-sdk/qa-user-flows.js"
     },
     "./plugin-sdk/memory-core": {
       "types": "./dist/plugin-sdk/memory-core.d.ts",

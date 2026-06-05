@@ -1,34 +1,30 @@
-// Private QA CLI tests cover private QA command registration and filesystem behavior.
+// Experimental QA CLI tests cover QA command registration and filesystem behavior.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadPrivateQaCliModule } from "./private-qa-cli.js";
+import { loadExperimentalQaCliModule } from "./private-qa-cli.js";
 
-describe("private-qa-cli", () => {
+describe("experimental QA CLI loader", () => {
   const tempDirs: string[] = [];
-  const originalPrivateQaCli = process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+  const originalExperimentalQaCli = process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
 
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-    if (originalPrivateQaCli === undefined) {
-      delete process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+    if (originalExperimentalQaCli === undefined) {
+      delete process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
     } else {
-      process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = originalPrivateQaCli;
+      process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = originalExperimentalQaCli;
     }
   });
 
-  it("loads the private QA CLI from a source checkout path", async () => {
-    process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
-    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-private-qa-source-"));
+  it("loads the bundled QA CLI module when experimental QA is enabled", async () => {
+    process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = "1";
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-qa-bundle-"));
     tempDirs.push(repoRoot);
-    const expectedPaths = new Set([
-      path.join(repoRoot, ".git"),
-      path.join(repoRoot, "src"),
-      path.join(repoRoot, "dist", "plugin-sdk", "qa-lab.js"),
-    ]);
+    const expectedPaths = new Set([path.join(repoRoot, "dist", "plugin-sdk", "qa-lab.js")]);
     let importedSpecifier: string | undefined;
     const isQaLabCliAvailable = vi.fn();
     const registerQaLabCli = vi.fn();
@@ -40,7 +36,7 @@ describe("private-qa-cli", () => {
       };
     });
 
-    const module = await loadPrivateQaCliModule({
+    const module = await loadExperimentalQaCliModule({
       importModule,
       resolvePackageRootSync: () => repoRoot,
       existsSync: (filePath) => typeof filePath === "string" && expectedPaths.has(filePath),
@@ -52,55 +48,31 @@ describe("private-qa-cli", () => {
     expect(module.registerQaLabCli).toBe(registerQaLabCli);
   });
 
-  it("loads the private QA CLI from a raw synced source checkout path", async () => {
-    process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
-    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-private-qa-raw-source-"));
+  it("rejects when the bundled QA CLI module is missing", () => {
+    process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = "1";
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-qa-missing-bundle-"));
     tempDirs.push(repoRoot);
-    const expectedPaths = new Set([
-      path.join(repoRoot, "pnpm-workspace.yaml"),
-      path.join(repoRoot, "src"),
-      path.join(repoRoot, "dist", "plugin-sdk", "qa-lab.js"),
-    ]);
     const importModule = vi.fn(async () => ({
       isQaLabCliAvailable: vi.fn(),
       registerQaLabCli: vi.fn(),
     }));
 
-    await expect(
-      loadPrivateQaCliModule({
+    expect(() =>
+      loadExperimentalQaCliModule({
         importModule,
         resolvePackageRootSync: () => repoRoot,
-        existsSync: (filePath) => typeof filePath === "string" && expectedPaths.has(filePath),
+        existsSync: () => false,
       }),
-    ).resolves.toMatchObject({
-      isQaLabCliAvailable: expect.any(Function),
-      registerQaLabCli: expect.any(Function),
-    });
-    expect(importModule).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects non-source package roots even when private QA is enabled", () => {
-    process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-private-qa-"));
-    tempDirs.push(root);
-    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "openclaw" }), "utf8");
-    const importModule = vi.fn(async () => ({}));
-
-    expect(() =>
-      loadPrivateQaCliModule({
-        resolvePackageRootSync: () => root,
-        importModule,
-      }),
-    ).toThrow("Private QA CLI is only available from an OpenClaw source checkout.");
+    ).toThrow("bundled QA Lab CLI module");
     expect(importModule).not.toHaveBeenCalled();
   });
 
-  it("rejects when the private QA env flag is disabled", () => {
-    delete process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+  it("rejects when the experimental QA env flag is disabled", () => {
+    delete process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
     const importModule = vi.fn(async () => ({}));
 
-    expect(() => loadPrivateQaCliModule({ importModule })).toThrow(
-      "Private QA CLI is only available from an OpenClaw source checkout.",
+    expect(() => loadExperimentalQaCliModule({ importModule })).toThrow(
+      "OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI=1",
     );
     expect(importModule).not.toHaveBeenCalled();
   });

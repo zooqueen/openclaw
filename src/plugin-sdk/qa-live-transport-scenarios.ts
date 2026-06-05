@@ -1,3 +1,11 @@
+import {
+  planQaUserFlows,
+  type QaStandardUserFlowId,
+  type QaUserFlowDefinition,
+  type QaUserFlowPlan,
+  type QaUserFlowSkipReason,
+} from "./qa-user-flows.js";
+
 /** Standard live-transport behavior buckets used to compare channel QA suites. */
 export type LiveTransportStandardScenarioId =
   | "canary"
@@ -9,6 +17,19 @@ export type LiveTransportStandardScenarioId =
   | "thread-isolation"
   | "reaction-observation"
   | "help-command";
+
+/** Channel capability atoms used to plan standard live transport scenarios. */
+export type LiveTransportScenarioCapabilityId =
+  | "inbound-message"
+  | "inbound-reaction"
+  | "inbound-thread"
+  | "mention-gating"
+  | "native-help-command"
+  | "outbound-final-reply"
+  | "outbound-thread-reply"
+  | "sender-allowlist"
+  | "top-level-reply"
+  | "runtime-restart";
 
 /** Transport-specific live QA scenario with optional mapping to a standard behavior bucket. */
 export type LiveTransportScenarioDefinition<TId extends string = string> = {
@@ -22,59 +43,121 @@ export type LiveTransportScenarioDefinition<TId extends string = string> = {
   title: string;
 };
 
-type LiveTransportStandardScenarioDefinition = {
+export type LiveTransportStandardScenarioDefinition = {
   description: string;
   id: LiveTransportStandardScenarioId;
+  requiredCapabilities: readonly LiveTransportScenarioCapabilityId[];
   title: string;
+  userFlowId?: QaStandardUserFlowId;
+} & Pick<QaUserFlowDefinition, "action" | "contracts" | "surface">;
+
+export type LiveTransportStandardScenarioPlanEntry = LiveTransportStandardScenarioDefinition & {
+  missingCapabilities: readonly LiveTransportScenarioCapabilityId[];
 };
 
-const LIVE_TRANSPORT_STANDARD_SCENARIOS: readonly LiveTransportStandardScenarioDefinition[] = [
-  {
-    id: "canary",
-    title: "Transport canary",
-    description: "The lane can trigger one known-good reply on the real transport.",
-  },
-  {
-    id: "mention-gating",
-    title: "Mention gating",
-    description: "Messages without the required mention do not trigger a reply.",
-  },
-  {
-    id: "allowlist-block",
-    title: "Sender allowlist block",
-    description: "Non-allowlisted senders do not trigger a reply.",
-  },
-  {
-    id: "top-level-reply-shape",
-    title: "Top-level reply shape",
-    description: "Top-level replies stay top-level when the lane is configured that way.",
-  },
-  {
-    id: "restart-resume",
-    title: "Restart resume",
-    description: "The lane still responds after a gateway restart.",
-  },
-  {
-    id: "thread-follow-up",
-    title: "Thread follow-up",
-    description: "Threaded prompts receive threaded replies with the expected relation metadata.",
-  },
-  {
-    id: "thread-isolation",
-    title: "Thread isolation",
-    description: "Fresh top-level prompts stay out of prior threads.",
-  },
-  {
-    id: "reaction-observation",
-    title: "Reaction observation",
-    description: "Reaction events are observed and normalized correctly.",
-  },
-  {
-    id: "help-command",
-    title: "Help command",
-    description: "The transport-specific help command path replies successfully.",
-  },
-] as const;
+export type LiveTransportStandardScenarioSkipReason = QaUserFlowSkipReason;
+
+export type LiveTransportStandardScenarioPlan =
+  QaUserFlowPlan<LiveTransportStandardScenarioDefinition>;
+
+export const LIVE_TRANSPORT_STANDARD_SCENARIOS: readonly LiveTransportStandardScenarioDefinition[] =
+  [
+    {
+      id: "canary",
+      title: "Transport canary",
+      description: "The lane can trigger one known-good reply on the real transport.",
+      surface: "messaging",
+      action: { actor: "user", verb: "send", object: "message" },
+      contracts: [{ family: "channel", name: "base channel plugin contract" }],
+      requiredCapabilities: ["inbound-message", "outbound-final-reply"],
+      userFlowId: "messaging.direct-reply",
+    },
+    {
+      id: "mention-gating",
+      title: "Mention gating",
+      description: "Messages without the required mention do not trigger a reply.",
+      surface: "messaging",
+      action: { actor: "user", verb: "send", object: "unmentioned group message" },
+      contracts: [{ family: "channel", name: "mention gating contract" }],
+      requiredCapabilities: ["inbound-message", "mention-gating"],
+      userFlowId: "messaging.mention-gating",
+    },
+    {
+      id: "allowlist-block",
+      title: "Sender allowlist block",
+      description: "Non-allowlisted senders do not trigger a reply.",
+      surface: "security",
+      action: { actor: "user", verb: "send", object: "blocked sender message" },
+      contracts: [{ family: "channel", name: "sender allowlist contract" }],
+      requiredCapabilities: ["inbound-message", "sender-allowlist"],
+      userFlowId: "security.sender-allowlist-block",
+    },
+    {
+      id: "top-level-reply-shape",
+      title: "Top-level reply shape",
+      description: "Top-level replies stay top-level when the lane is configured that way.",
+      surface: "messaging",
+      action: { actor: "user", verb: "send", object: "top-level message" },
+      contracts: [{ family: "channel", name: "reply shape contract" }],
+      requiredCapabilities: ["inbound-message", "outbound-final-reply", "top-level-reply"],
+      userFlowId: "messaging.direct-reply",
+    },
+    {
+      id: "restart-resume",
+      title: "Restart resume",
+      description: "The lane still responds after a gateway restart.",
+      surface: "recovery",
+      action: { actor: "system", verb: "restart", object: "gateway" },
+      contracts: [{ family: "gateway", name: "restart recovery contract" }],
+      requiredCapabilities: ["inbound-message", "outbound-final-reply", "runtime-restart"],
+      userFlowId: "recovery.restart-resume",
+    },
+    {
+      id: "thread-follow-up",
+      title: "Thread follow-up",
+      description: "Threaded prompts receive threaded replies with the expected relation metadata.",
+      surface: "messaging",
+      action: { actor: "user", verb: "reply", object: "thread" },
+      contracts: [{ family: "channel", name: "thread binding contract" }],
+      requiredCapabilities: ["inbound-message", "inbound-thread", "outbound-thread-reply"],
+      userFlowId: "messaging.thread-follow-up",
+    },
+    {
+      id: "thread-isolation",
+      title: "Thread isolation",
+      description: "Fresh top-level prompts stay out of prior threads.",
+      surface: "messaging",
+      action: { actor: "user", verb: "send", object: "fresh top-level message" },
+      contracts: [{ family: "channel", name: "thread isolation contract" }],
+      requiredCapabilities: [
+        "inbound-message",
+        "inbound-thread",
+        "outbound-final-reply",
+        "top-level-reply",
+      ],
+      userFlowId: "messaging.thread-follow-up",
+    },
+    {
+      id: "reaction-observation",
+      title: "Reaction observation",
+      description: "Reaction events are observed and normalized correctly.",
+      surface: "messaging",
+      action: { actor: "user", verb: "react", object: "message" },
+      contracts: [{ family: "channel", name: "message actions contract" }],
+      requiredCapabilities: ["inbound-reaction"],
+      userFlowId: "messaging.reaction-edit-delete",
+    },
+    {
+      id: "help-command",
+      title: "Help command",
+      description: "The transport-specific help command path replies successfully.",
+      surface: "setup",
+      action: { actor: "user", verb: "request", object: "native help command" },
+      contracts: [{ family: "channel", name: "native command contract" }],
+      requiredCapabilities: ["inbound-message", "native-help-command", "outbound-final-reply"],
+      userFlowId: "setup.native-help-command",
+    },
+  ] as const;
 
 /** Minimum standard scenarios expected from baseline live transport suites. */
 export const LIVE_TRANSPORT_BASELINE_STANDARD_SCENARIO_IDS: readonly LiveTransportStandardScenarioId[] =
@@ -157,4 +240,23 @@ export function findMissingLiveTransportStandardScenarios(params: {
   assertKnownStandardScenarioIds(params.expectedStandardScenarioIds);
   const covered = new Set(params.coveredStandardScenarioIds);
   return params.expectedStandardScenarioIds.filter((id) => !covered.has(id));
+}
+
+/** Plans standard live transport scenarios from channel capabilities and driver support. */
+export function planLiveTransportStandardScenarios(params: {
+  availableCapabilities: readonly LiveTransportScenarioCapabilityId[];
+  driverSupportedScenarioIds?: readonly LiveTransportStandardScenarioId[];
+  requestedScenarioIds?: readonly LiveTransportStandardScenarioId[];
+}): LiveTransportStandardScenarioPlan {
+  assertKnownStandardScenarioIds(params.driverSupportedScenarioIds ?? []);
+  assertKnownStandardScenarioIds(params.requestedScenarioIds ?? []);
+
+  return planQaUserFlows({
+    flows: LIVE_TRANSPORT_STANDARD_SCENARIOS,
+    availableCapabilities: params.availableCapabilities,
+    ...(params.driverSupportedScenarioIds
+      ? { driverSupportedFlowIds: params.driverSupportedScenarioIds }
+      : {}),
+    ...(params.requestedScenarioIds ? { requestedFlowIds: params.requestedScenarioIds } : {}),
+  });
 }

@@ -3,7 +3,6 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   LOCAL_BUILD_METADATA_DIST_PATHS,
@@ -85,61 +84,7 @@ const FORBIDDEN_PACKED_PATH_RULES = [
     describe: (packedPath: string) =>
       `npm package must not include generated docs artifact "${packedPath}".`,
   },
-  {
-    prefix: "docs/channels/qa-channel.md",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA channel docs "${packedPath}".`,
-  },
-  {
-    prefix: "dist/extensions/qa-channel/",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA channel artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/extensions/qa-lab/",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA lab artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/plugin-sdk/extensions/qa-channel/",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA channel type artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/plugin-sdk/extensions/qa-lab/",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA lab type artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/plugin-sdk/qa-channel.",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA channel SDK artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/plugin-sdk/qa-channel-protocol.",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA channel SDK artifact "${packedPath}".`,
-  },
-  {
-    prefix: "dist/qa-runtime-",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA runtime chunk "${packedPath}".`,
-  },
-  {
-    prefix: "qa/",
-    describe: (packedPath: string) =>
-      `npm package must not include private QA suite artifact "${packedPath}".`,
-  },
 ] as const;
-const FORBIDDEN_PRIVATE_QA_CONTENT_MARKERS = [
-  "//#region extensions/qa-lab/",
-  "qa-channel/runtime-api.js",
-  "qa-channel.js",
-  "qa-channel-protocol.js",
-  "qa-lab/cli.js",
-  "qa-lab/runtime-api.js",
-] as const;
-const FORBIDDEN_PRIVATE_QA_CONTENT_SCAN_PREFIXES = ["dist/"] as const;
 const PACKED_TEST_CARGO_DIRECTORY_SEGMENTS = new Set([
   "__snapshots__",
   "__tests__",
@@ -688,7 +633,6 @@ function collectPackedTarballErrors(): string[] {
   return [
     ...collectControlUiPackErrors(packedPaths),
     ...collectForbiddenPackedPathErrors(packedPaths),
-    ...collectForbiddenPackedContentErrors(packedPaths),
     ...collectPackedTestCargoErrors(packedPaths),
   ];
 }
@@ -719,40 +663,6 @@ export function collectForbiddenPackedPathErrors(paths: Iterable<string>): strin
       continue;
     }
     errors.push(matchedRule.describe(packedPath));
-  }
-  return errors.toSorted((left, right) => left.localeCompare(right));
-}
-
-export function collectForbiddenPackedContentErrors(
-  paths: Iterable<string>,
-  rootDir = process.cwd(),
-): string[] {
-  const textPathPattern = /\.(?:[cm]?js|d\.ts|json|md|mjs|cjs)$/u;
-  const errors: string[] = [];
-  for (const packedPath of paths) {
-    if (
-      !FORBIDDEN_PRIVATE_QA_CONTENT_SCAN_PREFIXES.some((prefix) => packedPath.startsWith(prefix))
-    ) {
-      continue;
-    }
-    if (!textPathPattern.test(packedPath)) {
-      continue;
-    }
-    let content: string;
-    try {
-      content = readFileSync(pathToFileURL(join(rootDir, packedPath)), "utf8");
-    } catch {
-      continue;
-    }
-    const matchedMarker = FORBIDDEN_PRIVATE_QA_CONTENT_MARKERS.find((marker) =>
-      content.includes(marker),
-    );
-    if (!matchedMarker) {
-      continue;
-    }
-    errors.push(
-      `npm package must not include private QA lab marker "${matchedMarker}" in "${packedPath}".`,
-    );
   }
   return errors.toSorted((left, right) => left.localeCompare(right));
 }

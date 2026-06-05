@@ -229,7 +229,12 @@ usage endpoint failed or returned no usable usage data.
     | `plugin-sdk/lazy-runtime` | Lazy runtime import/binding helpers such as `createLazyRuntimeModule`, `createLazyRuntimeMethod`, and `createLazyRuntimeSurface` |
     | `plugin-sdk/process-runtime` | Process exec helpers |
     | `plugin-sdk/cli-runtime` | CLI formatting, wait, version, argument-invocation, and lazy command-group helpers |
+    | `plugin-sdk/qa-channel` | QA Channel facade helpers for synthetic user-flow and suite execution |
+    | `plugin-sdk/qa-channel-protocol` | QA Channel bus protocol helpers shared by the synthetic QA channel runtime |
+    | `plugin-sdk/qa-lab` | Gated QA Lab CLI facade used by experimental QA command registration |
+    | `plugin-sdk/qa-runtime` | QA Lab runtime facade helpers for scenario and user-flow execution |
     | `plugin-sdk/qa-live-transport-scenarios` | Shared live transport QA scenario ids, baseline coverage helpers, and scenario-selection helper |
+    | `plugin-sdk/qa-user-flows` | Shared user-flow surfaces, capability mappings, standard flow catalog, and planner helpers for QA runners |
     | `plugin-sdk/gateway-method-runtime` | Reserved Gateway method dispatch helper for plugin HTTP routes that declare `contracts.gatewayMethodDispatch: ["authenticated-request"]` |
     | `plugin-sdk/gateway-runtime` | Gateway client, event-loop-ready client start helper, gateway CLI RPC, gateway protocol errors, and channel-status patch helpers |
     | `plugin-sdk/config-contracts` | Focused type-only config surface for plugin config shapes such as `OpenClawConfig` and channel/provider config types |

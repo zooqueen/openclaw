@@ -19,23 +19,23 @@ export function cleanupTempDirs(tempDirs: string[]): void {
   }
 }
 
-/** Restores the private QA CLI env flag after a test mutates it. */
-export function restorePrivateQaCliEnv(originalPrivateQaCli: string | undefined): void {
-  if (originalPrivateQaCli === undefined) {
-    delete process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+/** Restores the experimental QA CLI env flag after a test mutates it. */
+export function restoreExperimentalQaCliEnv(originalExperimentalQaCli: string | undefined): void {
+  if (originalExperimentalQaCli === undefined) {
+    delete process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
   } else {
-    process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = originalPrivateQaCli;
+    process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = originalExperimentalQaCli;
   }
 }
 
-/** Creates a minimal source checkout shape that enables private QA runtime loading. */
-export function makePrivateQaSourceRoot(tempDirs: string[], prefix: string): string {
+/** Creates a minimal source checkout shape that enables experimental QA source runtime loading. */
+export function makeExperimentalQaSourceRoot(tempDirs: string[], prefix: string): string {
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tempDirs.push(sourceRoot);
   fs.mkdirSync(path.join(sourceRoot, "src"), { recursive: true });
   fs.mkdirSync(path.join(sourceRoot, "extensions"), { recursive: true });
   fs.writeFileSync(path.join(sourceRoot, ".git"), "gitdir: /tmp/mock\n", "utf8");
-  process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI = "1";
+  process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI = "1";
   return sourceRoot;
 }
 
@@ -63,14 +63,14 @@ export async function expectQaLabRuntimeSurfaceLoad(params: {
   });
 }
 
-/** Asserts private QA loading rewrites bundled plugin lookup to the source extensions root. */
-export async function expectPrivateQaLabRuntimeSurfaceLoad(params: {
+/** Asserts experimental QA loading rewrites bundled plugin lookup to the source extensions root. */
+export async function expectExperimentalQaLabRuntimeSurfaceLoad(params: {
   tempDirs: string[];
   importRuntime: () => Promise<QaRuntimeModule>;
   loadBundledPluginPublicSurfaceModuleSync: SurfaceLoaderMock;
   resolveOpenClawPackageRootSync: SurfaceLoaderMock;
 }) {
-  const sourceRoot = makePrivateQaSourceRoot(params.tempDirs, "openclaw-qa-runtime-root-");
+  const sourceRoot = makeExperimentalQaSourceRoot(params.tempDirs, "openclaw-qa-runtime-root-");
   params.resolveOpenClawPackageRootSync.mockReturnValue(sourceRoot);
 
   const runtimeSurface = makeQaRuntimeSurface();
@@ -83,7 +83,7 @@ export async function expectPrivateQaLabRuntimeSurfaceLoad(params: {
     dirName: "qa-lab",
     artifactBasename: "runtime-api.js",
     env: expect.objectContaining({
-      OPENCLAW_ENABLE_PRIVATE_QA_CLI: "1",
+      OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI: "1",
       OPENCLAW_BUNDLED_PLUGINS_DIR: path.join(sourceRoot, "extensions"),
     }),
   });

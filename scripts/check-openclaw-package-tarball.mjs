@@ -86,32 +86,11 @@ const LEGACY_LOCAL_BUILD_METADATA_COMPAT_MAX = { year: 2026, month: 4, day: 26 }
 const LEGACY_SHRINKWRAP_COMPAT_MAX = { year: 2026, month: 5, day: 20 };
 const FORBIDDEN_LOCAL_BUILD_METADATA_FILES = new Set(LOCAL_BUILD_METADATA_DIST_PATHS);
 
-const LEGACY_OMITTED_PRIVATE_QA_INVENTORY_PREFIXES = [
-  "dist/extensions/qa-channel/",
-  "dist/extensions/qa-lab/",
-  "dist/extensions/qa-matrix/",
-  "dist/plugin-sdk/extensions/qa-channel/",
-  "dist/plugin-sdk/extensions/qa-lab/",
-];
-const LEGACY_OMITTED_PRIVATE_QA_INVENTORY_FILES = new Set([
-  "dist/plugin-sdk/qa-channel.d.ts",
-  "dist/plugin-sdk/qa-channel.js",
-  "dist/plugin-sdk/qa-channel-protocol.d.ts",
-  "dist/plugin-sdk/qa-channel-protocol.js",
-  "dist/plugin-sdk/qa-lab.d.ts",
-  "dist/plugin-sdk/qa-lab.js",
-  "dist/plugin-sdk/qa-runtime.d.ts",
-  "dist/plugin-sdk/qa-runtime.js",
-  "dist/plugin-sdk/src/plugin-sdk/qa-channel.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-channel-protocol.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-lab.d.ts",
-  "dist/plugin-sdk/src/plugin-sdk/qa-runtime.d.ts",
-]);
+const LEGACY_OMITTED_QA_MATRIX_INVENTORY_PREFIXES = ["dist/extensions/qa-matrix/"];
 
-function isLegacyOmittedPrivateQaInventoryEntry(relativePath) {
-  return (
-    LEGACY_OMITTED_PRIVATE_QA_INVENTORY_FILES.has(relativePath) ||
-    LEGACY_OMITTED_PRIVATE_QA_INVENTORY_PREFIXES.some((prefix) => relativePath.startsWith(prefix))
+function isLegacyOmittedQaMatrixInventoryEntry(relativePath) {
+  return LEGACY_OMITTED_QA_MATRIX_INVENTORY_PREFIXES.some((prefix) =>
+    relativePath.startsWith(prefix),
   );
 }
 
@@ -256,7 +235,7 @@ if (!entrySet.has("dist/postinstall-inventory.json")) {
 let packageDistImports = null;
 if (entrySet.has("dist/postinstall-inventory.json")) {
   try {
-    const allowLegacyPrivateQaInventoryOmissions =
+    const allowLegacyQaMatrixInventoryOmissions =
       isLegacyPackageAcceptanceCompatVersion(packageVersion);
     const inventory = JSON.parse(readTarEntry("dist/postinstall-inventory.json"));
     if (!Array.isArray(inventory) || inventory.some((entry) => typeof entry !== "string")) {
@@ -274,11 +253,11 @@ if (entrySet.has("dist/postinstall-inventory.json")) {
         const normalizedEntry = inventoryEntry.replace(/\\/gu, "/");
         if (!entrySet.has(normalizedEntry)) {
           if (
-            allowLegacyPrivateQaInventoryOmissions &&
-            isLegacyOmittedPrivateQaInventoryEntry(normalizedEntry)
+            allowLegacyQaMatrixInventoryOmissions &&
+            isLegacyOmittedQaMatrixInventoryEntry(normalizedEntry)
           ) {
             warnings.push(
-              `legacy inventory references omitted private QA tar entry ${normalizedEntry}`,
+              `legacy inventory references omitted QA Matrix tar entry ${normalizedEntry}`,
             );
             continue;
           }

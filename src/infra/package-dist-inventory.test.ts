@@ -40,7 +40,7 @@ describe("package dist inventory", () => {
     });
   });
 
-  it("keeps npm-omitted dist artifacts out of the inventory", async () => {
+  it("keeps omitted dist artifacts out of the inventory while tracking packaged QA facades", async () => {
     await withTempDir({ prefix: "openclaw-dist-inventory-pack-" }, async (packageRoot) => {
       const packagedQaChannelRuntime = path.join(
         packageRoot,
@@ -56,8 +56,8 @@ describe("package dist inventory", () => {
         "qa-lab",
         "runtime-api.js",
       );
-      const omittedQaChunk = path.join(packageRoot, "dist", "extensions", "qa-channel", "cli.js");
-      const omittedQaLabChunk = path.join(packageRoot, "dist", "extensions", "qa-lab", "cli.js");
+      const packagedQaChunk = path.join(packageRoot, "dist", "extensions", "qa-channel", "cli.js");
+      const packagedQaLabChunk = path.join(packageRoot, "dist", "extensions", "qa-lab", "cli.js");
       const omittedQaMatrixChunk = path.join(
         packageRoot,
         "dist",
@@ -65,20 +65,20 @@ describe("package dist inventory", () => {
         "qa-matrix",
         "index.js",
       );
-      const omittedQaLabPluginSdk = path.join(packageRoot, "dist", "plugin-sdk", "qa-lab.js");
-      const omittedQaChannelPluginSdk = path.join(
+      const packagedQaLabPluginSdk = path.join(packageRoot, "dist", "plugin-sdk", "qa-lab.js");
+      const packagedQaChannelPluginSdk = path.join(
         packageRoot,
         "dist",
         "plugin-sdk",
         "qa-channel.js",
       );
-      const omittedQaChannelProtocolPluginSdk = path.join(
+      const packagedQaChannelProtocolPluginSdk = path.join(
         packageRoot,
         "dist",
         "plugin-sdk",
         "qa-channel-protocol.js",
       );
-      const omittedQaLabTypes = path.join(
+      const packagedQaLabTypes = path.join(
         packageRoot,
         "dist",
         "plugin-sdk",
@@ -100,7 +100,7 @@ describe("package dist inventory", () => {
         "plugin-sdk",
         "provider-entry.d.ts",
       );
-      const omittedQaRuntimeChunk = path.join(packageRoot, "dist", "qa-runtime-B9LDtssJ.js");
+      const packagedQaRuntimeChunk = path.join(packageRoot, "dist", "qa-runtime-B9LDtssJ.js");
       const [omittedBuildStamp, omittedRuntimePostBuildStamp] = LOCAL_BUILD_METADATA_DIST_PATHS.map(
         (relativePath) => path.join(packageRoot, relativePath),
       );
@@ -108,27 +108,36 @@ describe("package dist inventory", () => {
       await fs.mkdir(path.dirname(packagedQaChannelRuntime), { recursive: true });
       await fs.mkdir(path.dirname(packagedQaLabRuntime), { recursive: true });
       await fs.mkdir(path.dirname(omittedQaMatrixChunk), { recursive: true });
-      await fs.mkdir(path.dirname(omittedQaLabTypes), { recursive: true });
+      await fs.mkdir(path.dirname(packagedQaLabTypes), { recursive: true });
       await fs.mkdir(path.join(packageRoot, "dist", "plugin-sdk"), { recursive: true });
       await fs.mkdir(path.dirname(omittedDeepPluginSdkDeclaration), { recursive: true });
       await fs.writeFile(packagedQaChannelRuntime, "export {};\n", "utf8");
       await fs.writeFile(packagedQaLabRuntime, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaChunk, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaLabChunk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaChunk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaLabChunk, "export {};\n", "utf8");
       await fs.writeFile(omittedQaMatrixChunk, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaLabPluginSdk, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaChannelPluginSdk, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaChannelProtocolPluginSdk, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaLabTypes, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaLabPluginSdk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaChannelPluginSdk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaChannelProtocolPluginSdk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaLabTypes, "export {};\n", "utf8");
       await fs.writeFile(omittedDeepPluginSdkDeclaration, "export {};\n", "utf8");
       await fs.writeFile(flatPluginSdkDeclaration, "export {};\n", "utf8");
-      await fs.writeFile(omittedQaRuntimeChunk, "export {};\n", "utf8");
+      await fs.writeFile(packagedQaRuntimeChunk, "export {};\n", "utf8");
       await fs.writeFile(omittedBuildStamp, "{}\n", "utf8");
       await fs.writeFile(omittedRuntimePostBuildStamp, "{}\n", "utf8");
       await fs.writeFile(omittedMap, "{}", "utf8");
 
       await expect(writePackageDistInventory(packageRoot)).resolves.toStrictEqual([
+        "dist/extensions/qa-channel/cli.js",
+        "dist/extensions/qa-channel/runtime-api.js",
+        "dist/extensions/qa-lab/cli.js",
+        "dist/extensions/qa-lab/runtime-api.js",
+        "dist/plugin-sdk/extensions/qa-lab/cli.d.ts",
         "dist/plugin-sdk/provider-entry.d.ts",
+        "dist/plugin-sdk/qa-channel-protocol.js",
+        "dist/plugin-sdk/qa-channel.js",
+        "dist/plugin-sdk/qa-lab.js",
+        "dist/qa-runtime-B9LDtssJ.js",
       ]);
     });
   });

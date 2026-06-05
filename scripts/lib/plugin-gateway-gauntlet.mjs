@@ -386,7 +386,7 @@ function buildGauntletPrebuildEnv(env, options = {}) {
     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: env.PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN ?? "false",
     ...runtimeOnlyPrebuildEnv,
     OPENCLAW_BUILD_PRIVATE_QA: "1",
-    OPENCLAW_ENABLE_PRIVATE_QA_CLI: "1",
+    OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI: "1",
     ...(buildIds.size > 0
       ? {
           OPENCLAW_BUNDLED_PLUGIN_BUILD_IDS: [...buildIds]

@@ -6,10 +6,10 @@ import type { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupTempDirs,
-  expectPrivateQaLabRuntimeSurfaceLoad,
+  expectExperimentalQaLabRuntimeSurfaceLoad,
   expectQaLabRuntimeSurfaceLoad,
-  makePrivateQaSourceRoot,
-  restorePrivateQaCliEnv,
+  makeExperimentalQaSourceRoot,
+  restoreExperimentalQaCliEnv,
 } from "./qa-runtime.test-helpers.js";
 
 const loadPluginManifestRegistry = vi.hoisted(() => vi.fn());
@@ -49,7 +49,7 @@ function firstPublicSurfaceCall(): PublicSurfaceCall | undefined {
 
 describe("plugin-sdk qa-runner-runtime", () => {
   const tempDirs: string[] = [];
-  const originalPrivateQaCli = process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+  const originalExperimentalQaCli = process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
 
   beforeEach(() => {
     loadPluginManifestRegistry.mockReset().mockReturnValue({
@@ -59,12 +59,12 @@ describe("plugin-sdk qa-runner-runtime", () => {
     loadBundledPluginPublicSurfaceModuleSync.mockReset();
     tryLoadActivatedBundledPluginPublicSurfaceModuleSync.mockReset();
     resolveOpenClawPackageRootSync.mockReset().mockReturnValue(null);
-    delete process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI;
+    delete process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI;
   });
 
   afterEach(() => {
     cleanupTempDirs(tempDirs);
-    restorePrivateQaCliEnv(originalPrivateQaCli);
+    restoreExperimentalQaCliEnv(originalExperimentalQaCli);
   });
 
   it("stays cold until runner discovery is requested", async () => {
@@ -82,8 +82,8 @@ describe("plugin-sdk qa-runner-runtime", () => {
     });
   });
 
-  it("uses the source bundled tree for qa-lab runtime loading in private qa mode", async () => {
-    await expectPrivateQaLabRuntimeSurfaceLoad({
+  it("uses the source bundled tree for qa-lab runtime loading with the experimental QA source override", async () => {
+    await expectExperimentalQaLabRuntimeSurfaceLoad({
       tempDirs,
       importRuntime: () => import("./qa-runner-runtime.js"),
       loadBundledPluginPublicSurfaceModuleSync,
@@ -91,8 +91,8 @@ describe("plugin-sdk qa-runner-runtime", () => {
     });
   });
 
-  it("loads bundled plugin test APIs with the private QA source tree override", async () => {
-    const sourceRoot = makePrivateQaSourceRoot(tempDirs, "openclaw-qa-test-api-root-");
+  it("loads bundled plugin test APIs with the experimental QA source tree override", async () => {
+    const sourceRoot = makeExperimentalQaSourceRoot(tempDirs, "openclaw-qa-test-api-root-");
     resolveOpenClawPackageRootSync.mockReturnValue(sourceRoot);
 
     const testApi = { marker: "matrix-test-api" };
@@ -104,7 +104,7 @@ describe("plugin-sdk qa-runner-runtime", () => {
     const testApiCall = firstPublicSurfaceCall();
     expect(testApiCall?.dirName).toBe("matrix");
     expect(testApiCall?.artifactBasename).toBe("test-api.js");
-    expect(testApiCall?.env?.OPENCLAW_ENABLE_PRIVATE_QA_CLI).toBe("1");
+    expect(testApiCall?.env?.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI).toBe("1");
     expect(testApiCall?.env?.OPENCLAW_BUNDLED_PLUGINS_DIR).toBe(
       path.join(sourceRoot, "extensions"),
     );
@@ -188,7 +188,7 @@ describe("plugin-sdk qa-runner-runtime", () => {
   });
 
   it("prefers the source bundled tree for private qa discovery in repo checkouts", async () => {
-    const sourceRoot = makePrivateQaSourceRoot(tempDirs, "openclaw-qa-runner-root-");
+    const sourceRoot = makeExperimentalQaSourceRoot(tempDirs, "openclaw-qa-runner-root-");
     resolveOpenClawPackageRootSync.mockReturnValue(sourceRoot);
 
     const register = vi.fn((qa: Command) => qa);
@@ -221,7 +221,7 @@ describe("plugin-sdk qa-runner-runtime", () => {
       },
     ]);
     const manifestCall = firstManifestRegistryCall();
-    expect(manifestCall?.env?.OPENCLAW_ENABLE_PRIVATE_QA_CLI).toBe("1");
+    expect(manifestCall?.env?.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI).toBe("1");
     expect(manifestCall?.env?.OPENCLAW_BUNDLED_PLUGINS_DIR).toBe(
       path.join(sourceRoot, "extensions"),
     );
@@ -229,7 +229,7 @@ describe("plugin-sdk qa-runner-runtime", () => {
     const publicSurfaceCall = firstPublicSurfaceCall();
     expect(publicSurfaceCall?.dirName).toBe("qa-matrix");
     expect(publicSurfaceCall?.artifactBasename).toBe("runtime-api.js");
-    expect(publicSurfaceCall?.env?.OPENCLAW_ENABLE_PRIVATE_QA_CLI).toBe("1");
+    expect(publicSurfaceCall?.env?.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI).toBe("1");
     expect(publicSurfaceCall?.env?.OPENCLAW_BUNDLED_PLUGINS_DIR).toBe(
       path.join(sourceRoot, "extensions"),
     );

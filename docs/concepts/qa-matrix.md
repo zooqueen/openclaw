@@ -9,7 +9,7 @@ title: "Matrix QA"
 
 The Matrix QA lane runs the bundled `@openclaw/matrix` plugin against a disposable Tuwunel homeserver in Docker, with temporary driver, SUT, and observer accounts plus seeded rooms. It is the live transport-real coverage for Matrix.
 
-This is maintainer-only tooling. Packaged OpenClaw releases intentionally omit `qa-lab`, so `openclaw qa` is only available from a source checkout. Source checkouts load the bundled runner directly - no plugin install step is needed.
+This is maintainer-only tooling. The Matrix live lane still requires a source checkout because `qa-matrix` and its Docker-backed fixtures are not packaged with OpenClaw. Source checkouts load the bundled runner directly - no plugin install step is needed.
 
 For broader QA framework context, see [QA overview](/concepts/qa-e2e-automation).
 

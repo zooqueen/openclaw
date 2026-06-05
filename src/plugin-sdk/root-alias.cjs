@@ -265,9 +265,13 @@ function findDistChunkByPrefix(prefix) {
   }
 }
 
+function isExperimentalQaCliEnabled() {
+  return process.env.OPENCLAW_ENABLE_EXPERIMENTAL_QA_CLI === "1";
+}
+
 function listPluginSdkExportedSubpaths() {
   const packageRoot = getPackageRoot();
-  const cacheKey = `${packageRoot}::privateQa=${process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI === "1" ? "1" : "0"}`;
+  const cacheKey = `${packageRoot}::experimentalQa=${isExperimentalQaCliEnabled() ? "1" : "0"}`;
   if (pluginSdkSubpathsCache.has(cacheKey)) {
     return pluginSdkSubpathsCache.get(cacheKey);
   }
@@ -290,7 +294,7 @@ function listPluginSdkExportedSubpaths() {
 }
 
 function listPrivateLocalOnlyPluginSdkSubpaths() {
-  if (process.env.OPENCLAW_ENABLE_PRIVATE_QA_CLI !== "1") {
+  if (!isExperimentalQaCliEnabled()) {
     return [];
   }
   try {

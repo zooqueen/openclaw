@@ -1,7 +1,7 @@
 // Sub-CLI descriptor catalog used for root help placeholders and lazy registration.
 import { defineCommandDescriptorCatalog } from "./command-descriptor-utils.js";
 import type { NamedCommandDescriptor } from "./command-group-descriptors.js";
-import { isPrivateQaCliEnabled } from "./private-qa-cli.js";
+import { isExperimentalQaCliEnabled } from "./private-qa-cli.js";
 
 /** Descriptor shape for root-level sub-CLI commands. */
 export type SubCliDescriptor = NamedCommandDescriptor;
@@ -104,7 +104,7 @@ const subCliCommandCatalog = defineCommandDescriptorCatalog([
   },
   {
     name: "qa",
-    description: "Run QA scenarios and launch the private QA debugger UI",
+    description: "Run experimental QA scenarios and user flows",
     hasSubcommands: true,
   },
   {
@@ -181,25 +181,25 @@ const subCliCommandCatalog = defineCommandDescriptorCatalog([
   },
 ] as const satisfies ReadonlyArray<SubCliDescriptor>);
 
-function filterPrivateQaItems<T>(
+function filterExperimentalQaItems<T>(
   items: ReadonlyArray<T>,
   getName: (item: T) => string,
 ): ReadonlyArray<T> {
-  if (isPrivateQaCliEnabled()) {
+  if (isExperimentalQaCliEnabled()) {
     return items;
   }
   return items.filter((item) => getName(item) !== "qa");
 }
 
-/** Visible sub-CLI descriptors after private QA gating. */
-export const SUB_CLI_DESCRIPTORS = filterPrivateQaItems(
+/** Visible sub-CLI descriptors after experimental QA gating. */
+export const SUB_CLI_DESCRIPTORS = filterExperimentalQaItems(
   subCliCommandCatalog.descriptors,
   (descriptor) => descriptor.name,
 );
 
 /** Return visible sub-CLI descriptors in help/registration order. */
 export function getSubCliEntries(): ReadonlyArray<SubCliDescriptor> {
-  return filterPrivateQaItems(
+  return filterExperimentalQaItems(
     subCliCommandCatalog.getDescriptors(),
     (descriptor) => descriptor.name,
   );
@@ -208,7 +208,7 @@ export function getSubCliEntries(): ReadonlyArray<SubCliDescriptor> {
 /** Return visible sub-CLI names that own child subcommands. */
 export function getSubCliCommandsWithSubcommands(): string[] {
   return [
-    ...filterPrivateQaItems(
+    ...filterExperimentalQaItems(
       subCliCommandCatalog.getCommandsWithSubcommands(),
       (command) => command,
     ),
@@ -218,7 +218,7 @@ export function getSubCliCommandsWithSubcommands(): string[] {
 /** Return visible sub-CLI names whose parent command should show help by default. */
 export function getSubCliParentDefaultHelpCommands(): string[] {
   return [
-    ...filterPrivateQaItems(
+    ...filterExperimentalQaItems(
       subCliCommandCatalog.getParentDefaultHelpCommands(),
       (command) => command,
     ),
