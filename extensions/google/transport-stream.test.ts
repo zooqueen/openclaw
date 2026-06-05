@@ -629,6 +629,48 @@ describe("google transport stream", () => {
     expect(result.errorMessage).toBe("Google SSE stream returned malformed JSON");
   });
 
+  it("keeps unreadable output identity inside the stream error path", async () => {
+    const model = buildGeminiModel();
+    Object.defineProperties(model, {
+      provider: {
+        enumerable: true,
+        get() {
+          throw new Error("revoked provider");
+        },
+      },
+      id: {
+        enumerable: true,
+        get() {
+          throw new Error("revoked model id");
+        },
+      },
+    });
+    const onPayload = vi.fn();
+
+    const streamFn = createGoogleGenerativeAiTransportStreamFn();
+    const stream = await Promise.resolve(
+      streamFn(
+        model,
+        {
+          messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        } as unknown as Parameters<typeof streamFn>[1],
+        {
+          apiKey: "gemini-api-key",
+          onPayload,
+        } as Parameters<typeof streamFn>[2],
+      ),
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    expect(result.provider).toBe("unknown");
+    expect(result.model).toBe("unknown");
+    expect(result.errorMessage).toBe("revoked model id");
+    expect(onPayload).not.toHaveBeenCalled();
+    expect(guardedFetchMock).not.toHaveBeenCalled();
+  });
+
   it("cancels open Gemini SSE bodies when parsing fails", async () => {
     let cancelCalled = false;
     guardedFetchMock.mockResolvedValueOnce(

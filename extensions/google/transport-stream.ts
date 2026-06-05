@@ -1385,8 +1385,8 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
         role: "assistant",
         content: [],
         api: kind,
-        provider: model.provider,
-        model: model.id,
+        provider: readGoogleTransportOutputString(model, "provider"),
+        model: readGoogleTransportOutputString(model, "id"),
         usage: createEmptyTransportUsage(),
         stopReason: "stop",
         timestamp: Date.now(),
@@ -1573,6 +1573,18 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
     })();
     return eventStream as unknown as ReturnType<StreamFn>;
   };
+}
+
+function readGoogleTransportOutputString(
+  model: GoogleTransportModel,
+  key: "id" | "provider",
+): string {
+  try {
+    const value = model[key];
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export function createGoogleGenerativeAiTransportStreamFn(): StreamFn {
