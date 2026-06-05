@@ -280,9 +280,12 @@ describe("buildGuardedModelFetch", () => {
       baseUrl: "https://chatgpt.com/backend-api/codex",
     } as unknown as Model<"openai-chatgpt-responses">;
     fetchWithSsrFGuardMock.mockResolvedValue({
-      response: new Response(responseStreamText('event: response.created\ndata: {"ok": true}\n\n'), {
-        status: 200,
-      }),
+      response: new Response(
+        responseStreamText('event: response.created\ndata: {"ok": true}\n\n'),
+        {
+          status: 200,
+        },
+      ),
       finalUrl: "https://chatgpt.com/backend-api/codex/responses",
       release,
     });
