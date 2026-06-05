@@ -157,6 +157,56 @@ function createToolPluginToolFactory<TConfig>(): ToolPluginToolFactory<TConfig> 
   })) as ToolPluginToolFactory<TConfig>;
 }
 
+function readToolPluginProperty(tool: unknown, key: string): unknown {
+  try {
+    return (tool as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function readToolPluginString(tool: unknown, key: string): string | undefined {
+  const value = readToolPluginProperty(tool, key);
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readToolPluginStringValue(tool: unknown, key: string): string | undefined {
+  const value = readToolPluginProperty(tool, key);
+  return typeof value === "string" ? value : undefined;
+}
+
+function snapshotDefinedToolPluginTool(tool: unknown): DefinedToolPluginTool | undefined {
+  if (!tool || typeof tool !== "object") {
+    return undefined;
+  }
+  const name = readToolPluginString(tool, "name");
+  const description = readToolPluginStringValue(tool, "description");
+  const parameters = readToolPluginProperty(tool, "parameters");
+  if (!name || description === undefined || !parameters || typeof parameters !== "object") {
+    return undefined;
+  }
+  const execute = readToolPluginProperty(tool, "execute");
+  const factory = readToolPluginProperty(tool, "factory");
+  if (typeof execute !== "function" && typeof factory !== "function") {
+    return undefined;
+  }
+  const label = readToolPluginString(tool, "label") ?? name;
+  const optional = readToolPluginProperty(tool, "optional") === true;
+  return {
+    name,
+    label,
+    description,
+    parameters: parameters as TSchema,
+    optional,
+    ...(typeof execute === "function"
+      ? { execute: execute as DefinedToolPluginTool["execute"] }
+      : {}),
+    ...(typeof factory === "function"
+      ? { factory: factory as DefinedToolPluginTool["factory"] }
+      : {}),
+  };
+}
+
 /** Define a tool-focused plugin entry and register its tools at plugin startup. */
 export function defineToolPlugin<TConfigSchema extends TSchema | undefined = undefined>(
   definition: DefineToolPluginOptions<TConfigSchema>,
@@ -167,7 +217,10 @@ export function defineToolPlugin<TConfigSchema extends TSchema | undefined = und
   const normalizedConfigSchema = pluginConfigSchema.jsonSchema ?? configSchema;
   const tools = [
     ...definition.tools(createToolPluginToolFactory<ToolPluginConfig<TConfigSchema>>()),
-  ];
+  ].flatMap((tool) => {
+    const snapshot = snapshotDefinedToolPluginTool(tool);
+    return snapshot ? [snapshot] : [];
+  });
   const activation = definition.activation ?? { onStartup: true };
   const metadata: ToolPluginMetadata = {
     id: definition.id,
@@ -210,7 +263,7 @@ export function defineToolPlugin<TConfigSchema extends TSchema | undefined = und
         }
         const execute = tool.execute;
         if (!execute) {
-          throw new Error(`tool plugin tool ${tool.name} must define execute or factory`);
+          continue;
         }
         api.registerTool(
           {

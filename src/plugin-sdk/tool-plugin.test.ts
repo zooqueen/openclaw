@@ -213,4 +213,77 @@ describe("defineToolPlugin", () => {
       tools: [{ name: "metadata_tool", description: "Static tool." }],
     });
   });
+
+  it("skips malformed returned tool definitions before metadata and registration", () => {
+    const execute = vi.fn();
+    const unreadableName = Object.defineProperty(
+      {
+        description: "Broken tool.",
+        execute: vi.fn(),
+        parameters: Type.Object({}),
+      },
+      "name",
+      {
+        get() {
+          throw new Error("broken SDK tool name");
+        },
+      },
+    );
+    const missingHandler = {
+      name: "missing_handler",
+      description: "Missing handler.",
+      parameters: Type.Object({}),
+    };
+    const entry = defineToolPlugin({
+      id: "hostile-tools",
+      name: "Hostile Tools",
+      description: "Hostile tool metadata.",
+      tools: () =>
+        [
+          unreadableName,
+          missingHandler,
+          {
+            name: "healthy_tool",
+            label: "Healthy",
+            description: "Healthy tool.",
+            parameters: Type.Object({}),
+            execute,
+          },
+        ] as never,
+    });
+    const captured = createCapturedPluginRegistration({ id: "hostile-tools" });
+
+    entry.register(captured.api);
+
+    expect(getToolPluginMetadata(entry)?.tools.map((tool) => tool.name)).toEqual(["healthy_tool"]);
+    expect(captured.tools.map((tool) => tool.name)).toEqual(["healthy_tool"]);
+  });
+
+  it("preserves tools with empty descriptions", () => {
+    const entry = defineToolPlugin({
+      id: "empty-description",
+      name: "Empty Description",
+      description: "Preserve empty tool descriptions.",
+      tools: (tool) => [
+        tool({
+          name: "empty_description_tool",
+          description: "",
+          parameters: Type.Object({}),
+          execute: () => "ok",
+        }),
+      ],
+    });
+    const captured = createCapturedPluginRegistration({ id: "empty-description" });
+
+    entry.register(captured.api);
+
+    expect(getToolPluginMetadata(entry)?.tools).toMatchObject([
+      { name: "empty_description_tool", description: "" },
+    ]);
+    expect(captured.tools).toHaveLength(1);
+    expect(captured.tools[0]).toMatchObject({
+      name: "empty_description_tool",
+      description: "",
+    });
+  });
 });
