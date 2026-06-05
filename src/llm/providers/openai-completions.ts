@@ -124,6 +124,28 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
   return "short";
 }
 
+function readOpenAICompletionsOutputApi(
+  model: Model<"openai-completions">,
+): Model<"openai-completions">["api"] {
+  try {
+    return model.api === "openai-completions" ? model.api : "openai-completions";
+  } catch {
+    return "openai-completions";
+  }
+}
+
+function readOpenAICompletionsOutputString(
+  model: Model<"openai-completions">,
+  key: "id" | "provider",
+): string {
+  try {
+    const value = model[key];
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export const streamOpenAICompletions: StreamFunction<
   "openai-completions",
   OpenAICompletionsOptions
@@ -134,9 +156,9 @@ export const streamOpenAICompletions: StreamFunction<
     const output: AssistantMessage = {
       role: "assistant",
       content: [],
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
+      api: readOpenAICompletionsOutputApi(model),
+      provider: readOpenAICompletionsOutputString(model, "provider"),
+      model: readOpenAICompletionsOutputString(model, "id"),
       usage: {
         input: 0,
         output: 0,

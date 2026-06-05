@@ -227,6 +227,34 @@ describe("OpenAI-compatible completions params", () => {
     expect(capturedRetention).toBe("24h");
   });
 
+  it("keeps stream errors reachable when output identity metadata is unreadable", async () => {
+    const hostileModel = createModel(32_000);
+    for (const key of ["api", "provider", "id"] as const) {
+      Object.defineProperty(hostileModel, key, {
+        enumerable: true,
+        get() {
+          throw new Error(`revoked ${key}`);
+        },
+      });
+    }
+    let sawPayload = false;
+    const stream = streamOpenAICompletions(hostileModel, context, {
+      apiKey: "sk-test",
+      onPayload() {
+        sawPayload = true;
+        throw new Error("stop before network");
+      },
+    });
+
+    const result = await stream.result();
+
+    expect(sawPayload).toBe(false);
+    expect(result.stopReason).toBe("error");
+    expect(result.api).toBe("openai-completions");
+    expect(result.provider).toBe("unknown");
+    expect(result.model).toBe("unknown");
+  });
+
   it("skips unreadable tools when building OpenAI completions payloads", async () => {
     const revokedTool = Object.create(null) as {
       name: string;
