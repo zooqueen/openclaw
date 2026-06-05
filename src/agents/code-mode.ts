@@ -498,10 +498,14 @@ async function prepareSource(input: {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message || String(error);
+  try {
+    if (error instanceof Error) {
+      return error.message || error.name || "Unknown code mode error";
+    }
+    return String(error);
+  } catch {
+    return "Unknown code mode error";
   }
-  return String(error);
 }
 
 async function runBridgeRequest(params: {
@@ -635,7 +639,11 @@ function failedCodeModeWorkerResult(
 }
 
 function isQuickJsInterruptedWorkerError(error: unknown): boolean {
-  return String(error) === "interrupted";
+  try {
+    return String(error) === "interrupted";
+  } catch {
+    return false;
+  }
 }
 
 function normalizeCodeModeWorkerResult(result: CodeModeWorkerResult): CodeModeWorkerResult {
@@ -1283,6 +1291,7 @@ export const testing = {
   activeRuns,
   resumingRunIds,
   codeModeWorkerUrl,
+  errorMessage,
   normalizeCodeModeWorkerResult,
   runCodeModeWorker,
   resolveCodeModeWorkerUrl,

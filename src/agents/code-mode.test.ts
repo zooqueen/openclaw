@@ -2056,6 +2056,41 @@ describe("Code Mode", () => {
     });
   });
 
+  it("formats hostile code mode errors without throwing", () => {
+    const hostileValue = {
+      toString() {
+        throw new Error("stringification denied");
+      },
+    };
+    const hostileError = new Error();
+    Object.defineProperties(hostileError, {
+      message: {
+        get() {
+          throw new Error("message denied");
+        },
+      },
+      name: {
+        get() {
+          throw new Error("name denied");
+        },
+      },
+    });
+
+    expect(testing.errorMessage(hostileValue)).toBe("Unknown code mode error");
+    expect(testing.errorMessage(hostileError)).toBe("Unknown code mode error");
+    expect(
+      testing.normalizeCodeModeWorkerResult({
+        status: "failed",
+        code: "timeout",
+        error: hostileValue as never,
+        output: [],
+      }),
+    ).toMatchObject({
+      code: "timeout",
+      error: hostileValue,
+    });
+  });
+
   it("classifies missing worker runtime as unavailable", async () => {
     const config = resolveCodeModeConfig({ tools: { codeMode: true } } as never);
     const missingWorkerUrl = new URL("./missing-code-mode.worker.js", import.meta.url);
