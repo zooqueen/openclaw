@@ -155,6 +155,19 @@ describe("ensureAgentWorkspace", () => {
     await expectPathMissing(path.join(tempDir, ...WORKSPACE_STATE_PATH_SEGMENTS));
   });
 
+  it("seeds workspace AGENTS.md from the non-instruction template source", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+
+    const agents = await fs.readFile(path.join(tempDir, DEFAULT_AGENTS_FILENAME), "utf-8");
+    const template = await fs.readFile(
+      path.join("docs", "reference", "templates", "agents-template.md"),
+      "utf-8",
+    );
+    expect(agents).toBe(template.replace(/^---[\s\S]*?\n---\s*/, ""));
+  });
+
   it("refuses to re-seed a recently attested workspace after only generated remnants survive", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });

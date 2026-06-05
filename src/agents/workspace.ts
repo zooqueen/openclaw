@@ -49,6 +49,9 @@ const WORKSPACE_ONBOARDING_PROFILE_FILENAMES = [
   DEFAULT_IDENTITY_FILENAME,
   DEFAULT_USER_FILENAME,
 ] as const;
+const WORKSPACE_TEMPLATE_SOURCE_FILENAMES: ReadonlyMap<string, string> = new Map([
+  [DEFAULT_AGENTS_FILENAME, "agents-template.md"],
+]);
 
 const workspaceTemplateCache = new Map<string, Promise<string>>();
 let gitAvailabilityPromise: Promise<boolean> | null = null;
@@ -128,8 +131,9 @@ async function loadTemplate(name: string): Promise<string> {
         ? [await resolveWorkspaceTemplateDir()]
         : await resolveWorkspaceTemplateSearchDirs();
     const triedPaths: string[] = [];
+    const templateSourceName = WORKSPACE_TEMPLATE_SOURCE_FILENAMES.get(name) ?? name;
     for (const templateDir of templateDirs) {
-      const templatePath = path.join(templateDir, name);
+      const templatePath = path.join(templateDir, templateSourceName);
       triedPaths.push(templatePath);
       try {
         const content = await fs.readFile(templatePath, "utf-8");
