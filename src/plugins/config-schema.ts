@@ -1,5 +1,6 @@
 // Builds plugin config schemas from manifest metadata.
 import { z, type ZodTypeAny } from "zod";
+import { formatErrorMessage } from "../infra/errors.js";
 import type { JsonSchemaObject } from "../shared/json-schema.types.js";
 import { parseConfigPathArrayIndex } from "../shared/path-array-index.js";
 import type { PluginConfigUiHint } from "./manifest-types.js";
@@ -42,7 +43,21 @@ function cloneIssue(issue: z.ZodIssue): Issue {
 }
 
 function safeParseRuntimeSchema(schema: ZodTypeAny, value: unknown): SafeParseResult {
-  const result = schema.safeParse(value);
+  let safeParse: unknown;
+  try {
+    safeParse = Reflect.get(schema, "safeParse", schema);
+  } catch (parseError) {
+    return error(`config schema parser unavailable: ${formatErrorMessage(parseError)}`);
+  }
+  if (typeof safeParse !== "function") {
+    return error("config schema parser unavailable");
+  }
+  let result: ReturnType<ZodTypeAny["safeParse"]>;
+  try {
+    result = Reflect.apply(safeParse, schema, [value]) as ReturnType<ZodTypeAny["safeParse"]>;
+  } catch (parseError) {
+    return error(`config schema parser failed: ${formatErrorMessage(parseError)}`);
+  }
   if (result.success) {
     return {
       success: true,
@@ -119,12 +134,17 @@ function safeParseJsonSchema(
   cacheKey: string,
   value: unknown,
 ): SafeParseResult {
-  const result = validateJsonSchemaValue({
-    schema,
-    cacheKey,
-    value,
-    applyDefaults: true,
-  });
+  let result: ReturnType<typeof validateJsonSchemaValue>;
+  try {
+    result = validateJsonSchemaValue({
+      schema,
+      cacheKey,
+      value,
+      applyDefaults: true,
+    });
+  } catch (parseError) {
+    return error(`config JSON schema validation failed: ${formatErrorMessage(parseError)}`);
+  }
   if (result.ok) {
     return { success: true, data: result.value };
   }

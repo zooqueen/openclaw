@@ -120,6 +120,44 @@ describe("buildPluginConfigSchema", () => {
     });
   });
 
+  it("keeps the runtime parser receiver", () => {
+    const schema = {
+      key: "enabled",
+      safeParse(this: { key: string }, value: unknown) {
+        return {
+          success: true as const,
+          data: { [this.key]: value === true },
+        };
+      },
+    };
+    const result = buildPluginConfigSchema(
+      schema as unknown as Parameters<typeof buildPluginConfigSchema>[0],
+    );
+
+    expect(result.safeParse?.(true)).toEqual({
+      success: true,
+      data: { enabled: true },
+    });
+  });
+
+  it("returns a validation issue when runtime parsing throws", () => {
+    const schema = {
+      safeParse() {
+        throw new Error("runtime parser exploded");
+      },
+    };
+    const result = buildPluginConfigSchema(
+      schema as unknown as Parameters<typeof buildPluginConfigSchema>[0],
+    );
+
+    expect(result.safeParse?.({})).toEqual({
+      success: false,
+      error: {
+        issues: [{ path: [], message: "config schema parser failed: runtime parser exploded" }],
+      },
+    });
+  });
+
   it("allows custom safeParse overrides", () => {
     const safeParse = vi.fn(() => ({ success: true as const, data: { normalized: true } }));
     const result = buildPluginConfigSchema(z.strictObject({ enabled: z.boolean().optional() }), {
@@ -204,6 +242,20 @@ describe("buildJsonPluginConfigSchema", () => {
     });
     const invalid = result.safeParse?.({ INVALID: 1 });
     expect(invalid).toMatchObject({ success: false });
+  });
+
+  it("returns a validation issue when JSON schema compilation fails", () => {
+    const result = buildJsonPluginConfigSchema(
+      {
+        type: "not-a-json-schema-type",
+      } as never,
+      { cacheKey: "config-schema.test.invalid-schema" },
+    );
+
+    expect(result.safeParse?.({})).toMatchObject({
+      success: false,
+      error: { issues: [{ path: [] }] },
+    });
   });
 
   it("skips unreadable JSON schema fields before config validation", () => {
