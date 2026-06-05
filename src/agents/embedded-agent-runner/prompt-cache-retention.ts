@@ -6,6 +6,14 @@ import { resolveAnthropicCacheRetentionFamily } from "../../llm/providers/stream
 
 type CacheRetention = "none" | "short" | "long";
 
+function readOwnDataProperty(params: Record<string, unknown> | undefined, key: string): unknown {
+  if (!params) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(params, key);
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
 export function isGooglePromptCacheEligible(params: {
   modelApi?: string;
   modelId?: string;
@@ -24,8 +32,9 @@ export function resolveCacheRetention(
   modelId?: string,
   supportsPromptCacheKey?: boolean,
 ): CacheRetention | undefined {
-  const hasExplicitCacheConfig =
-    extraParams?.cacheRetention !== undefined || extraParams?.cacheControlTtl !== undefined;
+  const newVal = readOwnDataProperty(extraParams, "cacheRetention");
+  const legacy = readOwnDataProperty(extraParams, "cacheControlTtl");
+  const hasExplicitCacheConfig = newVal !== undefined || legacy !== undefined;
   const family = resolveAnthropicCacheRetentionFamily({
     provider,
     modelApi,
@@ -46,12 +55,10 @@ export function resolveCacheRetention(
     return undefined;
   }
 
-  const newVal = extraParams?.cacheRetention;
   if (newVal === "none" || newVal === "short" || newVal === "long") {
     return newVal;
   }
 
-  const legacy = extraParams?.cacheControlTtl;
   if (legacy === "5m" && (family || googleEligible)) {
     return "short";
   }

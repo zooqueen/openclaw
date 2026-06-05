@@ -25,6 +25,42 @@ describe("prompt cache retention", () => {
     ).toBe("short");
   });
 
+  it("ignores dynamic cacheRetention accessors without dropping legacy TTL", () => {
+    const extraParams = { cacheControlTtl: "5m" };
+    Object.defineProperty(extraParams, "cacheRetention", {
+      enumerable: true,
+      get() {
+        throw new Error("cacheRetention getter should not run");
+      },
+    });
+
+    expect(
+      resolveCacheRetention(extraParams, "google", "google-generative-ai", "gemini-2.5-flash"),
+    ).toBe("short");
+  });
+
+  it("ignores dynamic legacy TTL accessors without crashing", () => {
+    const extraParams = { cacheRetention: "long" };
+    Object.defineProperty(extraParams, "cacheControlTtl", {
+      enumerable: true,
+      get() {
+        throw new Error("cacheControlTtl getter should not run");
+      },
+    });
+
+    expect(
+      resolveCacheRetention(extraParams, "google", "google-generative-ai", "gemini-2.5-flash"),
+    ).toBe("long");
+  });
+
+  it("does not treat inherited cache params as explicit config", () => {
+    const extraParams = Object.create({ cacheRetention: "long" }) as Record<string, unknown>;
+
+    expect(
+      resolveCacheRetention(extraParams, "google", "google-generative-ai", "gemini-2.5-flash"),
+    ).toBeUndefined();
+  });
+
   it("does not default cacheRetention for direct Google models without explicit config", () => {
     expect(
       resolveCacheRetention(undefined, "google", "google-generative-ai", "gemini-3.1-pro-preview"),
