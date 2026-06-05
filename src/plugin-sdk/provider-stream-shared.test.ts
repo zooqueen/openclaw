@@ -199,6 +199,43 @@ describe("createPayloadPatchStreamWrapper", () => {
 });
 
 describe("createPlainTextToolCallCompatWrapper", () => {
+  it("emits sanitized errors when stream normalization sees hostile failures", async () => {
+    const hostileError = new Error("stream failed");
+    Object.defineProperty(hostileError, "message", {
+      get() {
+        throw new Error("message denied");
+      },
+    });
+    const baseStreamFn: StreamFn = () =>
+      (async function* () {
+        yield* [];
+        throw hostileError;
+      })() as never;
+    const wrapped = createPlainTextToolCallCompatWrapper(baseStreamFn);
+    const events: unknown[] = [];
+
+    for await (const event of wrapped(
+      {} as never,
+      { tools: [{ name: "read" }] } as never,
+      {},
+    ) as AsyncIterable<unknown>) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      {
+        type: "error",
+        reason: "error",
+        error: {
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          errorMessage: "Unknown provider stream error",
+        },
+      },
+    ]);
+  });
+
   it("promotes standalone text tool calls into tool-call stream events", async () => {
     const baseStreamFn: StreamFn = () =>
       createEventStream([

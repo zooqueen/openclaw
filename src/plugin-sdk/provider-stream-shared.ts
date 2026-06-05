@@ -173,6 +173,17 @@ function normalizeProviderDoneMessage(
   return promotedMessage ? { kind: "promoted", message: promotedMessage } : undefined;
 }
 
+function describeProviderStreamError(error: unknown): string {
+  try {
+    if (error instanceof Error) {
+      return error.message || error.name || "Unknown provider stream error";
+    }
+    return String(error);
+  } catch {
+    return "Unknown provider stream error";
+  }
+}
+
 function wrapPlainTextToolCallStream(
   source: ReturnType<StreamFn>,
   context: Parameters<StreamFn>[1],
@@ -220,7 +231,7 @@ function wrapPlainTextToolCallStream(
           role: "assistant",
           content: [],
           stopReason: "error",
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage: describeProviderStreamError(error),
         },
       });
     } finally {
