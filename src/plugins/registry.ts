@@ -1650,8 +1650,12 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     policy: OpenClawPluginNodeInvokePolicy,
     pluginConfig?: Record<string, unknown>,
   ) => {
+    const fields = readNodeInvokePolicyFields(record, policy);
+    if (!fields) {
+      return;
+    }
     const commands = normalizeUniqueStringEntries(
-      Array.isArray(policy.commands) ? policy.commands : [],
+      Array.isArray(fields.commands) ? fields.commands : [],
     );
     if (commands.length === 0) {
       pushDiagnostic({
@@ -1662,7 +1666,8 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       });
       return;
     }
-    if (typeof policy.handle !== "function") {
+    const handle = fields.handle;
+    if (typeof handle !== "function") {
       pushDiagnostic({
         level: "error",
         pluginId: record.id,
@@ -1689,11 +1694,61 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     registry.nodeInvokePolicies.push({
       pluginId: record.id,
       pluginName: record.name,
-      policy: { ...policy, commands },
+      policy: {
+        commands,
+        ...(Array.isArray(fields.defaultPlatforms)
+          ? {
+              defaultPlatforms: normalizeUniqueStringEntries(
+                fields.defaultPlatforms,
+              ) as OpenClawPluginNodeInvokePolicy["defaultPlatforms"],
+            }
+          : {}),
+        ...(fields.dangerous === true ? { dangerous: true } : {}),
+        ...(fields.foregroundRestrictedOnIos === true ? { foregroundRestrictedOnIos: true } : {}),
+        handle: handle as OpenClawPluginNodeInvokePolicy["handle"],
+      },
       pluginConfig,
       source: record.source,
       rootDir: record.rootDir,
     });
+  };
+
+  const readNodeInvokePolicyFields = (
+    record: PluginRecord,
+    policy: OpenClawPluginNodeInvokePolicy,
+  ):
+    | {
+        commands: unknown;
+        defaultPlatforms: unknown;
+        dangerous: unknown;
+        foregroundRestrictedOnIos: unknown;
+        handle: unknown;
+      }
+    | undefined => {
+    let commands: unknown;
+    try {
+      commands = policy.commands;
+      return {
+        commands,
+        defaultPlatforms: policy.defaultPlatforms,
+        dangerous: policy.dangerous,
+        foregroundRestrictedOnIos: policy.foregroundRestrictedOnIos,
+        handle: policy.handle,
+      };
+    } catch (error) {
+      const normalizedCommands = normalizeUniqueStringEntries(
+        Array.isArray(commands) ? commands : [],
+      );
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message:
+          `node invoke policy registration has unreadable fields` +
+          `${normalizedCommands.length > 0 ? `: ${normalizedCommands.join(", ")}` : ""}: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
   };
 
   const registerSecurityAuditCollector = (
