@@ -156,4 +156,51 @@ describe("buildToolSearchRunPlan", () => {
 
     expect(plan.emptyAllowlistCallableNames).toEqual([]);
   });
+
+  it("skips malformed client tool names while counting explicit client allowlists", () => {
+    const unreadableFunction = Object.defineProperty({ type: "function" }, "function", {
+      get() {
+        throw new Error("revoked client function");
+      },
+    });
+    const unreadableParameters = {
+      type: "function",
+      function: {
+        name: "bad_schema",
+      },
+    };
+    Object.defineProperty(unreadableParameters.function, "parameters", {
+      get() {
+        throw new Error("revoked client schema");
+      },
+    });
+    const plan = buildToolSearchRunPlan({
+      visibleTools: [{ name: "tool_search_code" }] as never,
+      uncompactedTools: [{ name: "tool_search_code" }] as never,
+      clientTools: [
+        unreadableFunction,
+        {
+          type: "function",
+          function: {
+            name: 42,
+            parameters: { type: "object", properties: {} },
+          },
+        },
+        unreadableParameters,
+        {
+          type: "function",
+          function: {
+            name: "client_pick_file",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ] as never,
+      catalogRegistered: true,
+      catalogToolCount: 0,
+      controlsEnabled: true,
+      explicitAllowlistSources: [{ entries: ["bad_schema", "client_pick_file"] }],
+    });
+
+    expect(plan.emptyAllowlistCallableNames).toEqual(["tool-search-client:client_pick_file"]);
+  });
 });

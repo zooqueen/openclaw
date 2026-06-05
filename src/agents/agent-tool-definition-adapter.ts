@@ -22,6 +22,7 @@ import {
 } from "./code-mode-control-tools.js";
 import { sanitizeForConsole } from "./console-sanitize.js";
 import type { ClientToolDefinition } from "./embedded-agent-runner/run/params.js";
+import { readClientToolName } from "./embedded-agent-runner/tool-name-allowlist.js";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "./runtime/index.js";
 import type { ToolDefinition } from "./sessions/index.js";
 import { normalizeToolName } from "./tool-policy.js";
@@ -81,6 +82,11 @@ type ToolDefinitionSnapshot = {
   description: string;
   parameters: ToolDefinition["parameters"];
   beforeHookWrapped: boolean;
+};
+type ClientToolDefinitionSnapshot = {
+  name: string;
+  description: string;
+  parameters: ToolDefinition["parameters"];
 };
 
 export type ClientToolCallRecorder =
@@ -349,7 +355,7 @@ export function findClientToolNameConflicts(params: {
   const conflicts = new Set<string>();
   const seenClientNames = new Map<string, string>();
   for (const tool of params.tools) {
-    const rawName = (tool.function?.name ?? "").trim();
+    const rawName = readClientToolName(tool)?.trim() ?? "";
     if (!rawName) {
       continue;
     }
@@ -526,6 +532,59 @@ function snapshotAgentToolDefinition(tool: AnyAgentTool): ToolDefinitionSnapshot
   }
 }
 
+function snapshotClientToolDefinition(
+  tool: ClientToolDefinition,
+  options?: { logInvalid?: boolean },
+): ClientToolDefinitionSnapshot | undefined {
+  const name = readClientToolName(tool)?.trim() ?? "";
+  try {
+    if (!name) {
+      throw new Error("client tool function.name is required");
+    }
+    const func = tool.function;
+    const description = typeof func.description === "string" ? func.description : "";
+    const parameters = snapshotToolDefinitionSchema(func.parameters);
+    return {
+      name,
+      description,
+      parameters,
+    };
+  } catch (err) {
+    if (options?.logInvalid !== false) {
+      logError(
+        `[tools] skipped invalid client tool definition "${name || "tool"}": ${describeToolDefinitionError(err)}`,
+      );
+    }
+    return undefined;
+  }
+}
+
+function snapshotClientToolDefinitions(
+  tools: readonly ClientToolDefinition[],
+): ClientToolDefinitionSnapshot[] {
+  const snapshots: ClientToolDefinitionSnapshot[] = [];
+  for (const tool of tools) {
+    const snapshot = snapshotClientToolDefinition(tool);
+    if (snapshot) {
+      snapshots.push(snapshot);
+    }
+  }
+  return snapshots;
+}
+
+export function filterRuntimeCompatibleClientToolDefinitions(
+  tools: readonly ClientToolDefinition[],
+  options?: { logInvalid?: boolean },
+): ClientToolDefinition[] {
+  const compatible: ClientToolDefinition[] = [];
+  for (const tool of tools) {
+    if (snapshotClientToolDefinition(tool, options)) {
+      compatible.push(tool);
+    }
+  }
+  return compatible;
+}
+
 function describeToolDefinitionError(err: unknown): string {
   if (err instanceof Error && err.message) {
     return err.message;
@@ -637,29 +696,29 @@ export function toClientToolDefinitions(
   onClientToolCall?: ClientToolCallRecorder,
   hookContext?: HookContext,
 ): ToolDefinition[] {
-  return tools.map((tool) => {
-    const func = tool.function;
+  return snapshotClientToolDefinitions(tools).map((tool) => {
+    const { name } = tool;
     return {
-      name: func.name,
-      label: func.name,
-      description: func.description ?? "",
-      parameters: func.parameters as ToolDefinition["parameters"],
+      name,
+      label: name,
+      description: tool.description,
+      parameters: tool.parameters,
       execute: async (...args: ToolExecuteArgs): Promise<AgentToolResult<unknown>> => {
         const { toolCallId, params } = splitToolExecuteArgs(args);
         if (onClientToolCall && typeof onClientToolCall !== "function") {
-          onClientToolCall.reserve?.(toolCallId, func.name);
+          onClientToolCall.reserve?.(toolCallId, name);
         }
         const initialParamsRecord = coerceParamsRecord(params);
         try {
           const outcome = await runBeforeToolCallHook({
-            toolName: func.name,
+            toolName: name,
             params: initialParamsRecord,
             toolCallId,
             ctx: hookContext,
           });
           if (outcome.blocked) {
             if (onClientToolCall && typeof onClientToolCall !== "function") {
-              onClientToolCall.discard?.(toolCallId, func.name);
+              onClientToolCall.discard?.(toolCallId, name);
             }
             if (outcome.kind === "veto") {
               return buildBlockedToolResult({
@@ -674,14 +733,14 @@ export function toClientToolDefinitions(
           // Notify handler that a client tool was called.
           if (onClientToolCall) {
             if (typeof onClientToolCall === "function") {
-              onClientToolCall(func.name, paramsRecord);
+              onClientToolCall(name, paramsRecord);
             } else {
-              onClientToolCall.complete(toolCallId, func.name, paramsRecord);
+              onClientToolCall.complete(toolCallId, name, paramsRecord);
             }
           }
         } catch (err) {
           if (onClientToolCall && typeof onClientToolCall !== "function") {
-            onClientToolCall.discard?.(toolCallId, func.name);
+            onClientToolCall.discard?.(toolCallId, name);
           }
           throw err;
         }
@@ -689,7 +748,7 @@ export function toClientToolDefinitions(
         return {
           ...jsonResult({
             status: "pending",
-            tool: func.name,
+            tool: name,
             message: "Tool execution delegated to client",
           }),
           terminate: true,

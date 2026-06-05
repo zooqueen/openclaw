@@ -1,3 +1,4 @@
+import { filterRuntimeCompatibleClientToolDefinitions } from "../../agent-tool-definition-adapter.js";
 /**
  * Builds tool-search execution plans from allowlists and available controls.
  */
@@ -8,7 +9,7 @@ import {
   TOOL_SEARCH_CODE_MODE_TOOL_NAME,
   TOOL_SEARCH_RAW_TOOL_NAME,
 } from "../../tool-search.js";
-import { collectAllowedToolNames } from "../tool-name-allowlist.js";
+import { collectAllowedToolNames, readClientToolName } from "../tool-name-allowlist.js";
 
 /** Tool-search control tools that may be auto-added when tool search is enabled. */
 export const TOOL_SEARCH_CONTROL_ALLOWLIST_NAMES = [
@@ -84,7 +85,7 @@ function collectExplicitlyAllowedClientToolNames(params: {
     ),
   );
   return (params.clientTools ?? [])
-    .map((tool) => tool.function?.name)
+    .map((tool) => readClientToolName(tool))
     .filter((name): name is string => Boolean(name?.trim()))
     .filter((name) => explicitNames.has(normalizeToolName(name)));
 }
@@ -104,13 +105,17 @@ export function buildToolSearchRunPlan(params: {
   controlNames?: readonly string[];
   explicitAllowlistSources: Array<{ entries: string[] }>;
 }): ToolSearchRunPlan {
+  const runtimeClientTools = filterRuntimeCompatibleClientToolDefinitions(
+    params.clientTools ?? [],
+    { logInvalid: false },
+  );
   const visibleAllowedToolNames = collectAllowedToolNames({
     tools: params.visibleTools,
-    clientTools: params.catalogRegistered ? undefined : params.clientTools,
+    clientTools: params.catalogRegistered ? undefined : runtimeClientTools,
   });
   const replayAllowedToolNames = collectAllowedToolNames({
     tools: params.uncompactedTools,
-    clientTools: params.clientTools,
+    clientTools: runtimeClientTools,
   });
   if (params.controlsEnabled) {
     // A control that was visible in the compacted prompt must remain allowed
@@ -128,7 +133,7 @@ export function buildToolSearchRunPlan(params: {
   });
   const clientCatalogCallableNames = params.catalogRegistered
     ? collectExplicitlyAllowedClientToolNames({
-        clientTools: params.clientTools,
+        clientTools: runtimeClientTools,
         explicitAllowlistSources: params.explicitAllowlistSources,
       }).map((name) => `tool-search-client:${name}`)
     : [];

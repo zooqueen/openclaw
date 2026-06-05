@@ -28,9 +28,10 @@ function readToolName(tool: { name?: string }): string | undefined {
   }
 }
 
-function readClientToolName(tool: ClientToolDefinition): string | undefined {
+export function readClientToolName(tool: ClientToolDefinition): string | undefined {
   try {
-    return tool.function?.name;
+    const name = tool.function?.name;
+    return typeof name === "string" ? name : undefined;
   } catch {
     return undefined;
   }

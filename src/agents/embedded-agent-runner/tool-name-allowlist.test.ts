@@ -102,6 +102,27 @@ describe("tool name allowlists", () => {
     ).toEqual(["image_generate"]);
   });
 
+  it("skips non-string client tool names", () => {
+    expect(
+      collectClientToolNameList([
+        {
+          type: "function",
+          function: {
+            name: 42,
+            parameters: { type: "object", properties: {} },
+          },
+        } as unknown as ClientToolDefinition,
+        {
+          type: "function",
+          function: {
+            name: "image_generate",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ]),
+    ).toEqual(["image_generate"]);
+  });
+
   it("builds a stable agent session allowlist from custom tool names", () => {
     const allowlist = toSessionToolAllowlist(new Set(["write", "read", "read", "edit"]));
 

@@ -95,6 +95,7 @@ import {
 } from "../../agent-settings.js";
 import {
   createClientToolNameConflictError,
+  filterRuntimeCompatibleClientToolDefinitions,
   findClientToolNameConflicts,
   toClientToolDefinitions,
 } from "../../agent-tool-definition-adapter.js";
@@ -1445,7 +1446,10 @@ export async function runEmbeddedAttempt(
           sessionId: params.sessionId,
         }),
     });
-    const clientTools = toolsEnabled && !isRawModelRun ? params.clientTools : undefined;
+    const rawClientTools = toolsEnabled && !isRawModelRun ? params.clientTools : undefined;
+    const clientTools = rawClientTools
+      ? filterRuntimeCompatibleClientToolDefinitions(rawClientTools)
+      : undefined;
     const bundleMcpEnabled = shouldCreateBundleMcpRuntimeForAttempt({
       toolsEnabled,
       disableTools: params.disableTools || isRawModelRun,

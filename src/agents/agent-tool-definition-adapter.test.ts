@@ -235,6 +235,45 @@ async function executeClientTool(params: unknown): Promise<{
 }
 
 describe("toClientToolDefinitions – param coercion", () => {
+  it("skips malformed client tool descriptors while preserving healthy siblings", async () => {
+    const unreadableFunction = Object.defineProperty({ type: "function" }, "function", {
+      get() {
+        throw new Error("revoked client function");
+      },
+    }) as ClientToolDefinition;
+    const nonStringName = {
+      type: "function",
+      function: {
+        name: 42,
+        parameters: { type: "object", properties: {} },
+      },
+    } as unknown as ClientToolDefinition;
+    const unreadableParameters = {
+      type: "function",
+      function: {
+        name: "bad_schema",
+      },
+    } as ClientToolDefinition;
+    Object.defineProperty(unreadableParameters.function, "parameters", {
+      get() {
+        throw new Error("revoked client schema");
+      },
+    });
+
+    const defs = toClientToolDefinitions([
+      unreadableFunction,
+      nonStringName,
+      unreadableParameters,
+      makeClientTool("healthy_client"),
+    ]);
+
+    expect(defs.map((def) => def.name)).toEqual(["healthy_client"]);
+    expect(defs[0]?.parameters).toEqual({
+      type: "object",
+      properties: { query: { type: "string" } },
+    });
+  });
+
   it("returns terminal pending results for each client tool in a batch", async () => {
     const completed: Array<{ id: string; name: string; params: Record<string, unknown> }> = [];
     const defs = toClientToolDefinitions([makeClientTool("search"), makeClientTool("lookup")], {
@@ -310,6 +349,28 @@ describe("toClientToolDefinitions – param coercion", () => {
 });
 
 describe("client tool name conflict checks", () => {
+  it("skips malformed client tool names during conflict detection", () => {
+    const unreadableFunction = Object.defineProperty({ type: "function" }, "function", {
+      get() {
+        throw new Error("revoked client function");
+      },
+    }) as ClientToolDefinition;
+    const nonStringName = {
+      type: "function",
+      function: {
+        name: 42,
+        parameters: { type: "object", properties: {} },
+      },
+    } as unknown as ClientToolDefinition;
+
+    expect(
+      findClientToolNameConflicts({
+        tools: [unreadableFunction, nonStringName, makeClientTool("read")],
+        existingToolNames: ["read"],
+      }),
+    ).toEqual(["read"]);
+  });
+
   it("detects collisions with existing built-in names after normalization", () => {
     expect(
       findClientToolNameConflicts({
