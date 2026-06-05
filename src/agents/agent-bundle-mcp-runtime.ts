@@ -1263,5 +1263,5 @@ export function toLintErrorObject(value: unknown, fallbackMessage: string): Erro
   if (typeof value === "string") {
     return new Error(value);
   }
-  return new Error(fallbackMessage, { cause: value });
+  return new Error(fallbackMessage);
 }

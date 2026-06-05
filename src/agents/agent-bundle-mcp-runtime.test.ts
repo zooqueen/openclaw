@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createBundleMcpJsonSchemaValidator,
@@ -367,7 +368,7 @@ describe("isMcpMethodNotFoundError", () => {
 
 describe("toLintErrorObject", () => {
   it("normalizes hostile MCP connection rejections without touching proxy internals", () => {
-    const hostileError = new Proxy(
+    const prototypeHostileError = new Proxy(
       {},
       {
         get() {
@@ -381,6 +382,17 @@ describe("toLintErrorObject", () => {
         },
       },
     );
+    const causeHostileError = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("property denied");
+        },
+        ownKeys() {
+          throw new Error("keys denied");
+        },
+      },
+    );
     const readableMessage = {};
     Object.defineProperty(readableMessage, "message", {
       get() {
@@ -388,9 +400,12 @@ describe("toLintErrorObject", () => {
       },
     });
 
-    expect(toLintErrorObject(hostileError, "Non-Error rejection").message).toBe(
-      "Non-Error rejection",
-    );
+    const prototypeHostileResult = toLintErrorObject(prototypeHostileError, "Non-Error rejection");
+    expect(prototypeHostileResult.message).toBe("Non-Error rejection");
+    const causeHostileResult = toLintErrorObject(causeHostileError, "Non-Error rejection");
+    expect(causeHostileResult.message).toBe("Non-Error rejection");
+    expect(Object.hasOwn(causeHostileResult, "cause")).toBe(false);
+    expect(inspect(causeHostileResult)).toContain("Non-Error rejection");
     expect(toLintErrorObject(readableMessage, "Non-Error rejection").message).toBe(
       "connect failed",
     );
