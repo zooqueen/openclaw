@@ -6,21 +6,69 @@ function isVeniceDeepSeekV4ModelId(modelId: unknown): boolean {
   return modelId === "deepseek-v4-flash" || modelId === "deepseek-v4-pro";
 }
 
-function ensureVeniceDeepSeekV4Replay(payload: Record<string, unknown>): void {
-  delete payload.thinking;
-  delete payload.reasoning;
-  delete payload.reasoning_effort;
+type PayloadFieldRead = { ok: true; value: unknown } | { ok: false };
 
-  if (!Array.isArray(payload.messages)) {
+function readPayloadField(record: Record<string, unknown>, key: string): PayloadFieldRead {
+  try {
+    return { ok: true, value: record[key] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function deletePayloadField(record: Record<string, unknown>, key: string): boolean {
+  try {
+    delete record[key];
+    return !Object.hasOwn(record, key);
+  } catch {
+    return false;
+  }
+}
+
+function forcePayloadField(record: Record<string, unknown>, key: string, value: unknown): boolean {
+  try {
+    Object.defineProperty(record, key, {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true,
+    });
+    const next = readPayloadField(record, key);
+    return next.ok && next.value === value;
+  } catch {
+    return false;
+  }
+}
+
+function removeVenicePayloadField(payload: Record<string, unknown>, key: string): void {
+  if (!deletePayloadField(payload, key)) {
+    throw new Error(`Venice payload field could not be removed: ${key}`);
+  }
+}
+
+function ensureVeniceDeepSeekV4Replay(payload: Record<string, unknown>): void {
+  removeVenicePayloadField(payload, "thinking");
+  removeVenicePayloadField(payload, "reasoning");
+  removeVenicePayloadField(payload, "reasoning_effort");
+
+  const messages = readPayloadField(payload, "messages");
+  if (!messages.ok || !Array.isArray(messages.value)) {
     return;
   }
-  for (const message of payload.messages) {
+  for (const message of messages.value) {
     if (!message || typeof message !== "object") {
       continue;
     }
     const record = message as Record<string, unknown>;
-    if (record.role === "assistant") {
-      record.reasoning_content ??= "";
+    const role = readPayloadField(record, "role");
+    if (role.ok && role.value === "assistant") {
+      const reasoningContent = readPayloadField(record, "reasoning_content");
+      if (reasoningContent.ok && typeof reasoningContent.value === "string") {
+        continue;
+      }
+      if (!forcePayloadField(record, "reasoning_content", "")) {
+        throw new Error("Venice assistant reasoning_content payload patch failed");
+      }
     }
   }
 }
