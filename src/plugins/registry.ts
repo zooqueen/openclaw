@@ -1473,7 +1473,10 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     record: PluginRecord,
     adapter: EmbeddingProviderAdapter,
   ) => {
-    const id = adapter.id.trim();
+    const id = readProviderLikeId(record, "embedding provider", adapter);
+    if (id === undefined) {
+      return;
+    }
     if (!id) {
       pushDiagnostic({
         level: "error",
@@ -1512,15 +1515,25 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       });
       return;
     }
+    const snapshot = snapshotProviderLike(
+      record,
+      "embedding provider",
+      adapter,
+      id,
+      embeddingProviderAdapterSnapshotFields,
+    );
+    if (!snapshot) {
+      return;
+    }
     if (registryParams.activateGlobalSideEffects !== false) {
-      registerEmbeddingProvider(adapter, {
+      registerEmbeddingProvider(snapshot, {
         ownerPluginId: record.id,
       });
     }
     registry.embeddingProviders.push({
       pluginId: record.id,
       pluginName: record.name,
-      provider: adapter,
+      provider: snapshot,
       source: record.source,
       rootDir: record.rootDir,
     });
@@ -1831,6 +1844,26 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     "prepareApply",
     "plan",
     "apply",
+  ] as const;
+
+  const embeddingProviderAdapterSnapshotFields = [
+    "defaultModel",
+    "transport",
+    "authProviderId",
+    "create",
+    "formatSetupError",
+  ] as const;
+
+  const memoryEmbeddingProviderAdapterSnapshotFields = [
+    "defaultModel",
+    "transport",
+    "authProviderId",
+    "autoSelectPriority",
+    "allowExplicitWhenConfiguredAuto",
+    "supportsMultimodalEmbeddings",
+    "create",
+    "formatSetupError",
+    "shouldContinueAutoSelection",
   ] as const;
 
   const registerSpeechProvider = (record: PluginRecord, provider: SpeechProviderPlugin) => {
@@ -4333,18 +4366,43 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
                     });
                     return;
                   }
-                } else if (
-                  !(record.contracts?.memoryEmbeddingProviders ?? []).includes(adapter.id)
+                }
+                const id = readProviderLikeId(record, "memory embedding provider", adapter);
+                if (id === undefined) {
+                  return;
+                }
+                if (
+                  !hasKind(record.kind, "memory") &&
+                  !(record.contracts?.memoryEmbeddingProviders ?? []).includes(id)
                 ) {
                   pushDiagnostic({
                     level: "error",
                     pluginId: record.id,
                     source: record.source,
-                    message: `plugin must own memory slot or declare contracts.memoryEmbeddingProviders for adapter: ${adapter.id}`,
+                    message: `plugin must own memory slot or declare contracts.memoryEmbeddingProviders for adapter: ${id}`,
                   });
                   return;
                 }
-                const existing = getRegisteredMemoryEmbeddingProvider(adapter.id);
+                if (!id) {
+                  pushDiagnostic({
+                    level: "error",
+                    pluginId: record.id,
+                    source: record.source,
+                    message: "memory embedding provider registration missing id",
+                  });
+                  return;
+                }
+                const snapshot = snapshotProviderLike(
+                  record,
+                  "memory embedding provider",
+                  adapter,
+                  id,
+                  memoryEmbeddingProviderAdapterSnapshotFields,
+                );
+                if (!snapshot) {
+                  return;
+                }
+                const existing = getRegisteredMemoryEmbeddingProvider(id);
                 if (existing) {
                   const ownerDetail = existing.ownerPluginId
                     ? ` (owner: ${existing.ownerPluginId})`
@@ -4353,17 +4411,17 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
                     level: "error",
                     pluginId: record.id,
                     source: record.source,
-                    message: `memory embedding provider already registered: ${adapter.id}${ownerDetail}`,
+                    message: `memory embedding provider already registered: ${id}${ownerDetail}`,
                   });
                   return;
                 }
-                registerMemoryEmbeddingProvider(adapter, {
+                registerMemoryEmbeddingProvider(snapshot, {
                   ownerPluginId: record.id,
                 });
                 registry.memoryEmbeddingProviders.push({
                   pluginId: record.id,
                   pluginName: record.name,
-                  provider: adapter,
+                  provider: snapshot,
                   source: record.source,
                   rootDir: record.rootDir,
                 });

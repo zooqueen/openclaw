@@ -4,7 +4,10 @@ import {
   registerVirtualTestPlugin,
 } from "openclaw/plugin-sdk/plugin-test-contracts";
 import { describe, expect, it } from "vitest";
-import { getRegisteredMemoryEmbeddingProvider } from "../memory-embedding-providers.js";
+import {
+  getRegisteredMemoryEmbeddingProvider,
+  type MemoryEmbeddingProviderAdapter,
+} from "../memory-embedding-providers.js";
 import { createPluginRecord } from "../status.test-helpers.js";
 
 describe("memory embedding provider registration", () => {
@@ -55,6 +58,109 @@ describe("memory embedding provider registration", () => {
     const provider = getRegisteredMemoryEmbeddingProvider("external-vector");
     expect(provider?.adapter.id).toBe("external-vector");
     expect(provider?.ownerPluginId).toBe("external-vector");
+  });
+
+  it("skips inactive dual-kind memory adapters before reading adapter fields", () => {
+    let idReads = 0;
+    const { config, registry } = createPluginRegistryFixture();
+
+    registerVirtualTestPlugin({
+      registry,
+      config,
+      id: "inactive-dual-memory",
+      name: "Inactive Dual Memory",
+      kind: ["memory", "context-engine"],
+      register(api) {
+        api.registerMemoryEmbeddingProvider({
+          get id() {
+            idReads += 1;
+            throw new Error("inactive memory embedding id getter read");
+          },
+          create: async () => ({ provider: null }),
+        });
+      },
+    });
+
+    expect(getRegisteredMemoryEmbeddingProvider("inactive-dual-memory")).toBeUndefined();
+    expect(idReads).toBe(0);
+    expect(registry.registry.diagnostics).toEqual([
+      {
+        pluginId: "inactive-dual-memory",
+        level: "warn",
+        source: "/virtual/inactive-dual-memory/index.ts",
+        message:
+          "dual-kind plugin not selected for memory slot; skipping memory embedding provider registration",
+      },
+    ]);
+  });
+
+  it("snapshots adapter fields before memory embedding runtime lookup", async () => {
+    let idReads = 0;
+    let defaultModelReads = 0;
+    let createReads = 0;
+    let shouldContinueReads = 0;
+    const events: string[] = [];
+    const { config, registry } = createPluginRegistryFixture();
+
+    registerVirtualTestPlugin({
+      registry,
+      config,
+      id: "volatile-memory-vector",
+      name: "Volatile Memory Vector",
+      contracts: {
+        memoryEmbeddingProviders: ["volatile-memory-vector"],
+      },
+      register(api) {
+        api.registerMemoryEmbeddingProvider({
+          marker: "original",
+          get id() {
+            idReads += 1;
+            if (idReads > 1) {
+              throw new Error("memory embedding id getter re-read");
+            }
+            return " volatile-memory-vector ";
+          },
+          get defaultModel() {
+            defaultModelReads += 1;
+            if (defaultModelReads > 1) {
+              throw new Error("memory embedding defaultModel getter re-read");
+            }
+            return "memory-model";
+          },
+          get create() {
+            createReads += 1;
+            if (createReads > 1) {
+              throw new Error("memory embedding create getter re-read");
+            }
+            return async function (this: { marker?: string }) {
+              events.push(`create:${this.marker ?? "missing"}`);
+              return { provider: null };
+            };
+          },
+          get shouldContinueAutoSelection() {
+            shouldContinueReads += 1;
+            if (shouldContinueReads > 1) {
+              throw new Error("memory embedding shouldContinue getter re-read");
+            }
+            return function (this: { marker?: string }) {
+              events.push(`continue:${this.marker ?? "missing"}`);
+              return true;
+            };
+          },
+        } as MemoryEmbeddingProviderAdapter & { marker: string });
+      },
+    });
+
+    expect(registry.registry.diagnostics).toEqual([]);
+    const provider = getRegisteredMemoryEmbeddingProvider("volatile-memory-vector");
+    expect(provider?.adapter.defaultModel).toBe("memory-model");
+    await expect(provider?.adapter.create({} as never)).resolves.toEqual({ provider: null });
+    expect(provider?.adapter.shouldContinueAutoSelection?.(new Error("boom"))).toBe(true);
+    expect(events).toEqual(["create:original", "continue:original"]);
+    expect(idReads).toBe(1);
+    expect(defaultModelReads).toBe(1);
+    expect(createReads).toBe(1);
+    expect(shouldContinueReads).toBe(1);
   });
 
   it("records the owning memory plugin id for registered adapters", () => {

@@ -5,7 +5,10 @@ import {
   registerVirtualTestPlugin,
 } from "openclaw/plugin-sdk/plugin-test-contracts";
 import { describe, expect, it } from "vitest";
-import { getRegisteredEmbeddingProvider } from "../embedding-providers.js";
+import {
+  getRegisteredEmbeddingProvider,
+  type EmbeddingProviderAdapter,
+} from "../embedding-providers.js";
 
 describe("embedding provider registration", () => {
   it("keeps public SDK helpers read-only so plugins cannot bypass manifest ownership", () => {
@@ -66,6 +69,74 @@ describe("embedding provider registration", () => {
     expect(provider?.ownerPluginId).toBe("embedding-owner");
     expect(registry.registry.embeddingProviders).toHaveLength(1);
     expect(registry.registry.plugins[0]?.embeddingProviderIds).toContain("embedding-owner");
+  });
+
+  it("snapshots adapter fields before runtime lookup", async () => {
+    let idReads = 0;
+    let defaultModelReads = 0;
+    let createReads = 0;
+    let formatSetupErrorReads = 0;
+    const events: string[] = [];
+    const { config, registry } = createPluginRegistryFixture();
+
+    registerVirtualTestPlugin({
+      registry,
+      config,
+      id: "volatile-embedding-owner",
+      name: "Volatile Embedding Owner",
+      contracts: {
+        embeddingProviders: ["volatile-embedding"],
+      },
+      register(api) {
+        api.registerEmbeddingProvider({
+          marker: "original",
+          get id() {
+            idReads += 1;
+            if (idReads > 1) {
+              throw new Error("embedding id getter re-read");
+            }
+            return " volatile-embedding ";
+          },
+          get defaultModel() {
+            defaultModelReads += 1;
+            if (defaultModelReads > 1) {
+              throw new Error("embedding defaultModel getter re-read");
+            }
+            return "embedding-model";
+          },
+          get create() {
+            createReads += 1;
+            if (createReads > 1) {
+              throw new Error("embedding create getter re-read");
+            }
+            return async function (this: { marker?: string }) {
+              events.push(`create:${this.marker ?? "missing"}`);
+              return { provider: null };
+            };
+          },
+          get formatSetupError() {
+            formatSetupErrorReads += 1;
+            if (formatSetupErrorReads > 1) {
+              throw new Error("embedding formatSetupError getter re-read");
+            }
+            return function (this: { marker?: string }, err: unknown) {
+              return `${this.marker}:${String(err)}`;
+            };
+          },
+        } as EmbeddingProviderAdapter & { marker: string });
+      },
+    });
+
+    expect(registry.registry.diagnostics).toEqual([]);
+    const provider = getRegisteredEmbeddingProvider("volatile-embedding");
+    expect(provider?.adapter.defaultModel).toBe("embedding-model");
+    await expect(provider?.adapter.create({} as never)).resolves.toEqual({ provider: null });
+    expect(provider?.adapter.formatSetupError?.("boom")).toBe("original:boom");
+    expect(events).toEqual(["create:original"]);
+    expect(idReads).toBe(1);
+    expect(defaultModelReads).toBe(1);
+    expect(createReads).toBe(1);
+    expect(formatSetupErrorReads).toBe(1);
   });
 
   it("rejects duplicate provider ids", () => {
