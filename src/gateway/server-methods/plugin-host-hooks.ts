@@ -54,12 +54,29 @@ export const pluginHostHookHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const descriptors = (getActivePluginRegistry()?.controlUiDescriptors ?? []).map((entry) =>
-      Object.assign({}, entry.descriptor, {
+    const descriptors = (getActivePluginRegistry()?.controlUiDescriptors ?? []).map((entry) => {
+      const descriptor = entry.descriptor;
+      const projected: Record<string, unknown> = {
+        id: descriptor.id,
+        surface: descriptor.surface,
+        label: descriptor.label,
         pluginId: entry.pluginId,
         pluginName: entry.pluginName,
-      }),
-    );
+      };
+      if (descriptor.description !== undefined) {
+        projected.description = descriptor.description;
+      }
+      if (descriptor.placement !== undefined) {
+        projected.placement = descriptor.placement;
+      }
+      if (descriptor.schema !== undefined) {
+        projected.schema = descriptor.schema;
+      }
+      if (descriptor.requiredScopes !== undefined) {
+        projected.requiredScopes = descriptor.requiredScopes;
+      }
+      return projected;
+    });
     respond(true, { ok: true, descriptors }, undefined);
   },
   "plugins.sessionAction": async ({ params, client, respond }) => {

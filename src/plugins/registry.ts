@@ -1990,6 +1990,46 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     "settings",
   ]);
 
+  const readControlUiDescriptorFields = (
+    record: PluginRecord,
+    descriptor: PluginControlUiDescriptor,
+  ):
+    | {
+        id: unknown;
+        label: unknown;
+        description: unknown;
+        placement: unknown;
+        requiredScopes: unknown;
+        surface: unknown;
+        schema: unknown;
+      }
+    | undefined => {
+    let id: unknown;
+    try {
+      id = descriptor.id;
+      return {
+        id,
+        label: descriptor.label,
+        description: descriptor.description,
+        placement: descriptor.placement,
+        requiredScopes: descriptor.requiredScopes,
+        surface: descriptor.surface,
+        schema: descriptor.schema,
+      };
+    } catch (error) {
+      const normalizedId = normalizeOptionalHostHookString(id);
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message:
+          `control UI descriptor registration has unreadable fields` +
+          `${normalizedId ? `: ${normalizedId}` : ""}: ${formatErrorMessage(error)}`,
+      });
+      return undefined;
+    }
+  };
+
   const registerSessionExtension = (
     record: PluginRecord,
     extension: PluginSessionExtensionRegistration,
@@ -2200,12 +2240,16 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     record: PluginRecord,
     descriptor: PluginControlUiDescriptor,
   ) => {
-    const id = normalizeHostHookString(descriptor.id);
-    const label = normalizeHostHookString(descriptor.label);
-    const description = normalizeOptionalHostHookString(descriptor.description);
-    const placement = normalizeOptionalHostHookString(descriptor.placement);
-    const requiredScopes = normalizeHostHookStringList(descriptor.requiredScopes);
-    const surface = typeof descriptor.surface === "string" ? descriptor.surface : "";
+    const fields = readControlUiDescriptorFields(record, descriptor);
+    if (!fields) {
+      return;
+    }
+    const id = normalizeHostHookString(fields.id);
+    const label = normalizeHostHookString(fields.label);
+    const description = normalizeOptionalHostHookString(fields.description);
+    const placement = normalizeOptionalHostHookString(fields.placement);
+    const requiredScopes = normalizeHostHookStringList(fields.requiredScopes);
+    const surface = typeof fields.surface === "string" ? fields.surface : "";
     if (
       !id ||
       !label ||
@@ -2238,7 +2282,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
         return;
       }
     }
-    if (descriptor.schema !== undefined && !isPluginJsonValue(descriptor.schema)) {
+    if (fields.schema !== undefined && !isPluginJsonValue(fields.schema)) {
       pushDiagnostic({
         level: "error",
         pluginId: record.id,
@@ -2262,13 +2306,15 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     (registry.controlUiDescriptors ??= []).push({
       pluginId: record.id,
       pluginName: record.name,
+      // Control UI descriptors are projected on demand; keep plugin-owned
+      // accessors out of the registry so UI discovery remains side-effect free.
       descriptor: {
-        ...descriptor,
         id,
         surface: surface as PluginControlUiDescriptor["surface"],
         label,
         ...(description !== undefined ? { description } : {}),
         ...(placement !== undefined ? { placement } : {}),
+        ...(fields.schema !== undefined ? { schema: fields.schema } : {}),
         ...(requiredScopes !== undefined
           ? { requiredScopes: requiredScopes as OperatorScope[] }
           : {}),
