@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   hasBinary: vi.fn(() => true),
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
   resolveExecutable: vi.fn((name: string) => name),
   runCommandWithTimeout: vi.fn(),
   spawn: vi.fn(),
@@ -27,6 +32,10 @@ vi.mock("../infra/executable-path.js", () => ({
 
 vi.mock("../process/exec.js", () => ({
   runCommandWithTimeout: mocks.runCommandWithTimeout,
+}));
+
+vi.mock("../logging/subsystem.js", () => ({
+  createSubsystemLogger: () => mocks.logger,
 }));
 
 const { startGmailWatcher, stopGmailWatcher } = await import("./gmail-watcher.js");
@@ -74,6 +83,9 @@ describe("startGmailWatcher", () => {
   beforeEach(async () => {
     await stopGmailWatcher();
     mocks.hasBinary.mockReturnValue(true);
+    mocks.logger.error.mockClear();
+    mocks.logger.info.mockClear();
+    mocks.logger.warn.mockClear();
     mocks.resolveExecutable.mockImplementation((name: string) => name);
     mocks.runCommandWithTimeout.mockReset();
     mocks.spawn.mockReset();
@@ -120,6 +132,21 @@ describe("startGmailWatcher", () => {
         "--hook-token",
         "hook-token",
       ]),
+    );
+  });
+
+  it("uses pull wording when watch registration fails before pull runner start", async () => {
+    mocks.runCommandWithTimeout
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "watch failed" });
+
+    await expect(startGmailWatcher(createGmailPullConfig())).resolves.toEqual({
+      started: true,
+    });
+
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "gmail watch start failed, but continuing with pull delivery runner",
     );
   });
 

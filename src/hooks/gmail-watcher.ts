@@ -370,7 +370,8 @@ export async function startGmailWatcher(
     return cancelledGmailWatcherStart(runtimeConfig);
   }
   if (!watchStarted) {
-    log.warn("gmail watch start failed, but continuing with serve");
+    const deliveryMode = isGmailHookPushRuntimeConfig(runtimeConfig) ? "push" : "pull";
+    log.warn(`gmail watch start failed, but continuing with ${deliveryMode} delivery runner`);
   }
 
   // Spawn the gog delivery process
