@@ -24,6 +24,7 @@ vi.mock("openclaw/plugin-sdk/channel-inbound", async (importOriginal) => {
           enqueue: async (entry: unknown) => {
             opts.shouldDebounce(entry);
           },
+          flushKey: async (_key: string) => {},
         },
       }),
     ),

@@ -87,6 +87,17 @@ vi.mock("openclaw/plugin-sdk/channel-inbound", async (importOriginal) => {
             await opts.onFlush(entries);
           };
         },
+        // Mirrors the prod debouncer's flushKey contract: drain whatever
+        // entries the mock is currently holding so the new `payload-join`
+        // path in monitor-provider.ts has a real method to await instead of
+        // throwing a swallowed TypeError.
+        flushKey: async (_key: string) => {
+          if (debouncerControl.entries.length === 0) {
+            return;
+          }
+          const entries = debouncerControl.entries.splice(0);
+          await opts.onFlush(entries);
+        },
       },
     })),
     shouldDebounceTextInbound: vi.fn(() => false),

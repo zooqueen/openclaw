@@ -33,6 +33,7 @@ vi.mock("openclaw/plugin-sdk/channel-inbound", async (importOriginal) => {
     createChannelInboundDebouncer: vi.fn((opts) => ({
       debouncer: {
         enqueue: async (entry: unknown) => await opts.onFlush([entry]),
+        flushKey: async (_key: string) => {},
       },
     })),
     shouldDebounceTextInbound: vi.fn(() => false),
