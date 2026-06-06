@@ -641,7 +641,7 @@ When a user types a command and a URL together — e.g. `Dump https://example.co
 
 The two rows arrive at OpenClaw ~0.8-2.0 s apart on most setups. Without coalescing, the agent receives the command alone on turn 1, replies (often "send me the URL"), and only sees the URL on turn 2 — at which point the command context is already lost. This is Apple's send pipeline, not anything OpenClaw or `imsg` introduces.
 
-`channels.imessage.coalesceSameSenderDms` opts a DM into merging consecutive same-sender rows into a single agent turn. Group chats continue to dispatch per-message so multi-user turn structure is preserved.
+`channels.imessage.coalesceSameSenderDms` opts a DM into merging Apple's split-send — a short command or caption row followed by a URL or attachment — into one agent turn. Only short bare fragments (≤ 3 words, no URL, no attachment, no terminal punctuation — e.g. `Dump`, `Save this`) are briefly held to wait for a payload follow-up; everything else (prose, questions, lone URLs, longer text) dispatches instantly. Group chats continue to dispatch per-message so multi-user turn structure is preserved.
 
 <Tabs>
   <Tab title="When to enable">
@@ -649,11 +649,11 @@ The two rows arrive at OpenClaw ~0.8-2.0 s apart on most setups. Without coalesc
 
     - You ship skills that expect `command + payload` in one message (dump, paste, save, queue, etc.).
     - Your users paste URLs, images, or long content alongside commands.
-    - You can accept the added DM turn latency (see below).
+    - You can accept a brief hold on short bare DM fragments (see below).
 
     Leave disabled when:
 
-    - You need minimum command latency for single-word DM triggers.
+    - You need zero-latency dispatch even for short single-word DM triggers.
     - All your flows are one-shot commands without payload follow-ups.
 
   </Tab>
@@ -689,7 +689,7 @@ The two rows arrive at OpenClaw ~0.8-2.0 s apart on most setups. Without coalesc
 
   </Tab>
   <Tab title="Trade-offs">
-    - **Added latency for DM messages.** With the flag on, every DM (including standalone control commands and single-text follow-ups) waits up to the debounce window before dispatching, in case a payload row is coming. Group-chat messages keep instant dispatch.
+    - **Brief hold on short lead-in fragments only.** A DM that looks like the lead-in row of a split-send — short bare text (≤ 3 words, no URL, no attachment, no terminal punctuation, e.g. `Dump`, `Save this`, `ok`) — is held up to the debounce window in case a payload row follows. The matching payload row flushes the bucket the moment it lands, so a real split-send adds only Apple's cross-row gap (~0.8-2.0 s), not the full window. Everything else — prose, questions, lone URLs, longer text, anything ending in `.`, `?`, or `!` — dispatches instantly. Group-chat messages also keep instant dispatch.
     - **Merged output is bounded.** Merged text caps at 4000 chars with an explicit `…[truncated]` marker; attachments cap at 20; source entries cap at 10 (first-plus-latest retained beyond that). Every source GUID is tracked in `coalescedMessageGuids` for downstream telemetry.
     - **DM-only.** Group chats fall through to per-message dispatch so the bot stays responsive when multiple people are typing.
     - **Opt-in, per-channel.** Other channels (Telegram, WhatsApp, Slack, …) are unaffected. Legacy BlueBubbles configs that set `channels.bluebubbles.coalesceSameSenderDms` should migrate that value to `channels.imessage.coalesceSameSenderDms`.
@@ -703,10 +703,12 @@ The two rows arrive at OpenClaw ~0.8-2.0 s apart on most setups. Without coalesc
 | ------------------------------------------------------------------ | --------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
 | `Dump https://example.com` (one send)                              | 2 rows ~1 s apart     | Two agent turns: "Dump" alone, then URL | One turn: merged text `Dump https://example.com`                        |
 | `Save this 📎image.jpg caption` (attachment + text)                | 2 rows                | Two turns (attachment dropped on merge) | One turn: text + image preserved                                        |
-| `/status` (standalone command)                                     | 1 row                 | Instant dispatch                        | **Wait up to window, then dispatch**                                    |
-| URL pasted alone                                                   | 1 row                 | Instant dispatch                        | Instant dispatch (only one entry in bucket)                             |
+| `ok` / `Dump` (short bare fragment, no follow-up)                  | 1 row                 | Instant dispatch                        | Hold up to window, then dispatch (matches lead-in shape)                |
+| Single prose DM (`what's for dinner?`, `see you at 5pm tomorrow`)  | 1 row                 | Instant dispatch                        | Instant dispatch (has punctuation or >3 words)                          |
+| URL pasted alone                                                   | 1 row                 | Instant dispatch                        | Instant dispatch (no pending lead-in)                                   |
 | Text + URL sent as two deliberate separate messages, minutes apart | 2 rows outside window | Two turns                               | Two turns (window expires between them)                                 |
-| Rapid flood (>10 small DMs inside window)                          | N rows                | N turns                                 | One turn, bounded output (first + latest, text/attachment caps applied) |
+| Rapid flood of short bare fragments (`hi`, `ok`, `hmm`)            | N rows                | N turns                                 | One turn, bounded output (first + latest, text/attachment caps applied) |
+| Rapid flood of prose/questions inside window                       | N rows                | N turns                                 | N turns (each row dispatches instantly)                                 |
 | Two people typing in a group chat                                  | N rows from M senders | M+ turns (one per sender bucket)        | M+ turns — group chats are not coalesced                                |
 
 ## Catching up after gateway downtime
