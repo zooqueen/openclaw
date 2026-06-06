@@ -96,7 +96,8 @@ function findPlannedRequestEntry(params: {
     return undefined;
   }
   const index = params.requestCountBefore + foundIndex;
-  return { index, request: params.requests[index]! };
+  const request = params.requests[index];
+  return request ? { index, request } : undefined;
 }
 
 function findPlannedRequest(params: Parameters<typeof findPlannedRequestEntry>[0]) {
@@ -164,6 +165,10 @@ function formatKnownHarnessGapDetails(toolName: string, config: QaRuntimeToolFix
 
 function formatPromptError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function toError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 export async function runRuntimeToolFixture(
@@ -236,7 +241,7 @@ export async function runRuntimeToolFixture(
     : 0;
   const allowAsyncHappyPath = readBoolean(config.allowAsyncHappyPath, false);
   const asyncHappyPathProof = readString(config.asyncHappyPathProof);
-  let asyncHappyPathError: unknown;
+  let asyncHappyPathError: Error | undefined;
   let asyncHappyPathDetails: string | undefined;
   let asyncHappyPathRequest: QaRuntimeToolFixtureRequest | undefined;
 
@@ -247,10 +252,11 @@ export async function runRuntimeToolFixture(
       timeoutMs: liveTurnTimeoutMs(env, 45_000),
     });
   } catch (error) {
+    const promptError = toError(error);
     if (!allowAsyncHappyPath || !env.mock) {
-      throw error;
+      throw promptError;
     }
-    asyncHappyPathError = error;
+    asyncHappyPathError = promptError;
   }
   if (asyncHappyPathError && env.mock) {
     const requestsAfterHappy = readQaRuntimeToolFixtureRequests(
