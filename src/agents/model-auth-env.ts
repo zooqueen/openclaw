@@ -4,12 +4,16 @@
 import { resolvePluginSetupProvider } from "../plugins/setup-registry.js";
 import {
   resolveStaticEnvApiKey,
-  type EnvApiKeyLookupOptions,
-  type EnvApiKeyResult,
+  type EnvApiKeyLookupOptions as StaticEnvApiKeyLookupOptions,
 } from "./model-auth-env-core.js";
 import { GCP_VERTEX_CREDENTIALS_MARKER } from "./model-auth-markers.js";
 
-export type { EnvApiKeyLookupOptions, EnvApiKeyResult } from "./model-auth-env-core.js";
+export type EnvApiKeyResult = {
+  apiKey: string;
+  source: string;
+};
+
+export type EnvApiKeyLookupOptions = StaticEnvApiKeyLookupOptions;
 
 /** Resolve an API key or auth-evidence marker for a provider from environment state. */
 export function resolveEnvApiKey(
