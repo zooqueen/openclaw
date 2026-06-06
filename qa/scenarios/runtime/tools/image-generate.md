@@ -12,6 +12,7 @@ objective: Verify image_generate preserves arguments and result shape across Ope
 successCriteria:
   - Effective tools expose image_generate after QA image-generation config is applied.
   - The mock provider plans exactly one happy-path image_generate call.
+  - The OpenClaw happy path may end after the async media task starts, but the mock provider call remains mandatory proof.
   - The mock provider plans one denied-input failure-path image_generate call.
   - Runtime parity coverage hard-fails call/result drift in the standard direct-loading gate.
 docsRefs:
@@ -25,6 +26,9 @@ execution:
   config:
     toolName: image_generate
     ensureImageGeneration: true
+    allowAsyncHappyPath: true
+    asyncHappyPathProof: tool-output-started
+    asyncHappyPathOutputSnippet: Background task started
     toolCoverage:
       family: image_generate
       actualTool: image_generate

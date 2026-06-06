@@ -12,6 +12,9 @@ type QaRuntimeToolFixtureConfig = {
   promptSnippet?: unknown;
   failurePromptSnippet?: unknown;
   ensureImageGeneration?: unknown;
+  allowAsyncHappyPath?: unknown;
+  asyncHappyPathProof?: unknown;
+  asyncHappyPathOutputSnippet?: unknown;
   expectedAvailable?: unknown;
   toolCoverage?: unknown;
   knownBroken?: unknown;
@@ -22,6 +25,7 @@ type QaRuntimeToolFixtureRequest = {
   allInputText?: string;
   plannedToolName?: string;
   plannedToolArgs?: unknown;
+  toolOutput?: string;
 };
 
 type QaRuntimeToolFixtureDeps = {
@@ -74,19 +78,29 @@ function requestMatchesPrompt(request: QaRuntimeToolFixtureRequest, promptSnippe
   return (request.allInputText ?? "").includes(promptSnippet);
 }
 
-function findPlannedRequest(params: {
+function findPlannedRequestEntry(params: {
   requests: readonly QaRuntimeToolFixtureRequest[];
   requestCountBefore: number;
   promptSnippet: string;
+  excludedPromptSnippet?: string;
   toolName: string;
 }) {
-  return params.requests
-    .slice(params.requestCountBefore)
-    .find(
-      (request) =>
-        requestMatchesPrompt(request, params.promptSnippet) &&
-        request.plannedToolName === params.toolName,
-    );
+  const foundIndex = params.requests.slice(params.requestCountBefore).findIndex(
+    (request) =>
+      requestMatchesPrompt(request, params.promptSnippet) &&
+      (!params.excludedPromptSnippet ||
+        !requestMatchesPrompt(request, params.excludedPromptSnippet)) &&
+      request.plannedToolName === params.toolName,
+  );
+  if (foundIndex < 0) {
+    return undefined;
+  }
+  const index = params.requestCountBefore + foundIndex;
+  return { index, request: params.requests[index]! };
+}
+
+function findPlannedRequest(params: Parameters<typeof findPlannedRequestEntry>[0]) {
+  return findPlannedRequestEntry(params)?.request;
 }
 
 function formatKnownBrokenDetails(
@@ -146,6 +160,10 @@ function formatKnownHarnessGapDetails(toolName: string, config: QaRuntimeToolFix
   return [`known-harness-gap ${toolName}: ${reason}`, issue ? `tracking: ${issue}` : undefined]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatPromptError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function runRuntimeToolFixture(
@@ -216,12 +234,58 @@ export async function runRuntimeToolFixture(
     ? readQaRuntimeToolFixtureRequests(await deps.fetchJson(`${env.mock.baseUrl}/debug/requests`))
         .length
     : 0;
+  const allowAsyncHappyPath = readBoolean(config.allowAsyncHappyPath, false);
+  const asyncHappyPathProof = readString(config.asyncHappyPathProof);
+  let asyncHappyPathError: unknown;
+  let asyncHappyPathDetails: string | undefined;
+  let asyncHappyPathRequest: QaRuntimeToolFixtureRequest | undefined;
 
-  await deps.runAgentPrompt(env, {
-    sessionKey: happySessionKey,
-    message: happyPrompt,
-    timeoutMs: liveTurnTimeoutMs(env, 45_000),
-  });
+  try {
+    await deps.runAgentPrompt(env, {
+      sessionKey: happySessionKey,
+      message: happyPrompt,
+      timeoutMs: liveTurnTimeoutMs(env, 45_000),
+    });
+  } catch (error) {
+    if (!allowAsyncHappyPath || !env.mock) {
+      throw error;
+    }
+    asyncHappyPathError = error;
+  }
+  if (asyncHappyPathError && env.mock) {
+    const requestsAfterHappy = readQaRuntimeToolFixtureRequests(
+      await deps.fetchJson(`${env.mock.baseUrl}/debug/requests`),
+    );
+    const happyEntry = findPlannedRequestEntry({
+      requests: requestsAfterHappy,
+      requestCountBefore,
+      promptSnippet,
+      excludedPromptSnippet: failurePromptSnippet,
+      toolName,
+    });
+    if (!happyEntry) {
+      throw asyncHappyPathError;
+    }
+    if (asyncHappyPathProof !== "tool-output-started") {
+      throw new Error(
+        `allowAsyncHappyPath for ${toolName} requires asyncHappyPathProof: tool-output-started`,
+      );
+    }
+    const outputSnippet = readString(
+      config.asyncHappyPathOutputSnippet,
+      "Background task started",
+    );
+    const asyncStartOutput = requestsAfterHappy
+      .slice(happyEntry.index + 1)
+      .find((request) => (request.toolOutput ?? "").includes(outputSnippet));
+    if (!asyncStartOutput) {
+      throw new Error(
+        `expected async tool-output start after happy-path ${toolName}; happy prompt error: ${formatPromptError(asyncHappyPathError)}`,
+      );
+    }
+    asyncHappyPathRequest = happyEntry.request;
+    asyncHappyPathDetails = `${toolName} happy path started async work before ending: ${formatPromptError(asyncHappyPathError)}`;
+  }
   await deps.runAgentPrompt(env, {
     sessionKey: failureSessionKey,
     message: failurePrompt,
@@ -235,12 +299,15 @@ export async function runRuntimeToolFixture(
   const requests = readQaRuntimeToolFixtureRequests(
     await deps.fetchJson(`${env.mock.baseUrl}/debug/requests`),
   );
-  const happyRequest = findPlannedRequest({
-    requests,
-    requestCountBefore,
-    promptSnippet,
-    toolName,
-  });
+  const happyRequest =
+    asyncHappyPathRequest ??
+    findPlannedRequest({
+      requests,
+      requestCountBefore,
+      promptSnippet,
+      excludedPromptSnippet: failurePromptSnippet,
+      toolName,
+    });
   if (!happyRequest) {
     if (dynamicExposureIntentionallyExcluded) {
       return formatCodexNativeWorkspaceDetails({
@@ -251,6 +318,9 @@ export async function runRuntimeToolFixture(
     }
     if (isKnownHarnessGap(config.knownHarnessGap)) {
       return formatKnownHarnessGapDetails(toolName, config);
+    }
+    if (asyncHappyPathError) {
+      throw asyncHappyPathError;
     }
     throw new Error(`expected mock happy-path request for ${toolName}`);
   }
@@ -286,7 +356,10 @@ export async function runRuntimeToolFixture(
   }
 
   return [
+    asyncHappyPathDetails,
     `${toolName} mock provider happy planned args (diagnostic only): ${JSON.stringify(happyRequest.plannedToolArgs ?? {})}`,
     `${toolName} mock provider failure planned args (diagnostic only): ${JSON.stringify(failureRequest.plannedToolArgs ?? {})}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
