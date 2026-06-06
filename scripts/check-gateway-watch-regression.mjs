@@ -416,7 +416,7 @@ function readProcessTreeCpuMs(rootPid) {
  * Reports whether gateway watch output contains a ready marker.
  */
 export function hasGatewayReadyLog(text) {
-  return /\[gateway\] (?:http server listening|ready \()/.test(text);
+  return /\[gateway\] (?:http server listening|ready(?:\s|\(|$))/.test(text);
 }
 
 async function waitForGatewayReady(readText, timeoutMs) {
@@ -853,6 +853,24 @@ export function collectGatewayWatchFindings(params) {
   return { failures, warnings };
 }
 
+/**
+ * Reports whether a failed watch run actually has duplicate graph evidence.
+ */
+export function hasDuplicateDistRuntimeGraphEvidence(params) {
+  const {
+    distRuntimeByteGrowth,
+    distRuntimeFileGrowth,
+    options,
+    watchBuildReason,
+    watchTriggeredBuild,
+  } = params;
+  return (
+    (watchTriggeredBuild && watchBuildReason !== "dirty_watched_tree") ||
+    distRuntimeFileGrowth > options.distRuntimeFileGrowthMax ||
+    distRuntimeByteGrowth > options.distRuntimeByteGrowthMax
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   ensureDir(options.outputDir);
@@ -975,7 +993,16 @@ async function main() {
     for (const message of failures) {
       fail(message);
     }
-    if (!failures.every((message) => message.includes("dirty watched source tree"))) {
+    if (
+      !failures.every((message) => message.includes("dirty watched source tree")) &&
+      hasDuplicateDistRuntimeGraphEvidence({
+        distRuntimeByteGrowth,
+        distRuntimeFileGrowth,
+        options,
+        watchBuildReason,
+        watchTriggeredBuild,
+      })
+    ) {
       fail(
         "Possible duplicate dist-runtime graph regression: this can reintroduce split runtime personalities where plugins and core observe different global state, including Telegram missing /voice, /phone, or /pair.",
       );

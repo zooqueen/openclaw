@@ -576,6 +576,10 @@ describe("scripts/lib/plugin-prerelease-test-plan.mjs", () => {
     expect(fullReleaseSource).toContain(
       "npm-telegram-beta-e2e.yml has failed child jobs before the workflow completed; cancelling the remaining run.",
     );
+    expect(fullReleaseSource).toContain(
+      'if [[ "$workflow" == "openclaw-release-checks.yml" ]]; then',
+    );
+    expect(fullReleaseSource).toContain("Verify release checks accepted advisory lanes");
   });
 
   it("keeps runtime tool coverage blocking in release checks", () => {
@@ -604,8 +608,24 @@ describe("scripts/lib/plugin-prerelease-test-plan.mjs", () => {
         expect.objectContaining({
           name: "Enforce standard runtime tool coverage",
           run: expect.stringContaining(
-            "--summary .artifacts/qa-e2e/runtime-parity-standard/qa-suite-summary.json",
+            'summary=".artifacts/qa-e2e/runtime-parity-standard/qa-suite-summary.json"',
           ),
+        }),
+      ]),
+    );
+    expect(runtimeToolCoverage.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Enforce standard runtime tool coverage",
+          run: expect.stringContaining('--summary "$summary"'),
+        }),
+      ]),
+    );
+    expect(runtimeToolCoverage.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Enforce standard runtime tool coverage",
+          run: expect.stringContaining("Missing standard runtime parity summary"),
         }),
       ]),
     );

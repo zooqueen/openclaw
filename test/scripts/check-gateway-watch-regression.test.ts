@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   appendBoundedWatchLog,
   collectGatewayWatchFindings,
+  hasDuplicateDistRuntimeGraphEvidence,
   hasGatewayReadyLog,
   parseArgs,
   runTimedWatch,
@@ -86,6 +87,7 @@ describe("check-gateway-watch-regression", () => {
   it("recognizes current and legacy gateway ready logs", () => {
     expect(hasGatewayReadyLog("[gateway] http server listening (0 plugins, 0.8s)")).toBe(true);
     expect(hasGatewayReadyLog("[gateway] ready (0 plugins, 0.8s)")).toBe(true);
+    expect(hasGatewayReadyLog("[gateway] ready")).toBe(true);
     expect(hasGatewayReadyLog("[gateway] starting HTTP server...")).toBe(false);
   });
 
@@ -143,6 +145,50 @@ describe("check-gateway-watch-regression", () => {
       "gateway:watch did not report ready before the idle CPU window",
     );
     expect(findings.warnings).toEqual([]);
+  });
+
+  it("reports duplicate graph evidence only for build or dist-runtime growth", () => {
+    const options = {
+      distRuntimeByteGrowthMax: 2 * 1024 * 1024,
+      distRuntimeFileGrowthMax: 200,
+    };
+
+    expect(
+      hasDuplicateDistRuntimeGraphEvidence({
+        distRuntimeByteGrowth: 0,
+        distRuntimeFileGrowth: 0,
+        options,
+        watchBuildReason: null,
+        watchTriggeredBuild: false,
+      }),
+    ).toBe(false);
+    expect(
+      hasDuplicateDistRuntimeGraphEvidence({
+        distRuntimeByteGrowth: 0,
+        distRuntimeFileGrowth: 201,
+        options,
+        watchBuildReason: null,
+        watchTriggeredBuild: false,
+      }),
+    ).toBe(true);
+    expect(
+      hasDuplicateDistRuntimeGraphEvidence({
+        distRuntimeByteGrowth: 0,
+        distRuntimeFileGrowth: 0,
+        options,
+        watchBuildReason: "source_mtime_newer",
+        watchTriggeredBuild: true,
+      }),
+    ).toBe(true);
+    expect(
+      hasDuplicateDistRuntimeGraphEvidence({
+        distRuntimeByteGrowth: 0,
+        distRuntimeFileGrowth: 0,
+        options,
+        watchBuildReason: "dirty_watched_tree",
+        watchTriggeredBuild: true,
+      }),
+    ).toBe(false);
   });
 
   it("refreshes restored build stamps only for skip-build config mtime drift", () => {

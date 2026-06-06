@@ -1198,10 +1198,17 @@ jobs:
       - name: Enforce standard runtime tool coverage
         run: |
           set -euo pipefail
+          summary=".artifacts/qa-e2e/runtime-parity-standard/qa-suite-summary.json"
+          if [[ ! -f "$summary" ]]; then
+            echo "::error::Missing standard runtime parity summary: ${summary}"
+            echo "Downloaded runtime parity artifact layout:"
+            find .artifacts/qa-e2e -maxdepth 4 -type f | sort
+            exit 1
+          fi
           pnpm openclaw qa coverage \
             --repo-root . \
             --tools \
-            --summary .artifacts/qa-e2e/runtime-parity-standard/qa-suite-summary.json \
+            --summary "$summary" \
             --output .artifacts/qa-e2e/runtime-parity-standard-report/qa-runtime-tool-coverage-report.md
 
       - name: Upload runtime tool coverage artifacts
