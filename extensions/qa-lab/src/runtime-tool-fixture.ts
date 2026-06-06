@@ -146,9 +146,7 @@ function formatKnownBrokenDetails(
   tools: Set<string>,
   config: QaRuntimeToolFixtureConfig,
 ) {
-  const knownBroken = isKnownBroken(config.knownBroken)
-    ? (config.knownBroken as Record<string, unknown>)
-    : {};
+  const knownBroken = isKnownBroken(config.knownBroken) ? config.knownBroken : {};
   const issue = readString(knownBroken.issue);
   const reason = readString(knownBroken.reason, "known broken runtime tool fixture");
   return [
@@ -191,7 +189,7 @@ function formatCodexNativeWorkspaceDetails(params: {
 
 function formatKnownHarnessGapDetails(toolName: string, config: QaRuntimeToolFixtureConfig) {
   const knownHarnessGap = isKnownHarnessGap(config.knownHarnessGap)
-    ? (config.knownHarnessGap as Record<string, unknown>)
+    ? config.knownHarnessGap
     : {};
   const issue = readString(knownHarnessGap.issue);
   const reason = readString(knownHarnessGap.reason, "known QA harness gap");
@@ -215,7 +213,9 @@ async function waitForAsyncImageGenerationRequest(params: {
   prompt: string;
 }) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const after = readRecords(await params.deps.fetchJson(`${params.mockBaseUrl}/debug/image-generations`));
+    const after = readRecords(
+      await params.deps.fetchJson(`${params.mockBaseUrl}/debug/image-generations`),
+    );
     const request = findNewImageGenerationRequest({
       before: params.before,
       after,
@@ -224,7 +224,9 @@ async function waitForAsyncImageGenerationRequest(params: {
     if (request) {
       return request;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 250);
+    });
   }
   return undefined;
 }
