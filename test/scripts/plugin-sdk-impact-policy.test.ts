@@ -1,4 +1,5 @@
 // Plugin SDK Impact Policy tests cover PR impact classification and gate requirements.
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   classificationFromClawSweeperExactHead,
@@ -10,10 +11,12 @@ import {
 } from "../../scripts/github/plugin-sdk-impact-policy.mjs";
 
 const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
+const BASE_SHA = "89abcdef012345670123456789abcdef01234567";
 
 function pullRequest(overrides: Record<string, unknown> = {}) {
   return {
     body: "",
+    base: { sha: BASE_SHA },
     head: { sha: HEAD_SHA },
     labels: [],
     ...overrides,
@@ -22,6 +25,24 @@ function pullRequest(overrides: Record<string, unknown> = {}) {
 
 function file(filename: string, patch = "") {
   return { filename, patch };
+}
+
+function renamedFile(filename: string, previousFilename: string, patch = "") {
+  return { filename, patch, previous_filename: previousFilename, status: "renamed" };
+}
+
+function pathsHash(paths: string[]) {
+  return createHash("sha256").update(paths.toSorted().join("\n")).digest("hex");
+}
+
+function clawsweeperMarker(classification: string, paths: string[], overrides = {}) {
+  const fields = {
+    base: BASE_SHA,
+    paths: pathsHash(paths),
+    sha: HEAD_SHA,
+    ...overrides,
+  };
+  return `<!-- clawsweeper-plugin-sdk-impact sha=${fields.sha} base=${fields.base} paths=${fields.paths} classification=${classification} -->`;
 }
 
 describe("plugin-sdk-impact-policy", () => {
@@ -37,6 +58,9 @@ describe("plugin-sdk-impact-policy", () => {
     expect(isPluginSdkImpactPath(file("src/plugins/types.ts"))).toBe(true);
     expect(isPluginSdkImpactPath(file("src/channels/plugins/catalog.ts"))).toBe(true);
     expect(isPluginSdkImpactPath(file("packages/markdown-core/src/ir.ts"))).toBe(true);
+    expect(
+      isPluginSdkImpactPath(renamedFile("src/internal/core.ts", "src/plugin-sdk/core.ts")),
+    ).toBe(true);
     expect(isPluginSdkImpactPath(file("package.json", '+    "name": "openclaw"'))).toBe(false);
     expect(isPluginSdkImpactPath(file("src/agents/run.ts"))).toBe(false);
   });
@@ -119,6 +143,27 @@ describe("plugin-sdk-impact-policy", () => {
     });
   });
 
+  it("classifies renamed-away public metadata by its previous path", () => {
+    const evaluation = evaluatePluginSdkImpact({
+      changedFiles: [
+        renamedFile(
+          "scripts/lib/internal-entrypoints.json",
+          "scripts/lib/plugin-sdk-entrypoints.json",
+        ),
+      ],
+      pullRequest: pullRequest(),
+    });
+
+    expect(evaluation).toMatchObject({
+      classification: "plugin-sdk:breaking-change",
+      classificationSource: "deterministic",
+      triggeredPaths: [
+        "scripts/lib/internal-entrypoints.json",
+        "scripts/lib/plugin-sdk-entrypoints.json",
+      ],
+    });
+  });
+
   it("classifies adding private-local-only SDK metadata as breaking", () => {
     const evaluation = evaluatePluginSdkImpact({
       changedFiles: [
@@ -171,6 +216,19 @@ describe("plugin-sdk-impact-policy", () => {
     });
   });
 
+  it("classifies renamed-away public SDK entrypoints by their previous path", () => {
+    const evaluation = evaluatePluginSdkImpact({
+      changedFiles: [renamedFile("src/internal/core.ts", "src/plugin-sdk/core.ts")],
+      pullRequest: pullRequest(),
+    });
+
+    expect(evaluation).toMatchObject({
+      classification: "plugin-sdk:behavior-change",
+      classificationSource: "deterministic",
+      triggeredPaths: ["src/internal/core.ts", "src/plugin-sdk/core.ts"],
+    });
+  });
+
   it("classifies public SDK dependency graph changes as behavior changes", () => {
     const evaluation = evaluatePluginSdkImpact({
       changedFiles: [file("packages/markdown-core/src/ir.ts", "+export type Changed = true;")],
@@ -188,7 +246,7 @@ describe("plugin-sdk-impact-policy", () => {
       changedFiles: [file("src/plugin-sdk/core.ts", "+export const changed = true;")],
       comments: [
         {
-          body: `<!-- clawsweeper-plugin-sdk-impact sha=${HEAD_SHA} classification=plugin-sdk:architecture-change -->`,
+          body: clawsweeperMarker("plugin-sdk:architecture-change", ["src/plugin-sdk/core.ts"]),
           performed_via_github_app: { slug: "clawsweeper" },
           user: { login: "clawsweeper[bot]", type: "Bot" },
         },
@@ -212,7 +270,9 @@ describe("plugin-sdk-impact-policy", () => {
       ],
       comments: [
         {
-          body: `<!-- clawsweeper-plugin-sdk-impact sha=${HEAD_SHA} classification=plugin-sdk:additive-api -->`,
+          body: clawsweeperMarker("plugin-sdk:additive-api", [
+            "docs/.generated/plugin-sdk-api-baseline.sha256",
+          ]),
           performed_via_github_app: { slug: "clawsweeper" },
           user: { login: "clawsweeper[bot]", type: "Bot" },
         },
@@ -222,6 +282,51 @@ describe("plugin-sdk-impact-policy", () => {
 
     expect(evaluation).toMatchObject({
       classification: "plugin-sdk:additive-api",
+      classificationSource: "clawsweeper",
+    });
+  });
+
+  it("ignores stale ClawSweeper markers with the wrong base", () => {
+    const evaluation = evaluatePluginSdkImpact({
+      changedFiles: [file("src/plugin-sdk/core.ts", "+export const changed = true;")],
+      comments: [
+        {
+          body: clawsweeperMarker("plugin-sdk:private-only", ["src/plugin-sdk/core.ts"], {
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          }),
+          performed_via_github_app: { slug: "clawsweeper" },
+          user: { login: "clawsweeper[bot]", type: "Bot" },
+        },
+      ],
+      pullRequest: pullRequest(),
+    });
+
+    expect(evaluation).toMatchObject({
+      classification: "plugin-sdk:behavior-change",
+      classificationSource: "deterministic",
+    });
+  });
+
+  it("uses the latest matching ClawSweeper marker", () => {
+    const evaluation = evaluatePluginSdkImpact({
+      changedFiles: [file("src/plugin-sdk/core.ts", "+export const changed = true;")],
+      comments: [
+        {
+          body: clawsweeperMarker("plugin-sdk:private-only", ["src/plugin-sdk/core.ts"]),
+          performed_via_github_app: { slug: "clawsweeper" },
+          user: { login: "clawsweeper[bot]", type: "Bot" },
+        },
+        {
+          body: clawsweeperMarker("plugin-sdk:architecture-change", ["src/plugin-sdk/core.ts"]),
+          performed_via_github_app: { slug: "clawsweeper" },
+          user: { login: "clawsweeper[bot]", type: "Bot" },
+        },
+      ],
+      pullRequest: pullRequest(),
+    });
+
+    expect(evaluation).toMatchObject({
+      classification: "plugin-sdk:architecture-change",
       classificationSource: "clawsweeper",
     });
   });
@@ -324,7 +429,7 @@ describe("plugin-sdk-impact-policy", () => {
       classificationFromClawSweeperExactHead({
         comments: [
           {
-            body: `<!-- clawsweeper-plugin-sdk-impact sha=${HEAD_SHA} classification=additive-api -->`,
+            body: clawsweeperMarker("additive-api", []),
             performed_via_github_app: { slug: "clawsweeper" },
             user: { login: "clawsweeper[bot]", type: "Bot" },
           },

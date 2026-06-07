@@ -86,6 +86,20 @@ export async function fetchPullRequestFiles(params) {
   });
 }
 
+/** Fetch pull request metadata when the triggering event only has an issue payload. */
+export async function fetchPullRequest(params) {
+  const url = new URL(
+    `https://api.github.com/repos/${params.owner}/${params.repo}/pulls/${params.pullNumber}`,
+  );
+  return await fetchGitHubJson({
+    ...params,
+    fetchImpl: params.fetchImpl ?? fetch,
+    label: "pull request lookup",
+    timeoutMs: params.timeoutMs ?? DEFAULT_GITHUB_API_TIMEOUT_MS,
+    url,
+  });
+}
+
 /** Fetch issue comments so trusted ClawSweeper exact-head markers can be read. */
 export async function fetchIssueComments(params) {
   return await fetchPagedGitHubJson({
@@ -104,7 +118,6 @@ export async function fetchPullRequestReviews(params) {
   });
 }
 
-const privilegedReviewerAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 const significantReviewStates = new Set(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]);
 
 function latestReviewsByLogin(reviews) {
@@ -129,13 +142,6 @@ function latestReviewsByLogin(reviews) {
   return byLogin;
 }
 
-function hasPrivilegedReviewerAssociation(review) {
-  const association = String(
-    review?.author_association ?? review?.authorAssociation ?? "",
-  ).toUpperCase();
-  return privilegedReviewerAssociations.has(association);
-}
-
 /** Return true when an active maintainer approved the exact current PR head SHA. */
 export async function hasMaintainerApprovalForHead({
   appToken,
@@ -149,15 +155,15 @@ export async function hasMaintainerApprovalForHead({
   if (!/^[0-9a-f]{40}$/iu.test(headSha)) {
     return false;
   }
+  if (!appToken) {
+    return false;
+  }
 
   for (const [login, review] of latestReviewsByLogin(reviews)) {
     const state = String(review?.state ?? "").toUpperCase();
     const commitId = String(review?.commit_id ?? review?.commitId ?? "").toLowerCase();
     if (state !== "APPROVED" || commitId !== headSha) {
       continue;
-    }
-    if (!appToken && hasPrivilegedReviewerAssociation(review)) {
-      return true;
     }
     if (
       await isMaintainerTeamMember({
@@ -209,21 +215,37 @@ async function main(env = process.env) {
   }
 
   const event = JSON.parse(readFileSync(eventPath, "utf8"));
-  const pullRequest = event.pull_request;
+  const repository = env.GITHUB_REPOSITORY;
+  const [owner, repo] = String(repository ?? "").split("/");
+  if (!repository || !owner || !repo) {
+    console.error("::error title=Plugin SDK impact gate failed::GITHUB_REPOSITORY is missing.");
+    process.exit(1);
+  }
+  const eventPullRequest = event.pull_request;
+  const issuePullRequestNumber = event.issue?.pull_request ? event.issue.number : undefined;
+  const pullRequestNumber = eventPullRequest?.number ?? issuePullRequestNumber;
+  const pullRequest =
+    eventPullRequest ??
+    (pullRequestNumber
+      ? await fetchPullRequest({
+          owner,
+          pullNumber: pullRequestNumber,
+          repo,
+          token: env.GH_APP_TOKEN || env.GITHUB_TOKEN,
+        })
+      : undefined);
   if (!pullRequest) {
     console.log("No pull_request payload found; skipping plugin SDK impact gate.");
     process.exit(0);
   }
 
-  const repository = env.GITHUB_REPOSITORY;
-  if (!repository || !pullRequest.number) {
+  if (!pullRequest.number) {
     console.error(
       "::error title=Plugin SDK impact gate failed::GITHUB_REPOSITORY or PR number is missing.",
     );
     process.exit(1);
   }
 
-  const [owner, repo] = repository.split("/");
   const token = env.GH_APP_TOKEN || env.GITHUB_TOKEN;
   const appToken = env.GH_APP_TOKEN;
   const commonParams = {
@@ -254,6 +276,7 @@ async function main(env = process.env) {
       ? fetchPullRequestReviews(commonParams).then((reviews) =>
           hasMaintainerApprovalForHead({
             appToken,
+            fetchImpl: fetch,
             org: owner,
             pullRequest,
             reviews,
@@ -287,6 +310,7 @@ async function main(env = process.env) {
 
 export const testing = {
   fetchIssueComments,
+  fetchPullRequest,
   fetchPullRequestFiles,
   fetchPullRequestReviews,
   hasMaintainerApprovalForHead,

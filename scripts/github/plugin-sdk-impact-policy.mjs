@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,6 +62,14 @@ function labelNames(labels) {
 
 function changedFilePath(file) {
   return normalizePath(typeof file === "string" ? file : file?.filename);
+}
+
+function changedFilePaths(file) {
+  const paths = [changedFilePath(file)];
+  if (typeof file === "object" && file !== null) {
+    paths.push(normalizePath(file.previous_filename ?? file.previousFilename));
+  }
+  return [...new Set(paths.filter(Boolean))];
 }
 
 function changedFilePatch(file) {
@@ -186,7 +195,16 @@ function isPluginSdkScriptPath(filePath) {
 
 /** Return true when a changed PR file belongs to the plugin SDK impact gate. */
 export function isPluginSdkImpactPath(file) {
-  const filePath = changedFilePath(file);
+  if (
+    changedFilePaths(file).some((filePath) => filePath === "package.json") &&
+    (!hasChangedFilePatch(file) || packageJsonPatchTouchesPluginSdk(changedFilePatch(file)))
+  ) {
+    return true;
+  }
+  return changedFilePaths(file).some(isPluginSdkImpactRepoPath);
+}
+
+function isPluginSdkImpactRepoPath(filePath) {
   if (!filePath) {
     return false;
   }
@@ -204,9 +222,6 @@ export function isPluginSdkImpactPath(file) {
   }
   if (isPluginSdkScriptPath(filePath)) {
     return true;
-  }
-  if (filePath === "package.json") {
-    return !hasChangedFilePatch(file) || packageJsonPatchTouchesPluginSdk(changedFilePatch(file));
   }
   if (filePath === "src/plugins/types.ts" || filePath === "src/plugins/runtime/types.ts") {
     return true;
@@ -247,6 +262,21 @@ function isPublicSurfaceMetadataPath(filePath) {
   );
 }
 
+function hasPublicSurfaceMetadataPath(file) {
+  return changedFilePaths(file).some(isPublicSurfaceMetadataPath);
+}
+
+function hasChangedFilePath(file, filePath) {
+  return changedFilePaths(file).includes(filePath);
+}
+
+function changesAwayFromPublicSurfaceMetadataPath(file) {
+  const currentPath = changedFilePath(file);
+  return changedFilePaths(file).some(
+    (filePath) => isPublicSurfaceMetadataPath(filePath) && filePath !== currentPath,
+  );
+}
+
 function classifyDeterministically(triggeredFiles) {
   if (triggeredFiles.length === 0) {
     return {
@@ -256,7 +286,7 @@ function classifyDeterministically(triggeredFiles) {
     };
   }
 
-  const paths = triggeredFiles.map(changedFilePath);
+  const paths = triggeredFiles.flatMap(changedFilePaths);
   if (paths.every(isTestOnlyPluginSdkPath)) {
     return {
       classification: "plugin-sdk:test-only",
@@ -265,9 +295,7 @@ function classifyDeterministically(triggeredFiles) {
     };
   }
 
-  const publicMetadataFiles = triggeredFiles.filter((file) =>
-    isPublicSurfaceMetadataPath(changedFilePath(file)),
-  );
+  const publicMetadataFiles = triggeredFiles.filter(hasPublicSurfaceMetadataPath);
   if (publicMetadataFiles.some((file) => !hasChangedFilePatch(file))) {
     return {
       classification: "plugin-sdk:breaking-change",
@@ -275,11 +303,18 @@ function classifyDeterministically(triggeredFiles) {
       source: "deterministic",
     };
   }
+  if (publicMetadataFiles.some(changesAwayFromPublicSurfaceMetadataPath)) {
+    return {
+      classification: "plugin-sdk:breaking-change",
+      reason: "Plugin SDK public surface metadata was renamed or removed.",
+      source: "deterministic",
+    };
+  }
   const structuralPublicMetadataFiles = publicMetadataFiles.filter(
-    (file) => changedFilePath(file) !== "docs/.generated/plugin-sdk-api-baseline.sha256",
+    (file) => !hasChangedFilePath(file, "docs/.generated/plugin-sdk-api-baseline.sha256"),
   );
-  const privateLocalOnlyMetadataFiles = structuralPublicMetadataFiles.filter(
-    (file) => changedFilePath(file) === "scripts/lib/plugin-sdk-private-local-only-subpaths.json",
+  const privateLocalOnlyMetadataFiles = structuralPublicMetadataFiles.filter((file) =>
+    hasChangedFilePath(file, "scripts/lib/plugin-sdk-private-local-only-subpaths.json"),
   );
   if (privateLocalOnlyMetadataFiles.some((file) => patchHasAddedLines(changedFilePatch(file)))) {
     return {
@@ -289,7 +324,7 @@ function classifyDeterministically(triggeredFiles) {
     };
   }
   const normalStructuralPublicMetadataFiles = structuralPublicMetadataFiles.filter(
-    (file) => changedFilePath(file) !== "scripts/lib/plugin-sdk-private-local-only-subpaths.json",
+    (file) => !hasChangedFilePath(file, "scripts/lib/plugin-sdk-private-local-only-subpaths.json"),
   );
   if (
     normalStructuralPublicMetadataFiles.some((file) => patchHasRemovedLines(changedFilePatch(file)))
@@ -313,8 +348,8 @@ function classifyDeterministically(triggeredFiles) {
     };
   }
   if (
-    publicMetadataFiles.some(
-      (file) => changedFilePath(file) === "docs/.generated/plugin-sdk-api-baseline.sha256",
+    publicMetadataFiles.some((file) =>
+      hasChangedFilePath(file, "docs/.generated/plugin-sdk-api-baseline.sha256"),
     )
   ) {
     return {
@@ -390,6 +425,10 @@ function extractMarkerField(marker, name) {
   return match?.[1] ?? "";
 }
 
+function hashTriggeredPaths(triggeredPaths) {
+  return createHash("sha256").update(triggeredPaths.join("\n")).digest("hex");
+}
+
 function isTrustedClawSweeperComment(comment) {
   const appSlug = String(
     comment?.performed_via_github_app?.slug ?? comment?.performedViaGithubApp?.slug ?? "",
@@ -403,22 +442,30 @@ function isTrustedClawSweeperComment(comment) {
 }
 
 /** Read a trusted ClawSweeper exact-head impact marker from PR comments. */
-export function classificationFromClawSweeperExactHead({ comments = [], pullRequest } = {}) {
+export function classificationFromClawSweeperExactHead({
+  comments = [],
+  pullRequest,
+  triggeredPaths = [],
+} = {}) {
   const headSha = String(pullRequest?.head?.sha ?? pullRequest?.head_sha ?? "").toLowerCase();
-  if (!/^[0-9a-f]{40}$/iu.test(headSha)) {
+  const baseSha = String(pullRequest?.base?.sha ?? pullRequest?.base_sha ?? "").toLowerCase();
+  const pathsHash = hashTriggeredPaths(triggeredPaths);
+  if (!/^[0-9a-f]{40}$/iu.test(headSha) || !/^[0-9a-f]{40}$/iu.test(baseSha)) {
     return "";
   }
 
-  for (const comment of comments) {
+  for (const comment of [...comments].reverse()) {
     if (!isTrustedClawSweeperComment(comment)) {
       continue;
     }
     const body = String(comment?.body ?? "");
     const markers = body.match(/<!--\s*clawsweeper-plugin-sdk-impact\b[\s\S]*?-->/giu) ?? [];
-    for (const marker of markers) {
+    for (const marker of [...markers].reverse()) {
       const sha = extractMarkerField(marker, "sha").toLowerCase();
+      const base = extractMarkerField(marker, "base").toLowerCase();
+      const paths = extractMarkerField(marker, "paths").toLowerCase();
       const classification = normalizeClassification(extractMarkerField(marker, "classification"));
-      if (sha === headSha && classification) {
+      if (sha === headSha && base === baseSha && paths === pathsHash && classification) {
         return classification;
       }
     }
@@ -429,7 +476,7 @@ export function classificationFromClawSweeperExactHead({ comments = [], pullRequ
 /** Resolve the final plugin SDK impact classification for a pull request. */
 export function evaluatePluginSdkImpact({ changedFiles = [], comments = [], pullRequest } = {}) {
   const triggeredFiles = changedFiles.filter(isPluginSdkImpactPath);
-  const triggeredPaths = triggeredFiles.map(changedFilePath).toSorted();
+  const triggeredPaths = [...new Set(triggeredFiles.flatMap(changedFilePaths))].toSorted();
   const deterministic = classifyDeterministically(triggeredFiles);
   if (triggeredFiles.length === 0) {
     return {
@@ -444,6 +491,7 @@ export function evaluatePluginSdkImpact({ changedFiles = [], comments = [], pull
   const clawsweeperClassification = classificationFromClawSweeperExactHead({
     comments,
     pullRequest,
+    triggeredPaths,
   });
   if (clawsweeperClassification) {
     return {

@@ -12,6 +12,24 @@ function jsonResponse(body: unknown) {
 }
 
 describe("plugin-sdk-impact-check GitHub helpers", () => {
+  it("fetches pull request metadata for issue-comment events", async () => {
+    const fetch = vi.fn((url: URL | string) => {
+      expect(String(url)).toBe("https://api.github.com/repos/openclaw/openclaw/pulls/123");
+      return Promise.resolve(jsonResponse({ number: 123 }));
+    });
+
+    await expect(
+      testing.fetchPullRequest({
+        fetchImpl: fetch as typeof globalThis.fetch,
+        owner: "openclaw",
+        pullNumber: 123,
+        repo: "openclaw",
+        token: "tok",
+      }),
+    ).resolves.toEqual({ number: 123 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("fetches all pull request file pages before classification", async () => {
     const firstPage = Array.from({ length: 100 }, (_, index) => ({
       filename: `src/noise/${index}.ts`,
@@ -144,7 +162,7 @@ describe("plugin-sdk-impact-check GitHub helpers", () => {
     ).resolves.toBe(true);
   });
 
-  it("accepts privileged reviewer association when app-token secrets are unavailable", async () => {
+  it("does not accept privileged reviewer association when app-token secrets are unavailable", async () => {
     const fetch = vi.fn();
 
     await expect(
@@ -163,7 +181,7 @@ describe("plugin-sdk-impact-check GitHub helpers", () => {
           },
         ],
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     expect(fetch).not.toHaveBeenCalled();
   });
 
