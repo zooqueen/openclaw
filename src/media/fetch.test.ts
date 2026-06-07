@@ -4,10 +4,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { MAX_TIMER_TIMEOUT_MS } from "../shared/number-coercion.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
 
-const { createHttp1EnvHttpProxyAgentMock, createHttp1ProxyAgentMock } = vi.hoisted(() => ({
-  createHttp1EnvHttpProxyAgentMock: vi.fn(),
-  createHttp1ProxyAgentMock: vi.fn(),
-}));
+const { captureHttpExchangeMock, createHttp1EnvHttpProxyAgentMock, createHttp1ProxyAgentMock } =
+  vi.hoisted(() => ({
+    captureHttpExchangeMock: vi.fn(),
+    createHttp1EnvHttpProxyAgentMock: vi.fn(),
+    createHttp1ProxyAgentMock: vi.fn(),
+  }));
 
 vi.mock("../infra/net/undici-runtime.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../infra/net/undici-runtime.js")>();
@@ -17,6 +19,10 @@ vi.mock("../infra/net/undici-runtime.js", async (importOriginal) => {
     createHttp1ProxyAgent: createHttp1ProxyAgentMock,
   };
 });
+
+vi.mock("../proxy-capture/runtime.js", () => ({
+  captureHttpExchange: captureHttpExchangeMock,
+}));
 
 type FetchModule = typeof import("./fetch.js");
 type ReadRemoteMediaBuffer = FetchModule["readRemoteMediaBuffer"];
@@ -213,6 +219,7 @@ describe("readRemoteMediaBuffer", () => {
 
   beforeEach(() => {
     vi.useRealTimers();
+    captureHttpExchangeMock.mockReset();
     createHttp1EnvHttpProxyAgentMock.mockReset();
     createHttp1ProxyAgentMock.mockReset();
   });
@@ -717,6 +724,40 @@ describe("readRemoteMediaBuffer", () => {
       "https://example.com/download",
       expect.objectContaining({ redirect: "error" }),
     );
+  });
+
+  it("captures native media fetches for debug proxy traces", async () => {
+    const response = new Response(Buffer.from("captured"), {
+      status: 200,
+      headers: { "content-type": "application/octet-stream" },
+    });
+    const fetchImpl = vi.fn(async () => response);
+
+    const result = await readRemoteMediaBuffer({
+      url: "https://cdn.example.com/file.bin",
+      fetchImpl,
+      lookupFn: makeLookupFn(),
+      maxBytes: 1024,
+      requestInit: {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: '{"id":1}',
+      },
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("captured"));
+    const capture = captureHttpExchangeMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(capture).toMatchObject({
+      url: "https://cdn.example.com/file.bin",
+      method: "POST",
+      requestHeaders: { "content-type": "application/json" },
+      requestBody: '{"id":1}',
+      response,
+      transport: "http",
+      meta: {
+        captureOrigin: "media-fetch",
+      },
+    });
   });
 
   it("rejects media URLs outside the configured hostname allowlist before fetch", async () => {

@@ -37,6 +37,7 @@ import {
 import { retryAsync, type RetryOptions } from "../infra/retry.js";
 import { isAbortError, isTransientNetworkError } from "../infra/unhandled-rejections.js";
 import { redactSensitiveText } from "../logging/redact.js";
+import { captureHttpExchange } from "../proxy-capture/runtime.js";
 import { resolveTimerTimeoutMs } from "../shared/number-coercion.js";
 import { saveMediaBuffer, saveMediaStream, type SavedMedia } from "./store.js";
 
@@ -322,6 +323,27 @@ function assertExplicitProxySupportsMediaTarget(
   }
 }
 
+function captureMediaFetchExchange(params: {
+  url: string;
+  finalUrl: string;
+  init: RequestInit | undefined;
+  response: Response;
+}): void {
+  captureHttpExchange({
+    url: params.url,
+    method: params.init?.method ?? "GET",
+    requestHeaders: params.init?.headers as Headers | Record<string, string> | undefined,
+    requestBody:
+      (params.init as (RequestInit & { body?: BodyInit | null }) | undefined)?.body ?? null,
+    response: params.response,
+    transport: "http",
+    meta: {
+      captureOrigin: "media-fetch",
+      ...(params.finalUrl !== params.url ? { finalUrl: params.finalUrl } : {}),
+    },
+  });
+}
+
 async function createMediaFetchDispatcher(params: {
   url: URL;
   attempt: FetchDispatcherAttempt;
@@ -408,6 +430,7 @@ async function fetchNativeMediaAttempt(
       await discardIgnoredResponseBody(response);
       throw err;
     }
+    captureMediaFetchExchange({ url: requestUrl, finalUrl, init, response });
     return {
       response,
       finalUrl,
