@@ -808,6 +808,32 @@ describe("readRemoteMediaBuffer", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("cleans up request timeouts when dispatcher setup rejects before fetch", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async () => new Response("should not fetch", { status: 200 }));
+      const lookupFn = vi.fn(async () => ({
+        address: "127.0.0.1",
+        family: 4,
+      })) as unknown as LookupFn;
+
+      await expect(
+        readRemoteMediaBuffer({
+          url: "https://cdn.example.com/secret.png",
+          fetchImpl,
+          lookupFn,
+          maxBytes: 1024,
+          timeoutMs: 5000,
+        }),
+      ).rejects.toThrow("resolves to private/internal/special-use IP address");
+
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses the managed env proxy dispatcher after DNS validation when proxy is active", async () => {
     vi.stubEnv("OPENCLAW_PROXY_ACTIVE", "1");
     vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:8888");

@@ -392,15 +392,7 @@ async function fetchNativeMediaAttempt(
     requestSignal: requestInit?.signal,
     timeoutMs,
   });
-  const dispatcher = await createMediaFetchDispatcher({
-    url: parsedRequestUrl,
-    attempt,
-    fetchImpl,
-    lookupFn,
-    ssrfPolicy,
-    timeoutMs,
-    trustExplicitProxyDns,
-  });
+  let dispatcher: Dispatcher | null = null;
   let released = false;
   const release = async () => {
     if (released) {
@@ -410,16 +402,25 @@ async function fetchNativeMediaAttempt(
     signal.cleanup();
     await closeDispatcher(dispatcher);
   };
-  const init: DispatcherAwareRequestInit = {
-    ...requestInit,
-    ...(signal.signal ? { signal: signal.signal } : {}),
-    ...(dispatcher ? { dispatcher } : {}),
-    redirect:
-      requestInit?.redirect === "manual" || requestInit?.redirect === "error"
-        ? requestInit.redirect
-        : "error",
-  };
   try {
+    dispatcher = await createMediaFetchDispatcher({
+      url: parsedRequestUrl,
+      attempt,
+      fetchImpl,
+      lookupFn,
+      ssrfPolicy,
+      timeoutMs,
+      trustExplicitProxyDns,
+    });
+    const init: DispatcherAwareRequestInit = {
+      ...requestInit,
+      ...(signal.signal ? { signal: signal.signal } : {}),
+      ...(dispatcher ? { dispatcher } : {}),
+      redirect:
+        requestInit?.redirect === "manual" || requestInit?.redirect === "error"
+          ? requestInit.redirect
+          : "error",
+    };
     const response = fetchImpl
       ? await fetchImpl(requestUrl, init)
       : await fetchWithRuntimeDispatcherOrMockedGlobal(requestUrl, init);
