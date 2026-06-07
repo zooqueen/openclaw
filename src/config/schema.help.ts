@@ -942,9 +942,9 @@ export const FIELD_HELP: Record<string, string> = {
   "tools.web.fetch.ssrfPolicy":
     "Deprecated generic fetch SSRF policy overrides. Direct web_fetch no longer consumes this policy, but remote media tools still read it until a replacement media-specific key exists.",
   "tools.web.fetch.ssrfPolicy.allowRfc2544BenchmarkRange":
-    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; run `openclaw doctor --fix` to remove it.",
+    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; remote media tools still read it until a replacement media-specific key exists.",
   "tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange":
-    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; run `openclaw doctor --fix` to remove it.",
+    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; remote media tools still read it until a replacement media-specific key exists.",
   models:
     "Model catalog root for provider definitions, merge/replace behavior, and optional Bedrock discovery integration. Keep provider definitions explicit and validated before relying on production failover paths.",
   "models.mode":
