@@ -80,31 +80,32 @@ export function memoryCoreStateReference(namespace: string, workspaceDir: string
   return `plugin-state:${MEMORY_CORE_PLUGIN_ID}/${namespace}/${memoryCoreWorkspaceStateKey(workspaceDir)}`;
 }
 
-function openWorkspaceStore<T>(namespace: string): PluginStateKeyedStore<WorkspaceValue<T>> {
-  return openMemoryCoreStateStore<WorkspaceValue<T>>({
+function openWorkspaceStore(namespace: string): PluginStateKeyedStore<WorkspaceValue<unknown>> {
+  return openMemoryCoreStateStore<WorkspaceValue<unknown>>({
     namespace,
     maxEntries: DREAMING_WORKSPACE_STATE_MAX_ENTRIES,
   });
 }
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers bind plugin-state JSON values by namespace.
 export async function readMemoryCoreWorkspaceEntries<T>(params: {
   namespace: string;
   workspaceDir: string;
 }): Promise<Array<{ key: string; value: T }>> {
   const workspaceKey = memoryCoreWorkspaceStateKey(params.workspaceDir);
   const prefix = `${workspaceKey}:`;
-  const entries = await openWorkspaceStore<T>(params.namespace).entries();
+  const entries = await openWorkspaceStore(params.namespace).entries();
   return entries
     .filter((entry) => entry.key.startsWith(prefix) && entry.value.workspaceKey === workspaceKey)
-    .map((entry) => ({ key: entry.value.key, value: entry.value.value }));
+    .map((entry) => ({ key: entry.value.key, value: entry.value.value as T }));
 }
 
-export async function writeMemoryCoreWorkspaceEntries<T>(params: {
+export async function writeMemoryCoreWorkspaceEntries(params: {
   namespace: string;
   workspaceDir: string;
-  entries: Array<{ key: string; value: T }>;
+  entries: Array<{ key: string; value: unknown }>;
 }): Promise<void> {
-  const store = openWorkspaceStore<T>(params.namespace);
+  const store = openWorkspaceStore(params.namespace);
   const workspaceKey = memoryCoreWorkspaceStateKey(params.workspaceDir);
   const prefix = `${workspaceKey}:`;
   const replacementKeys = new Set<string>();
@@ -126,14 +127,14 @@ export async function writeMemoryCoreWorkspaceEntries<T>(params: {
   }
 }
 
-export async function writeMemoryCoreWorkspaceEntry<T>(params: {
+export async function writeMemoryCoreWorkspaceEntry(params: {
   namespace: string;
   workspaceDir: string;
   key: string;
-  value: T;
+  value: unknown;
 }): Promise<void> {
   const workspaceKey = memoryCoreWorkspaceStateKey(params.workspaceDir);
-  await openWorkspaceStore<T>(params.namespace).register(
+  await openWorkspaceStore(params.namespace).register(
     memoryCoreWorkspaceEntryKey(params.workspaceDir, params.key),
     {
       version: 1,

@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
   createPluginStateKeyedStoreForTests,
   resetPluginStateStoreForTests,
@@ -53,11 +54,11 @@ describe("memory-core doctor dreaming migration", () => {
   }
 
   function migrationParams(
-    config: unknown = {
+    config: OpenClawConfig = {
       agents: {
         list: [{ id: "main", workspace: workspaceDir }],
       },
-    },
+    } as OpenClawConfig,
   ) {
     return {
       config,
@@ -242,7 +243,7 @@ describe("memory-core doctor dreaming migration", () => {
       }),
       "utf8",
     );
-    const config = { agents: { list: [{ id: "main", default: true }] } };
+    const config = { agents: { list: [{ id: "main", default: true }] } } as OpenClawConfig;
 
     const preview = await stateMigrations[0].detectLegacyState(migrationParams(config));
     expect(preview?.preview).toEqual([expect.stringContaining("Memory Core short-term recall")]);

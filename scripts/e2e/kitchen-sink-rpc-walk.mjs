@@ -283,9 +283,12 @@ export function runCommand(command, args, options = {}) {
             });
           }
         })
-        .catch((error) => {
-          lastResourceSampleError = error;
-        })
+        .catch(
+          /** @param {unknown} error */
+          (error) => {
+            lastResourceSampleError = error;
+          },
+        )
         .finally(() => {
           resourceSampleInFlight = null;
         });

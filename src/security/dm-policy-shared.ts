@@ -1,15 +1,11 @@
 // Shares direct-message policy normalization for channel audits.
 import { normalizeStringEntries } from "@openclaw/normalization-core/string-normalization";
-import { resolveGroupAllowFromSources } from "../channels/allow-from.js";
+import { mergeDmAllowFromSources, resolveGroupAllowFromSources } from "../channels/allow-from.js";
 import { resolveControlCommandGate } from "../channels/command-gating.js";
-import { resolveDmAllowAuditState } from "../channels/message-access/dm-allow-state.js";
-import {
-  readChannelIngressStoreAllowFromForDmPolicy,
-  resolveChannelIngressEffectiveAllowFromLists,
-} from "../channels/message-access/runtime.js";
-import type { ChannelId } from "../channels/plugins/types.public.js";
 import type { GroupPolicy } from "../config/types.base.js";
 import { evaluateMatchedGroupAccessForPolicy } from "../plugin-sdk/group-access.js";
+
+type ChannelId = string;
 
 /**
  * Derive a stable main-DM owner from a single-entry allowlist.
@@ -48,7 +44,24 @@ export function resolveEffectiveAllowFromLists(params: {
   effectiveAllowFrom: string[];
   effectiveGroupAllowFrom: string[];
 } {
-  return resolveChannelIngressEffectiveAllowFromLists(params);
+  const allowFrom = Array.isArray(params.allowFrom) ? params.allowFrom : undefined;
+  const groupAllowFrom = Array.isArray(params.groupAllowFrom) ? params.groupAllowFrom : undefined;
+  const storeAllowFrom = Array.isArray(params.storeAllowFrom) ? params.storeAllowFrom : undefined;
+  const effectiveAllowFrom = normalizeStringEntries(
+    mergeDmAllowFromSources({
+      allowFrom,
+      storeAllowFrom,
+      dmPolicy: params.dmPolicy ?? undefined,
+    }),
+  );
+  const effectiveGroupAllowFrom = normalizeStringEntries(
+    resolveGroupAllowFromSources({
+      allowFrom,
+      groupAllowFrom,
+      fallbackToAllowFrom: params.groupAllowFromFallbackToAllowFrom ?? undefined,
+    }),
+  );
+  return { effectiveAllowFrom, effectiveGroupAllowFrom };
 }
 
 /** Admission decision returned by legacy DM/group access helpers. */
@@ -152,6 +165,8 @@ export async function readStoreAllowFromForDmPolicy(params: {
   shouldRead?: boolean | null;
   readStore?: (provider: ChannelId, accountId: string) => Promise<string[]>;
 }): Promise<string[]> {
+  const { readChannelIngressStoreAllowFromForDmPolicy } =
+    await import("../channels/message-access/runtime.js");
   return await readChannelIngressStoreAllowFromForDmPolicy(params);
 }
 
@@ -353,5 +368,6 @@ export async function resolveDmAllowState(params: {
   allowCount: number;
   isMultiUserDm: boolean;
 }> {
+  const { resolveDmAllowAuditState } = await import("../channels/message-access/dm-allow-state.js");
   return await resolveDmAllowAuditState(params);
 }

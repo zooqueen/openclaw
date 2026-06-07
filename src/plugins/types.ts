@@ -6,6 +6,7 @@ import type {
   UnifiedModelCatalogKind,
 } from "@openclaw/model-catalog-core/model-catalog-types";
 import type { Command } from "commander";
+import type { AgentMessage, StreamFn } from "../../packages/agent-core/src/types.js";
 import type {
   ApiKeyCredential,
   AuthProfileCredential,
@@ -15,8 +16,6 @@ import type {
 import type { FailoverReason } from "../agents/embedded-agent-helpers/types.js";
 import type { AgentHarness } from "../agents/harness/types.js";
 import type { ModelCatalogEntry } from "../agents/model-catalog.types.js";
-import type { AgentMessage } from "../agents/runtime/index.js";
-import type { StreamFn } from "../agents/runtime/index.js";
 import type { ProviderSystemPromptContribution } from "../agents/system-prompt-contribution.js";
 import type { PromptMode } from "../agents/system-prompt.types.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
