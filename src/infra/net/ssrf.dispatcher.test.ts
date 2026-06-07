@@ -43,6 +43,10 @@ const { dnsLookupMock } = vi.hoisted(() => ({
       cb(null, opts.all ? [{ address: "127.0.0.1", family: 4 }] : "127.0.0.1", 4);
       return;
     }
+    if (hostname === "localhost") {
+      cb(null, opts.all ? [{ address: "127.0.0.1", family: 4 }] : "127.0.0.1", 4);
+      return;
+    }
     cb(null, opts.all ? [{ address: "93.184.216.34", family: 4 }] : "93.184.216.34", 4);
   }),
 }));
@@ -343,6 +347,43 @@ describe("createPinnedDispatcher", () => {
         autoSelectFamilyAttemptTimeout: 300,
       },
     });
+  });
+
+  it("does not apply the target SSRF policy to env proxy host lookups", () => {
+    const lookup = vi.fn() as unknown as PinnedHostname["lookup"];
+    const pinned: PinnedHostname = {
+      hostname: "api.telegram.org",
+      addresses: ["149.154.167.220"],
+      lookup,
+    };
+
+    createPinnedDispatcher(
+      pinned,
+      {
+        mode: "env-proxy",
+        connect: {
+          autoSelectFamily: true,
+        },
+      },
+      {
+        hostnameAllowlist: ["api.telegram.org"],
+      },
+    );
+
+    const [call] = envHttpProxyAgentCtor.mock.calls;
+    const options = requireRecord(call?.[0], "EnvHttpProxyAgent constructor options");
+    const connect = requireRecord(options.connect, "EnvHttpProxyAgent connect options");
+    const envProxyLookup = connect.lookup as PinnedHostname["lookup"] | undefined;
+    expect(envProxyLookup).toBeTypeOf("function");
+
+    const targetCallback = vi.fn();
+    envProxyLookup?.("api.telegram.org", targetCallback);
+    expect(targetCallback).toHaveBeenCalledWith(null, "149.154.167.220", 4);
+
+    const proxyCallback = vi.fn();
+    envProxyLookup?.("localhost", proxyCallback);
+    expect(dnsLookupMock).toHaveBeenCalledWith("localhost", expect.any(Function));
+    expect(proxyCallback).toHaveBeenCalledWith(null, "127.0.0.1", 4);
   });
 
   it("keeps explicit proxy routing intact", () => {

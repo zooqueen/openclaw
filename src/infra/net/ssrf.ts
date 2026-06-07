@@ -684,13 +684,14 @@ function withPinnedLookup(
 function resolvePinnedDispatcherLookup(
   pinned: PinnedHostname,
   override?: PinnedHostnameOverride,
+  fallback: typeof dnsLookupCb = createPolicyCheckingLookup(),
   policy?: SsrFPolicy,
 ): PinnedHostname["lookup"] {
   if (!override) {
     return createPinnedLookup({
       hostname: pinned.hostname,
       addresses: [...pinned.addresses],
-      fallback: createPolicyCheckingLookup(policy),
+      fallback,
     });
   }
   const normalizedOverrideHost = normalizeHostname(override.hostname);
@@ -711,7 +712,7 @@ function resolvePinnedDispatcherLookup(
   return createPinnedLookup({
     hostname: pinned.hostname,
     addresses: [...override.addresses],
-    fallback: createPolicyCheckingLookup(policy),
+    fallback,
   });
 }
 
@@ -721,7 +722,14 @@ export function createPinnedDispatcher(
   ssrfPolicy?: SsrFPolicy,
   timeoutMs?: number,
 ): Dispatcher {
-  const lookup = resolvePinnedDispatcherLookup(pinned, policy?.pinnedHostname, ssrfPolicy);
+  const fallbackLookup =
+    policy?.mode === "env-proxy" ? dnsLookupCb : createPolicyCheckingLookup(ssrfPolicy);
+  const lookup = resolvePinnedDispatcherLookup(
+    pinned,
+    policy?.pinnedHostname,
+    fallbackLookup,
+    ssrfPolicy,
+  );
 
   if (!policy || policy.mode === "direct") {
     return createHttp1Agent({ connect: withPinnedLookup(lookup, policy?.connect) }, timeoutMs);
