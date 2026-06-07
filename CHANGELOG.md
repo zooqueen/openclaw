@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.7-alpha.2
+
+### Fixes
+
+- Release validation: reuse alpha stabilization fixes for plugin prerelease, QA runtime parity, package scanning, startup cleanup, Docker stats, and runtime tool fixture handling while refreshing generated release metadata for the current branch.
+
 ## 2026.6.5
 
 ### Highlights
