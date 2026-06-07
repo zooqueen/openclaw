@@ -622,6 +622,58 @@ describe("readRemoteMediaBuffer", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("routes ambient global fetchImpl through the runtime dispatcher path", async () => {
+    const runtimeFetch = vi.fn(
+      async () =>
+        new Response(Buffer.from("runtime"), {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+    );
+    const originalGlobalFetch = globalThis.fetch;
+    let ambientFetchCalls = 0;
+    const ambientFetch = async () => {
+      ambientFetchCalls += 1;
+      throw new Error("ambient global fetch should not be called");
+    };
+
+    class MockAgent {
+      constructor(readonly options: unknown) {}
+    }
+    class MockEnvHttpProxyAgent {
+      constructor(readonly options: unknown) {}
+    }
+    class MockProxyAgent {
+      constructor(readonly options: unknown) {}
+    }
+
+    (globalThis as Record<string, unknown>).fetch = ambientFetch as typeof fetch;
+    (globalThis as Record<string, unknown>)[TEST_UNDICI_RUNTIME_DEPS_KEY] = {
+      Agent: MockAgent,
+      EnvHttpProxyAgent: MockEnvHttpProxyAgent,
+      ProxyAgent: MockProxyAgent,
+      fetch: runtimeFetch,
+    };
+
+    try {
+      const result = await readRemoteMediaBuffer({
+        url: "https://files.example.test/file.bin",
+        fetchImpl: globalThis.fetch,
+        lookupFn: makeLookupFn(),
+        maxBytes: 1024,
+      });
+
+      expect(result.buffer).toStrictEqual(Buffer.from("runtime"));
+      expect(ambientFetchCalls).toBe(0);
+      expect(runtimeFetch).toHaveBeenCalledWith(
+        "https://files.example.test/file.bin",
+        expect.objectContaining({ dispatcher: expect.any(MockAgent) }),
+      );
+    } finally {
+      (globalThis as Record<string, unknown>).fetch = originalGlobalFetch;
+    }
+  });
+
   it("inherits the configured global stream timeout for direct dispatchers", async () => {
     const agentCtor = vi.fn(function MockAgent(this: { options: unknown }, options: unknown) {
       this.options = options;

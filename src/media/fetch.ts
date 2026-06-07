@@ -64,6 +64,20 @@ function mediaRedirectVisitKey(url: string, init: RequestInit | undefined): stri
   return `${init?.method?.toUpperCase() ?? "GET"} ${url}`;
 }
 
+async function fetchMediaWithDispatcher(
+  input: string,
+  init: DispatcherAwareRequestInit,
+  fetchImpl: FetchLike | undefined,
+): Promise<Response> {
+  if (!fetchImpl) {
+    return await fetchWithRuntimeDispatcherOrMockedGlobal(input, init);
+  }
+  if (fetchImpl === globalThis.fetch && !isMockedFetch(fetchImpl)) {
+    return await fetchWithRuntimeDispatcherOrMockedGlobal(input, init);
+  }
+  return await fetchImpl(input, init);
+}
+
 /** Remote media bytes plus metadata before they are persisted to the media store. */
 type FetchMediaResult = {
   buffer: Buffer;
@@ -507,9 +521,7 @@ async function fetchNativeMediaAttempt(
         ...(dispatcher ? { dispatcher } : {}),
         redirect: followRedirects ? "manual" : currentInit?.redirect,
       };
-      const response = fetchImpl
-        ? await fetchImpl(currentUrl, init)
-        : await fetchWithRuntimeDispatcherOrMockedGlobal(currentUrl, init);
+      const response = await fetchMediaWithDispatcher(currentUrl, init, fetchImpl);
       const finalUrl = response.url || currentUrl;
       try {
         assertMediaUrlAllowedByPolicy(finalUrl, ssrfPolicy);
