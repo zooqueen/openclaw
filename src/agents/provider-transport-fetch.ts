@@ -1,8 +1,13 @@
 /**
  * Guarded provider fetch transport utilities.
  *
- * Applies request timeouts, proxy/TLS overrides, local-service leases, retry hints, and SSE normalization.
+ * Applies request timeouts, proxy/TLS overrides, SSRF policy, local-service leases, retry hints, and SSE normalization.
  */
+import {
+  isCloudMetadataIpAddress,
+  isLinkLocalIpAddress,
+  parseCanonicalIpAddress,
+} from "@openclaw/net-policy/ip";
 import {
   asFiniteNumberInRange,
   clampTimerTimeoutMs,
@@ -15,12 +20,19 @@ import {
   fetchWithRuntimeDispatcherOrMockedGlobal,
   type DispatcherAwareRequestInit,
 } from "../infra/net/runtime-fetch.js";
-import { closeDispatcher, type PinnedDispatcherPolicy } from "../infra/net/ssrf.js";
 import {
-  createHttp1Agent,
-  createHttp1EnvHttpProxyAgent,
-  createHttp1ProxyAgent,
-} from "../infra/net/undici-runtime.js";
+  assertHostnameAllowedWithPolicy,
+  closeDispatcher,
+  createPinnedDispatcher,
+  mergeSsrFPolicies,
+  resolvePinnedHostnameWithPolicy,
+  resolveSsrFPolicyForUrl,
+  ssrfPolicyFromHttpBaseUrlAllowedOrigin,
+  ssrfPolicyFromHttpBaseUrlFakeIpHostnameAllowlist,
+  type PinnedDispatcherPolicy,
+  type SsrFPolicy,
+} from "../infra/net/ssrf.js";
+import { createHttp1EnvHttpProxyAgent } from "../infra/net/undici-runtime.js";
 import type { Model } from "../llm/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveDebugProxySettings } from "../proxy-capture/env.js";
@@ -43,6 +55,7 @@ import {
 const DEFAULT_MAX_SDK_RETRY_WAIT_SECONDS = 60;
 const OPENAI_SDK_STREAM_CONTENT_SNIFF_BYTES = 2 * 1024;
 const log = createSubsystemLogger("provider-transport-fetch");
+const BLOCKED_EXACT_ORIGIN_TRUST_HOSTNAME_LABELS = new Set(["instance-data"]);
 const PLAIN_DECIMAL_NUMBER_RE = /^\d+(?:\.\d+)?$/;
 const RETRY_AFTER_HTTP_DATE_RE =
   /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ \d]\d \d{2}:\d{2}:\d{2} \d{4})$/;
@@ -617,42 +630,126 @@ function buildModelRequestSignal(
   return AbortSignal.any([baseSignal, timeoutSignal]);
 }
 
+function resolveHttpOrigin(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    parsed.hostname = parsed.hostname.replace(/\.+$/, "");
+    return parsed.origin.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeProviderOriginHostname(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    const normalized = parsed.hostname.trim().toLowerCase().replace(/\.+$/, "");
+    return normalized || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function canImplicitlyTrustConfiguredBaseUrlOrigin(value: unknown): value is string {
+  const hostname = normalizeProviderOriginHostname(value);
+  if (!hostname) {
+    return false;
+  }
+  const labels = hostname.split(".").filter(Boolean);
+  return (
+    !labels.some(
+      (label) =>
+        label.includes("metadata") || BLOCKED_EXACT_ORIGIN_TRUST_HOSTNAME_LABELS.has(label),
+    ) &&
+    !isLinkLocalIpAddress(hostname) &&
+    !isCloudMetadataIpAddress(hostname)
+  );
+}
+
+function canApplyFakeIpHostnamePolicy(value: unknown): value is string {
+  const hostname = normalizeProviderOriginHostname(value);
+  if (!hostname) {
+    return false;
+  }
+  const labels = hostname.split(".").filter(Boolean);
+  return (
+    !labels.some(
+      (label) =>
+        label.includes("metadata") || BLOCKED_EXACT_ORIGIN_TRUST_HOSTNAME_LABELS.has(label),
+    ) && !parseCanonicalIpAddress(hostname)
+  );
+}
+
+function resolveModelTransportSsrFPolicy(params: {
+  model: Model;
+  url: string;
+  allowPrivateNetwork?: boolean;
+  trustConfiguredBaseUrlOrigin?: boolean;
+}): SsrFPolicy | undefined {
+  const baseUrl = (params.model as { baseUrl?: unknown }).baseUrl;
+  const baseOrigin = resolveHttpOrigin(baseUrl);
+  const requestOrigin = resolveHttpOrigin(params.url);
+  const requestMatchesBaseOrigin =
+    typeof baseUrl === "string" && Boolean(baseOrigin) && requestOrigin === baseOrigin;
+  const baseUrlOriginPolicy =
+    requestMatchesBaseOrigin &&
+    params.trustConfiguredBaseUrlOrigin &&
+    canImplicitlyTrustConfiguredBaseUrlOrigin(baseUrl)
+      ? ssrfPolicyFromHttpBaseUrlAllowedOrigin(baseUrl)
+      : undefined;
+  // Fake-IP trust is hostname-scoped and separate from exact-origin private-IP trust.
+  // It is for DNS hostnames only and does not allow literal private IPs by itself.
+  const fakeIpPolicy =
+    requestMatchesBaseOrigin && canApplyFakeIpHostnamePolicy(baseUrl)
+      ? ssrfPolicyFromHttpBaseUrlFakeIpHostnameAllowlist(baseUrl)
+      : undefined;
+  return mergeSsrFPolicies(
+    baseUrlOriginPolicy,
+    fakeIpPolicy,
+    params.allowPrivateNetwork ? { allowPrivateNetwork: true } : undefined,
+  );
+}
+
 type ProviderTransportFetchResult = {
   response: Response;
   release: () => Promise<void>;
   refreshTimeout?: () => void;
 };
 
-function createProviderTransportDispatcher(
-  dispatcherPolicy: PinnedDispatcherPolicy | undefined,
-  useEnvProxy: boolean,
-  timeoutMs: number | undefined,
-): Dispatcher | null {
-  if (dispatcherPolicy?.mode === "direct") {
-    return createHttp1Agent(
-      dispatcherPolicy.connect ? { connect: { ...dispatcherPolicy.connect } } : undefined,
-      timeoutMs,
-    );
+async function createProviderTransportDispatcher(params: {
+  url: string;
+  dispatcherPolicy: PinnedDispatcherPolicy | undefined;
+  useEnvProxy: boolean;
+  timeoutMs: number | undefined;
+  policy?: SsrFPolicy;
+}): Promise<Dispatcher | null> {
+  const parsedUrl = new URL(params.url);
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error("Invalid URL: must be http or https");
   }
-  if (dispatcherPolicy?.mode === "env-proxy") {
-    return createHttp1EnvHttpProxyAgent(
-      {
-        ...(dispatcherPolicy.connect ? { connect: { ...dispatcherPolicy.connect } } : {}),
-        ...(dispatcherPolicy.proxyTls ? { proxyTls: { ...dispatcherPolicy.proxyTls } } : {}),
-      },
-      timeoutMs,
-    );
+  const policyForUrl = resolveSsrFPolicyForUrl(parsedUrl, params.policy);
+
+  if (params.useEnvProxy && !params.dispatcherPolicy) {
+    assertHostnameAllowedWithPolicy(parsedUrl.hostname, policyForUrl);
+    return createHttp1EnvHttpProxyAgent(undefined, params.timeoutMs);
   }
-  if (dispatcherPolicy?.mode === "explicit-proxy") {
-    const proxyUrl = dispatcherPolicy.proxyUrl.trim();
-    return dispatcherPolicy.proxyTls
-      ? createHttp1ProxyAgent(
-          { uri: proxyUrl, requestTls: { ...dispatcherPolicy.proxyTls } },
-          timeoutMs,
-        )
-      : createHttp1ProxyAgent({ uri: proxyUrl }, timeoutMs);
-  }
-  return useEnvProxy ? createHttp1EnvHttpProxyAgent(undefined, timeoutMs) : null;
+
+  const pinned = await resolvePinnedHostnameWithPolicy(parsedUrl.hostname, {
+    policy: policyForUrl,
+  });
+  return createPinnedDispatcher(pinned, params.dispatcherPolicy, policyForUrl, params.timeoutMs);
 }
 
 function captureProviderTransportExchange(params: {
@@ -678,6 +775,25 @@ function captureProviderTransportExchange(params: {
   });
 }
 
+function hasUnsafeProviderRedirectReplayRisk(init?: RequestInit): boolean {
+  if (init?.body === undefined || init.body === null) {
+    return false;
+  }
+  const method = (init.method ?? "GET").toUpperCase();
+  return method !== "GET" && method !== "HEAD";
+}
+
+function applyProviderRedirectPolicy(init: DispatcherAwareRequestInit): DispatcherAwareRequestInit {
+  if (
+    !hasUnsafeProviderRedirectReplayRisk(init) ||
+    init.redirect === "error" ||
+    init.redirect === "manual"
+  ) {
+    return init;
+  }
+  return { ...init, redirect: "error" };
+}
+
 async function fetchProviderTransport(params: {
   url: string;
   init?: RequestInit;
@@ -685,6 +801,7 @@ async function fetchProviderTransport(params: {
   useEnvProxy: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
+  policy?: SsrFPolicy;
   model: Model;
 }): Promise<ProviderTransportFetchResult> {
   const { signal, cleanup, refresh } = buildTimeoutAbortSignal({
@@ -693,11 +810,7 @@ async function fetchProviderTransport(params: {
     operation: "providerTransportFetch",
     url: params.url,
   });
-  const dispatcher = createProviderTransportDispatcher(
-    params.dispatcherPolicy,
-    params.useEnvProxy,
-    params.timeoutMs,
-  );
+  let dispatcher: Dispatcher | null = null;
   let released = false;
   const release = async () => {
     if (released) {
@@ -708,11 +821,18 @@ async function fetchProviderTransport(params: {
     await closeDispatcher(dispatcher);
   };
   try {
-    const init: DispatcherAwareRequestInit = {
+    dispatcher = await createProviderTransportDispatcher({
+      url: params.url,
+      dispatcherPolicy: params.dispatcherPolicy,
+      useEnvProxy: params.useEnvProxy,
+      timeoutMs: params.timeoutMs,
+      policy: params.policy,
+    });
+    const init = applyProviderRedirectPolicy({
       ...(params.init ? { ...params.init } : {}),
       ...(signal ? { signal } : {}),
       ...(dispatcher ? { dispatcher } : {}),
-    };
+    });
     const response = await fetchWithRuntimeDispatcherOrMockedGlobal(params.url, init);
     captureProviderTransportExchange({ url: params.url, init, response, model: params.model });
     return {
@@ -764,6 +884,17 @@ export function buildGuardedModelFetch(
           : (() => {
               throw new Error("Unsupported fetch input for transport-aware model request");
             })());
+    const policy = resolveModelTransportSsrFPolicy({
+      model,
+      url,
+      allowPrivateNetwork: requestConfig.allowPrivateNetwork,
+      // Only operator-configured custom/local endpoints get exact-origin trust;
+      // known public/native providers keep the default rebinding checks.
+      trustConfiguredBaseUrlOrigin:
+        !requestConfig.privateNetworkExplicitlyDenied &&
+        (requestConfig.policy?.endpointClass === "custom" ||
+          requestConfig.policy?.endpointClass === "local"),
+    });
     const requestInit =
       request &&
       ({
@@ -785,7 +916,8 @@ export function buildGuardedModelFetch(
       log,
       `[model-fetch] start provider=${model.provider} api=${model.api} model=${model.id} ` +
         `method=${baseInit?.method ?? "GET"} url=${formatModelTransportDebugUrl(url)} timeoutMs=${requestTimeoutMs} ` +
-        `proxy=${dispatcherPolicy ? "configured" : useEnvProxy ? "env" : "none"}`,
+        `proxy=${dispatcherPolicy ? "configured" : useEnvProxy ? "env" : "none"} ` +
+        `policy=${policy ? "custom" : "default"}`,
     );
     try {
       localServiceLease = await ensureModelProviderLocalService(
@@ -800,6 +932,7 @@ export function buildGuardedModelFetch(
         useEnvProxy,
         timeoutMs: requestTimeoutMs,
         ...(baseSignal ? { signal: baseSignal } : {}),
+        ...(policy ? { policy } : {}),
         model,
       });
     } catch (error) {

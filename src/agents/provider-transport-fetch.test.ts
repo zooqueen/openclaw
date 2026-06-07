@@ -17,11 +17,14 @@ const {
   buildProviderRequestDispatcherPolicyMock,
   fetchWithSsrFGuardMock,
   captureHttpExchangeMock,
+  closeDispatcherMock,
   createHttp1AgentMock,
   createHttp1EnvHttpProxyAgentMock,
   createHttp1ProxyAgentMock,
+  createPinnedDispatcherMock,
   ensureModelProviderLocalServiceMock,
   mergeModelProviderRequestOverridesMock,
+  resolvePinnedHostnameWithPolicyMock,
   resolveProviderRequestPolicyConfigMock,
   shouldUseEnvHttpProxyForUrlMock,
   managedStreamCleanupRegistrations,
@@ -62,17 +65,59 @@ const {
     >(() => undefined),
     fetchWithSsrFGuardMock: vi.fn(),
     captureHttpExchangeMock: vi.fn(),
+    closeDispatcherMock: vi.fn(async (dispatcher: { close?: () => Promise<void> } | null) => {
+      await dispatcher?.close?.();
+    }),
     createHttp1AgentMock: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
     createHttp1EnvHttpProxyAgentMock: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
     createHttp1ProxyAgentMock: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
+    createPinnedDispatcherMock: vi.fn(
+      (
+        pinned: { lookup: unknown },
+        policy?: {
+          mode?: "direct" | "env-proxy" | "explicit-proxy";
+          proxyUrl?: string;
+          connect?: Record<string, unknown>;
+          proxyTls?: Record<string, unknown>;
+        },
+        _ssrfPolicy?: unknown,
+        timeoutMs?: number,
+      ) => {
+        if (policy?.mode === "env-proxy") {
+          return createHttp1EnvHttpProxyAgentMock(
+            {
+              connect: { ...policy.connect, lookup: pinned.lookup },
+              ...(policy.proxyTls ? { proxyTls: policy.proxyTls } : {}),
+            },
+            timeoutMs,
+          );
+        }
+        if (policy?.mode === "explicit-proxy") {
+          return createHttp1ProxyAgentMock(
+            { uri: policy.proxyUrl, requestTls: { ...policy.proxyTls, lookup: pinned.lookup } },
+            timeoutMs,
+          );
+        }
+        return createHttp1AgentMock(
+          { connect: { ...policy?.connect, lookup: pinned.lookup } },
+          timeoutMs,
+        );
+      },
+    ),
     ensureModelProviderLocalServiceMock: vi.fn(),
     mergeModelProviderRequestOverridesMock: vi.fn((current, overrides) => ({
       ...current,
       ...overrides,
     })),
+    resolvePinnedHostnameWithPolicyMock: vi.fn(async (hostname: string) => ({
+      hostname,
+      addresses: ["93.184.216.34"],
+      lookup: vi.fn(),
+    })),
     resolveProviderRequestPolicyConfigMock: vi.fn<() => ProviderRequestPolicyConfigMockResult>(
       () => ({
         allowPrivateNetwork: false,
+        policy: { endpointClass: "local" },
       }),
     ),
     shouldUseEnvHttpProxyForUrlMock: vi.fn(() => false),
@@ -95,6 +140,16 @@ vi.mock("../infra/net/undici-runtime.js", () => ({
   createHttp1EnvHttpProxyAgent: createHttp1EnvHttpProxyAgentMock,
   createHttp1ProxyAgent: createHttp1ProxyAgentMock,
 }));
+
+vi.mock("../infra/net/ssrf.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../infra/net/ssrf.js")>();
+  return {
+    ...actual,
+    closeDispatcher: closeDispatcherMock,
+    createPinnedDispatcher: createPinnedDispatcherMock,
+    resolvePinnedHostnameWithPolicy: resolvePinnedHostnameWithPolicyMock,
+  };
+});
 
 vi.mock("../proxy-capture/runtime.js", () => ({
   captureHttpExchange: captureHttpExchangeMock,
@@ -177,10 +232,19 @@ describe("buildGuardedModelFetch", () => {
       .mockClear()
       .mockReturnValue({ close: vi.fn(async () => undefined) });
     createHttp1ProxyAgentMock.mockClear().mockReturnValue({ close: vi.fn(async () => undefined) });
+    closeDispatcherMock.mockClear();
+    createPinnedDispatcherMock.mockClear();
+    resolvePinnedHostnameWithPolicyMock
+      .mockClear()
+      .mockImplementation(async (hostname: string) => ({
+        hostname,
+        addresses: ["93.184.216.34"],
+        lookup: vi.fn(),
+      }));
     mergeModelProviderRequestOverridesMock.mockClear();
     resolveProviderRequestPolicyConfigMock
       .mockClear()
-      .mockReturnValue({ allowPrivateNetwork: false });
+      .mockReturnValue({ allowPrivateNetwork: false, policy: { endpointClass: "local" } });
     shouldUseEnvHttpProxyForUrlMock.mockClear().mockReturnValue(false);
     delete process.env.OPENCLAW_DEBUG_PROXY_ENABLED;
     delete process.env.OPENCLAW_DEBUG_PROXY_URL;
@@ -223,6 +287,52 @@ describe("buildGuardedModelFetch", () => {
       },
     });
     expect(capture.response).toBeInstanceOf(Response);
+  });
+
+  it("checks provider private-network policy before native fetch", async () => {
+    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
+      allowPrivateNetwork: false,
+      privateNetworkExplicitlyDenied: true,
+      policy: { endpointClass: "local" },
+    });
+    resolvePinnedHostnameWithPolicyMock.mockRejectedValueOnce(
+      new Error("Blocked hostname or private/internal/special-use IP address"),
+    );
+    const model = {
+      id: "local-model",
+      provider: "custom-openai",
+      api: "openai-completions",
+      baseUrl: "http://127.0.0.1:18000/v1",
+    } as unknown as Model<"openai-completions">;
+
+    await expect(
+      buildGuardedModelFetch(model)("http://127.0.0.1:18000/v1/chat/completions", {
+        method: "POST",
+        body: '{"messages":[]}',
+      }),
+    ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
+
+    expect(resolvePinnedHostnameWithPolicyMock).toHaveBeenCalledWith("127.0.0.1", {
+      policy: undefined,
+    });
+    expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects native redirect following for provider requests with bodies", async () => {
+    const model = {
+      id: "gpt-5.4",
+      provider: "openai",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+    } as unknown as Model<"openai-responses">;
+
+    await buildGuardedModelFetch(model)("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"input":"secret prompt"}',
+    });
+
+    expect((latestGuardedFetchParams().init as RequestInit | undefined)?.redirect).toBe("error");
   });
 
   it("rejects successful streamed OpenAI-compatible responses with HTML content", async () => {
@@ -714,7 +824,7 @@ describe("buildGuardedModelFetch", () => {
 
     expect(createHttp1EnvHttpProxyAgentMock).not.toHaveBeenCalled();
     expect(createHttp1AgentMock).toHaveBeenCalledWith(
-      { connect: { ca: "provider-ca" } },
+      { connect: { ca: "provider-ca", lookup: expect.any(Function) } },
       undefined,
     );
     expect((latestGuardedFetchParams().init as Record<string, unknown>).dispatcher).toBe(
@@ -740,7 +850,10 @@ describe("buildGuardedModelFetch", () => {
     });
 
     expect(createHttp1EnvHttpProxyAgentMock).toHaveBeenCalledWith(
-      { connect: { ca: "target-ca" }, proxyTls: { ca: "proxy-ca" } },
+      {
+        connect: { ca: "target-ca", lookup: expect.any(Function) },
+        proxyTls: { ca: "proxy-ca" },
+      },
       undefined,
     );
   });
@@ -763,7 +876,10 @@ describe("buildGuardedModelFetch", () => {
     });
 
     expect(createHttp1ProxyAgentMock).toHaveBeenCalledWith(
-      { uri: "https://proxy.example:8443", requestTls: { ca: "target-ca" } },
+      {
+        uri: "https://proxy.example:8443",
+        requestTls: { ca: "target-ca", lookup: expect.any(Function) },
+      },
       undefined,
     );
   });
