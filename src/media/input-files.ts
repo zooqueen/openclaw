@@ -10,6 +10,7 @@ import {
 import type { Dispatcher } from "undici";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
+import { shouldUseEnvHttpProxyForUrl } from "../infra/net/proxy-env.js";
 import {
   fetchWithRuntimeDispatcherOrMockedGlobal,
   isMockedFetch,
@@ -25,6 +26,7 @@ import {
   type LookupFn,
   type SsrFPolicy,
 } from "../infra/net/ssrf.js";
+import { createHttp1EnvHttpProxyAgent } from "../infra/net/undici-runtime.js";
 import { logWarn } from "../logger.js";
 import { convertHeicToJpeg } from "./media-services.js";
 import { extractPdfContent, type PdfExtractedImage } from "./pdf-extract.js";
@@ -210,6 +212,12 @@ async function createInputFetchDispatcher(params: {
     lookupFn: params.lookupFn,
     policy: policyForUrl,
   });
+  if (
+    process.env["OPENCLAW_PROXY_ACTIVE"] === "1" &&
+    shouldUseEnvHttpProxyForUrl(params.url.toString())
+  ) {
+    return createHttp1EnvHttpProxyAgent(undefined, params.timeoutMs);
+  }
   return createPinnedDispatcher(pinned, undefined, policyForUrl, params.timeoutMs);
 }
 

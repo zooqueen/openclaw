@@ -1,5 +1,5 @@
 // Qqbot tests cover media plugin behavior.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MediaFileType, type UploadMediaResponse } from "../types.js";
 import { MAX_UPLOAD_SIZE } from "../utils/file-utils.js";
 import { ApiClient } from "./api-client.js";
@@ -8,7 +8,16 @@ import { TokenManager } from "./token.js";
 
 type LookupFn = NonNullable<Parameters<typeof downloadDirectUploadUrl>[1]>["lookupFn"];
 
+const createHttp1EnvHttpProxyAgentMock = vi.hoisted(() => vi.fn());
 const readResponseWithLimitMock = vi.hoisted(() => vi.fn());
+
+vi.mock("openclaw/plugin-sdk/fetch-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/fetch-runtime")>();
+  return {
+    ...actual,
+    createHttp1EnvHttpProxyAgent: createHttp1EnvHttpProxyAgentMock,
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/response-limit-runtime", async (importOriginal) => {
   const actual =
@@ -61,9 +70,14 @@ function expectNativeDownload(url: string): void {
 describe("MediaApi.uploadMedia direct URL uploads", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    createHttp1EnvHttpProxyAgentMock.mockReset();
     readResponseWithLimitMock.mockReset();
     readResponseWithLimitMock.mockResolvedValue(MEDIA_BYTES);
     mockNativeResponse();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it.each([
@@ -374,6 +388,36 @@ describe("MediaApi.uploadMedia direct URL uploads", () => {
     ).rejects.toThrow("resolves to private/internal/special-use IP address");
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses managed env proxy dispatcher after DNS validation when proxy is active", async () => {
+    vi.restoreAllMocks();
+    vi.stubEnv("OPENCLAW_PROXY_ACTIVE", "1");
+    vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:8888");
+    const close = vi.fn(async () => undefined);
+    const dispatcher = { close };
+    createHttp1EnvHttpProxyAgentMock.mockReturnValueOnce(dispatcher);
+    const response = mockNativeResponse();
+    const lookupFn = vi.fn(async () => ({
+      address: "93.184.216.34",
+      family: 4,
+    })) as unknown as LookupFn;
+
+    const result = await downloadDirectUploadUrl("https://cdn.example.com/assets/photo.png", {
+      lookupFn,
+    });
+
+    expect(result).toStrictEqual(MEDIA_BYTES);
+    expect(lookupFn).toHaveBeenCalled();
+    expect(createHttp1EnvHttpProxyAgentMock).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://cdn.example.com/assets/photo.png",
+      expect.objectContaining({ dispatcher }),
+    );
+    expect(readResponseWithLimitMock).toHaveBeenCalledWith(response, MAX_UPLOAD_SIZE, {
+      chunkTimeoutMs: 10_000,
+    });
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("does not forward URLs when the native download fails", async () => {

@@ -12,6 +12,10 @@
  */
 
 import * as fs from "node:fs";
+import {
+  createHttp1EnvHttpProxyAgent,
+  shouldUseEnvHttpProxyForUrl,
+} from "openclaw/plugin-sdk/fetch-runtime";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 import {
   fetchWithRuntimeDispatcherOrMockedGlobal,
@@ -85,6 +89,9 @@ async function createDirectUploadDispatcher(
     return null;
   }
   const pinned = await resolvePinnedHostnameWithPolicy(url.hostname, { lookupFn });
+  if (process.env["OPENCLAW_PROXY_ACTIVE"] === "1" && shouldUseEnvHttpProxyForUrl(url.toString())) {
+    return createHttp1EnvHttpProxyAgent();
+  }
   return createPinnedDispatcher(pinned);
 }
 

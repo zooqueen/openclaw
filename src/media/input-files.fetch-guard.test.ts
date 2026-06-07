@@ -3,6 +3,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 const convertHeicToJpegMock = vi.fn();
 const detectMimeMock = vi.fn();
+const createHttp1EnvHttpProxyAgentMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../infra/net/undici-runtime.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../infra/net/undici-runtime.js")>();
+  return {
+    ...actual,
+    createHttp1EnvHttpProxyAgent: createHttp1EnvHttpProxyAgentMock,
+  };
+});
 
 vi.mock("./media-services.js", () => ({
   convertHeicToJpeg: (...args: unknown[]) => convertHeicToJpegMock(...args),
@@ -32,10 +41,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  createHttp1EnvHttpProxyAgentMock.mockReset();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function createImageSourceLimits(allowedMimes: string[], allowUrl = false) {
@@ -353,6 +364,39 @@ describe("fetchWithGuard", () => {
     ).rejects.toThrow("resolves to private/internal/special-use IP address");
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses managed env proxy dispatcher after DNS validation when proxy is active", async () => {
+    vi.stubEnv("OPENCLAW_PROXY_ACTIVE", "1");
+    vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:8888");
+    const close = vi.fn(async () => undefined);
+    const dispatcher = { close };
+    createHttp1EnvHttpProxyAgentMock.mockReturnValueOnce(dispatcher);
+    const lookupFn = vi.fn(async () => ({
+      address: "93.184.216.34",
+      family: 4,
+    })) as unknown as LookupFn;
+    mockFetchResponse({
+      body: Buffer.from("proxied"),
+      init: { status: 200, headers: { "content-type": "application/octet-stream" } },
+    });
+
+    const result = await fetchWithGuard({
+      url: "https://cdn.example.com/file.bin",
+      maxBytes: 1024,
+      maxRedirects: 0,
+      timeoutMs: 1000,
+      lookupFn,
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("proxied"));
+    expect(lookupFn).toHaveBeenCalled();
+    expect(createHttp1EnvHttpProxyAgentMock).toHaveBeenCalledWith(undefined, 1000);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://cdn.example.com/file.bin",
+      expect.objectContaining({ dispatcher }),
+    );
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("rejects native redirect results outside the configured hostname allowlist", async () => {

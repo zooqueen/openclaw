@@ -4,12 +4,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { MAX_TIMER_TIMEOUT_MS } from "../shared/number-coercion.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
 
-const createHttp1ProxyAgentMock = vi.hoisted(() => vi.fn());
+const { createHttp1EnvHttpProxyAgentMock, createHttp1ProxyAgentMock } = vi.hoisted(() => ({
+  createHttp1EnvHttpProxyAgentMock: vi.fn(),
+  createHttp1ProxyAgentMock: vi.fn(),
+}));
 
 vi.mock("../infra/net/undici-runtime.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../infra/net/undici-runtime.js")>();
   return {
     ...actual,
+    createHttp1EnvHttpProxyAgent: createHttp1EnvHttpProxyAgentMock,
     createHttp1ProxyAgent: createHttp1ProxyAgentMock,
   };
 });
@@ -209,11 +213,13 @@ describe("readRemoteMediaBuffer", () => {
 
   beforeEach(() => {
     vi.useRealTimers();
+    createHttp1EnvHttpProxyAgentMock.mockReset();
     createHttp1ProxyAgentMock.mockReset();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   afterAll(async () => {
@@ -697,6 +703,38 @@ describe("readRemoteMediaBuffer", () => {
     ).rejects.toThrow("resolves to private/internal/special-use IP address");
 
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("uses the managed env proxy dispatcher after DNS validation when proxy is active", async () => {
+    vi.stubEnv("OPENCLAW_PROXY_ACTIVE", "1");
+    vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:8888");
+    const close = vi.fn(async () => undefined);
+    const dispatcher = { close };
+    createHttp1EnvHttpProxyAgentMock.mockReturnValueOnce(dispatcher);
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(Buffer.from("proxied"), {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+    );
+    const lookupFn = makeLookupFn();
+
+    const result = await readRemoteMediaBuffer({
+      url: "https://cdn.example.com/file.bin",
+      fetchImpl,
+      lookupFn,
+      maxBytes: 1024,
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("proxied"));
+    expect(lookupFn).toHaveBeenCalled();
+    expect(createHttp1EnvHttpProxyAgentMock).toHaveBeenCalledWith(undefined, undefined);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://cdn.example.com/file.bin",
+      expect.objectContaining({ dispatcher }),
+    );
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("rejects native redirect results outside the configured hostname allowlist", async () => {

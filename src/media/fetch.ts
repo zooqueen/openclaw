@@ -10,6 +10,7 @@ import {
 import type { Dispatcher } from "undici";
 import { formatErrorMessage } from "../infra/errors.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
+import { shouldUseEnvHttpProxyForUrl } from "../infra/net/proxy-env.js";
 import {
   fetchWithRuntimeDispatcherOrMockedGlobal,
   isMockedFetch,
@@ -305,6 +306,10 @@ function createMediaFetchDispatcherWithoutPinnedDns(
   return null;
 }
 
+function shouldUseManagedEnvProxyForUrl(url: string): boolean {
+  return process.env["OPENCLAW_PROXY_ACTIVE"] === "1" && shouldUseEnvHttpProxyForUrl(url);
+}
+
 async function createMediaFetchDispatcher(params: {
   url: URL;
   attempt: FetchDispatcherAttempt;
@@ -328,6 +333,9 @@ async function createMediaFetchDispatcher(params: {
     lookupFn: attempt.lookupFn,
     policy: policyForUrl,
   });
+  if (shouldUseManagedEnvProxyForUrl(params.url.toString())) {
+    return createHttp1EnvHttpProxyAgent(undefined, timeoutMs);
+  }
   return createPinnedDispatcher(pinned, dispatcherPolicy, policyForUrl, timeoutMs);
 }
 
