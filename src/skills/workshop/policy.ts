@@ -8,13 +8,17 @@ const SKILL_WORKSHOP_LIFECYCLE_ACTIONS = new Set(["apply", "reject", "quarantine
 
 type SkillWorkshopLifecycleAction = "apply" | "reject" | "quarantine";
 
+function isSkillWorkshopLifecycleAction(action: string): action is SkillWorkshopLifecycleAction {
+  return SKILL_WORKSHOP_LIFECYCLE_ACTIONS.has(action);
+}
+
 // Only lifecycle actions mutate proposals and therefore require approval checks.
 function readLifecycleAction(params: unknown): SkillWorkshopLifecycleAction | undefined {
   const action = asNullableRecord(params)?.action;
-  if (typeof action !== "string" || !SKILL_WORKSHOP_LIFECYCLE_ACTIONS.has(action)) {
+  if (typeof action !== "string" || !isSkillWorkshopLifecycleAction(action)) {
     return undefined;
   }
-  return action as SkillWorkshopLifecycleAction;
+  return action;
 }
 
 function lifecycleApprovalText(action: SkillWorkshopLifecycleAction): {
