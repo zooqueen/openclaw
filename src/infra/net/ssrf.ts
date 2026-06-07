@@ -489,6 +489,51 @@ export function createPinnedLookup(params: {
   }) as typeof dnsLookupCb;
 }
 
+function createPolicyCheckingLookup(policy?: SsrFPolicy): typeof dnsLookupCb {
+  const lookupWithOptions = dnsLookupCb as unknown as (
+    hostname: string,
+    options: unknown,
+    callback: LookupCallback,
+  ) => void;
+  return ((host: string, options?: unknown, callback?: unknown) => {
+    const cb: LookupCallback =
+      typeof options === "function" ? (options as LookupCallback) : (callback as LookupCallback);
+    if (!cb) {
+      return;
+    }
+    let hostnameChecks: ReturnType<typeof resolveHostnamePolicyChecks>;
+    try {
+      hostnameChecks = resolveHostnamePolicyChecks(host, policy);
+    } catch (err) {
+      cb(err as NodeJS.ErrnoException, []);
+      return;
+    }
+    const done: LookupCallback = (err, address, family) => {
+      if (err) {
+        cb(err, address, family);
+        return;
+      }
+      try {
+        const results = normalizeLookupResults(address as LookupResult);
+        if (!hostnameChecks.skipPrivateNetworkChecks) {
+          assertAllowedResolvedAddressesOrThrow(results, policy);
+        } else if (!isPrivateNetworkAllowedByPolicy(policy)) {
+          assertAllowedTrustedHostnameResolvedAddressesOrThrow(results);
+        }
+      } catch (checkErr) {
+        cb(checkErr as NodeJS.ErrnoException, []);
+        return;
+      }
+      cb(null, address, family);
+    };
+    if (typeof options === "function" || options === undefined) {
+      dnsLookupCb(hostnameChecks.normalized, done);
+      return;
+    }
+    lookupWithOptions(hostnameChecks.normalized, options, done);
+  }) as typeof dnsLookupCb;
+}
+
 export type PinnedHostname = {
   hostname: string;
   addresses: string[];
@@ -602,7 +647,11 @@ function resolvePinnedDispatcherLookup(
   policy?: SsrFPolicy,
 ): PinnedHostname["lookup"] {
   if (!override) {
-    return pinned.lookup;
+    return createPinnedLookup({
+      hostname: pinned.hostname,
+      addresses: [...pinned.addresses],
+      fallback: createPolicyCheckingLookup(policy),
+    });
   }
   const normalizedOverrideHost = normalizeHostname(override.hostname);
   if (!normalizedOverrideHost || normalizedOverrideHost !== pinned.hostname) {
@@ -622,7 +671,7 @@ function resolvePinnedDispatcherLookup(
   return createPinnedLookup({
     hostname: pinned.hostname,
     addresses: [...override.addresses],
-    fallback: pinned.lookup,
+    fallback: createPolicyCheckingLookup(policy),
   });
 }
 

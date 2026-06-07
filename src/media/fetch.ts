@@ -12,12 +12,16 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
 import {
   fetchWithRuntimeDispatcherOrMockedGlobal,
+  isMockedFetch,
   type DispatcherAwareRequestInit,
 } from "../infra/net/runtime-fetch.js";
 import {
+  assertHostnameAllowedWithPolicy,
   closeDispatcher,
+  createPinnedDispatcher,
   matchesHostnameAllowlist,
   normalizeHostnameAllowlist,
+  resolvePinnedHostnameWithPolicy,
   resolveSsrFPolicyForUrl,
   type LookupFn,
   type PinnedDispatcherPolicy,
@@ -211,6 +215,10 @@ function assertMediaUrlAllowedByPolicy(rawUrl: string, policy?: SsrFPolicy): str
       throw new Error(`Media URL hostname is not in allowlist: ${parsed.hostname}`);
     }
   }
+  assertHostnameAllowedWithPolicy(parsed.hostname, {
+    ...policyForUrl,
+    hostnameAllowlist: undefined,
+  });
   return parsed.toString();
 }
 
@@ -266,7 +274,7 @@ function resolveFetchSignal(params: { requestSignal?: AbortSignal | null; timeou
   };
 }
 
-function createMediaFetchDispatcher(
+function createMediaFetchDispatcherWithoutPinnedDns(
   dispatcherPolicy: PinnedDispatcherPolicy | undefined,
   timeoutMs: number | undefined,
 ): Dispatcher | null {
@@ -297,17 +305,59 @@ function createMediaFetchDispatcher(
   return null;
 }
 
+async function createMediaFetchDispatcher(params: {
+  url: URL;
+  attempt: FetchDispatcherAttempt;
+  fetchImpl: FetchLike | undefined;
+  ssrfPolicy: SsrFPolicy | undefined;
+  timeoutMs: number | undefined;
+  trustExplicitProxyDns: boolean | undefined;
+}): Promise<Dispatcher | null> {
+  const { attempt, fetchImpl, timeoutMs, trustExplicitProxyDns } = params;
+  const dispatcherPolicy = attempt.dispatcherPolicy;
+  if (dispatcherPolicy?.mode === "explicit-proxy" && trustExplicitProxyDns === true) {
+    return createMediaFetchDispatcherWithoutPinnedDns(dispatcherPolicy, timeoutMs);
+  }
+  const canUsePinnedDns =
+    attempt.lookupFn !== undefined || (fetchImpl === undefined && !isMockedFetch(globalThis.fetch));
+  if (!canUsePinnedDns) {
+    return createMediaFetchDispatcherWithoutPinnedDns(dispatcherPolicy, timeoutMs);
+  }
+  const policyForUrl = resolveSsrFPolicyForUrl(params.url, params.ssrfPolicy);
+  const pinned = await resolvePinnedHostnameWithPolicy(params.url.hostname, {
+    lookupFn: attempt.lookupFn,
+    policy: policyForUrl,
+  });
+  return createPinnedDispatcher(pinned, dispatcherPolicy, policyForUrl, timeoutMs);
+}
+
 async function fetchNativeMediaAttempt(
   options: FetchMediaOptions,
   attempt: FetchDispatcherAttempt,
 ): Promise<NativeMediaResponse> {
-  const { url, fetchImpl, requestInit, maxRedirects, timeoutMs, ssrfPolicy } = options;
+  const {
+    url,
+    fetchImpl,
+    requestInit,
+    maxRedirects,
+    timeoutMs,
+    ssrfPolicy,
+    trustExplicitProxyDns,
+  } = options;
   const requestUrl = assertMediaUrlAllowedByPolicy(url, ssrfPolicy);
+  const parsedRequestUrl = new URL(requestUrl);
   const signal = resolveFetchSignal({
     requestSignal: requestInit?.signal,
     timeoutMs,
   });
-  const dispatcher = createMediaFetchDispatcher(attempt.dispatcherPolicy, timeoutMs);
+  const dispatcher = await createMediaFetchDispatcher({
+    url: parsedRequestUrl,
+    attempt,
+    fetchImpl,
+    ssrfPolicy,
+    timeoutMs,
+    trustExplicitProxyDns,
+  });
   let released = false;
   const release = async () => {
     if (released) {

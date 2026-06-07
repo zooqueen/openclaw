@@ -662,6 +662,39 @@ describe("readRemoteMediaBuffer", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("rejects private media URL literals before fetch", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not fetch", { status: 200 }));
+
+    await expect(
+      readRemoteMediaBuffer({
+        url: "http://127.0.0.1/secret.png",
+        fetchImpl,
+        maxBytes: 1024,
+      }),
+    ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects media hostnames that resolve to private addresses before fetch", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not fetch", { status: 200 }));
+    const lookupFn = vi.fn(async () => ({
+      address: "127.0.0.1",
+      family: 4,
+    })) as unknown as LookupFn;
+
+    await expect(
+      readRemoteMediaBuffer({
+        url: "https://cdn.example.com/secret.png",
+        fetchImpl,
+        lookupFn,
+        maxBytes: 1024,
+      }),
+    ).rejects.toThrow("resolves to private/internal/special-use IP address");
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("rejects native redirect results outside the configured hostname allowlist", async () => {
     const body = makeCancelableStream([new Uint8Array([1, 2, 3])]);
     const redirectedResponse = new Response(body.stream, {

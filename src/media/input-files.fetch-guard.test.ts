@@ -18,7 +18,10 @@ async function waitForMicrotaskTurn(): Promise<void> {
   });
 }
 
-let fetchWithGuard: typeof import("./input-files.js").fetchWithGuard;
+type FetchWithGuard = typeof import("./input-files.js").fetchWithGuard;
+type LookupFn = NonNullable<Parameters<FetchWithGuard>[0]["lookupFn"]>;
+
+let fetchWithGuard: FetchWithGuard;
 let extractImageContentFromSource: typeof import("./input-files.js").extractImageContentFromSource;
 let extractFileContentFromSource: typeof import("./input-files.js").extractFileContentFromSource;
 
@@ -310,6 +313,41 @@ describe("fetchWithGuard", () => {
         policy: { hostnameAllowlist: ["cdn.example.com", "*.assets.example.com"] },
       }),
     ).rejects.toThrow("hostname is not in allowlist");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects private URL literals before fetch", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected"));
+
+    await expect(
+      fetchWithGuard({
+        url: "http://127.0.0.1/secret.txt",
+        maxBytes: 1024,
+        timeoutMs: 1000,
+        maxRedirects: 3,
+      }),
+    ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects hostnames that resolve to private addresses before fetch", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected"));
+    const lookupFn = vi.fn(async () => ({
+      address: "127.0.0.1",
+      family: 4,
+    })) as unknown as LookupFn;
+
+    await expect(
+      fetchWithGuard({
+        url: "https://cdn.example.com/secret.txt",
+        maxBytes: 1024,
+        timeoutMs: 1000,
+        maxRedirects: 3,
+        lookupFn,
+      }),
+    ).rejects.toThrow("resolves to private/internal/special-use IP address");
 
     expect(fetchMock).not.toHaveBeenCalled();
   });

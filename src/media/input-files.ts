@@ -7,9 +7,24 @@ import {
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
 } from "@openclaw/normalization-core/string-coerce";
+import type { Dispatcher } from "undici";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
-import { matchesHostnameAllowlist, type SsrFPolicy } from "../infra/net/ssrf.js";
+import {
+  fetchWithRuntimeDispatcherOrMockedGlobal,
+  isMockedFetch,
+  type DispatcherAwareRequestInit,
+} from "../infra/net/runtime-fetch.js";
+import {
+  assertHostnameAllowedWithPolicy,
+  closeDispatcher,
+  createPinnedDispatcher,
+  matchesHostnameAllowlist,
+  resolvePinnedHostnameWithPolicy,
+  resolveSsrFPolicyForUrl,
+  type LookupFn,
+  type SsrFPolicy,
+} from "../infra/net/ssrf.js";
 import { logWarn } from "../logger.js";
 import { convertHeicToJpeg } from "./media-services.js";
 import { extractPdfContent, type PdfExtractedImage } from "./pdf-extract.js";
@@ -159,9 +174,10 @@ function parseInputSourceUrl(rawUrl: string): URL {
   return parsed;
 }
 
-function assertInputSourceUrlAllowed(rawUrl: string, policy?: SsrFPolicy): string {
+function assertInputSourceUrlAllowed(rawUrl: string, policy?: SsrFPolicy): URL {
   const parsed = parseInputSourceUrl(rawUrl);
-  const allowlist = policy?.hostnameAllowlist;
+  const policyForUrl = resolveSsrFPolicyForUrl(parsed, policy);
+  const allowlist = policyForUrl?.hostnameAllowlist;
   if (allowlist?.length) {
     const hostname = normalizeHostname(parsed.hostname);
     if (
@@ -173,7 +189,28 @@ function assertInputSourceUrlAllowed(rawUrl: string, policy?: SsrFPolicy): strin
       throw new Error(`Input source URL hostname is not in allowlist: ${parsed.hostname}`);
     }
   }
-  return parsed.toString();
+  assertHostnameAllowedWithPolicy(parsed.hostname, {
+    ...policyForUrl,
+    hostnameAllowlist: undefined,
+  });
+  return parsed;
+}
+
+async function createInputFetchDispatcher(params: {
+  url: URL;
+  policy: SsrFPolicy | undefined;
+  timeoutMs: number;
+  lookupFn: LookupFn | undefined;
+}): Promise<Dispatcher | null> {
+  if (params.lookupFn === undefined && isMockedFetch(globalThis.fetch)) {
+    return null;
+  }
+  const policyForUrl = resolveSsrFPolicyForUrl(params.url, params.policy);
+  const pinned = await resolvePinnedHostnameWithPolicy(params.url.hostname, {
+    lookupFn: params.lookupFn,
+    policy: policyForUrl,
+  });
+  return createPinnedDispatcher(pinned, undefined, policyForUrl, params.timeoutMs);
 }
 
 function rejectOversizedBase64Payload(params: {
@@ -241,6 +278,7 @@ export async function fetchWithGuard(params: {
   timeoutMs: number;
   maxRedirects: number;
   policy?: SsrFPolicy;
+  lookupFn?: LookupFn;
   auditContext?: string;
 }): Promise<InputFetchResult> {
   const url = assertInputSourceUrlAllowed(params.url, params.policy);
@@ -251,19 +289,28 @@ export async function fetchWithGuard(params: {
   }, params.timeoutMs);
   unrefTimer(timeout);
   let response: Response;
+  let dispatcher: Dispatcher | null = null;
   try {
-    response = await fetch(url, {
+    dispatcher = await createInputFetchDispatcher({
+      url,
+      policy: params.policy,
+      timeoutMs: params.timeoutMs,
+      lookupFn: params.lookupFn,
+    });
+    const init: DispatcherAwareRequestInit = {
       headers: { "User-Agent": "OpenClaw-Gateway/1.0" },
       signal: controller.signal,
       redirect: params.maxRedirects === 0 ? "error" : "follow",
-    });
+      ...(dispatcher ? { dispatcher } : {}),
+    };
+    response = await fetchWithRuntimeDispatcherOrMockedGlobal(url.toString(), init);
 
     if (!response.ok) {
       await discardIgnoredResponseBody(response);
       throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
     }
     try {
-      assertInputSourceUrlAllowed(response.url || url, params.policy);
+      assertInputSourceUrlAllowed(response.url || url.toString(), params.policy);
     } catch (err) {
       await discardIgnoredResponseBody(response);
       throw err;
@@ -291,6 +338,7 @@ export async function fetchWithGuard(params: {
     return { buffer, mimeType, contentType };
   } finally {
     clearTimeout(timeout);
+    await closeDispatcher(dispatcher);
   }
 }
 
