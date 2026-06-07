@@ -649,6 +649,7 @@ export function buildProviderRequestDispatcherPolicy(
   return {
     mode: "explicit-proxy",
     proxyUrl: request.proxy.proxyUrl,
+    allowPrivateProxy: true,
     ...(proxiedTls ? { proxyTls: proxiedTls } : {}),
   };
 }

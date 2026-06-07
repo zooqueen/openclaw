@@ -26,6 +26,7 @@ type DispatcherPolicyMockResult =
   | {
       mode: "explicit-proxy";
       proxyUrl: string;
+      allowPrivateProxy?: boolean;
       proxyTls?: Record<string, unknown>;
     }
   | undefined;
@@ -102,6 +103,7 @@ const {
         policy?: {
           mode?: "direct" | "env-proxy" | "explicit-proxy";
           proxyUrl?: string;
+          allowPrivateProxy?: boolean;
           connect?: Record<string, unknown>;
           proxyTls?: Record<string, unknown>;
         },
@@ -922,7 +924,53 @@ describe("buildGuardedModelFetch", () => {
     );
   });
 
-  it("rejects private explicit provider proxy hosts before fetch", async () => {
+  it("allows configured private explicit provider proxy hosts", async () => {
+    buildProviderRequestDispatcherPolicyMock.mockReturnValueOnce({
+      mode: "explicit-proxy",
+      proxyUrl: "http://127.0.0.1:8888",
+      allowPrivateProxy: true,
+    });
+    const model = {
+      id: "gpt-5.4",
+      provider: "openai",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+    } as unknown as Model<"openai-responses">;
+
+    await buildGuardedModelFetch(model)("https://api.openai.com/v1/responses", {
+      method: "POST",
+    });
+
+    expect(assertExplicitProxyAllowedWithPolicyMock).toHaveBeenCalledWith(
+      {
+        mode: "explicit-proxy",
+        proxyUrl: "http://127.0.0.1:8888",
+        allowPrivateProxy: true,
+      },
+      {
+        policy: expect.objectContaining({
+          allowedOrigins: ["https://api.openai.com"],
+          hostnameAllowlist: ["api.openai.com"],
+        }),
+      },
+    );
+    expect(resolvePinnedHostnameWithPolicyMock).toHaveBeenCalledWith("api.openai.com", {
+      policy: expect.objectContaining({
+        allowedOrigins: ["https://api.openai.com"],
+        hostnameAllowlist: ["api.openai.com"],
+      }),
+    });
+    expect(createHttp1ProxyAgentMock).toHaveBeenCalledWith(
+      {
+        uri: "http://127.0.0.1:8888",
+        requestTls: { lookup: expect.any(Function) },
+      },
+      undefined,
+    );
+    expect(fetchWithSsrFGuardMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unmarked private explicit provider proxy hosts before fetch", async () => {
     buildProviderRequestDispatcherPolicyMock.mockReturnValueOnce({
       mode: "explicit-proxy",
       proxyUrl: "http://127.0.0.1:8888",
@@ -943,18 +991,6 @@ describe("buildGuardedModelFetch", () => {
       }),
     ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
 
-    expect(assertExplicitProxyAllowedWithPolicyMock).toHaveBeenCalledWith(
-      {
-        mode: "explicit-proxy",
-        proxyUrl: "http://127.0.0.1:8888",
-      },
-      {
-        policy: expect.objectContaining({
-          allowedOrigins: ["https://api.openai.com"],
-          hostnameAllowlist: ["api.openai.com"],
-        }),
-      },
-    );
     expect(resolvePinnedHostnameWithPolicyMock).not.toHaveBeenCalled();
     expect(createHttp1ProxyAgentMock).not.toHaveBeenCalled();
     expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();

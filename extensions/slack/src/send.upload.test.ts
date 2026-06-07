@@ -137,7 +137,7 @@ function createUploadTestClient(): UploadTestClient {
     files: {
       getUploadURLExternal: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
         ok: true,
-        upload_url: "https://uploads.slack.test/upload",
+        upload_url: "https://uploads.slack-files.com/upload",
         file_id: "F001",
       })),
       completeUploadExternal: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
@@ -385,10 +385,10 @@ describe("sendMessageSlack file upload with user IDs", () => {
     const fetchCalls = (globalThis.fetch as unknown as MockCalls).mock.calls;
     expect(fetchCalls).toHaveLength(1);
     const [fetchUrl, fetchInit] = fetchCalls[0] ?? [];
-    expect(fetchUrl).toBe("https://uploads.slack.test/upload");
+    expect(fetchUrl).toBe("https://uploads.slack-files.com/upload");
     expectFields(requireRecord(fetchInit, "fetch init"), {
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
     });
     expectCompletedUpload({
       client,
@@ -400,6 +400,27 @@ describe("sendMessageSlack file upload with user IDs", () => {
     });
     expect(hasSlackThreadParticipation("default", "C123CHAN", "171.222")).toBe(true);
     expect(result.receipt.threadId).toBe("171.222");
+  });
+
+  it("rejects non-Slack presigned upload URLs before posting bytes", async () => {
+    const client = createUploadTestClient();
+    client.files.getUploadURLExternal.mockResolvedValueOnce({
+      ok: true,
+      upload_url: "http://127.0.0.1/upload",
+      file_id: "F001",
+    });
+
+    await expect(
+      sendMessageSlack("channel:C123CHAN", "caption", {
+        token: "xoxb-test",
+        cfg: SLACK_TEST_CFG,
+        client,
+        mediaUrl: "/tmp/threaded.png",
+      }),
+    ).rejects.toThrow("Blocked hostname");
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(client.files.completeUploadExternal).not.toHaveBeenCalled();
   });
 
   it("uses the configured env proxy dispatcher for presigned upload bytes", async () => {

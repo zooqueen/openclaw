@@ -8,10 +8,7 @@ import {
   type MessageReceiptSourceResult,
 } from "openclaw/plugin-sdk/channel-outbound";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
-import {
-  createHttp1EnvHttpProxyAgent,
-  shouldUseEnvHttpProxyForUrl,
-} from "openclaw/plugin-sdk/fetch-runtime";
+import { withTrustedEnvProxyGuardedFetchMode } from "openclaw/plugin-sdk/fetch-runtime";
 import { resolveMarkdownTableMode } from "openclaw/plugin-sdk/markdown-table-runtime";
 import { requireRuntimeConfig } from "openclaw/plugin-sdk/plugin-config-runtime";
 import {
@@ -22,11 +19,7 @@ import {
 } from "openclaw/plugin-sdk/reply-chunking";
 import { resolveTextChunksWithFallback } from "openclaw/plugin-sdk/reply-payload";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import {
-  fetchWithRuntimeDispatcherOrMockedGlobal,
-  type DispatcherAwareRequestInit,
-} from "openclaw/plugin-sdk/runtime-fetch";
-import { closeDispatcher } from "openclaw/plugin-sdk/ssrf-runtime";
+import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
@@ -46,6 +39,10 @@ import { normalizeSlackThreadTsCandidate } from "./thread-ts.js";
 import { resolveSlackBotToken } from "./token.js";
 import { truncateSlackText } from "./truncate.js";
 const SLACK_DM_CHANNEL_CACHE_MAX = 1024;
+const SLACK_UPLOAD_SSRF_POLICY = {
+  allowedHostnames: ["*.slack.com", "*.slack-edge.com", "*.slack-files.com"],
+  allowRfc2544BenchmarkRange: true,
+};
 const SLACK_DNS_RETRY_CODES = new Set(["EAI_AGAIN", "ENOTFOUND", "UND_ERR_DNS_RESOLVE_FAILED"]);
 const SLACK_DNS_RETRY_ATTEMPTS = 2;
 const SLACK_DNS_RETRY_BASE_DELAY_MS = 250;
@@ -549,20 +546,24 @@ async function uploadSlackFileContent(params: {
   body: BodyInit;
   contentType?: string;
 }): Promise<Response> {
-  const dispatcher = shouldUseEnvHttpProxyForUrl(params.uploadUrl)
-    ? createHttp1EnvHttpProxyAgent()
-    : null;
-  const init: DispatcherAwareRequestInit = {
-    method: "POST",
-    ...(params.contentType ? { headers: { "Content-Type": params.contentType } } : {}),
-    body: params.body,
-    redirect: "error",
-    ...(dispatcher ? { dispatcher } : {}),
-  };
+  const { response, release } = await fetchWithSsrFGuard(
+    withTrustedEnvProxyGuardedFetchMode({
+      url: params.uploadUrl,
+      maxRedirects: 0,
+      init: {
+        method: "POST",
+        ...(params.contentType ? { headers: { "Content-Type": params.contentType } } : {}),
+        body: params.body,
+        redirect: "error",
+      },
+      policy: SLACK_UPLOAD_SSRF_POLICY,
+      auditContext: "slack-upload-file",
+    }),
+  );
   try {
-    return await fetchWithRuntimeDispatcherOrMockedGlobal(params.uploadUrl, init);
+    return response;
   } finally {
-    await closeDispatcher(dispatcher);
+    await release();
   }
 }
 

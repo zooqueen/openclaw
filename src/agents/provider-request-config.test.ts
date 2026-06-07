@@ -193,6 +193,7 @@ describe("provider request config", () => {
     expect(buildProviderRequestDispatcherPolicy(resolved)).toEqual({
       mode: "explicit-proxy",
       proxyUrl: "http://proxy.internal:8443",
+      allowPrivateProxy: true,
       proxyTls: {
         ca: "proxy-ca",
       },
