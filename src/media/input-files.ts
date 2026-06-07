@@ -257,39 +257,41 @@ export async function fetchWithGuard(params: {
       signal: controller.signal,
       redirect: params.maxRedirects === 0 ? "error" : "follow",
     });
+
+    if (!response.ok) {
+      await discardIgnoredResponseBody(response);
+      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+    }
+    try {
+      assertInputSourceUrlAllowed(response.url || url, params.policy);
+    } catch (err) {
+      await discardIgnoredResponseBody(response);
+      throw err;
+    }
+
+    let contentLength: number | null;
+    try {
+      contentLength = parseMediaContentLength(response.headers.get("content-length"));
+    } catch (err) {
+      await discardIgnoredResponseBody(response);
+      throw err;
+    }
+    if (contentLength !== null && contentLength > params.maxBytes) {
+      await discardIgnoredResponseBody(response);
+      throw new Error(
+        `Content too large: ${contentLength} bytes (limit: ${params.maxBytes} bytes)`,
+      );
+    }
+
+    const buffer = await readResponseWithLimit(response, params.maxBytes);
+
+    const contentType = response.headers.get("content-type") || undefined;
+    const parsed = parseContentType(contentType);
+    const mimeType = parsed.mimeType ?? "application/octet-stream";
+    return { buffer, mimeType, contentType };
   } finally {
     clearTimeout(timeout);
   }
-
-  if (!response.ok) {
-    await discardIgnoredResponseBody(response);
-    throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-  }
-  try {
-    assertInputSourceUrlAllowed(response.url || url, params.policy);
-  } catch (err) {
-    await discardIgnoredResponseBody(response);
-    throw err;
-  }
-
-  let contentLength: number | null;
-  try {
-    contentLength = parseMediaContentLength(response.headers.get("content-length"));
-  } catch (err) {
-    await discardIgnoredResponseBody(response);
-    throw err;
-  }
-  if (contentLength !== null && contentLength > params.maxBytes) {
-    await discardIgnoredResponseBody(response);
-    throw new Error(`Content too large: ${contentLength} bytes (limit: ${params.maxBytes} bytes)`);
-  }
-
-  const buffer = await readResponseWithLimit(response, params.maxBytes);
-
-  const contentType = response.headers.get("content-type") || undefined;
-  const parsed = parseContentType(contentType);
-  const mimeType = parsed.mimeType ?? "application/octet-stream";
-  return { buffer, mimeType, contentType };
 }
 
 async function discardIgnoredResponseBody(response: Response): Promise<void> {

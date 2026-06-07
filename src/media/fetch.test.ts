@@ -533,6 +533,44 @@ describe("readRemoteMediaBuffer", () => {
     }
   });
 
+  it("keeps the request timeout active while reading the response body", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new Uint8Array([1]));
+                init?.signal?.addEventListener("abort", () => {
+                  controller.error(init.signal?.reason);
+                });
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/octet-stream" } },
+          ),
+      );
+
+      const pending = readRemoteMediaBuffer({
+        url: "https://example.com/file.bin",
+        fetchImpl,
+        lookupFn: makeLookupFn(),
+        maxBytes: 1024,
+        timeoutMs: 25,
+      });
+      const rejection = expect(pending).rejects.toThrow("Media fetch timed out after 25ms");
+
+      await vi.advanceTimersByTimeAsync(25);
+      await rejection;
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "https://example.com/file.bin",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("passes explicit proxy transport through native fetch and closes it after reading", async () => {
     const close = vi.fn(async () => undefined);
     const dispatcher = { close };

@@ -259,6 +259,45 @@ describe("fetchWithGuard", () => {
     );
   });
 
+  it("keeps the request timeout active while reading the response body", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new Uint8Array([1]));
+                init?.signal?.addEventListener("abort", () => {
+                  controller.error(init.signal?.reason);
+                });
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/octet-stream" } },
+          ),
+      );
+
+      const pending = fetchWithGuard({
+        url: "https://example.com/file.bin",
+        maxBytes: 1024,
+        timeoutMs: 20,
+        maxRedirects: 0,
+      });
+      const rejection = expect(pending).rejects.toThrow(
+        "Input source URL fetch timed out after 20ms",
+      );
+
+      await vi.advanceTimersByTimeAsync(20);
+      await rejection;
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://example.com/file.bin",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects URL fetches outside the configured hostname allowlist before fetch", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected"));
 

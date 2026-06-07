@@ -285,7 +285,7 @@ That stages grounded durable candidates into the short-term dreaming store while
     - remove `browser.relayBindHost` (legacy extension relay setting)
     - legacy `models.providers.*.api: "openai"` → `"openai-completions"` (gateway startup also skips providers whose `api` is set to a future or unknown enum value rather than failing closed)
     - remove `plugins.entries.codex.config.codexDynamicToolsProfile`; Codex app-server always keeps Codex-native workspace tools native
-    - remove deprecated generic fetch policy keys: `tools.web.fetch.maxRedirects`, `tools.web.fetch.useTrustedEnvProxy`, `tools.web.fetch.ssrfPolicy`, `gateway.http.endpoints.chatCompletions.images.maxRedirects`, `gateway.http.endpoints.responses.files.maxRedirects`, and `gateway.http.endpoints.responses.images.maxRedirects`
+    - remove deprecated generic fetch policy keys: `tools.web.fetch.maxRedirects`, `tools.web.fetch.useTrustedEnvProxy`, `tools.web.fetch.ssrfPolicy`, and positive gateway URL `maxRedirects` caps. Gateway `maxRedirects: 0` is preserved because it still rejects redirects.
 
     Doctor warnings also include account-default guidance for multi-account channels:
 

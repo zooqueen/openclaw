@@ -308,7 +308,13 @@ async function fetchNativeMediaAttempt(
     timeoutMs,
   });
   const dispatcher = createMediaFetchDispatcher(attempt.dispatcherPolicy, timeoutMs);
+  let released = false;
   const release = async () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    signal.cleanup();
     await closeDispatcher(dispatcher);
   };
   const init: DispatcherAwareRequestInit = {
@@ -337,8 +343,6 @@ async function fetchNativeMediaAttempt(
   } catch (err) {
     await release();
     throw err;
-  } finally {
-    signal.cleanup();
   }
 }
 

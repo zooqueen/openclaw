@@ -266,7 +266,8 @@ Security note:
 - URL allowlists are enforced before fetch and on the final native-fetch URL
   after redirects.
 - URL fetches use native fetch redirects. The former positive `maxRedirects`
-  caps are deprecated; run `openclaw doctor --fix` to remove them from config.
+  caps are deprecated; set `maxRedirects: 0` only when you want URL fetches to
+  reject redirects.
 - For internet-exposed gateways, use [Network proxy](/security/network-proxy)
   when you need outbound destination policy.
 
