@@ -87,6 +87,7 @@ function openWorkspaceStore<T>(namespace: string): PluginStateKeyedStore<Workspa
   });
 }
 
+// eslint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers provide the typed plugin-state value shape owned by each namespace.
 export async function readMemoryCoreWorkspaceEntries<T>(params: {
   namespace: string;
   workspaceDir: string;
@@ -99,6 +100,7 @@ export async function readMemoryCoreWorkspaceEntries<T>(params: {
     .map((entry) => ({ key: entry.value.key, value: entry.value.value }));
 }
 
+// eslint-disable-next-line typescript/no-unnecessary-type-parameters -- Keeps namespace value types explicit at write call sites.
 export async function writeMemoryCoreWorkspaceEntries<T>(params: {
   namespace: string;
   workspaceDir: string;
@@ -126,6 +128,7 @@ export async function writeMemoryCoreWorkspaceEntries<T>(params: {
   }
 }
 
+// eslint-disable-next-line typescript/no-unnecessary-type-parameters -- Keeps namespace value types explicit at write call sites.
 export async function writeMemoryCoreWorkspaceEntry<T>(params: {
   namespace: string;
   workspaceDir: string;
