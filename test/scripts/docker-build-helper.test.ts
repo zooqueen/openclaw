@@ -854,12 +854,13 @@ export -f docker
 
 source "$ROOT_DIR/scripts/lib/docker-e2e-container.sh"
 
+expected_default_cpus="$(docker_e2e_cap_cpu_limit 16)"
 docker_e2e_docker_cmd run demo
 OPENCLAW_DOCKER_E2E_MEMORY=12g OPENCLAW_DOCKER_E2E_CPUS=4 OPENCLAW_DOCKER_E2E_PIDS_LIMIT=512 docker_e2e_docker_cmd run demo
 docker_e2e_docker_cmd run --memory 2g --cpus 3 --pids-limit 99 demo
 OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS=1 docker_e2e_docker_cmd run demo
 
-[[ "$(sed -n '1p' "$TMPDIR/docker-seen")" = "run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
+[[ "$(sed -n '1p' "$TMPDIR/docker-seen")" = "run --memory 8g --cpus $expected_default_cpus --pids-limit 2048 demo" ]]
 [[ "$(sed -n '2p' "$TMPDIR/docker-seen")" = "run --memory 12g --cpus 4 --pids-limit 512 demo" ]]
 [[ "$(sed -n '3p' "$TMPDIR/docker-seen")" = "run --memory 2g --cpus 3 --pids-limit 99 demo" ]]
 [[ "$(sed -n '4p' "$TMPDIR/docker-seen")" = "run demo" ]]
