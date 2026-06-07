@@ -721,11 +721,13 @@ describe("web_fetch extraction fallbacks", () => {
   });
 
   it("uses the provider fallback when direct fetch fails", async () => {
+    const cancelBody = vi.fn(async () => undefined);
     installMockFetch((_input: RequestInfo | URL) => {
       return Promise.resolve({
         ok: false,
         status: 403,
         headers: makeFetchHeaders({ "content-type": "text/html" }),
+        body: { cancel: cancelBody } as unknown as ReadableStream<Uint8Array>,
         text: async () => "blocked",
       } as Response);
     });
@@ -747,6 +749,7 @@ describe("web_fetch extraction fallbacks", () => {
     const details = result?.details as { extractor?: string; text?: string };
     expect(details.extractor).toBe("test-fetch");
     expect(details.text).toContain("provider fallback");
+    expect(cancelBody).toHaveBeenCalledTimes(1);
   });
 
   it("wraps external content and clamps oversized maxChars", async () => {

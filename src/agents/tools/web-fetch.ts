@@ -376,6 +376,15 @@ async function directWebFetch(params: {
   }
 }
 
+async function cancelUnusedResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Best-effort cleanup for bodies that are no longer needed. If the stream
+    // is already locked or closed, the caller should keep its original result.
+  }
+}
+
 function normalizeProviderWebFetchPayload(params: {
   providerId: string;
   payload: unknown;
@@ -530,6 +539,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
         tookMs: Date.now() - start,
       });
       if (payload) {
+        await cancelUnusedResponseBody(res);
         return payload;
       }
       const rawDetailResult = await readResponseText(res, { maxBytes: DEFAULT_ERROR_MAX_BYTES });
