@@ -359,6 +359,8 @@ async function directWebFetch(params: {
   };
 
   try {
+    // Direct web_fetch intentionally follows native fetch networking. SSRF policy
+    // stays on URL-to-bytes surfaces such as media and provider transports.
     const response = await fetch(url, {
       headers: params.headers,
       signal: timeout.signal,
