@@ -10,7 +10,7 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import { Type } from "typebox";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import type { LookupFn } from "../../infra/net/ssrf.js";
+import { isBlockedHostnameOrIp, type LookupFn } from "../../infra/net/ssrf.js";
 import { logDebug } from "../../logger.js";
 import type { RuntimeWebFetchMetadata } from "../../secrets/runtime-web-tools.types.js";
 import { wrapExternalContent, wrapWebContent } from "../../security/external-content.js";
@@ -314,6 +314,15 @@ function normalizeProviderFinalUrl(value: unknown): string | undefined {
   }
 }
 
+function canUseProviderFallbackForUrl(urlToFetch: string): boolean {
+  try {
+    const parsed = new URL(urlToFetch);
+    return !isBlockedHostnameOrIp(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function throwIfFetchAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) {
     return;
@@ -450,6 +459,9 @@ async function maybeFetchProviderWebFetchPayload(
     tookMs: number;
   },
 ): Promise<Record<string, unknown> | null> {
+  if (!canUseProviderFallbackForUrl(params.urlToFetch)) {
+    return null;
+  }
   const providerFallback = await params.resolveProviderFallback();
   if (!providerFallback) {
     return null;

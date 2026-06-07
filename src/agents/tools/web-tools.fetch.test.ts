@@ -753,6 +753,32 @@ describe("web_fetch extraction fallbacks", () => {
     expect(cancelBody).toHaveBeenCalledTimes(1);
   });
 
+  it("does not send private URLs to provider fallback after direct fetch fails", async () => {
+    installMockFetch(() => Promise.reject(new Error("connect refused")));
+    const providerExecute = vi.fn(async () => ({
+      extractor: "test-fetch",
+      text: "provider fallback",
+    }));
+    resolveWebFetchDefinitionMock.mockReturnValue({
+      provider: { id: "test-fetch", label: "Test Fetch" },
+      definition: {
+        description: "test provider",
+        parameters: {},
+        execute: providerExecute,
+      },
+    });
+
+    const tool = createProviderFallbackTool();
+
+    await expect(
+      captureToolErrorMessage({
+        tool,
+        url: "http://127.0.0.1:9/private",
+      }),
+    ).resolves.toContain("connect refused");
+    expect(providerExecute).not.toHaveBeenCalled();
+  });
+
   it("wraps external content and clamps oversized maxChars", async () => {
     const large = "a".repeat(80_000);
     installMockFetch(
