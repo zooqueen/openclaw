@@ -2981,6 +2981,8 @@ output="$(cat "$sampler_log")"
     const runner = readFileSync(QR_IMPORT_DOCKER_E2E_PATH, "utf8");
 
     expect(runner).toContain("scripts/lib/docker-e2e-container.sh");
+    expect(runner).toContain('local requested="${OPENCLAW_QR_SMOKE_CPUS:-4}"');
+    expect(runner).toContain('if [[ -z "${OPENCLAW_DOCKER_E2E_CPUS+x}" ]]; then');
     expect(runner).toContain("run_logged qr-import-run docker_e2e_docker_run_cmd run --rm -t");
     expect(runner).not.toContain("run_logged qr-import-run docker run --rm");
   });
