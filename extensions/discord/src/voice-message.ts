@@ -24,6 +24,7 @@ import { unlinkIfExists } from "openclaw/plugin-sdk/media-runtime";
 import { parseStrictFiniteNumber } from "openclaw/plugin-sdk/number-runtime";
 import type { RetryRunner } from "openclaw/plugin-sdk/retry-runtime";
 import { writeExternalFileWithinRoot } from "openclaw/plugin-sdk/security-runtime";
+import { fetchWithSsrFGuard, type SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";
 import { DiscordError, RateLimitError, type RequestClient } from "./internal/discord.js";
@@ -33,6 +34,10 @@ const DISCORD_VOICE_MESSAGE_FLAG = 1 << 13;
 const SUPPRESS_NOTIFICATIONS_FLAG = 1 << 12;
 const WAVEFORM_SAMPLES = 256;
 const DISCORD_OPUS_SAMPLE_RATE_HZ = 48_000;
+const DISCORD_VOICE_UPLOAD_SSRF_POLICY: SsrFPolicy = {
+  allowRfc2544BenchmarkRange: true,
+  allowIpv6UniqueLocalRange: true,
+};
 
 async function runFfmpegToOutput(params: {
   outputPath: string;
@@ -346,17 +351,25 @@ async function uploadVoiceAttachment(params: {
   uploadUrl: string;
   audioBuffer: Buffer;
 }): Promise<void> {
-  const uploadResponse = await fetch(params.uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "audio/ogg",
+  const { response: uploadResponse, release } = await fetchWithSsrFGuard({
+    url: params.uploadUrl,
+    init: {
+      method: "PUT",
+      headers: {
+        "Content-Type": "audio/ogg",
+      },
+      body: new Uint8Array(params.audioBuffer),
     },
-    body: new Uint8Array(params.audioBuffer),
-    redirect: "error",
+    policy: DISCORD_VOICE_UPLOAD_SSRF_POLICY,
+    auditContext: "discord.voice.attachment-upload",
   });
 
-  if (!uploadResponse.ok) {
-    throw await createVoiceRequestError(uploadResponse, "Failed to upload voice message");
+  try {
+    if (!uploadResponse.ok) {
+      throw await createVoiceRequestError(uploadResponse, "Failed to upload voice message");
+    }
+  } finally {
+    await release();
   }
 }
 

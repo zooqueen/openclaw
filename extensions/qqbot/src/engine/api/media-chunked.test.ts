@@ -4,6 +4,17 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const fetchWithSsrFGuardMock = vi.hoisted(() => vi.fn());
+
+vi.mock("openclaw/plugin-sdk/ssrf-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/ssrf-runtime")>();
+  return {
+    ...actual,
+    fetchWithSsrFGuard: fetchWithSsrFGuardMock,
+  };
+});
+
 import { normalizeSource } from "../messaging/media-source.js";
 import {
   ApiError,
@@ -78,20 +89,27 @@ function makePrepareResponse(uploadId: string, parts: number): UploadPrepareResp
 /** Fixture: a 20-byte buffer that spans 3 parts at block_size=8. */
 const FIXTURE_BUFFER = Buffer.from("0123456789abcdefghij"); // 20 bytes
 
-// ============ fetch stub for COS PUT ============
+// ============ Guarded fetch stub for COS PUT ============
 
-let originalFetch: typeof globalThis.fetch;
+const guardedFetchReleases: Array<ReturnType<typeof vi.fn>> = [];
 
 function stubFetchOk(): ReturnType<typeof vi.fn> {
-  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response("", {
+  guardedFetchReleases.length = 0;
+  fetchWithSsrFGuardMock.mockImplementation(async () => ({
+    response: new Response("", {
       status: 200,
       headers: {
         ETag: '"etag-value"',
         "x-cos-request-id": "req-id",
       },
     }),
-  );
+    release: (() => {
+      const release = vi.fn(async () => {});
+      guardedFetchReleases.push(release);
+      return release;
+    })(),
+  }));
+  return fetchWithSsrFGuardMock;
 }
 
 // ============ Tests ============
@@ -115,11 +133,11 @@ describe("media-chunked: isChunkedUploadImplemented", () => {
 
 describe("media-chunked: ChunkedMediaApi.uploadChunked", () => {
   beforeEach(() => {
-    originalFetch = globalThis.fetch;
+    fetchWithSsrFGuardMock.mockReset();
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    fetchWithSsrFGuardMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -232,9 +250,15 @@ describe("media-chunked: ChunkedMediaApi.uploadChunked", () => {
     // One prepare + 3 part_finish + 1 complete = 5 client requests.
     expect(client.request).toHaveBeenCalledTimes(5);
 
-    // 3 COS PUTs, one per part, each to the presigned URL.
+    // 3 guarded COS PUTs, one per part, each to the presigned URL.
     expect(fetchSpy).toHaveBeenCalledTimes(3);
-    const putUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(guardedFetchReleases).toHaveLength(3);
+    for (const release of guardedFetchReleases) {
+      expect(release).toHaveBeenCalledTimes(1);
+    }
+    const putUrls = fetchSpy.mock.calls.map(([params]) => {
+      return (params as { url: string }).url;
+    });
     expect(new Set(putUrls)).toEqual(
       new Set([
         "https://cos.example.com/part-1",
@@ -242,8 +266,15 @@ describe("media-chunked: ChunkedMediaApi.uploadChunked", () => {
         "https://cos.example.com/part-3",
       ]),
     );
-    for (const [, init] of fetchSpy.mock.calls) {
-      expect(init).toMatchObject({ method: "PUT", redirect: "error" });
+    for (const [params] of fetchSpy.mock.calls) {
+      const guardedRequest = params as {
+        auditContext?: string;
+        init?: RequestInit;
+        signal?: AbortSignal;
+      };
+      expect(guardedRequest.auditContext).toBe("qqbot-media-part-upload");
+      expect(guardedRequest.init).toMatchObject({ method: "PUT" });
+      expect(guardedRequest.signal).toBeInstanceOf(AbortSignal);
     }
 
     // FILE uploads carry filename metadata in upload_prepare, so the content-only
