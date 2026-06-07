@@ -375,10 +375,9 @@ async function readSessionFilesForDir(dir: string): Promise<SessionFilesReadResu
       .map((name) => path.join(dir, name));
     return { ok: true, files };
   } catch (err) {
-    // A missing sessions dir is the normal "no sessions yet" state and is safe
-    // to cache as empty (the first session write emits an invalidation event).
-    // Any other readdir failure (transient NFS EIO/ESTALE/EACCES/timeout) is
-    // returned to this caller as empty but deliberately not cached.
+    // A missing sessions dir is the normal "no sessions yet" state, safe to
+    // cache as empty (the first session write emits an invalidation event).
+    // Any other failure is transient (EIO/ESTALE/timeout) and stays uncached.
     if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
       return { ok: true, files: [] };
     }
@@ -395,8 +394,8 @@ async function loadSessionFilesSnapshot(
   // read during the await must win.
   const active = sessionFilesListingByDir.get(dir) === entry;
   if (!result.ok) {
-    // Failed scan: never publish an empty snapshot. Drop the entry so the next
-    // caller retries instead of serving a false-empty listing for the TTL.
+    // Drop the entry so the next caller retries; never publish a false-empty
+    // snapshot from a transient failure.
     if (active) {
       sessionFilesListingByDir.delete(dir);
     }
@@ -423,8 +422,8 @@ export async function listSessionFilesForAgent(agentId: string): Promise<string[
   const entry: SessionFilesListingEntry = { expiresAt: 0 };
   sessionFilesListingByDir.set(dir, entry);
   pruneSessionFilesListing();
-  // Share one in-flight read across concurrent callers; the snapshot is only
-  // published on success (see loadSessionFilesSnapshot).
+  // Publish inFlight before this function awaits so concurrent callers join a
+  // single read; the snapshot is only stored on success.
   const inFlight = loadSessionFilesSnapshot(dir, entry);
   entry.inFlight = inFlight;
   return await inFlight;
