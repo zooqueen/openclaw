@@ -168,10 +168,11 @@ trusted provider API hosts, OpenClaw allows Surge, Clash, and sing-box fake-IP
 DNS answers in `198.18.0.0/15` and `fc00::/7` only for that provider hostname.
 Other private, loopback, link-local, and metadata destinations remain blocked.
 
-This automatic allowance does not apply to arbitrary `web_fetch` URLs. For
-`web_fetch`, enable `tools.web.fetch.ssrfPolicy.allowRfc2544BenchmarkRange` and
-`tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange` explicitly only when your
-trusted proxy owns those synthetic ranges.
+This automatic allowance does not apply to arbitrary `web_fetch` URLs. Direct
+`web_fetch` now uses native fetch and no longer consumes
+`tools.web.fetch.ssrfPolicy`. Use [Network proxy](/security/network-proxy) when
+a deployment needs outbound destination policy for `web_fetch` and other
+runtime HTTP traffic.
 
 ## Setting up web search
 

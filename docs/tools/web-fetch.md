@@ -42,7 +42,8 @@ Truncate output to this many characters.
 <Steps>
   <Step title="Fetch">
     Sends an HTTP GET with a Chrome-like User-Agent and `Accept-Language`
-    header. Blocks private/internal hostnames and re-checks redirects.
+    header. The initial URL must be `http` or `https`; redirects use native
+    fetch behavior.
   </Step>
   <Step title="Extract">
     Runs Readability (main-content extraction) on the HTML response.
@@ -86,14 +87,8 @@ content.
         maxResponseBytes: 2000000, // max download size before truncation
         timeoutSeconds: 30,
         cacheTtlMinutes: 15,
-        maxRedirects: 3,
-        useTrustedEnvProxy: false, // let a trusted HTTP(S) env proxy resolve DNS
         readability: true, // use Readability extraction
         userAgent: "Mozilla/5.0 ...", // override User-Agent
-        ssrfPolicy: {
-          allowRfc2544BenchmarkRange: true, // opt-in for trusted fake-IP proxies using 198.18.0.0/15
-          allowIpv6UniqueLocalRange: true, // opt-in for trusted fake-IP proxies using fc00::/7
-        },
       },
     },
   },
@@ -158,36 +153,37 @@ Current runtime behavior:
 - If Readability is disabled, `web_fetch` skips straight to the selected
   provider fallback. If no provider is available, it fails closed.
 
-## Trusted env proxy
+## Fetch policy change
 
-If your deployment requires `web_fetch` to go through a trusted outbound
-HTTP(S) proxy, set `tools.web.fetch.useTrustedEnvProxy: true`.
+Direct `web_fetch` uses native fetch for the initial HTTP(S) request. OpenClaw
+core fetch paths no longer provide app-level private-IP / SSRF blocking, fake-IP
+policy opt-ins, trusted-env-proxy DNS mode, or custom positive redirect caps.
 
-In this mode, OpenClaw still applies hostname-based SSRF checks before sending
-the request, but it lets the proxy resolve DNS instead of doing local DNS
-pinning. Enable this only when the proxy is operator-controlled and enforces
-outbound policy after DNS resolution.
+These old keys are deprecated and ignored by direct `web_fetch`:
 
-<Note>
-  If no HTTP(S) proxy env var is configured, or the target host is excluded by
-  `NO_PROXY`, `web_fetch` falls back to the normal strict path with local DNS
-  pinning.
-</Note>
+- `tools.web.fetch.maxRedirects`
+- `tools.web.fetch.useTrustedEnvProxy`
+- `tools.web.fetch.ssrfPolicy`
+
+Run `openclaw doctor` to report deprecated keys, or run
+`openclaw doctor --fix` to remove them from config.
+
+Use [Network proxy](/security/network-proxy) when a deployment needs outbound
+destination policy. Managed proxy / Proxyline is the supported egress-policy
+boundary; it is a policy-model change, not exact feature parity with the old
+guarded fetch helper.
+
+Browser navigation is separate. `browser.ssrfPolicy` still controls browser and
+CDP navigation policy and is not deprecated by this `web_fetch` change.
 
 ## Limits and safety
 
 - `maxChars` is clamped to `tools.web.fetch.maxCharsCap`
 - Response body is capped at `maxResponseBytes` before parsing; oversized
   responses are truncated with a warning
-- Private/internal hostnames are blocked
-- `tools.web.fetch.ssrfPolicy.allowRfc2544BenchmarkRange` and
-  `tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange` are narrow opt-ins
-  for trusted fake-IP proxy stacks; leave them unset unless your proxy owns
-  those synthetic ranges and enforces its own destination policy
-- Redirects are checked and limited by `maxRedirects`
-- `useTrustedEnvProxy` is an explicit opt-in and should only be enabled for
-  operator-controlled proxies that still enforce outbound policy after DNS
-  resolution
+- The initial URL must be `http` or `https`
+- Redirects use native fetch behavior
+- For outbound destination policy, configure [Network proxy](/security/network-proxy)
 - `web_fetch` is best-effort -- some sites need the [Web Browser](/tools/browser)
 
 ## Tool profiles

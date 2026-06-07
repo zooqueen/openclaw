@@ -219,7 +219,6 @@ Defaults can be tuned under `gateway.http.endpoints.responses`:
             ],
             maxBytes: 5242880,
             maxChars: 200000,
-            maxRedirects: 3,
             timeoutMs: 10000,
             pdf: {
               maxPages: 4,
@@ -239,7 +238,6 @@ Defaults can be tuned under `gateway.http.endpoints.responses`:
               "image/heif",
             ],
             maxBytes: 10485760,
-            maxRedirects: 3,
             timeoutMs: 10000,
           },
         },
@@ -255,22 +253,22 @@ Defaults when omitted:
 - `maxUrlParts`: 8
 - `files.maxBytes`: 5MB
 - `files.maxChars`: 200k
-- `files.maxRedirects`: 3
 - `files.timeoutMs`: 10s
 - `files.pdf.maxPages`: 4
 - `files.pdf.maxPixels`: 4,000,000
 - `files.pdf.minTextChars`: 200
 - `images.maxBytes`: 10MB
-- `images.maxRedirects`: 3
 - `images.timeoutMs`: 10s
 - HEIC/HEIF `input_image` sources are accepted when a system converter is available and are normalized to JPEG before provider delivery. Supported converters are macOS `sips`, ImageMagick, GraphicsMagick, or ffmpeg.
 
 Security note:
 
-- URL allowlists are enforced before fetch and on redirect hops.
-- Allowlisting a hostname does not bypass private/internal IP blocking.
-- For internet-exposed gateways, apply network egress controls in addition to app-level guards.
-  See [Security](/gateway/security).
+- URL allowlists are enforced before fetch and on the final native-fetch URL
+  after redirects.
+- URL fetches use native fetch redirects. The former positive `maxRedirects`
+  caps are deprecated; run `openclaw doctor --fix` to remove them from config.
+- For internet-exposed gateways, use [Network proxy](/security/network-proxy)
+  when you need outbound destination policy.
 
 ## Streaming (SSE)
 

@@ -333,14 +333,15 @@ export const FIELD_LABELS: Record<string, string> = {
   "tools.web.fetch.provider": "Web Fetch Provider",
   "tools.web.fetch.timeoutSeconds": "Web Fetch Timeout (sec)",
   "tools.web.fetch.cacheTtlMinutes": "Web Fetch Cache TTL (min)",
-  "tools.web.fetch.maxRedirects": "Web Fetch Max Redirects",
+  "tools.web.fetch.maxRedirects": "Deprecated Web Fetch Max Redirects",
   "tools.web.fetch.userAgent": "Web Fetch User-Agent",
   "tools.web.fetch.readability": "Web Fetch Readability Extraction",
-  "tools.web.fetch.useTrustedEnvProxy": "Web Fetch Trusted Env Proxy",
-  "tools.web.fetch.ssrfPolicy": "Web Fetch SSRF Policy",
+  "tools.web.fetch.useTrustedEnvProxy": "Deprecated Web Fetch Trusted Env Proxy",
+  "tools.web.fetch.ssrfPolicy": "Deprecated Web Fetch SSRF Policy",
   "tools.web.fetch.ssrfPolicy.allowRfc2544BenchmarkRange":
-    "Web Fetch Allow RFC 2544 Benchmark Range",
-  "tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange": "Web Fetch Allow IPv6 Unique Local Range",
+    "Deprecated Web Fetch Allow RFC 2544 Benchmark Range",
+  "tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange":
+    "Deprecated Web Fetch Allow IPv6 Unique Local Range",
   "gateway.controlUi.basePath": "Control UI Base Path",
   "gateway.controlUi.root": "Control UI Assets Root",
   "gateway.controlUi.embedSandbox": "Control UI Embed Sandbox Mode",
@@ -371,7 +372,7 @@ export const FIELD_LABELS: Record<string, string> = {
   "gateway.http.endpoints.chatCompletions.images.maxBytes":
     "OpenAI Chat Completions Image Max Bytes",
   "gateway.http.endpoints.chatCompletions.images.maxRedirects":
-    "OpenAI Chat Completions Image Max Redirects",
+    "Deprecated OpenAI Chat Completions Image Max Redirects",
   "gateway.http.endpoints.chatCompletions.images.timeoutMs":
     "OpenAI Chat Completions Image Timeout (ms)",
   "gateway.reload.mode": "Config Reload Mode",

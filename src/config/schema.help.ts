@@ -579,7 +579,7 @@ export const FIELD_HELP: Record<string, string> = {
   "gateway.http.endpoints.chatCompletions.images.maxBytes":
     "Max bytes per fetched/decoded `image_url` image (default: 10MB).",
   "gateway.http.endpoints.chatCompletions.images.maxRedirects":
-    "Max HTTP redirects allowed when fetching `image_url` URLs (default: 3).",
+    "Deprecated generic fetch redirect cap. Native fetch redirects are used; run `openclaw doctor --fix` to remove this key.",
   "gateway.http.endpoints.chatCompletions.images.timeoutMs":
     "Timeout in milliseconds for `image_url` URL fetches (default: 10000).",
   "gateway.reload.mode":
@@ -932,18 +932,19 @@ export const FIELD_HELP: Record<string, string> = {
   "tools.web.fetch.provider": "Web fetch fallback provider id.",
   "tools.web.fetch.timeoutSeconds": "Timeout in seconds for web_fetch requests.",
   "tools.web.fetch.cacheTtlMinutes": "Cache TTL in minutes for web_fetch results.",
-  "tools.web.fetch.maxRedirects": "Maximum redirects allowed for web_fetch (default: 3).",
+  "tools.web.fetch.maxRedirects":
+    "Deprecated generic fetch redirect cap. Direct web_fetch uses native fetch redirects; run `openclaw doctor --fix` to remove this key.",
   "tools.web.fetch.userAgent": "Override User-Agent header for web_fetch requests.",
   "tools.web.fetch.readability":
     "Use Readability to extract main content from HTML (fallbacks to basic HTML cleanup).",
   "tools.web.fetch.useTrustedEnvProxy":
-    "Route web_fetch through a trusted HTTP(S) env proxy and let the proxy resolve DNS. Enable only when that proxy is operator-controlled and enforces outbound policy after DNS resolution.",
+    "Deprecated generic fetch proxy-DNS mode. Use managed proxy / Proxyline for outbound destination policy; run `openclaw doctor --fix` to remove this key.",
   "tools.web.fetch.ssrfPolicy":
-    "Scoped SSRF policy overrides for web_fetch. Keep this narrow and opt in only for known local-network proxy environments.",
+    "Deprecated generic fetch SSRF policy overrides. Direct web_fetch no longer consumes this policy; run `openclaw doctor --fix` to remove this key.",
   "tools.web.fetch.ssrfPolicy.allowRfc2544BenchmarkRange":
-    "Allow RFC 2544 benchmark-range IPs (198.18.0.0/15) for fake-IP proxy compatibility such as Clash or Surge.",
+    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; run `openclaw doctor --fix` to remove it.",
   "tools.web.fetch.ssrfPolicy.allowIpv6UniqueLocalRange":
-    "Allow IPv6 Unique Local Addresses (fc00::/7) for trusted fake-IP proxy compatibility such as sing-box, Clash, or Surge.",
+    "Deprecated web_fetch SSRF policy field. Direct web_fetch no longer consumes this policy; run `openclaw doctor --fix` to remove it.",
   models:
     "Model catalog root for provider definitions, merge/replace behavior, and optional Bedrock discovery integration. Keep provider definitions explicit and validated before relying on production failover paths.",
   "models.mode":
