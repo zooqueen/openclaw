@@ -2979,6 +2979,38 @@ describe("qa mock openai server", () => {
     expect(String(toolPlanOutput.arguments)).toContain("denied-input");
   });
 
+  it("does not re-plan QA tool-search calls after tool output", async () => {
+    const server = await startMockServer();
+    const prompt =
+      "tool search qa check target=image_generate. Call exactly that tool once and then summarize.";
+
+    const response = await postResponses(server, {
+      stream: false,
+      input: [
+        makeUserInput(prompt),
+        {
+          type: "function_call",
+          name: "image_generate",
+          call_id: "call_mock_image_generate_1",
+          arguments: JSON.stringify({
+            prompt: "QA lighthouse runtime parity fixture",
+            filename: "runtime-tool-fixture",
+          }),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_mock_image_generate_1",
+          output: "Background task started for image generation.",
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(outputItem(payload).type).not.toBe("function_call");
+    expect(outputText(payload)).toContain("Worked:");
+  });
+
   it("plans QA subagent handoff calls even when Codex dynamic tools are not in body.tools", async () => {
     const server = await startMockServer();
 

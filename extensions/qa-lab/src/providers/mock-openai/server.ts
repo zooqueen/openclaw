@@ -1810,6 +1810,24 @@ async function buildResponsesPayload(
     }
   }
   if (
+    (QA_TOOL_SEARCH_PROMPT_RE.test(allInputText) ||
+      QA_TOOL_SEARCH_FAILURE_PROMPT_RE.test(allInputText)) &&
+    toolOutput
+  ) {
+    return buildAssistantEvents(
+      [
+        "Worked:",
+        "- Exercised the requested runtime tool fixture.",
+        "Failed:",
+        "- None observed in mock mode.",
+        "Blocked:",
+        "- No live provider evidence in this lane.",
+        "Follow-up:",
+        "- Re-run with a real model for qualitative coverage.",
+      ].join("\n"),
+    );
+  }
+  if (
     QA_MCP_CODE_MODE_API_FILE_PROMPT_RE.test(allInputText) ||
     QA_MCP_CODE_MODE_PROMPT_RE.test(allInputText)
   ) {

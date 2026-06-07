@@ -148,6 +148,17 @@ function formatKnownHarnessGapDetails(toolName: string, config: QaRuntimeToolFix
     .join("\n");
 }
 
+function formatRuntimeToolFixtureError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function shouldToleratePromptErrorAfterCapturedRequests(
+  toolName: string,
+  config: QaRuntimeToolFixtureConfig,
+) {
+  return toolName === "image_generate" && config.ensureImageGeneration === true;
+}
+
 export async function runRuntimeToolFixture(
   env: QaSuiteRuntimeEnv,
   config: QaRuntimeToolFixtureConfig,
@@ -217,18 +228,34 @@ export async function runRuntimeToolFixture(
         .length
     : 0;
 
-  await deps.runAgentPrompt(env, {
-    sessionKey: happySessionKey,
-    message: happyPrompt,
-    timeoutMs: liveTurnTimeoutMs(env, 45_000),
-  });
-  await deps.runAgentPrompt(env, {
-    sessionKey: failureSessionKey,
-    message: failurePrompt,
-    timeoutMs: liveTurnTimeoutMs(env, 45_000),
-  });
+  let happyPromptError: unknown;
+  try {
+    await deps.runAgentPrompt(env, {
+      sessionKey: happySessionKey,
+      message: happyPrompt,
+      timeoutMs: liveTurnTimeoutMs(env, 45_000),
+    });
+  } catch (error) {
+    happyPromptError = error;
+  }
+
+  let failurePromptError: unknown;
+  try {
+    await deps.runAgentPrompt(env, {
+      sessionKey: failureSessionKey,
+      message: failurePrompt,
+      timeoutMs: liveTurnTimeoutMs(env, 45_000),
+    });
+  } catch (error) {
+    failurePromptError = error;
+  }
+
+  const firstPromptError = happyPromptError ?? failurePromptError;
 
   if (!env.mock) {
+    if (firstPromptError) {
+      throw firstPromptError;
+    }
     return `${toolName} fixture completed in live provider mode`;
   }
 
@@ -252,6 +279,11 @@ export async function runRuntimeToolFixture(
     if (isKnownHarnessGap(config.knownHarnessGap)) {
       return formatKnownHarnessGapDetails(toolName, config);
     }
+    if (happyPromptError) {
+      throw new Error(
+        `expected mock happy-path request for ${toolName}; prompt failed: ${formatRuntimeToolFixtureError(happyPromptError)}`,
+      );
+    }
     throw new Error(`expected mock happy-path request for ${toolName}`);
   }
   const failureRequest = findPlannedRequest({
@@ -272,6 +304,11 @@ export async function runRuntimeToolFixture(
     if (isKnownHarnessGap(config.knownHarnessGap)) {
       return formatKnownHarnessGapDetails(toolName, config);
     }
+    if (failurePromptError) {
+      throw new Error(
+        `expected mock failure-path request for ${toolName}; prompt failed: ${formatRuntimeToolFixtureError(failurePromptError)}`,
+      );
+    }
     throw new Error(`expected mock failure-path request for ${toolName}`);
   }
 
@@ -283,6 +320,10 @@ export async function runRuntimeToolFixture(
       happyRequest,
       failureRequest,
     });
+  }
+
+  if (firstPromptError && !shouldToleratePromptErrorAfterCapturedRequests(toolName, config)) {
+    throw firstPromptError;
   }
 
   return [
