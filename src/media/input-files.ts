@@ -29,6 +29,8 @@ import {
 } from "../infra/net/ssrf.js";
 import { createHttp1EnvHttpProxyAgent } from "../infra/net/undici-runtime.js";
 import { logWarn } from "../logger.js";
+import { captureHttpExchange } from "../proxy-capture/runtime.js";
+import { resolveTimerTimeoutMs } from "../shared/number-coercion.js";
 import { convertHeicToJpeg } from "./media-services.js";
 import { extractPdfContent, type PdfExtractedImage } from "./pdf-extract.js";
 
@@ -230,6 +232,28 @@ function rejectOversizedBase64Payload(params: {
   }
 }
 
+function captureInputUrlFetchExchange(params: {
+  url: string;
+  finalUrl: string;
+  init: RequestInit;
+  response: Response;
+  auditContext?: string;
+}): void {
+  captureHttpExchange({
+    url: params.url,
+    method: params.init.method ?? "GET",
+    requestHeaders: params.init.headers as Headers | Record<string, string> | undefined,
+    requestBody: (params.init as RequestInit & { body?: BodyInit | null }).body ?? null,
+    response: params.response,
+    transport: "http",
+    meta: {
+      captureOrigin: "input-url-fetch",
+      ...(params.auditContext ? { auditContext: params.auditContext } : {}),
+      ...(params.finalUrl !== params.url ? { finalUrl: params.finalUrl } : {}),
+    },
+  });
+}
+
 /** Normalizes a MIME value by stripping parameters and lowercasing the media type. */
 export function normalizeMimeType(value: string | undefined): string | undefined {
   const [raw] = value?.split(";") ?? [];
@@ -288,9 +312,10 @@ export async function fetchWithGuard(params: {
   const url = assertInputSourceUrlAllowed(params.url, params.policy);
   const controller = new AbortController();
   const timeoutError = new Error(`Input source URL fetch timed out after ${params.timeoutMs}ms`);
+  const timerTimeoutMs = resolveTimerTimeoutMs(params.timeoutMs, 1);
   const timeout = setTimeout(() => {
     controller.abort(timeoutError);
-  }, params.timeoutMs);
+  }, timerTimeoutMs);
   unrefTimer(timeout);
   let response: Response;
   let dispatcher: Dispatcher | null | undefined;
@@ -298,7 +323,7 @@ export async function fetchWithGuard(params: {
     dispatcher = await createInputFetchDispatcher({
       url,
       policy: params.policy,
-      timeoutMs: params.timeoutMs,
+      timeoutMs: timerTimeoutMs,
       lookupFn: params.lookupFn,
     });
     const init: DispatcherAwareRequestInit = {
@@ -319,6 +344,13 @@ export async function fetchWithGuard(params: {
       await discardIgnoredResponseBody(response);
       throw err;
     }
+    captureInputUrlFetchExchange({
+      url: url.toString(),
+      finalUrl: response.url || url.toString(),
+      init,
+      response,
+      auditContext: params.auditContext,
+    });
 
     let contentLength: number | null;
     try {

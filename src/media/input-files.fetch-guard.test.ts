@@ -1,9 +1,13 @@
 // Input file fetch guard tests cover network fetch limits for media inputs.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_TIMER_TIMEOUT_MS } from "../shared/number-coercion.js";
 
 const convertHeicToJpegMock = vi.fn();
 const detectMimeMock = vi.fn();
-const createHttp1EnvHttpProxyAgentMock = vi.hoisted(() => vi.fn());
+const { captureHttpExchangeMock, createHttp1EnvHttpProxyAgentMock } = vi.hoisted(() => ({
+  captureHttpExchangeMock: vi.fn(),
+  createHttp1EnvHttpProxyAgentMock: vi.fn(),
+}));
 
 vi.mock("../infra/net/undici-runtime.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../infra/net/undici-runtime.js")>();
@@ -19,6 +23,10 @@ vi.mock("./media-services.js", () => ({
 
 vi.mock("@openclaw/media-core/mime", () => ({
   detectMime: (...args: unknown[]) => detectMimeMock(...args),
+}));
+
+vi.mock("../proxy-capture/runtime.js", () => ({
+  captureHttpExchange: captureHttpExchangeMock,
 }));
 
 async function waitForMicrotaskTurn(): Promise<void> {
@@ -41,6 +49,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  captureHttpExchangeMock.mockReset();
   createHttp1EnvHttpProxyAgentMock.mockReset();
 });
 
@@ -313,6 +322,64 @@ describe("fetchWithGuard", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("clamps oversized input URL timeout timers before scheduling", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(Buffer.from("input"), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+
+      await expect(
+        fetchWithGuard({
+          url: "https://example.com/file.txt",
+          maxBytes: 1024,
+          timeoutMs: MAX_TIMER_TIMEOUT_MS + 1,
+          maxRedirects: 0,
+        }),
+      ).resolves.toMatchObject({
+        buffer: Buffer.from("input"),
+      });
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), MAX_TIMER_TIMEOUT_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it("captures input URL fetches for debug proxy traces", async () => {
+    const response = new Response(Buffer.from("captured"), {
+      status: 200,
+      headers: { "content-type": "application/octet-stream" },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+
+    const result = await fetchWithGuard({
+      url: "https://cdn.example.com/file.bin",
+      maxBytes: 1024,
+      timeoutMs: 1000,
+      maxRedirects: 0,
+      auditContext: "openresponses.input_file",
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("captured"));
+    const capture = captureHttpExchangeMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(capture).toMatchObject({
+      url: "https://cdn.example.com/file.bin",
+      method: "GET",
+      requestHeaders: { "User-Agent": "OpenClaw-Gateway/1.0" },
+      requestBody: null,
+      response,
+      transport: "http",
+      meta: {
+        captureOrigin: "input-url-fetch",
+        auditContext: "openresponses.input_file",
+      },
+    });
   });
 
   it("rejects URL fetches outside the configured hostname allowlist before fetch", async () => {

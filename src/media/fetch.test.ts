@@ -803,6 +803,32 @@ describe("readRemoteMediaBuffer", () => {
     });
   });
 
+  it("clamps oversized native media fetch timeout timers before scheduling", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(makeStream([new Uint8Array([1, 2, 3])]), {
+            status: 200,
+            headers: { "content-type": "application/octet-stream" },
+          }),
+      );
+
+      const result = await readRemoteMediaBuffer({
+        url: "https://example.com/file.bin",
+        fetchImpl,
+        lookupFn: makeLookupFn(),
+        maxBytes: 8,
+        timeoutMs: MAX_TIMER_TIMEOUT_MS + 1,
+      });
+
+      expect(result.buffer).toStrictEqual(Buffer.from([1, 2, 3]));
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), MAX_TIMER_TIMEOUT_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it("rejects media URLs outside the configured hostname allowlist before fetch", async () => {
     const fetchImpl = vi.fn(async () => new Response("should not fetch", { status: 200 }));
 

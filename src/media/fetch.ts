@@ -46,7 +46,8 @@ import { saveMediaBuffer, saveMediaStream, type SavedMedia } from "./store.js";
 export const DEFAULT_FETCH_MEDIA_MAX_BYTES = MAX_DOCUMENT_BYTES;
 
 function resolveDispatcherTimeoutMs(timeoutMs: number | undefined): number | undefined {
-  return timeoutMs ?? globalUndiciStreamTimeoutMs;
+  const resolved = timeoutMs ?? globalUndiciStreamTimeoutMs;
+  return resolved === undefined ? undefined : resolveTimerTimeoutMs(resolved, 1);
 }
 
 /** Remote media bytes plus metadata before they are persisted to the media store. */
@@ -247,9 +248,10 @@ function resolveFetchSignal(params: { requestSignal?: AbortSignal | null; timeou
 
   const controller = new AbortController();
   const timeoutError = new Error(`Media fetch timed out after ${timeoutMs}ms`);
+  const timerTimeoutMs = resolveTimerTimeoutMs(timeoutMs, 1);
   const timeout = setTimeout(() => {
     controller.abort(timeoutError);
-  }, timeoutMs);
+  }, timerTimeoutMs);
   unrefTimer(timeout);
 
   let removeAbortListener: (() => void) | undefined;
