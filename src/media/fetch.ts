@@ -325,24 +325,26 @@ async function createMediaFetchDispatcher(params: {
   url: URL;
   attempt: FetchDispatcherAttempt;
   fetchImpl: FetchLike | undefined;
+  lookupFn: LookupFn | undefined;
   ssrfPolicy: SsrFPolicy | undefined;
   timeoutMs: number | undefined;
   trustExplicitProxyDns: boolean | undefined;
 }): Promise<Dispatcher | null> {
-  const { attempt, fetchImpl, timeoutMs, trustExplicitProxyDns } = params;
+  const { attempt, fetchImpl, lookupFn, timeoutMs, trustExplicitProxyDns } = params;
+  const resolvedLookupFn = attempt.lookupFn ?? lookupFn;
   const dispatcherPolicy = attempt.dispatcherPolicy;
   if (dispatcherPolicy?.mode === "explicit-proxy" && trustExplicitProxyDns === true) {
     return createMediaFetchDispatcherWithoutPinnedDns(dispatcherPolicy, timeoutMs);
   }
   assertExplicitProxySupportsMediaTarget(params.url, dispatcherPolicy);
   const resolvedFetch = fetchImpl ?? globalThis.fetch;
-  const canUsePinnedDns = attempt.lookupFn !== undefined || !isMockedFetch(resolvedFetch);
+  const canUsePinnedDns = resolvedLookupFn !== undefined || !isMockedFetch(resolvedFetch);
   if (!canUsePinnedDns) {
     return createMediaFetchDispatcherWithoutPinnedDns(dispatcherPolicy, timeoutMs);
   }
   const policyForUrl = resolveSsrFPolicyForUrl(params.url, params.ssrfPolicy);
   const pinned = await resolvePinnedHostnameWithPolicy(params.url.hostname, {
-    lookupFn: attempt.lookupFn,
+    lookupFn: resolvedLookupFn,
     policy: policyForUrl,
   });
   if (shouldUseManagedEnvProxyForUrl(params.url.toString())) {
@@ -355,7 +357,8 @@ async function fetchNativeMediaAttempt(
   options: FetchMediaOptions,
   attempt: FetchDispatcherAttempt,
 ): Promise<NativeMediaResponse> {
-  const { url, fetchImpl, requestInit, timeoutMs, ssrfPolicy, trustExplicitProxyDns } = options;
+  const { url, fetchImpl, requestInit, timeoutMs, ssrfPolicy, lookupFn, trustExplicitProxyDns } =
+    options;
   const requestUrl = assertMediaUrlAllowedByPolicy(url, ssrfPolicy);
   const parsedRequestUrl = new URL(requestUrl);
   const signal = resolveFetchSignal({
@@ -366,6 +369,7 @@ async function fetchNativeMediaAttempt(
     url: parsedRequestUrl,
     attempt,
     fetchImpl,
+    lookupFn,
     ssrfPolicy,
     timeoutMs,
     trustExplicitProxyDns,

@@ -628,6 +628,29 @@ describe("readRemoteMediaBuffer", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("uses the shared lookup resolver for dispatcher fallback attempts", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(Buffer.from("fallback"), {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+    );
+    const lookupFn = makeLookupFn();
+
+    const result = await readRemoteMediaBuffer({
+      url: "https://files.example.test/file.bin",
+      fetchImpl,
+      lookupFn,
+      dispatcherAttempts: [{ dispatcherPolicy: { mode: "direct" } }],
+      maxBytes: 1024,
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("fallback"));
+    expect(lookupFn).toHaveBeenCalledWith("files.example.test", { all: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("streams successful responses directly into the media store", async () => {
     const fetchImpl = vi.fn(
       async () =>

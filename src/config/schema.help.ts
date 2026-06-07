@@ -579,7 +579,7 @@ export const FIELD_HELP: Record<string, string> = {
   "gateway.http.endpoints.chatCompletions.images.maxBytes":
     "Max bytes per fetched/decoded `image_url` image (default: 10MB).",
   "gateway.http.endpoints.chatCompletions.images.maxRedirects":
-    "Deprecated positive redirect cap for `image_url` fetches. Set 0 only when URL fetches should reject redirects.",
+    "Deprecated ignored redirect cap for `image_url` fetches. URL fetches reject redirects by default; remove this key.",
   "gateway.http.endpoints.chatCompletions.images.timeoutMs":
     "Timeout in milliseconds for `image_url` URL fetches (default: 10000).",
   "gateway.reload.mode":
