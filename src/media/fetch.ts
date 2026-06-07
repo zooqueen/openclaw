@@ -29,6 +29,7 @@ import {
   type PinnedDispatcherPolicy,
   type SsrFPolicy,
 } from "../infra/net/ssrf.js";
+import { globalUndiciStreamTimeoutMs } from "../infra/net/undici-global-dispatcher.js";
 import {
   createHttp1Agent,
   createHttp1EnvHttpProxyAgent,
@@ -43,6 +44,10 @@ import { saveMediaBuffer, saveMediaStream, type SavedMedia } from "./store.js";
 
 /** Default remote media fetch cap shared by buffer reads and store writes. */
 export const DEFAULT_FETCH_MEDIA_MAX_BYTES = MAX_DOCUMENT_BYTES;
+
+function resolveDispatcherTimeoutMs(timeoutMs: number | undefined): number | undefined {
+  return timeoutMs ?? globalUndiciStreamTimeoutMs;
+}
 
 /** Remote media bytes plus metadata before they are persisted to the media store. */
 type FetchMediaResult = {
@@ -353,7 +358,8 @@ async function createMediaFetchDispatcher(params: {
   timeoutMs: number | undefined;
   trustExplicitProxyDns: boolean | undefined;
 }): Promise<Dispatcher | null> {
-  const { attempt, fetchImpl, lookupFn, timeoutMs, trustExplicitProxyDns } = params;
+  const { attempt, fetchImpl, lookupFn, trustExplicitProxyDns } = params;
+  const timeoutMs = resolveDispatcherTimeoutMs(params.timeoutMs);
   const resolvedLookupFn = attempt.lookupFn ?? lookupFn;
   const dispatcherPolicy = attempt.dispatcherPolicy;
   await assertExplicitProxyAllowedWithPolicy(dispatcherPolicy, {

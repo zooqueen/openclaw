@@ -1,6 +1,11 @@
 // Media fetch tests cover remote media download limits and validation.
 import fs from "node:fs/promises";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ensureGlobalUndiciStreamTimeouts,
+  resetGlobalUndiciStreamTimeoutsForTests,
+} from "../infra/net/undici-global-dispatcher.js";
+import { TEST_UNDICI_RUNTIME_DEPS_KEY } from "../infra/net/undici-runtime.js";
 import { MAX_TIMER_TIMEOUT_MS } from "../shared/number-coercion.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
 
@@ -227,6 +232,8 @@ describe("readRemoteMediaBuffer", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    resetGlobalUndiciStreamTimeoutsForTests();
+    delete (globalThis as Record<string, unknown>)[TEST_UNDICI_RUNTIME_DEPS_KEY];
   });
 
   afterAll(async () => {
@@ -612,6 +619,41 @@ describe("readRemoteMediaBuffer", () => {
       expect.objectContaining({ dispatcher }),
     );
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("inherits the configured global stream timeout for direct dispatchers", async () => {
+    const agentCtor = vi.fn(function MockAgent(this: { options: unknown }, options: unknown) {
+      this.options = options;
+    });
+    (globalThis as Record<string, unknown>)[TEST_UNDICI_RUNTIME_DEPS_KEY] = {
+      Agent: agentCtor,
+      EnvHttpProxyAgent: vi.fn(),
+      ProxyAgent: vi.fn(),
+      fetch: vi.fn(),
+    };
+    ensureGlobalUndiciStreamTimeouts({ timeoutMs: 1_900_000 });
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(Buffer.from("timed"), {
+          status: 200,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+    );
+
+    const result = await readRemoteMediaBuffer({
+      url: "https://files.example.test/file.bin",
+      fetchImpl,
+      lookupFn: makeLookupFn(),
+      maxBytes: 1024,
+    });
+
+    expect(result.buffer).toStrictEqual(Buffer.from("timed"));
+    expect(agentCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bodyTimeout: 1_900_000,
+        headersTimeout: 1_900_000,
+      }),
+    );
   });
 
   it("rejects private explicit proxy hosts unless allowPrivateProxy is set", async () => {
