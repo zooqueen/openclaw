@@ -339,10 +339,8 @@ async function requestVoiceUploadUrl(params: {
   };
   const { response: res, release } = await fetchWithSsrFGuard({
     url,
-    init: {
-      ...uploadUrlInit,
-      redirect: "error",
-    },
+    init: uploadUrlInit,
+    maxRedirects: 0,
     policy: DISCORD_VOICE_UPLOAD_SSRF_POLICY,
     auditContext: "discord.voice.upload-url",
   });

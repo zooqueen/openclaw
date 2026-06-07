@@ -295,13 +295,14 @@ describe("sendDiscordVoiceMessage", () => {
         const call = params as {
           url: string;
           init?: RequestInit;
+          maxRedirects?: number;
           policy?: unknown;
           auditContext?: string;
         };
         return {
           url: call.url,
           method: call.init?.method,
-          redirect: call.init?.redirect,
+          maxRedirects: call.maxRedirects,
           auditContext: call.auditContext,
           policy: call.policy,
         };
@@ -310,7 +311,7 @@ describe("sendDiscordVoiceMessage", () => {
       {
         url: "https://discord.test/api/v10/channels/channel-1/attachments",
         method: "POST",
-        redirect: "error",
+        maxRedirects: 0,
         auditContext: "discord.voice.upload-url",
         policy: {
           allowRfc2544BenchmarkRange: true,
@@ -320,7 +321,7 @@ describe("sendDiscordVoiceMessage", () => {
       {
         url: "https://cdn.test/upload-1",
         method: "PUT",
-        redirect: undefined,
+        maxRedirects: undefined,
         auditContext: "discord.voice.attachment-upload",
         policy: {
           allowRfc2544BenchmarkRange: true,
@@ -330,7 +331,7 @@ describe("sendDiscordVoiceMessage", () => {
       {
         url: "https://discord.test/api/v10/channels/channel-1/attachments",
         method: "POST",
-        redirect: "error",
+        maxRedirects: 0,
         auditContext: "discord.voice.upload-url",
         policy: {
           allowRfc2544BenchmarkRange: true,
@@ -340,7 +341,7 @@ describe("sendDiscordVoiceMessage", () => {
       {
         url: "https://cdn.test/upload-2",
         method: "PUT",
-        redirect: undefined,
+        maxRedirects: undefined,
         auditContext: "discord.voice.attachment-upload",
         policy: {
           allowRfc2544BenchmarkRange: true,
@@ -426,8 +427,8 @@ describe("sendDiscordVoiceMessage", () => {
         body: JSON.stringify({
           files: [{ filename: "voice-message.ogg", file_size: 3, id: "0" }],
         }),
-        redirect: "error",
       },
+      maxRedirects: 0,
       policy: {
         allowRfc2544BenchmarkRange: true,
         allowIpv6UniqueLocalRange: true,
