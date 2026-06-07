@@ -11,6 +11,7 @@ OPENCLAW_TEST_STATE_SCRIPT_B64="$(docker_e2e_test_state_shell_b64 agents-delete-
 
 docker_e2e_build_or_reuse "$IMAGE_NAME" agents-delete-shared-workspace "$ROOT_DIR/Dockerfile" "$ROOT_DIR" "" "$SKIP_BUILD"
 docker_e2e_harness_mount_args
+docker_e2e_set_default_cpus "${OPENCLAW_AGENTS_DELETE_SHARED_WORKSPACE_E2E_CPUS:-4}"
 
 run_logged agents-delete-shared-workspace docker_e2e_docker_cmd run --rm \
   "${DOCKER_E2E_HARNESS_ARGS[@]}" \
