@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { findLegacyConfigIssues } from "../../../config/legacy.js";
 import type { OpenClawConfig } from "../../../config/types.js";
+import { OpenClawSchema } from "../../../config/zod-schema.js";
 import { normalizeCompatibilityConfigValues } from "./legacy-config-core-migrate.js";
 import { LEGACY_CONFIG_MIGRATIONS } from "./legacy-config-migrations.js";
 
@@ -60,6 +61,87 @@ describe("compatibility binding repair migrate", () => {
 
     expect(res.config.bindings).toEqual(cfg.bindings);
     expect(res.changes).not.toContain("Removed 1 binding that referenced missing agents.list ids.");
+  });
+});
+
+describe("deprecated generic fetch config migrate", () => {
+  it("reports and removes deprecated generic fetch policy keys while leaving config loadable", () => {
+    const raw = {
+      tools: {
+        web: {
+          fetch: {
+            enabled: true,
+            maxRedirects: 7,
+            ssrfPolicy: {
+              allowRfc2544BenchmarkRange: true,
+            },
+            useTrustedEnvProxy: true,
+          },
+        },
+      },
+      gateway: {
+        http: {
+          endpoints: {
+            chatCompletions: {
+              images: {
+                allowUrl: true,
+                maxRedirects: 4,
+              },
+            },
+            responses: {
+              files: {
+                allowedMimes: ["text/plain"],
+                maxRedirects: 5,
+              },
+              images: {
+                maxBytes: 1_000,
+                maxRedirects: 6,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    expect(OpenClawSchema.safeParse(raw).success).toBe(true);
+
+    const issues = findLegacyConfigIssues(raw);
+    expect(issues.map((issue) => issue.path)).toEqual([
+      "tools.web.fetch.maxRedirects",
+      "tools.web.fetch.ssrfPolicy",
+      "tools.web.fetch.useTrustedEnvProxy",
+      "gateway.http.endpoints.chatCompletions.images.maxRedirects",
+      "gateway.http.endpoints.responses.files.maxRedirects",
+      "gateway.http.endpoints.responses.images.maxRedirects",
+    ]);
+    expect(issues.map((issue) => issue.message)).toEqual(
+      Array.from(
+        { length: 6 },
+        () =>
+          'Deprecated generic fetch config is accepted during this migration window, but outbound policy now belongs at the managed proxy / Proxyline boundary. Run "openclaw doctor --fix" to remove this key.',
+      ),
+    );
+
+    const res = migrateLegacyConfigForTest(raw);
+
+    expect(res.config?.tools?.web?.fetch).toEqual({ enabled: true });
+    expect(res.config?.gateway?.http?.endpoints?.chatCompletions?.images).toEqual({
+      allowUrl: true,
+    });
+    expect(res.config?.gateway?.http?.endpoints?.responses?.files).toEqual({
+      allowedMimes: ["text/plain"],
+    });
+    expect(res.config?.gateway?.http?.endpoints?.responses?.images).toEqual({
+      maxBytes: 1_000,
+    });
+    expect(res.changes).toEqual([
+      "Removed deprecated tools.web.fetch.maxRedirects.",
+      "Removed deprecated tools.web.fetch.ssrfPolicy.",
+      "Removed deprecated tools.web.fetch.useTrustedEnvProxy.",
+      "Removed deprecated gateway.http.endpoints.chatCompletions.images.maxRedirects.",
+      "Removed deprecated gateway.http.endpoints.responses.files.maxRedirects.",
+      "Removed deprecated gateway.http.endpoints.responses.images.maxRedirects.",
+    ]);
   });
 });
 

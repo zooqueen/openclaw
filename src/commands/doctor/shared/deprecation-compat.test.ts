@@ -19,6 +19,7 @@ const requiredDoctorCompatCodes = [
   "doctor-message-queue-steering-modes",
   "doctor-web-search-plugin-config",
   "doctor-web-fetch-plugin-config",
+  "doctor-generic-fetch-policy-config",
   "doctor-x-search-plugin-config",
 ] as const;
 

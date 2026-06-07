@@ -306,6 +306,22 @@ const DOCTOR_DEPRECATION_COMPAT_RECORDS = [
     tests: ["src/commands/doctor/shared/legacy-web-fetch-migrate.test.ts"],
   }),
   deprecatedCompatRecord({
+    code: "doctor-generic-fetch-policy-config",
+    owner: "config",
+    introduced: "2026-06-07",
+    deprecated: "2026-06-07",
+    warningStarts: "2026-06-07",
+    removeAfter: "2026-09-07",
+    source:
+      "tools.web.fetch.maxRedirects; tools.web.fetch.ssrfPolicy; tools.web.fetch.useTrustedEnvProxy; gateway.http.endpoints.chatCompletions.images.maxRedirects; gateway.http.endpoints.responses.files.maxRedirects; gateway.http.endpoints.responses.images.maxRedirects",
+    migration: "src/commands/doctor/shared/legacy-config-migrations.web-fetch.ts",
+    replacement: "managed proxy / Proxyline outbound policy boundary",
+    docsPath: "/security/network-proxy",
+    tests: ["src/commands/doctor/shared/legacy-config-migrate.test.ts"],
+    notes:
+      "Doctor keeps these deprecated generic fetch keys loadable and removable during rollout. This does not claim Proxyline has exact feature parity with the old fetch guard knobs.",
+  }),
+  deprecatedCompatRecord({
     code: "doctor-x-search-plugin-config",
     owner: "provider",
     introduced: "2026-04-26",
