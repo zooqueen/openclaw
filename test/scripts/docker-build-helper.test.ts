@@ -48,6 +48,8 @@ const PLUGIN_BINDING_COMMAND_ESCAPE_DOCKER_E2E_PATH =
 const PLUGIN_BINDING_COMMAND_ESCAPE_DOCKERFILE_PATH =
   "scripts/e2e/plugin-binding-command-escape.Dockerfile";
 const QR_IMPORT_DOCKER_E2E_PATH = "scripts/e2e/qr-import-docker.sh";
+const AGENTS_DELETE_SHARED_WORKSPACE_DOCKER_E2E_PATH =
+  "scripts/e2e/agents-delete-shared-workspace-docker.sh";
 const MULTI_NODE_UPDATE_DOCKER_E2E_PATH = "scripts/e2e/multi-node-update-docker.sh";
 const BUNDLED_PLUGIN_INSTALL_UNINSTALL_E2E_PATH =
   "scripts/e2e/bundled-plugin-install-uninstall-docker.sh";
@@ -861,6 +863,39 @@ OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS=1 docker_e2e_docker_cmd run demo
 [[ "$(sed -n '2p' "$TMPDIR/docker-seen")" = "run --memory 12g --cpus 4 --pids-limit 512 demo" ]]
 [[ "$(sed -n '3p' "$TMPDIR/docker-seen")" = "run --memory 2g --cpus 3 --pids-limit 99 demo" ]]
 [[ "$(sed -n '4p' "$TMPDIR/docker-seen")" = "run demo" ]]
+`;
+
+      execFileSync("bash", ["-lc", script], { encoding: "utf8" });
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("caps opt-in Docker CPU defaults to the host CPU count", () => {
+    const workDir = mkdtempSync(join(tmpdir(), "openclaw-docker-capped-cpus-"));
+
+    try {
+      const rootDir = process.cwd();
+      const script = `
+set -euo pipefail
+ROOT_DIR=${shellQuote(rootDir)}
+export ROOT_DIR
+
+source "$ROOT_DIR/scripts/lib/docker-e2e-container.sh"
+
+getconf() {
+  [[ "$1" = "_NPROCESSORS_ONLN" ]]
+  printf '4\\n'
+}
+
+unset OPENCLAW_DOCKER_E2E_CPUS
+docker_e2e_set_default_cpus 16
+[[ "$OPENCLAW_DOCKER_E2E_CPUS" = "4" ]]
+
+OPENCLAW_DOCKER_E2E_CPUS=6
+docker_e2e_set_default_cpus 16
+[[ "$OPENCLAW_DOCKER_E2E_CPUS" = "6" ]]
+[[ "$(docker_e2e_cap_cpu_limit none 4)" = "none" ]]
 `;
 
       execFileSync("bash", ["-lc", script], { encoding: "utf8" });
@@ -2981,10 +3016,21 @@ output="$(cat "$sampler_log")"
     const runner = readFileSync(QR_IMPORT_DOCKER_E2E_PATH, "utf8");
 
     expect(runner).toContain("scripts/lib/docker-e2e-container.sh");
-    expect(runner).toContain('local requested="${OPENCLAW_QR_SMOKE_CPUS:-4}"');
-    expect(runner).toContain('if [[ -z "${OPENCLAW_DOCKER_E2E_CPUS+x}" ]]; then');
+    expect(runner).toContain('docker_e2e_set_default_cpus "${OPENCLAW_QR_SMOKE_CPUS:-4}"');
     expect(runner).toContain("run_logged qr-import-run docker_e2e_docker_run_cmd run --rm -t");
     expect(runner).not.toContain("run_logged qr-import-run docker run --rm");
+  });
+
+  it("caps agents delete Docker smoke CPUs before running the reusable image", () => {
+    const runner = readFileSync(AGENTS_DELETE_SHARED_WORKSPACE_DOCKER_E2E_PATH, "utf8");
+
+    expect(runner).toContain("scripts/lib/docker-e2e-image.sh");
+    expect(runner).toContain(
+      'docker_e2e_set_default_cpus "${OPENCLAW_AGENTS_DELETE_SHARED_WORKSPACE_E2E_CPUS:-4}"',
+    );
+    expect(runner).toContain(
+      "run_logged agents-delete-shared-workspace docker_e2e_docker_cmd run --rm",
+    );
   });
 
   it("covers plugin CLI sources in the Docker plugin sweep", () => {

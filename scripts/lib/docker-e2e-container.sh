@@ -159,6 +159,49 @@ docker_e2e_docker_run_cmd() {
   docker_e2e_timeout_cmd "$timeout_value" docker "$@"
 }
 
+docker_e2e_detect_host_cpus() {
+  local available=""
+
+  if command -v getconf >/dev/null 2>&1; then
+    available="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  fi
+  if [[ -z "${available// }" ]] && command -v nproc >/dev/null 2>&1; then
+    available="$(nproc 2>/dev/null || true)"
+  fi
+
+  if [[ "$available" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' "$available"
+    return 0
+  fi
+
+  return 1
+}
+
+docker_e2e_cap_cpu_limit() {
+  local requested="$1"
+  local available="${2:-}"
+
+  if [[ -z "${available// }" ]]; then
+    available="$(docker_e2e_detect_host_cpus || true)"
+  fi
+
+  if [[ "$requested" =~ ^[1-9][0-9]*$ ]] && [[ "$available" =~ ^[1-9][0-9]*$ ]] && (( requested > available )); then
+    printf '%s\n' "$available"
+    return 0
+  fi
+
+  printf '%s\n' "$requested"
+}
+
+docker_e2e_set_default_cpus() {
+  if [[ -n "${OPENCLAW_DOCKER_E2E_CPUS+x}" ]]; then
+    return 0
+  fi
+
+  export OPENCLAW_DOCKER_E2E_CPUS
+  OPENCLAW_DOCKER_E2E_CPUS="$(docker_e2e_cap_cpu_limit "$1")"
+}
+
 docker_e2e_resource_limits_disabled() {
   case "${OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS:-}" in
     1 | true | TRUE | yes | YES | on | ON)
