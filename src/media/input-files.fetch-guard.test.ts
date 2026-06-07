@@ -331,6 +331,29 @@ describe("fetchWithGuard", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each([[["*"]], [["*."]]])(
+    "treats wildcard URL allowlist %j as unrestricted",
+    async (hostnameAllowlist) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(Buffer.from("ok"), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+
+      const result = await fetchWithGuard({
+        url: "https://evil.example.com/file.txt",
+        maxBytes: 1024,
+        timeoutMs: 1000,
+        maxRedirects: 3,
+        policy: { hostnameAllowlist },
+      });
+
+      expect(result.buffer).toStrictEqual(Buffer.from("ok"));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("rejects private URL literals before fetch", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected"));
 

@@ -573,6 +573,38 @@ export type PinnedDispatcherPolicy =
       pinnedHostname?: PinnedHostnameOverride;
     };
 
+export async function assertExplicitProxyAllowedWithPolicy(
+  dispatcherPolicy: PinnedDispatcherPolicy | undefined,
+  params: { lookupFn?: LookupFn; policy?: SsrFPolicy } = {},
+): Promise<void> {
+  if (!dispatcherPolicy || dispatcherPolicy.mode !== "explicit-proxy") {
+    return;
+  }
+  let parsedProxyUrl: URL;
+  try {
+    parsedProxyUrl = new URL(dispatcherPolicy.proxyUrl);
+  } catch {
+    throw new Error("Invalid explicit proxy URL");
+  }
+  if (parsedProxyUrl.protocol !== "http:" && parsedProxyUrl.protocol !== "https:") {
+    throw new Error("Explicit proxy URL must use http or https");
+  }
+  const proxyPolicy: SsrFPolicy | undefined =
+    params.policy || dispatcherPolicy.allowPrivateProxy === true
+      ? {
+          ...params.policy,
+          // Proxy hosts are operator configured. Target-scoped allowlists must
+          // not reject the proxy before the request target is checked.
+          hostnameAllowlist: undefined,
+          ...(dispatcherPolicy.allowPrivateProxy === true ? { allowPrivateNetwork: true } : {}),
+        }
+      : undefined;
+  await resolvePinnedHostnameWithPolicy(parsedProxyUrl.hostname, {
+    lookupFn: params.lookupFn,
+    policy: proxyPolicy,
+  });
+}
+
 function dedupeAndPreferIpv4(results: readonly LookupAddress[]): string[] {
   const seen = new Set<string>();
   const ipv4: string[] = [];

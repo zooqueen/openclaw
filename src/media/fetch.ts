@@ -17,6 +17,7 @@ import {
   type DispatcherAwareRequestInit,
 } from "../infra/net/runtime-fetch.js";
 import {
+  assertExplicitProxyAllowedWithPolicy,
   assertHostnameAllowedWithPolicy,
   closeDispatcher,
   createPinnedDispatcher,
@@ -333,6 +334,10 @@ async function createMediaFetchDispatcher(params: {
   const { attempt, fetchImpl, lookupFn, timeoutMs, trustExplicitProxyDns } = params;
   const resolvedLookupFn = attempt.lookupFn ?? lookupFn;
   const dispatcherPolicy = attempt.dispatcherPolicy;
+  await assertExplicitProxyAllowedWithPolicy(dispatcherPolicy, {
+    lookupFn: resolvedLookupFn,
+    policy: params.ssrfPolicy,
+  });
   if (dispatcherPolicy?.mode === "explicit-proxy" && trustExplicitProxyDns === true) {
     return createMediaFetchDispatcherWithoutPinnedDns(dispatcherPolicy, timeoutMs);
   }

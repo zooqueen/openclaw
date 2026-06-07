@@ -607,6 +607,24 @@ describe("readRemoteMediaBuffer", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects private explicit proxy hosts unless allowPrivateProxy is set", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("unexpected"));
+
+    await expect(
+      readRemoteMediaBuffer({
+        url: "https://files.example.test/file.bin",
+        maxBytes: 1024,
+        dispatcherPolicy: {
+          mode: "explicit-proxy",
+          proxyUrl: "http://127.0.0.1:8888",
+        },
+      }),
+    ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
+
+    expect(createHttp1ProxyAgentMock).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("rejects plain HTTP media targets through explicit proxies unless proxy DNS is trusted", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("unexpected"));
 

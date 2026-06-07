@@ -19,6 +19,7 @@ import {
   type DispatcherAwareRequestInit,
 } from "./runtime-fetch.js";
 import {
+  assertExplicitProxyAllowedWithPolicy,
   assertHostnameAllowedWithPolicy,
   closeDispatcher,
   createPinnedDispatcher,
@@ -209,42 +210,6 @@ function createPolicyDispatcherWithoutPinnedDns(
     );
   }
   return createHttp1ProxyAgent({ uri: proxyUrl }, timeoutMs);
-}
-
-async function assertExplicitProxyAllowed(
-  dispatcherPolicy: PinnedDispatcherPolicy | undefined,
-  lookupFn: LookupFn | undefined,
-  policy: SsrFPolicy | undefined,
-): Promise<void> {
-  // Explicit proxies are operator-configured, but the proxy host still needs
-  // basic URL and private-network validation before target validation proceeds.
-  if (!dispatcherPolicy || dispatcherPolicy.mode !== "explicit-proxy") {
-    return;
-  }
-  let parsedProxyUrl: URL;
-  try {
-    parsedProxyUrl = new URL(dispatcherPolicy.proxyUrl);
-  } catch {
-    throw new Error("Invalid explicit proxy URL");
-  }
-  if (!["http:", "https:"].includes(parsedProxyUrl.protocol)) {
-    throw new Error("Explicit proxy URL must use http or https");
-  }
-  const proxyPolicy: SsrFPolicy | undefined =
-    policy || dispatcherPolicy.allowPrivateProxy === true
-      ? {
-          ...policy,
-          // The proxy hostname is operator-configured, not user input. Target-scoped
-          // allowlists must not reject a configured proxy host before the request
-          // target gets checked against that same allowlist below.
-          hostnameAllowlist: undefined,
-          ...(dispatcherPolicy.allowPrivateProxy === true ? { allowPrivateNetwork: true } : {}),
-        }
-      : undefined;
-  await resolvePinnedHostnameWithPolicy(parsedProxyUrl.hostname, {
-    lookupFn,
-    policy: proxyPolicy,
-  });
 }
 
 function isRedirectStatus(status: number): boolean {
@@ -505,7 +470,10 @@ async function fetchWithSsrFGuardInternal(
         dispatcherPolicy,
         usesTrustedExplicitProxyMode ? false : params.pinDns,
       );
-      await assertExplicitProxyAllowed(dispatcherPolicy, params.lookupFn, params.policy);
+      await assertExplicitProxyAllowedWithPolicy(dispatcherPolicy, {
+        lookupFn: params.lookupFn,
+        policy: params.policy,
+      });
       const canUseManagedProxy =
         mode === GUARDED_FETCH_MODE.STRICT && isManagedProxyActive() && hasProxyEnvConfigured();
       const canUseTrustedEnvProxy =

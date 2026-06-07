@@ -21,6 +21,7 @@ import {
   type DispatcherAwareRequestInit,
 } from "../infra/net/runtime-fetch.js";
 import {
+  assertExplicitProxyAllowedWithPolicy,
   assertHostnameAllowedWithPolicy,
   closeDispatcher,
   createPinnedDispatcher,
@@ -751,6 +752,7 @@ async function createProviderTransportDispatcher(params: {
     throw new Error("Invalid URL: must be http or https");
   }
   assertExplicitProxySupportsProviderTarget(parsedUrl, params.dispatcherPolicy);
+  await assertExplicitProxyAllowedWithPolicy(params.dispatcherPolicy, { policy: params.policy });
   const policyForUrl = resolveSsrFPolicyForUrl(parsedUrl, params.policy);
 
   if (params.useEnvProxy && !params.dispatcherPolicy) {

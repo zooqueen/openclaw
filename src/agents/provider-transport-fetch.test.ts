@@ -32,6 +32,7 @@ type DispatcherPolicyMockResult =
 
 const {
   buildProviderRequestDispatcherPolicyMock,
+  assertExplicitProxyAllowedWithPolicyMock,
   fetchWithSsrFGuardMock,
   captureHttpExchangeMock,
   closeDispatcherMock,
@@ -80,6 +81,7 @@ const {
     buildProviderRequestDispatcherPolicyMock: vi.fn<
       (_request?: unknown) => DispatcherPolicyMockResult
     >(() => undefined),
+    assertExplicitProxyAllowedWithPolicyMock: vi.fn(async () => undefined),
     fetchWithSsrFGuardMock: vi.fn(),
     captureHttpExchangeMock: vi.fn(),
     closeDispatcherMock: vi.fn(async (dispatcher: { close?: () => Promise<void> } | null) => {
@@ -168,6 +170,7 @@ vi.mock("../infra/net/ssrf.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../infra/net/ssrf.js")>();
   return {
     ...actual,
+    assertExplicitProxyAllowedWithPolicy: assertExplicitProxyAllowedWithPolicyMock,
     closeDispatcher: closeDispatcherMock,
     createPinnedDispatcher: createPinnedDispatcherMock,
     resolvePinnedHostnameWithPolicy: resolvePinnedHostnameWithPolicyMock,
@@ -248,6 +251,7 @@ describe("buildGuardedModelFetch", () => {
       release: vi.fn(async () => undefined),
     });
     ensureModelProviderLocalServiceMock.mockReset().mockResolvedValue(undefined);
+    assertExplicitProxyAllowedWithPolicyMock.mockReset().mockResolvedValue(undefined);
     buildProviderRequestDispatcherPolicyMock.mockClear().mockReturnValue(undefined);
     captureHttpExchangeMock.mockClear();
     createHttp1AgentMock.mockClear().mockReturnValue({ close: vi.fn(async () => undefined) });
@@ -916,6 +920,44 @@ describe("buildGuardedModelFetch", () => {
       },
       undefined,
     );
+  });
+
+  it("rejects private explicit provider proxy hosts before fetch", async () => {
+    buildProviderRequestDispatcherPolicyMock.mockReturnValueOnce({
+      mode: "explicit-proxy",
+      proxyUrl: "http://127.0.0.1:8888",
+    });
+    assertExplicitProxyAllowedWithPolicyMock.mockRejectedValueOnce(
+      new Error("Blocked hostname or private/internal/special-use IP address"),
+    );
+    const model = {
+      id: "gpt-5.4",
+      provider: "openai",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+    } as unknown as Model<"openai-responses">;
+
+    await expect(
+      buildGuardedModelFetch(model)("https://api.openai.com/v1/responses", {
+        method: "POST",
+      }),
+    ).rejects.toThrow("Blocked hostname or private/internal/special-use IP address");
+
+    expect(assertExplicitProxyAllowedWithPolicyMock).toHaveBeenCalledWith(
+      {
+        mode: "explicit-proxy",
+        proxyUrl: "http://127.0.0.1:8888",
+      },
+      {
+        policy: expect.objectContaining({
+          allowedOrigins: ["https://api.openai.com"],
+          hostnameAllowlist: ["api.openai.com"],
+        }),
+      },
+    );
+    expect(resolvePinnedHostnameWithPolicyMock).not.toHaveBeenCalled();
+    expect(createHttp1ProxyAgentMock).not.toHaveBeenCalled();
+    expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
   });
 
   it("rejects plain HTTP provider targets through explicit proxies", async () => {

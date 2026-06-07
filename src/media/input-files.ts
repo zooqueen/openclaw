@@ -21,6 +21,7 @@ import {
   closeDispatcher,
   createPinnedDispatcher,
   matchesHostnameAllowlist,
+  normalizeHostnameAllowlist,
   resolvePinnedHostnameWithPolicy,
   resolveSsrFPolicyForUrl,
   type LookupFn,
@@ -179,15 +180,10 @@ function parseInputSourceUrl(rawUrl: string): URL {
 function assertInputSourceUrlAllowed(rawUrl: string, policy?: SsrFPolicy): URL {
   const parsed = parseInputSourceUrl(rawUrl);
   const policyForUrl = resolveSsrFPolicyForUrl(parsed, policy);
-  const allowlist = policyForUrl?.hostnameAllowlist;
+  const allowlist = normalizeHostnameAllowlist(policyForUrl?.hostnameAllowlist);
   if (allowlist?.length) {
     const hostname = normalizeHostname(parsed.hostname);
-    if (
-      !matchesHostnameAllowlist(
-        hostname,
-        allowlist.map((entry) => normalizeHostname(entry)),
-      )
-    ) {
+    if (!matchesHostnameAllowlist(hostname, allowlist)) {
       throw new Error(`Input source URL hostname is not in allowlist: ${parsed.hostname}`);
     }
   }
