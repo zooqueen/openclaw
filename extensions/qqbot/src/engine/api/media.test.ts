@@ -26,10 +26,7 @@ const UPLOAD_RESPONSE: UploadMediaResponse = {
 const MEDIA_BYTES = Buffer.from("downloaded-media");
 const MEDIA_BASE64 = MEDIA_BYTES.toString("base64");
 
-function mockNativeResponse(
-  body: BodyInit = MEDIA_BYTES,
-  init?: ResponseInit,
-): Response {
+function mockNativeResponse(body: BodyInit = MEDIA_BYTES, init?: ResponseInit): Response {
   const response = new Response(body, init);
   vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
   return response;
@@ -51,7 +48,7 @@ function expectNativeDownload(url: string): void {
   expect(globalThis.fetch).toHaveBeenCalledWith(
     url,
     expect.objectContaining({
-      redirect: "follow",
+      redirect: "error",
       signal: expect.any(AbortSignal),
     }),
   );
@@ -71,47 +68,42 @@ describe("MediaApi.uploadMedia direct URL uploads", () => {
     { fileType: MediaFileType.IMAGE, url: "https://cdn.example.com/assets/photo.png" },
     { fileType: MediaFileType.VIDEO, url: "http://cdn.example.com/assets/video.mp4" },
     { fileType: MediaFileType.FILE, url: "http://cdn.example.com/assets/report.pdf" },
-  ])(
-    "downloads public HTTP(S) $fileType URLs with native fetch redirects",
-    async ({ fileType, url }) => {
-      const client = mockApiClient();
-      const tokenManager = mockTokenManager();
-      const api = new MediaApi(client, tokenManager);
+  ])("downloads public HTTP(S) $fileType URLs with native fetch", async ({ fileType, url }) => {
+    const client = mockApiClient();
+    const tokenManager = mockTokenManager();
+    const api = new MediaApi(client, tokenManager);
 
-      const result = await api.uploadMedia(
-        "c2c",
-        "user-openid",
-        fileType,
-        { appId: "app-id", clientSecret: "client-secret" },
-        { url },
-      );
+    const result = await api.uploadMedia(
+      "c2c",
+      "user-openid",
+      fileType,
+      { appId: "app-id", clientSecret: "client-secret" },
+      { url },
+    );
 
-      expect(result).toBe(UPLOAD_RESPONSE);
-      expectNativeDownload(url);
-      expect(readResponseWithLimitMock).toHaveBeenCalledWith(
-        expect.any(Response),
-        MAX_UPLOAD_SIZE,
-        { chunkTimeoutMs: 10_000 },
-      );
-      expect(tokenManager["getAccessToken"]).toHaveBeenCalledWith("app-id", "client-secret");
-      expect(client["request"]).toHaveBeenCalledWith(
-        "token-1",
-        "POST",
-        expect.any(String),
-        {
-          file_type: fileType,
-          srv_send_msg: false,
-          file_data: MEDIA_BASE64,
-        },
-        {
-          redactBodyKeys: ["file_data"],
-          uploadRequest: true,
-        },
-      );
-    },
-  );
+    expect(result).toBe(UPLOAD_RESPONSE);
+    expectNativeDownload(url);
+    expect(readResponseWithLimitMock).toHaveBeenCalledWith(expect.any(Response), MAX_UPLOAD_SIZE, {
+      chunkTimeoutMs: 10_000,
+    });
+    expect(tokenManager["getAccessToken"]).toHaveBeenCalledWith("app-id", "client-secret");
+    expect(client["request"]).toHaveBeenCalledWith(
+      "token-1",
+      "POST",
+      expect.any(String),
+      {
+        file_type: fileType,
+        srv_send_msg: false,
+        file_data: MEDIA_BASE64,
+      },
+      {
+        redactBodyKeys: ["file_data"],
+        uploadRequest: true,
+      },
+    );
+  });
 
-  it("uses native fetch redirect-follow behavior when downloading media", async () => {
+  it("uses native fetch no-redirect behavior when downloading media", async () => {
     const client = mockApiClient();
     const tokenManager = mockTokenManager();
     const api = new MediaApi(client, tokenManager);
@@ -125,6 +117,33 @@ describe("MediaApi.uploadMedia direct URL uploads", () => {
     );
 
     expectNativeDownload("https://cdn.example.com/assets/photo.png");
+  });
+
+  it("rejects redirects before reading media URL bodies", async () => {
+    vi.restoreAllMocks();
+    const redirectResponse = new Response(null, {
+      status: 302,
+      headers: { Location: "http://127.0.0.1/private.png" },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(redirectResponse);
+    const client = mockApiClient();
+    const tokenManager = mockTokenManager();
+    const api = new MediaApi(client, tokenManager);
+
+    await expect(
+      api.uploadMedia(
+        "c2c",
+        "user-openid",
+        MediaFileType.IMAGE,
+        { appId: "app-id", clientSecret: "client-secret" },
+        { url: "https://cdn.example.com/assets/photo.png" },
+      ),
+    ).rejects.toThrow("Direct-upload media URL returned HTTP 302");
+
+    expectNativeDownload("https://cdn.example.com/assets/photo.png");
+    expect(readResponseWithLimitMock).not.toHaveBeenCalled();
+    expect(tokenManager["getAccessToken"]).not.toHaveBeenCalled();
+    expect(client["request"]).not.toHaveBeenCalled();
   });
 
   it("bounds stalled native fetch setup before reading URL bodies", async () => {

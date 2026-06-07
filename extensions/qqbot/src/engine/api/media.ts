@@ -78,7 +78,7 @@ async function fetchDirectUploadDownload(url: string) {
   });
   const downloadFetch = fetch(url, {
     signal: controller.signal,
-    redirect: "follow",
+    redirect: "error",
   });
   try {
     return await Promise.race([downloadFetch, timeoutPromise]);
