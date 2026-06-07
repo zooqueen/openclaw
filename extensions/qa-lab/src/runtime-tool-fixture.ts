@@ -148,8 +148,12 @@ function formatKnownHarnessGapDetails(toolName: string, config: QaRuntimeToolFix
     .join("\n");
 }
 
+function toRuntimeToolFixtureError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 function formatRuntimeToolFixtureError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return toRuntimeToolFixtureError(error).message;
 }
 
 function shouldToleratePromptErrorAfterCapturedRequests(
@@ -254,7 +258,7 @@ export async function runRuntimeToolFixture(
 
   if (!env.mock) {
     if (firstPromptError) {
-      throw firstPromptError;
+      throw toRuntimeToolFixtureError(firstPromptError);
     }
     return `${toolName} fixture completed in live provider mode`;
   }
@@ -323,7 +327,7 @@ export async function runRuntimeToolFixture(
   }
 
   if (firstPromptError && !shouldToleratePromptErrorAfterCapturedRequests(toolName, config)) {
-    throw firstPromptError;
+    throw toRuntimeToolFixtureError(firstPromptError);
   }
 
   return [
