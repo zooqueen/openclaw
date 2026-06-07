@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.7-alpha.1
+
+### Fixes
+
+- Release validation: keep alpha package preflight green by isolating channel-ingress allowlist/store helpers from plugin runtime import cycles, refreshing the Plugin SDK API baseline, and allowing the current packaged `dist` scan size.
+
 ## 2026.6.5
 
 ### Highlights
