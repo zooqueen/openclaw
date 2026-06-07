@@ -385,7 +385,7 @@ function rewriteMediaRedirectInitForMethod(params: {
   }
   const method = init.method?.toUpperCase() ?? "GET";
   const shouldRewriteToGet =
-    params.status === 303 ||
+    (params.status === 303 && method !== "HEAD") ||
     ((params.status === 301 || params.status === 302) && method === "POST");
   if (!shouldRewriteToGet) {
     return init;

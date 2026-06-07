@@ -226,42 +226,48 @@ describe("sendDiscordVoiceMessage", () => {
     const post = vi.fn(async () => ({ id: "msg-1", channel_id: "channel-1" }));
     const rest = createRest(post);
     let uploadUrlRequests = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = input instanceof Request ? input.url : String(input);
-      const method = input instanceof Request ? input.method : (init?.method ?? "GET");
-      if (method === "POST" && url.endsWith("/channels/channel-1/attachments")) {
-        uploadUrlRequests += 1;
-        return new Response(
-          JSON.stringify({
-            attachments: [
-              {
-                id: 0,
-                upload_url: `https://cdn.test/upload-${uploadUrlRequests}`,
-                upload_filename: `uploaded-${uploadUrlRequests}.ogg`,
-              },
-            ],
-          }),
-          { status: 200 },
-        );
-      }
-      throw new Error(`unexpected fetch ${method} ${url}`);
-    });
-    const guardedReleases = [vi.fn(async () => {}), vi.fn(async () => {})];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("unexpected fetch"));
+    const guardedReleases = [
+      vi.fn(async () => {}),
+      vi.fn(async () => {}),
+      vi.fn(async () => {}),
+      vi.fn(async () => {}),
+    ];
     fetchWithSsrFGuardMock.mockImplementation(
-      async ({ url }: { url: string; init?: RequestInit }) => {
+      async ({ url, init }: { url: string; init?: RequestInit }) => {
+        if (init?.method === "POST" && url.endsWith("/channels/channel-1/attachments")) {
+          uploadUrlRequests += 1;
+          return {
+            response: new Response(
+              JSON.stringify({
+                attachments: [
+                  {
+                    id: 0,
+                    upload_url: `https://cdn.test/upload-${uploadUrlRequests}`,
+                    upload_filename: `uploaded-${uploadUrlRequests}.ogg`,
+                  },
+                ],
+              }),
+              { status: 200 },
+            ),
+            release: guardedReleases[uploadUrlRequests - 1],
+          };
+        }
         if (url === "https://cdn.test/upload-1") {
           return {
             response: new Response(
               JSON.stringify({ message: "Slow down", retry_after: 0, global: false }),
               { status: 429 },
             ),
-            release: guardedReleases[0],
+            release: guardedReleases[2],
           };
         }
         if (url === "https://cdn.test/upload-2") {
           return {
             response: new Response(null, { status: 200 }),
-            release: guardedReleases[1],
+            release: guardedReleases[3],
           };
         }
         throw new Error(`unexpected guarded fetch ${url}`);
@@ -282,26 +288,8 @@ describe("sendDiscordVoiceMessage", () => {
     ).resolves.toEqual({ id: "msg-1", channel_id: "channel-1" });
 
     expect(uploadUrlRequests).toBe(2);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(
-      fetchMock.mock.calls.map(([input, init]) => ({
-        url: input instanceof Request ? input.url : String(input),
-        method: input instanceof Request ? input.method : (init?.method ?? "GET"),
-        redirect: input instanceof Request ? input.redirect : init?.redirect,
-      })),
-    ).toEqual([
-      {
-        url: "https://discord.test/api/v10/channels/channel-1/attachments",
-        method: "POST",
-        redirect: "error",
-      },
-      {
-        url: "https://discord.test/api/v10/channels/channel-1/attachments",
-        method: "POST",
-        redirect: "error",
-      },
-    ]);
-    expect(fetchWithSsrFGuardMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchWithSsrFGuardMock).toHaveBeenCalledTimes(4);
     expect(
       fetchWithSsrFGuardMock.mock.calls.map(([params]) => {
         const call = params as {
@@ -313,15 +301,37 @@ describe("sendDiscordVoiceMessage", () => {
         return {
           url: call.url,
           method: call.init?.method,
+          redirect: call.init?.redirect,
           auditContext: call.auditContext,
           policy: call.policy,
         };
       }),
     ).toEqual([
       {
+        url: "https://discord.test/api/v10/channels/channel-1/attachments",
+        method: "POST",
+        redirect: "error",
+        auditContext: "discord.voice.upload-url",
+        policy: {
+          allowRfc2544BenchmarkRange: true,
+          allowIpv6UniqueLocalRange: true,
+        },
+      },
+      {
         url: "https://cdn.test/upload-1",
         method: "PUT",
+        redirect: undefined,
         auditContext: "discord.voice.attachment-upload",
+        policy: {
+          allowRfc2544BenchmarkRange: true,
+          allowIpv6UniqueLocalRange: true,
+        },
+      },
+      {
+        url: "https://discord.test/api/v10/channels/channel-1/attachments",
+        method: "POST",
+        redirect: "error",
+        auditContext: "discord.voice.upload-url",
         policy: {
           allowRfc2544BenchmarkRange: true,
           allowIpv6UniqueLocalRange: true,
@@ -330,6 +340,7 @@ describe("sendDiscordVoiceMessage", () => {
       {
         url: "https://cdn.test/upload-2",
         method: "PUT",
+        redirect: undefined,
         auditContext: "discord.voice.attachment-upload",
         policy: {
           allowRfc2544BenchmarkRange: true,
@@ -339,6 +350,8 @@ describe("sendDiscordVoiceMessage", () => {
     ]);
     expect(guardedReleases[0]).toHaveBeenCalledTimes(1);
     expect(guardedReleases[1]).toHaveBeenCalledTimes(1);
+    expect(guardedReleases[2]).toHaveBeenCalledTimes(1);
+    expect(guardedReleases[3]).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith("/channels/channel-1/messages", {
       body: {
         flags: 8192,
@@ -357,26 +370,24 @@ describe("sendDiscordVoiceMessage", () => {
 
   it("throws typed CDN upload failures", async () => {
     const rest = createRest();
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = input instanceof Request ? input.url : String(input);
-      const method = input instanceof Request ? input.method : (init?.method ?? "GET");
-      if (method === "POST" && url.endsWith("/channels/channel-1/attachments")) {
-        return new Response(
-          JSON.stringify({
-            attachments: [
-              {
-                id: 0,
-                upload_url: "https://cdn.test/upload",
-                upload_filename: "uploaded.ogg",
-              },
-            ],
-          }),
-          { status: 200 },
-        );
-      }
-      throw new Error(`unexpected fetch ${method} ${url}`);
-    });
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected fetch"));
+    const uploadUrlRelease = vi.fn(async () => {});
     const release = vi.fn(async () => {});
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response(
+        JSON.stringify({
+          attachments: [
+            {
+              id: 0,
+              upload_url: "https://cdn.test/upload",
+              upload_filename: "uploaded.ogg",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+      release: uploadUrlRelease,
+    });
     fetchWithSsrFGuardMock.mockResolvedValueOnce({
       response: new Response("cdn unavailable", { status: 503 }),
       release,
@@ -405,6 +416,25 @@ describe("sendDiscordVoiceMessage", () => {
       message: "cdn unavailable",
     });
     expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
+      url: "https://discord.test/api/v10/channels/channel-1/attachments",
+      init: {
+        method: "POST",
+        headers: {
+          Authorization: "Bot bot-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          files: [{ filename: "voice-message.ogg", file_size: 3, id: "0" }],
+        }),
+        redirect: "error",
+      },
+      policy: {
+        allowRfc2544BenchmarkRange: true,
+        allowIpv6UniqueLocalRange: true,
+      },
+      auditContext: "discord.voice.upload-url",
+    });
+    expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
       url: "https://cdn.test/upload",
       init: {
         method: "PUT",
@@ -419,6 +449,7 @@ describe("sendDiscordVoiceMessage", () => {
       },
       auditContext: "discord.voice.attachment-upload",
     });
+    expect(uploadUrlRelease).toHaveBeenCalledTimes(1);
     expect(release).toHaveBeenCalledTimes(1);
   });
 });

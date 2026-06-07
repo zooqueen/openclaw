@@ -337,14 +337,23 @@ async function requestVoiceUploadUrl(params: {
       files: [{ filename: params.filename, file_size: params.fileSize, id: "0" }],
     }),
   };
-  const res = await fetch(url, {
-    ...uploadUrlInit,
-    redirect: "error",
+  const { response: res, release } = await fetchWithSsrFGuard({
+    url,
+    init: {
+      ...uploadUrlInit,
+      redirect: "error",
+    },
+    policy: DISCORD_VOICE_UPLOAD_SSRF_POLICY,
+    auditContext: "discord.voice.upload-url",
   });
-  if (!res.ok) {
-    throw await createVoiceRequestError(res, "Upload URL request failed");
+  try {
+    if (!res.ok) {
+      throw await createVoiceRequestError(res, "Upload URL request failed");
+    }
+    return (await res.json()) as UploadUrlResponse;
+  } finally {
+    await release();
   }
-  return (await res.json()) as UploadUrlResponse;
 }
 
 async function uploadVoiceAttachment(params: {

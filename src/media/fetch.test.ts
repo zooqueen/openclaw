@@ -783,6 +783,42 @@ describe("readRemoteMediaBuffer", () => {
     );
   });
 
+  it("preserves HEAD when replaying 303 media redirects", async () => {
+    const redirectResponse = new Response(null, {
+      status: 303,
+      headers: { location: "https://cdn.example.com/files/photo.png" },
+    });
+    const finalResponse = new Response(null, {
+      status: 200,
+      headers: { "content-type": "image/png" },
+    });
+    Object.defineProperty(finalResponse, "url", {
+      value: "https://cdn.example.com/files/photo.png",
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(redirectResponse)
+      .mockResolvedValueOnce(finalResponse);
+
+    await readRemoteMediaBuffer({
+      url: "https://example.com/download",
+      fetchImpl,
+      lookupFn: makeLookupFn(),
+      requestInit: { method: "HEAD" },
+      maxBytes: 8,
+      maxRedirects: 1,
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://cdn.example.com/files/photo.png",
+      expect.objectContaining({
+        method: "HEAD",
+        redirect: "manual",
+      }),
+    );
+  });
+
   it("honors maxRedirects zero for media fetches", async () => {
     const fetchImpl = vi.fn(
       async () =>
