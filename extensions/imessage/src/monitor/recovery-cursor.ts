@@ -39,6 +39,10 @@ function readRecoveryCursor(accountId: string): number | null {
 // One-time, self-cleaning migration: when the recovery cursor is empty (first
 // startup after upgrade or a fresh install), seed it from the retired catchup
 // cursor's lastSeenRowid and consume the legacy entry so this never runs again.
+// Intentionally only reads the SQLite plugin-state cursor, not the older
+// `imessage/catchup/*.json` sidecar generation: those were migrated to SQLite by
+// a prior doctor pass, so the realistic upgrade path is covered, and re-adding
+// sidecar fs reads here would reintroduce the legacy code this change removes.
 function migrateLegacyCatchupCursor(accountId: string): number | null {
   try {
     const legacy = getIMessageRuntime().state.openSyncKeyedStore<{ lastSeenRowid?: unknown }>({
