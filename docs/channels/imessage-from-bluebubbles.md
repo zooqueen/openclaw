@@ -234,9 +234,9 @@ If the gateway logs `imessage: dropping group message from chat_id=<id>` or the 
 | Add / remove participant, leave group               | ✅                                  | ✅                                                                            |
 | Read receipts and typing indicator                  | ✅                                  | ✅ (gated on private API probe)                                               |
 | Same-sender DM coalescing                           | ✅                                  | ✅ (DM-only; opt-in via `channels.imessage.coalesceSameSenderDms`)            |
-| Inbound recovery after a restart                    | ✅ (webhook replay + history fetch) | ✅ (automatic on local setups: replay missed via since_rowid + dedupe)        |
+| Inbound recovery after a restart                    | ✅ (webhook replay + history fetch) | ✅ (automatic: replay missed via since_rowid + dedupe; wider window on local) |
 
-iMessage recovers messages missed while the gateway was down: on startup it replays from the last dispatched rowid via `imsg watch.subscribe` `since_rowid` and dedupes by GUID, while a stale-backlog age fence suppresses the Push-flush "backlog bomb". Recovery needs local `chat.db` access; over a remote SSH `cliPath` it tails from the current rowid instead. See [Inbound recovery after a bridge or gateway restart](/channels/imessage#inbound-recovery-after-a-bridge-or-gateway-restart).
+iMessage recovers messages missed while the gateway was down: on startup it replays from the last dispatched rowid via `imsg watch.subscribe` `since_rowid` and dedupes by GUID, while a stale-backlog age fence suppresses the Push-flush "backlog bomb". This runs over the `imsg` RPC connection, so it works for remote SSH `cliPath` setups too; local setups get a wider recovery window because they can read `chat.db`. See [Inbound recovery after a bridge or gateway restart](/channels/imessage#inbound-recovery-after-a-bridge-or-gateway-restart).
 
 ## Pairing, sessions, and ACP bindings
 

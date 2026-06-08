@@ -365,27 +365,32 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
   // retries; this floor guarantees it is replayed.
   let recoveryHeldFloorRowid = Number.POSITIVE_INFINITY;
 
-  // Downtime recovery. `recoveryBoundaryRowid` (M) = the local MAX(ROWID) at
-  // startup, read before the transport probe. We ask imsg to replay from the
-  // last dispatched rowid (the recovery cursor), capped to the most recent
-  // IMESSAGE_RECOVERY_MAX_ROWS, so messages that landed while the gateway was
-  // down come back; the GUID dedupe drops anything already handled. Rows at or
-  // below M are that replay (delivered up to IMESSAGE_RECOVERY_MAX_AGE_MS old);
-  // rows above M are genuinely live (age-fenced at the tighter live threshold,
-  // which is where #89237's Push-flush backlog appears). Local only: a remote
-  // bridge cannot read chat.db, so recovery falls back to imsg's self-fence at
-  // subscribe-time MAX(ROWID) (suppress-and-move-on).
+  // Downtime recovery. We pass the persisted recovery cursor (the last
+  // dispatched rowid) to watch.subscribe as since_rowid so imsg replays the rows
+  // that landed while the gateway was down — over the same RPC client, so this
+  // works for remote SSH `cliPath` setups too — then tails live. The GUID dedupe
+  // drops anything already handled.
+  //
+  // `recoveryBoundaryRowid` (M) is the local MAX(ROWID) at startup, read before
+  // the transport probe. It is only available when the gateway can read chat.db
+  // (not a remote bridge). When present it (a) caps the replay span to the most
+  // recent IMESSAGE_RECOVERY_MAX_ROWS, and (b) splits the age fence: rows at or
+  // below M are replay (delivered up to IMESSAGE_RECOVERY_MAX_AGE_MS old), rows
+  // above M are live (the tighter fence where #89237's Push-flush backlog
+  // appears). Without it (remote) the replay is uncapped and every row uses the
+  // live fence, so recovery still delivers recently-missed messages and still
+  // suppresses old backlog, just with the narrower live window.
   const watchSourceDbPath = resolveIMessageWatchSourceDbPath({ cliPath, dbPath, remoteHost });
   const recoveryBoundaryRowid = watchSourceDbPath
     ? await resolveIMessageStartupRowidWatermark(watchSourceDbPath)
     : null;
   const recoveryCursorRowid = loadIMessageRecoveryCursor(accountInfo.accountId);
   const watchSinceRowid =
-    recoveryBoundaryRowid !== null
-      ? recoveryCursorRowid !== null
+    recoveryCursorRowid !== null
+      ? recoveryBoundaryRowid !== null
         ? Math.max(recoveryCursorRowid, recoveryBoundaryRowid - IMESSAGE_RECOVERY_MAX_ROWS)
-        : recoveryBoundaryRowid
-      : null;
+        : recoveryCursorRowid
+      : recoveryBoundaryRowid;
 
   // When `coalesceSameSenderDms` is enabled and the user has not set an
   // explicit inbound debounce for this channel, widen the window to 2500 ms.

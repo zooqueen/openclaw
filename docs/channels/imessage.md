@@ -9,7 +9,7 @@ title: "iMessage"
 <Note>
 For OpenClaw iMessage deployments, use `imsg` on a signed-in macOS Messages host. If your Gateway runs on Linux or Windows, point `channels.imessage.cliPath` at an SSH wrapper that runs `imsg` on the Mac.
 
-**Inbound recovery is automatic.** After a bridge or gateway restart, iMessage replays the messages missed while it was down (local setups) and suppresses the stale "backlog bomb" Apple can flush after a Push recovery, deduping so nothing is dispatched twice. There is no config to enable — see [Inbound recovery after a bridge or gateway restart](#inbound-recovery-after-a-bridge-or-gateway-restart).
+**Inbound recovery is automatic.** After a bridge or gateway restart, iMessage replays the messages missed while it was down and suppresses the stale "backlog bomb" Apple can flush after a Push recovery, deduping so nothing is dispatched twice. There is no config to enable — see [Inbound recovery after a bridge or gateway restart](#inbound-recovery-after-a-bridge-or-gateway-restart).
 </Note>
 
 <Warning>
@@ -733,7 +733,7 @@ iMessage recovers messages missed while the gateway was down, and at the same ti
 - **Downtime recovery.** On startup the monitor remembers the last dispatched `chat.db` rowid (a persisted per-account cursor) and passes it to `imsg watch.subscribe` as `since_rowid`, so imsg replays the rows that landed while the gateway was down, then tails live. Replay is bounded to the most recent rows and to messages up to ~2 hours old, and the dedupe drops anything already handled.
 - **Stale-backlog age fence.** Rows above the startup boundary are genuinely live; one whose send date is more than ~15 minutes older than its arrival is the Push-flush backlog and is suppressed. Replayed rows (at or below the boundary) use the wider recovery window instead, so a recently-missed message is delivered while ancient history is not.
 
-Recovery requires reading `chat.db` to anchor the rowid boundary, so it is available when the gateway runs on the Messages Mac (local `cliPath`). Over a remote SSH `cliPath` the monitor cannot read the database, so it tails from the current rowid and relies on the live age fence (suppress-and-move-on) instead.
+Recovery works over both local and remote `cliPath` setups, because `since_rowid` replay runs over the same `imsg` RPC connection. The difference is the window: when the gateway can read `chat.db` (local), it anchors the startup rowid boundary, caps the replay span, and delivers missed messages up to a couple of hours old. Over a remote SSH `cliPath` it cannot read the database, so the replay is uncapped and every row uses the live age fence — it still recovers recently-missed messages and still suppresses old backlog, just with the narrower live window. Run the gateway on the Messages Mac for the wider recovery window.
 
 ### Operator-visible signal
 

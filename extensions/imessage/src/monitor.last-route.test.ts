@@ -605,6 +605,39 @@ describe("iMessage monitor last-route updates", () => {
     );
   });
 
+  it("recovers over a remote cliPath: replays from the cursor even without a local chat.db boundary", async () => {
+    advanceIMessageRecoveryCursor("default", 4990);
+    const client = {
+      request: vi.fn(async () => ({ subscription: 1 })),
+      waitForClose: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+    };
+    createIMessageRpcClientMock.mockImplementation(async () => client as never);
+
+    await monitorIMessageProvider({
+      config: {
+        channels: {
+          imessage: {
+            // remoteHost set => no local chat.db boundary; recovery must still
+            // drive since_rowid from the persisted cursor over the RPC client.
+            remoteHost: "user@gateway-host",
+            dmPolicy: "allowlist",
+            allowFrom: ["+15550001111"],
+          },
+        },
+        messages: { inbound: { debounceMs: 0 } },
+        session: { mainKey: "main" },
+      } as never,
+      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
+    });
+
+    expect(client.request).toHaveBeenCalledWith(
+      "watch.subscribe",
+      { attachments: false, include_reactions: true, since_rowid: 4990 },
+      { timeoutMs: 10_000 },
+    );
+  });
+
   it("recovers downtime messages: replays from the cursor and delivers replay rows older than the live fence", async () => {
     advanceIMessageRecoveryCursor("default", 4990);
     const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-recovery-"));
