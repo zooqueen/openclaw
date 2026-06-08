@@ -136,15 +136,28 @@ steps:
               value: ""
             - set: imageReplyText
               value: ""
-            - call: runAgentPrompt
-              args:
-                - ref: env
-                - sessionKey:
-                    ref: sessionKey
-                  message:
-                    expr: config.imagePrompt
-                  timeoutMs:
-                    expr: liveTurnTimeoutMs(env, config.imageTurnTimeoutMs)
+            - try:
+                actions:
+                  - call: runAgentPrompt
+                    args:
+                      - ref: env
+                      - sessionKey:
+                          ref: sessionKey
+                        message:
+                          expr: config.imagePrompt
+                        timeoutMs:
+                          expr: liveTurnTimeoutMs(env, config.imageTurnTimeoutMs)
+                catchAs: imageRunError
+                catch:
+                  - set: imageRunErrorText
+                    value:
+                      expr: formatErrorMessage(imageRunError)
+                  - if:
+                      expr: "!/agent\\.wait returned error: agent run aborted/i.test(imageRunErrorText)"
+                      then:
+                        - throw:
+                            message:
+                              expr: imageRunErrorText
             - try:
                 actions:
                   - call: resolveGeneratedImagePath
