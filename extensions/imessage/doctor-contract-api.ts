@@ -5,11 +5,11 @@ import type {
 } from "openclaw/plugin-sdk/channel-contract";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 
-// `channels.imessage.catchup` was retired: iMessage inbound recovery is now the
-// always-on dedupe + stale-backlog age fence in the monitor, so the opt-in
-// catchup replay subsystem and its config no longer exist. Detect the stale key
-// so doctor reports it, and strip it in normalizeCompatibilityConfig so
-// `openclaw doctor --fix` removes it from disk.
+// `channels.imessage.catchup` was retired: iMessage now recovers messages
+// missed during downtime automatically (since_rowid replay on the always-on
+// inbound dedupe), so the opt-in catchup replay subsystem and its config no
+// longer exist. Detect the stale key so doctor reports it, and strip it in
+// normalizeCompatibilityConfig so `openclaw doctor --fix` removes it from disk.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -34,8 +34,8 @@ export const legacyConfigRules: ChannelDoctorLegacyConfigRule[] = [
   {
     path: ["channels", "imessage"],
     message:
-      "channels.imessage.catchup is retired; iMessage now recovers via always-on inbound dedupe and a stale-backlog age fence. " +
-      'Run "openclaw doctor --fix" to remove it.',
+      "channels.imessage.catchup is retired; iMessage now recovers missed messages automatically (no config). " +
+      'Run "openclaw doctor --fix" to remove the stale key.',
     match: (value) => imessageEntryHasCatchup(value),
   },
 ];

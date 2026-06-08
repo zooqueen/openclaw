@@ -7,7 +7,10 @@ import type { waitForTransportReady } from "openclaw/plugin-sdk/transport-ready-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createIMessageRpcClient } from "./client.js";
 import { monitorIMessageProvider } from "./monitor.js";
-import { advanceIMessageRecoveryCursor } from "./monitor/recovery-cursor.js";
+import {
+  advanceIMessageRecoveryCursor,
+  loadIMessageRecoveryCursor,
+} from "./monitor/recovery-cursor.js";
 import {
   clearCachedIMessagePrivateApiStatus,
   setCachedIMessagePrivateApiStatus,
@@ -687,6 +690,154 @@ describe("iMessage monitor last-route updates", () => {
     // The recovery replay row dispatches; the live old row is suppressed.
     await vi.waitFor(() => {
       expect(dispatchInboundMessageMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("records a suppressed live row so a later replay of the same row is deduped, not delivered", async () => {
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-suppress-record-"));
+    tempDirs.push(stateDir);
+    const dbPath = path.join(stateDir, "chat.db");
+    const { DatabaseSync } = await import("node:sqlite");
+    const database = new DatabaseSync(dbPath);
+    try {
+      database.exec("CREATE TABLE message (text TEXT);");
+      database.prepare("INSERT INTO message(rowid, text) VALUES (?, ?)").run(5000, "boundary");
+    } finally {
+      database.close();
+    }
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
+    const client = {
+      request: vi.fn(async () => ({ subscription: 1 })),
+      waitForClose: vi.fn(async () => {
+        // Live row (rowid > boundary), 30min old -> suppressed by the live fence
+        // AND recorded in the dedupe.
+        onNotification?.({
+          method: "message",
+          params: {
+            message: {
+              id: 5001,
+              guid: "SUPPRESSED-GUID",
+              chat_id: 123,
+              sender: "+15550001111",
+              is_from_me: false,
+              text: "stale live backlog",
+              is_group: false,
+              created_at: thirtyMinAgo,
+            },
+          },
+        });
+        // Same GUID re-emitted fresh (as a restart replay would): must be
+        // dropped as a duplicate, not delivered under the recovery window.
+        onNotification?.({
+          method: "message",
+          params: {
+            message: {
+              id: 5001,
+              guid: "SUPPRESSED-GUID",
+              chat_id: 123,
+              sender: "+15550001111",
+              is_from_me: false,
+              text: "stale live backlog",
+              is_group: false,
+              created_at: new Date().toISOString(),
+            },
+          },
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      }),
+      stop: vi.fn(async () => {}),
+    };
+    createIMessageRpcClientMock.mockImplementation(async (params) => {
+      if (!params?.onNotification) {
+        throw new Error("expected iMessage notification handler");
+      }
+      onNotification = params.onNotification;
+      return client as never;
+    });
+
+    await monitorIMessageProvider({
+      config: {
+        channels: { imessage: { dbPath, dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
+        messages: { inbound: { debounceMs: 0 } },
+        session: { mainKey: "main" },
+      } as never,
+      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(dispatchInboundMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("holds the recovery cursor below a failed replay row so it is replayed next startup", async () => {
+    advanceIMessageRecoveryCursor("default", 4990);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-floor-"));
+    tempDirs.push(stateDir);
+    const dbPath = path.join(stateDir, "chat.db");
+    const { DatabaseSync } = await import("node:sqlite");
+    const database = new DatabaseSync(dbPath);
+    try {
+      database.exec("CREATE TABLE message (text TEXT);");
+      database.prepare("INSERT INTO message(rowid, text) VALUES (?, ?)").run(5000, "boundary");
+    } finally {
+      database.close();
+    }
+    // Row 4995 fails dispatch; row 4996 succeeds. Both are recovery replay rows.
+    dispatchInboundMessageMock.mockImplementationOnce(async () => {
+      throw new Error("transient dispatch failure");
+    });
+    const fresh = new Date().toISOString();
+
+    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
+    const client = {
+      request: vi.fn(async () => ({ subscription: 1 })),
+      waitForClose: vi.fn(async () => {
+        for (const id of [4995, 4996]) {
+          onNotification?.({
+            method: "message",
+            params: {
+              message: {
+                id,
+                guid: `FLOOR-GUID-${id}`,
+                chat_id: 123,
+                sender: "+15550001111",
+                is_from_me: false,
+                text: `row ${id}`,
+                is_group: false,
+                created_at: fresh,
+              },
+            },
+          });
+        }
+        await Promise.resolve();
+        await Promise.resolve();
+      }),
+      stop: vi.fn(async () => {}),
+    };
+    createIMessageRpcClientMock.mockImplementation(async (params) => {
+      if (!params?.onNotification) {
+        throw new Error("expected iMessage notification handler");
+      }
+      onNotification = params.onNotification;
+      return client as never;
+    });
+
+    await monitorIMessageProvider({
+      config: {
+        channels: { imessage: { dbPath, dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
+        messages: { inbound: { debounceMs: 0 } },
+        session: { mainKey: "main" },
+      } as never,
+      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
+    });
+
+    // 4995 failed, 4996 succeeded; the cursor must stay below 4995 (held at
+    // 4994) so the failed row is replayed on the next startup.
+    await vi.waitFor(() => {
+      expect(loadIMessageRecoveryCursor("default")).toBe(4994);
     });
   });
 

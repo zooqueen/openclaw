@@ -78,6 +78,7 @@ import {
   warnGroupAllowlistMisconfigOnce,
 } from "./group-allowlist-warnings.js";
 import {
+  buildIMessageInboundReplayKey,
   claimIMessageInboundReplay,
   commitIMessageInboundReplay,
   createIMessageInboundReplayGuard,
@@ -357,6 +358,12 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
   // replay aggressively without the old catchup cursor/retry bookkeeping.
   const inboundReplayGuard = createIMessageInboundReplayGuard();
   let staleBacklogSuppressed = 0;
+  // Lowest rowid whose dispatch was released (failed) this session. The recovery
+  // cursor must never advance past it, or the failed row would sit below the
+  // next startup's since_rowid and never be replayed again (downtime message
+  // loss). A failed row keeps its dedupe claim released, so once replayed it
+  // retries; this floor guarantees it is replayed.
+  let recoveryHeldFloorRowid = Number.POSITIVE_INFINITY;
 
   // Downtime recovery. `recoveryBoundaryRowid` (M) = the local MAX(ROWID) at
   // startup, read before the transport probe. We ask imsg to replay from the
@@ -480,19 +487,25 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             accountId: accountInfo.accountId,
             keys,
           });
-          // Advance the recovery cursor past every handled row so the next
-          // startup replays only what landed after this. Dedupe is the backstop
-          // if the cursor is imprecise, so a best-effort max is enough.
+          // Advance the recovery cursor past every handled row, but never past a
+          // row that failed this session (recoveryHeldFloorRowid) so a held
+          // failure is still replayed next startup. Dedupe backstops imprecision.
           let maxRowid = -Infinity;
           for (const entry of unitEntries) {
             if (typeof entry.message.id === "number" && Number.isFinite(entry.message.id)) {
               maxRowid = Math.max(maxRowid, entry.message.id);
             }
           }
-          if (Number.isFinite(maxRowid)) {
-            advanceIMessageRecoveryCursor(accountInfo.accountId, maxRowid);
+          const advanceTo = Math.min(maxRowid, recoveryHeldFloorRowid - 1);
+          if (Number.isFinite(advanceTo)) {
+            advanceIMessageRecoveryCursor(accountInfo.accountId, advanceTo);
           }
         } catch (err) {
+          for (const entry of unitEntries) {
+            if (typeof entry.message.id === "number" && Number.isFinite(entry.message.id)) {
+              recoveryHeldFloorRowid = Math.min(recoveryHeldFloorRowid, entry.message.id);
+            }
+          }
           releaseIMessageInboundReplay({
             guard: inboundReplayGuard,
             accountId: accountInfo.accountId,
@@ -1091,6 +1104,22 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             `(${staleBacklogSuppressed} suppressed since start)`,
         ),
       );
+      // Record the suppression so it is durable: without this, a live row
+      // suppressed under the tight live fence would fall under the wider
+      // recovery window after a restart (its rowid is now below the new
+      // boundary) and be delivered. Committing the key makes the recovery
+      // replay treat it as already handled.
+      const suppressedKey = buildIMessageInboundReplayKey({
+        accountId: accountInfo.accountId,
+        message,
+      });
+      if (suppressedKey) {
+        await commitIMessageInboundReplay({
+          guard: inboundReplayGuard,
+          accountId: accountInfo.accountId,
+          keys: [suppressedKey],
+        });
+      }
       return;
     }
     const repairedMessage = await repairMessageConversationAnchor(message);
