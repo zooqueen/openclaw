@@ -7,7 +7,6 @@ import type { waitForTransportReady } from "openclaw/plugin-sdk/transport-ready-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createIMessageRpcClient } from "./client.js";
 import { monitorIMessageProvider } from "./monitor.js";
-import { loadIMessageCatchupCursor } from "./monitor/catchup.js";
 import {
   clearCachedIMessagePrivateApiStatus,
   setCachedIMessagePrivateApiStatus,
@@ -111,25 +110,6 @@ vi.mock("./monitor/abort-handler.js", () => ({
 
 describe("iMessage monitor last-route updates", () => {
   const tempDirs: string[] = [];
-
-  async function createMessagesDbWithMaxRowid(maxRowid: number, dbPath?: string): Promise<string> {
-    let resolvedDbPath = dbPath;
-    if (!resolvedDbPath) {
-      const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-watch-watermark-"));
-      tempDirs.push(stateDir);
-      resolvedDbPath = path.join(stateDir, "chat.db");
-    }
-    fs.mkdirSync(path.dirname(resolvedDbPath), { recursive: true });
-    const { DatabaseSync } = await import("node:sqlite");
-    const database = new DatabaseSync(resolvedDbPath);
-    try {
-      database.exec("CREATE TABLE message (text TEXT);");
-      database.prepare("INSERT INTO message(rowid, text) VALUES (?, ?)").run(maxRowid, "watermark");
-    } finally {
-      database.close();
-    }
-    return resolvedDbPath;
-  }
 
   beforeEach(() => {
     installIMessageStateRuntimeForTest();
@@ -497,15 +477,18 @@ describe("iMessage monitor last-route updates", () => {
     expect(recordParams?.updateLastRoute?.mainDmOwnerPin).toBeUndefined();
   });
 
-  it("drops historical watch notifications on startup when catchup is disabled", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-30T05:23:18.000Z"));
-    const dbPath = await createMessagesDbWithMaxRowid(3000);
+  it("suppresses stale backlog rows but dispatches fresh live rows", async () => {
+    // Dates are relative to real now so the age fence sees the intended ages
+    // (the live debouncer also flushes on a real 0ms timer here).
+    const staleCreatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const freshCreatedAt = new Date().toISOString();
 
     let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
     const client = {
       request: vi.fn(async () => ({ subscription: 1 })),
       waitForClose: vi.fn(async () => {
+        // Stale backlog row (old send date) Apple delivered after a recovery —
+        // must be suppressed by the age fence.
         onNotification?.({
           method: "message",
           params: {
@@ -515,79 +498,13 @@ describe("iMessage monitor last-route updates", () => {
               chat_id: 123,
               sender: "+15550001111",
               is_from_me: false,
-              text: "old row from another account",
+              text: "old backlog row",
               is_group: false,
-              created_at: "2023-08-09T03:45:59.000Z",
+              created_at: staleCreatedAt,
             },
           },
         });
-        await Promise.resolve();
-      }),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async (params) => {
-      if (!params?.onNotification) {
-        throw new Error("expected iMessage notification handler");
-      }
-      onNotification = params.onNotification;
-      return client as never;
-    });
-
-    await monitorIMessageProvider({
-      config: {
-        channels: { imessage: { dbPath, dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
-        messages: { inbound: { debounceMs: 0 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    expect(client.request).toHaveBeenCalledWith(
-      "watch.subscribe",
-      { attachments: false, include_reactions: true, since_rowid: 3000 },
-      { timeoutMs: 10_000 },
-    );
-    expect(recordInboundSessionMock).not.toHaveBeenCalled();
-    expect(dispatchInboundMessageMock).not.toHaveBeenCalled();
-  });
-
-  it("uses the default local chat.db path for the startup watermark", async () => {
-    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-default-home-"));
-    tempDirs.push(homeDir);
-    vi.stubEnv("HOME", homeDir);
-    await createMessagesDbWithMaxRowid(4000, path.join(homeDir, "Library", "Messages", "chat.db"));
-    const client = {
-      request: vi.fn(async () => ({ subscription: 1 })),
-      waitForClose: vi.fn(async () => {}),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async () => client as never);
-
-    await monitorIMessageProvider({
-      config: {
-        channels: { imessage: { dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
-        messages: { inbound: { debounceMs: 0 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    expect(client.request).toHaveBeenCalledWith(
-      "watch.subscribe",
-      { attachments: false, include_reactions: true, since_rowid: 4000 },
-      { timeoutMs: 10_000 },
-    );
-  });
-
-  it("accepts live watch notifications after startup when catchup is disabled", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-30T05:23:18.000Z"));
-    const dbPath = await createMessagesDbWithMaxRowid(3000);
-
-    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
-    const client = {
-      request: vi.fn(async () => ({ subscription: 1 })),
-      waitForClose: vi.fn(async () => {
+        // Fresh live row — must dispatch.
         onNotification?.({
           method: "message",
           params: {
@@ -599,7 +516,7 @@ describe("iMessage monitor last-route updates", () => {
               is_from_me: false,
               text: "current row",
               is_group: false,
-              created_at: "2023-08-09T03:45:59.000Z",
+              created_at: freshCreatedAt,
             },
           },
         });
@@ -618,21 +535,49 @@ describe("iMessage monitor last-route updates", () => {
 
     await monitorIMessageProvider({
       config: {
-        channels: { imessage: { dbPath, dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
+        channels: {
+          imessage: {
+            // Unreadable dbPath => no startup rowid watermark, so this test
+            // isolates the age-fence behavior on the live path.
+            dbPath: path.join(os.tmpdir(), `openclaw-missing-chat-${Date.now()}.db`),
+            dmPolicy: "allowlist",
+            allowFrom: ["+15550001111"],
+          },
+        },
         messages: { inbound: { debounceMs: 0 } },
         session: { mainKey: "main" },
       } as never,
       runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
     });
 
+    // No readable db => watch.subscribe carries no since_rowid; the age fence
+    // suppresses stale backlog on the live path instead.
+    expect(client.request).toHaveBeenCalledWith(
+      "watch.subscribe",
+      { attachments: false, include_reactions: true },
+      { timeoutMs: 10_000 },
+    );
+    // Only the fresh row dispatches; the stale backlog row is suppressed.
     await vi.waitFor(() => {
-      expect(recordInboundSessionMock).toHaveBeenCalledTimes(1);
       expect(dispatchInboundMessageMock).toHaveBeenCalledTimes(1);
     });
   });
 
-  it("subscribes without a startup watermark when the configured dbPath is not readable", async () => {
-    const dbPath = path.join(os.tmpdir(), `openclaw-missing-chat-${Date.now()}.db`);
+  it("passes the startup rowid watermark as since_rowid when chat.db is readable", async () => {
+    // Regression guard: the watermark is captured before the transport-ready
+    // probe so messages that land during the startup window are not skipped by
+    // imsg's self-fence at subscribe time.
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-startup-rowid-"));
+    tempDirs.push(stateDir);
+    const dbPath = path.join(stateDir, "chat.db");
+    const { DatabaseSync } = await import("node:sqlite");
+    const database = new DatabaseSync(dbPath);
+    try {
+      database.exec("CREATE TABLE message (text TEXT);");
+      database.prepare("INSERT INTO message(rowid, text) VALUES (?, ?)").run(5000, "watermark");
+    } finally {
+      database.close();
+    }
     const client = {
       request: vi.fn(async () => ({ subscription: 1 })),
       waitForClose: vi.fn(async () => {}),
@@ -651,195 +596,9 @@ describe("iMessage monitor last-route updates", () => {
 
     expect(client.request).toHaveBeenCalledWith(
       "watch.subscribe",
-      { attachments: false, include_reactions: true },
+      { attachments: false, include_reactions: true, since_rowid: 5000 },
       { timeoutMs: 10_000 },
     );
-  });
-
-  it("subscribes without a startup watermark when node sqlite is unavailable", async () => {
-    vi.doMock("node:sqlite", () => {
-      throw new Error("node:sqlite unavailable");
-    });
-    vi.resetModules();
-    try {
-      const { monitorIMessageProvider: monitorWithoutSqlite } = await import("./monitor.js");
-      const client = {
-        request: vi.fn(async () => ({ subscription: 1 })),
-        waitForClose: vi.fn(async () => {}),
-        stop: vi.fn(async () => {}),
-      };
-      createIMessageRpcClientMock.mockImplementation(async () => client as never);
-
-      await monitorWithoutSqlite({
-        config: {
-          channels: { imessage: { dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
-          messages: { inbound: { debounceMs: 0 } },
-          session: { mainKey: "main" },
-        } as never,
-        runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-      });
-
-      expect(client.request).toHaveBeenCalledWith(
-        "watch.subscribe",
-        { attachments: false, include_reactions: true },
-        { timeoutMs: 10_000 },
-      );
-    } finally {
-      vi.doUnmock("node:sqlite");
-      vi.resetModules();
-    }
-  });
-
-  it("advances the catchup cursor after startup catchup succeeds and a live row is handled", async () => {
-    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-live-cursor-"));
-    tempDirs.push(stateDir);
-    vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
-
-    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
-    const client = {
-      request: vi.fn(async (method: string) => {
-        if (method === "watch.subscribe") {
-          return { subscription: 1 };
-        }
-        if (method === "chats.list") {
-          return { chats: [] };
-        }
-        throw new Error(`unexpected imsg method ${method}`);
-      }),
-      waitForClose: vi.fn(async () => {
-        onNotification?.({
-          method: "message",
-          params: {
-            message: {
-              id: 77,
-              guid: "LIVE-GUID-77",
-              chat_id: 123,
-              sender: "+15550001111",
-              is_from_me: false,
-              text: "hello after catchup",
-              is_group: false,
-              created_at: "2026-05-22T15:30:00.000Z",
-            },
-          },
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-      }),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async (params) => {
-      if (!params?.onNotification) {
-        throw new Error("expected iMessage notification handler");
-      }
-      onNotification = params.onNotification;
-      return client as never;
-    });
-
-    await monitorIMessageProvider({
-      config: {
-        channels: {
-          imessage: {
-            catchup: { enabled: true },
-            dmPolicy: "allowlist",
-            allowFrom: ["+15550001111"],
-          },
-        },
-        messages: { inbound: { debounceMs: 0 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    await vi.waitFor(async () => {
-      expect((await loadIMessageCatchupCursor("default"))?.lastSeenRowid).toBe(77);
-    });
-  });
-
-  it("flushes live cursor advancement for rows handled while startup catchup is running", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-22T15:31:00.000Z"));
-    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-live-during-catchup-"));
-    tempDirs.push(stateDir);
-    vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
-
-    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
-    const client = {
-      request: vi.fn(async (method: string, params: unknown) => {
-        if (method === "watch.subscribe") {
-          return { subscription: 1 };
-        }
-        if (method === "chats.list") {
-          return {
-            chats: [{ id: 1, last_message_at: "2026-05-22T15:15:00.000Z" }],
-          };
-        }
-        if (method === "messages.history") {
-          onNotification?.({
-            method: "message",
-            params: {
-              message: {
-                id: 77,
-                guid: "LIVE-GUID-77",
-                chat_id: 123,
-                sender: "+15550001111",
-                is_from_me: false,
-                text: "hello during catchup",
-                is_group: false,
-                created_at: "2026-05-22T15:30:00.000Z",
-              },
-            },
-          });
-          await vi.waitFor(() => {
-            expect(dispatchInboundMessageMock).toHaveBeenCalled();
-          });
-          const p = params as { chat_id: number };
-          expect(p.chat_id).toBe(1);
-          return {
-            messages: [
-              {
-                id: 10,
-                guid: "CATCHUP-GUID-10",
-                chat_id: 1,
-                sender: "+15550001111",
-                is_from_me: false,
-                text: "catchup row",
-                is_group: false,
-                created_at: "2026-05-22T15:15:00.000Z",
-              },
-            ],
-          };
-        }
-        throw new Error(`unexpected imsg method ${method}`);
-      }),
-      waitForClose: vi.fn(async () => {}),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async (params) => {
-      if (!params?.onNotification) {
-        throw new Error("expected iMessage notification handler");
-      }
-      onNotification = params.onNotification;
-      return client as never;
-    });
-
-    await monitorIMessageProvider({
-      config: {
-        channels: {
-          imessage: {
-            catchup: { enabled: true },
-            dmPolicy: "allowlist",
-            allowFrom: ["+15550001111"],
-          },
-        },
-        messages: { inbound: { debounceMs: 0 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    await vi.waitFor(async () => {
-      expect((await loadIMessageCatchupCursor("default"))?.lastSeenRowid).toBe(77);
-    });
   });
 
   it("repairs anchorless group watch payloads before routing or cursor updates", async () => {
@@ -891,7 +650,7 @@ describe("iMessage monitor last-route updates", () => {
               chat_identifier: "",
               chat_name: "",
               participants: null,
-              created_at: "2026-05-22T15:30:00.000Z",
+              created_at: new Date().toISOString(),
             },
           },
         });
@@ -912,7 +671,6 @@ describe("iMessage monitor last-route updates", () => {
       config: {
         channels: {
           imessage: {
-            catchup: { enabled: true },
             groupPolicy: "open",
             groups: { "*": { requireMention: true } },
           },
@@ -937,176 +695,6 @@ describe("iMessage monitor last-route updates", () => {
     expect(dispatchParams?.ctx.To).not.toBe("imessage:+15550001111");
   });
 
-  it("does not advance the live cursor after partial startup catchup", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-22T15:31:00.000Z"));
-    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-partial-cursor-"));
-    tempDirs.push(stateDir);
-    vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
-
-    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
-    const client = {
-      request: vi.fn(async (method: string, params: unknown) => {
-        if (method === "watch.subscribe") {
-          return { subscription: 1 };
-        }
-        if (method === "chats.list") {
-          return {
-            chats: [
-              { id: 1, last_message_at: "2026-05-22T15:15:00.000Z" },
-              { id: 2, last_message_at: "2026-05-22T15:15:00.000Z" },
-            ],
-          };
-        }
-        if (method === "messages.history") {
-          const p = params as { chat_id: number };
-          if (p.chat_id === 1) {
-            throw new Error("chat history unavailable");
-          }
-          return {
-            messages: [
-              {
-                id: 10,
-                guid: "CATCHUP-GUID-10",
-                chat_id: 2,
-                sender: "+15550001111",
-                is_from_me: false,
-                text: "catchup row",
-                is_group: false,
-                created_at: "2026-05-22T15:15:00.000Z",
-              },
-            ],
-          };
-        }
-        throw new Error(`unexpected imsg method ${method}`);
-      }),
-      waitForClose: vi.fn(async () => {
-        onNotification?.({
-          method: "message",
-          params: {
-            message: {
-              id: 77,
-              guid: "LIVE-GUID-77",
-              chat_id: 123,
-              sender: "+15550001111",
-              is_from_me: false,
-              text: "hello after partial catchup",
-              is_group: false,
-              created_at: "2026-05-22T15:30:00.000Z",
-            },
-          },
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-      }),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async (params) => {
-      if (!params?.onNotification) {
-        throw new Error("expected iMessage notification handler");
-      }
-      onNotification = params.onNotification;
-      return client as never;
-    });
-
-    await monitorIMessageProvider({
-      config: {
-        channels: {
-          imessage: {
-            catchup: { enabled: true },
-            dmPolicy: "allowlist",
-            allowFrom: ["+15550001111"],
-          },
-        },
-        messages: { inbound: { debounceMs: 0 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    await vi.waitFor(async () => {
-      expect((await loadIMessageCatchupCursor("default"))?.lastSeenRowid).toBe(10);
-    });
-  });
-
-  it("advances a coalesced live bucket to the highest source row", async () => {
-    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-coalesced-cursor-"));
-    tempDirs.push(stateDir);
-    vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
-    debouncerControl.holdEntries = true;
-
-    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
-    const client = {
-      request: vi.fn(async (method: string) => {
-        if (method === "watch.subscribe") {
-          return { subscription: 1 };
-        }
-        if (method === "chats.list") {
-          return { chats: [] };
-        }
-        throw new Error(`unexpected imsg method ${method}`);
-      }),
-      waitForClose: vi.fn(async () => {
-        for (const row of [
-          { id: 77, guid: "LIVE-GUID-77", text: "Dump", created_at: "2026-05-22T15:30:00.000Z" },
-          {
-            id: 78,
-            guid: "LIVE-GUID-78",
-            text: "https://example.com",
-            balloon_bundle_id: "com.apple.messages.URLBalloonProvider",
-            created_at: "2026-05-22T15:30:01.000Z",
-          },
-        ]) {
-          onNotification?.({
-            method: "message",
-            params: {
-              message: {
-                ...row,
-                chat_id: 123,
-                sender: "+15550001111",
-                is_from_me: false,
-                is_group: false,
-              },
-            },
-          });
-        }
-        await vi.waitFor(() => {
-          expect(debouncerControl.flush).toBeDefined();
-        });
-        await debouncerControl.flush?.();
-        await Promise.resolve();
-      }),
-      stop: vi.fn(async () => {}),
-    };
-    createIMessageRpcClientMock.mockImplementation(async (params) => {
-      if (!params?.onNotification) {
-        throw new Error("expected iMessage notification handler");
-      }
-      onNotification = params.onNotification;
-      return client as never;
-    });
-
-    await monitorIMessageProvider({
-      config: {
-        channels: {
-          imessage: {
-            catchup: { enabled: true },
-            coalesceSameSenderDms: true,
-            dmPolicy: "allowlist",
-            allowFrom: ["+15550001111"],
-          },
-        },
-        messages: { inbound: { debounceMs: 2500 } },
-        session: { mainKey: "main" },
-      } as never,
-      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
-    });
-
-    await vi.waitFor(async () => {
-      expect((await loadIMessageCatchupCursor("default"))?.lastSeenRowid).toBe(78);
-    });
-  });
-
   it("legacy-merges coalesce buckets when imsg emits no balloon metadata (older builds)", async () => {
     // Back-compat: older imsg builds emit no balloon_bundle_id, so a Dump + URL
     // split-send arrives as two fieldless rows. We cannot structurally tell that
@@ -1124,13 +712,20 @@ describe("iMessage monitor last-route updates", () => {
         throw new Error(`unexpected imsg method ${method}`);
       }),
       waitForClose: vi.fn(async () => {
+        // Fresh dates relative to now so the stale-backlog age fence lets the
+        // live split-send through to the coalescer.
         for (const row of [
-          { id: 91, guid: "LIVE-GUID-91", text: "Dump", created_at: "2026-05-22T15:30:00.000Z" },
+          {
+            id: 91,
+            guid: "LIVE-GUID-91",
+            text: "Dump",
+            created_at: new Date(Date.now() - 2000).toISOString(),
+          },
           {
             id: 92,
             guid: "LIVE-GUID-92",
             text: "https://example.com",
-            created_at: "2026-05-22T15:30:01.000Z",
+            created_at: new Date(Date.now() - 1000).toISOString(),
           },
         ]) {
           onNotification?.({
@@ -1196,14 +791,21 @@ describe("iMessage monitor last-route updates", () => {
         throw new Error(`unexpected imsg method ${method}`);
       }),
       waitForClose: vi.fn(async () => {
+        // Fresh dates relative to now so the stale-backlog age fence lets the
+        // live split-send through to the coalescer.
         for (const row of [
-          { id: 93, guid: "LIVE-GUID-93", text: "Dump", created_at: "2026-05-22T15:30:00.000Z" },
+          {
+            id: 93,
+            guid: "LIVE-GUID-93",
+            text: "Dump",
+            created_at: new Date(Date.now() - 2000).toISOString(),
+          },
           {
             id: 94,
             guid: "LIVE-GUID-94",
             text: "https://example.com",
             balloon_bundle_id: "com.apple.messages.URLBalloonProvider",
-            created_at: "2026-05-22T15:30:01.000Z",
+            created_at: new Date(Date.now() - 1000).toISOString(),
           },
         ]) {
           onNotification?.({

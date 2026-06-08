@@ -64,8 +64,6 @@ import {
 import { sendMessageIMessage } from "../send.js";
 import { normalizeIMessageHandle } from "../targets.js";
 import { attachIMessageMonitorAbortHandler } from "./abort-handler.js";
-import { runIMessageCatchup } from "./catchup-bridge.js";
-import { advanceIMessageCatchupCursor, resolveCatchupConfig } from "./catchup.js";
 import {
   combineIMessagePayloads,
   hasIMessageBalloonMetadata,
@@ -79,6 +77,13 @@ import {
   warnGroupAllowlistDropPerChatOnce,
   warnGroupAllowlistMisconfigOnce,
 } from "./group-allowlist-warnings.js";
+import {
+  claimIMessageInboundReplay,
+  commitIMessageInboundReplay,
+  createIMessageInboundReplayGuard,
+  isStaleIMessageBacklog,
+  releaseIMessageInboundReplay,
+} from "./inbound-dedupe.js";
 import {
   buildIMessageInboundContext,
   resolveIMessageReactionContext,
@@ -165,13 +170,16 @@ function resolveLocalMessagesDbPath(dbPath: string): string {
   return home ? path.join(home, dbPath.slice(1).replace(/^\/+/, "")) : dbPath;
 }
 
+// Local chat.db path to read MAX(ROWID) from for the startup since_rowid. Only
+// available when the gateway can read the DB directly (no remote bridge). On a
+// remote `cliPath`, returns undefined and the startup window relies on imsg's
+// own self-fence (see watch.subscribe comment).
 function resolveIMessageWatchSourceDbPath(params: {
-  catchupEnabled: boolean;
   cliPath: string;
   dbPath?: string;
   remoteHost?: string;
 }): string | undefined {
-  if (params.catchupEnabled || params.remoteHost) {
+  if (params.remoteHost) {
     return undefined;
   }
   const configured = params.dbPath?.trim();
@@ -306,7 +314,6 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     log: (message) => runtime.log?.(warn(message)),
   });
   const dmPolicy = imessageCfg.dmPolicy ?? "pairing";
-  const catchupCfg = resolveCatchupConfig(imessageCfg.catchup);
   const includeAttachments = opts.includeAttachments ?? imessageCfg.includeAttachments ?? false;
   const mediaMaxBytes = (opts.mediaMaxMb ?? imessageCfg.mediaMaxMb ?? 16) * 1024 * 1024;
   const cliPath = opts.cliPath ?? imessageCfg.cliPath ?? "imsg";
@@ -340,12 +347,21 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       logVerbose(`imessage: detected remoteHost=${remoteHost} from cliPath`);
     }
   }
-  const watchSourceDbPath = resolveIMessageWatchSourceDbPath({
-    catchupEnabled: catchupCfg.enabled,
-    cliPath,
-    dbPath,
-    remoteHost,
-  });
+  // Inbound replay guard: dedupes already-seen messages (imsg re-emitting a
+  // recent row on reconnect) so a recovered bridge cannot re-dispatch them.
+  // The stale-backlog age fence in `handleMessage` covers the rows this guard
+  // structurally cannot (messages sent while the gateway was down, never seen,
+  // delivered late with old send dates).
+  const inboundReplayGuard = createIMessageInboundReplayGuard();
+  let staleBacklogSuppressed = 0;
+
+  // Startup rowid watermark captured BEFORE the (possibly multi-second)
+  // transport-ready probe, then passed to watch.subscribe as since_rowid. imsg
+  // otherwise self-fences at MAX(ROWID) as of subscribe time, which would skip
+  // any message that lands during the startup/probe/retry window. Local only;
+  // a remote bridge cannot read chat.db so that window falls back to imsg's
+  // self-fence. The age fence still suppresses genuinely old backlog.
+  const watchSourceDbPath = resolveIMessageWatchSourceDbPath({ cliPath, dbPath, remoteHost });
   const watchStartupRowidWatermark = watchSourceDbPath
     ? await resolveIMessageStartupRowidWatermark(watchSourceDbPath)
     : null;
@@ -371,6 +387,11 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
 
   const { debouncer: inboundDebouncer } = createChannelInboundDebouncer<{
     message: IMessagePayload;
+    // Exact replay-guard key claimed for this row at ingestion (GUID or, for a
+    // GUID-less row, the composite fallback). Carried through so flush commits
+    // or releases the same key it claimed, even after coalescing rewrites the
+    // payload identity. null when the row had no derivable key (fail open).
+    replayKey: string | null;
   }>({
     cfg,
     channel: "imessage",
@@ -427,15 +448,44 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       if (entries.length === 0) {
         return;
       }
+      // Dispatch one unit (a single row or a coalesced bucket), then commit the
+      // exact replay keys that were claimed at ingestion, or release them if
+      // dispatch throws so a transient failure can retry on a later re-emit. Per
+      // unit so a failure in one bucket entry cannot strand another's claim.
+      const dispatchUnit = async (
+        unitEntries: { message: IMessagePayload; replayKey: string | null }[],
+        message: IMessagePayload,
+      ) => {
+        const keys = unitEntries
+          .map((entry) => entry.replayKey)
+          .filter((key): key is string => key !== null);
+        try {
+          await handleMessageNow(message);
+          await commitIMessageInboundReplay({
+            guard: inboundReplayGuard,
+            accountId: accountInfo.accountId,
+            keys,
+          });
+        } catch (err) {
+          releaseIMessageInboundReplay({
+            guard: inboundReplayGuard,
+            accountId: accountInfo.accountId,
+            keys,
+            error: err,
+          });
+          runtime.error?.(`imessage: inbound dispatch failed: ${String(err)}`);
+        }
+      };
+
       if (entries.length === 1) {
-        await handleMessageNow(entries[0].message);
+        await dispatchUnit(entries, entries[0].message);
         return;
       }
 
       const messages = entries.map((e) => e.message);
       if (!shouldCombineIMessagePayloadBucket(messages, imsgEmitsBalloonMetadata)) {
-        for (const message of messages) {
-          await handleMessageNow(message);
+        for (const entry of entries) {
+          await dispatchUnit([entry], entry.message);
         }
         return;
       }
@@ -447,7 +497,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
         const ellipsis = text.length > 50 ? "..." : "";
         logVerbose(`[imessage] coalesced ${entries.length} messages: "${preview}${ellipsis}"`);
       }
-      await handleMessageNow(combined);
+      await dispatchUnit(entries, combined);
     },
     onError: (err) => {
       runtime.error?.(`imessage debounce flush failed: ${String(err)}`);
@@ -456,9 +506,6 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
 
   let client: IMessageRpcClient | undefined;
   let detachAbortHandler = () => {};
-  let liveCatchupCursorAdvanceEnabled = false;
-  let startupCatchupInProgress = false;
-  const pendingLiveCatchupCursorAdvances: Array<{ lastSeenMs: number; lastSeenRowid: number }> = [];
   const getActiveClient = () => {
     if (!client) {
       throw new Error("imessage monitor client not initialized");
@@ -476,72 +523,8 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     });
   }
 
-  function resolveLiveCatchupCursor(
-    message: IMessagePayload,
-  ): { lastSeenMs: number; lastSeenRowid: number } | null {
-    const coalescedCursor = (
-      message as {
-        coalescedCatchupCursor?: { lastSeenMs?: unknown; lastSeenRowid?: unknown };
-      }
-    ).coalescedCatchupCursor;
-    const rowid =
-      typeof coalescedCursor?.lastSeenRowid === "number" &&
-      Number.isFinite(coalescedCursor.lastSeenRowid)
-        ? coalescedCursor.lastSeenRowid
-        : typeof message.id === "number" && Number.isFinite(message.id)
-          ? message.id
-          : null;
-    const dateMs =
-      typeof coalescedCursor?.lastSeenMs === "number" && Number.isFinite(coalescedCursor.lastSeenMs)
-        ? coalescedCursor.lastSeenMs
-        : typeof message.created_at === "string"
-          ? Date.parse(message.created_at)
-          : Number.NaN;
-    if (rowid === null || !Number.isFinite(dateMs)) {
-      return null;
-    }
-    return { lastSeenMs: dateMs, lastSeenRowid: rowid };
-  }
-
-  async function maybeAdvanceLiveCatchupCursor(message: IMessagePayload): Promise<void> {
-    if (!catchupCfg.enabled) {
-      return;
-    }
-    const cursor = resolveLiveCatchupCursor(message);
-    if (!cursor) {
-      return;
-    }
-    if (!liveCatchupCursorAdvanceEnabled) {
-      if (startupCatchupInProgress) {
-        pendingLiveCatchupCursorAdvances.push(cursor);
-      }
-      return;
-    }
-    try {
-      await advanceIMessageCatchupCursor(accountInfo.accountId, cursor, catchupCfg);
-    } catch (err) {
-      runtime.error?.(`imessage catchup: failed to advance live cursor: ${String(err)}`);
-    }
-  }
-
-  async function flushPendingLiveCatchupCursorAdvances(): Promise<void> {
-    for (const cursor of pendingLiveCatchupCursorAdvances.splice(0)) {
-      try {
-        await advanceIMessageCatchupCursor(accountInfo.accountId, cursor, catchupCfg);
-      } catch (err) {
-        runtime.error?.(`imessage catchup: failed to advance pending live cursor: ${String(err)}`);
-      }
-    }
-  }
-
-  async function handleMessageNow(
-    message: IMessagePayload,
-    options: { advanceCatchupCursor?: boolean } = {},
-  ) {
+  async function handleMessageNow(message: IMessagePayload) {
     await handleMessageNowInner(message);
-    if (options.advanceCatchupCursor !== false) {
-      await maybeAdvanceLiveCatchupCursor(message);
-    }
   }
 
   async function handleMessageNowInner(rawMessage: IMessagePayload) {
@@ -1058,14 +1041,17 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     if (!imsgEmitsBalloonMetadata && hasIMessageBalloonMetadata(message)) {
       imsgEmitsBalloonMetadata = true;
     }
-    if (
-      watchStartupRowidWatermark !== null &&
-      typeof message.id === "number" &&
-      Number.isFinite(message.id) &&
-      message.id <= watchStartupRowidWatermark
-    ) {
-      logVerbose(
-        `imessage: dropping stale watch notification at or before startup rowid account=${accountInfo.accountId}`,
+    // Age fence: Apple delivers a burst of old backlog (fresh rowid, original
+    // old send date) on the live watch after a bridge/Push recovery. Suppress
+    // it so it is not dispatched as fresh user requests. Logged at default
+    // level so suppressed traffic is never silent (issue #89237).
+    if (isStaleIMessageBacklog(message, Date.now())) {
+      staleBacklogSuppressed += 1;
+      runtime.log?.(
+        warn(
+          `imessage: suppressed stale inbound backlog account=${accountInfo.accountId} ` +
+            `sent=${message.created_at ?? "unknown"} (${staleBacklogSuppressed} suppressed since start)`,
+        ),
       );
       return;
     }
@@ -1073,7 +1059,25 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     if (!repairedMessage) {
       return;
     }
-    await inboundDebouncer.enqueue({ message: repairedMessage });
+    // Replay dedupe: a recovered bridge can re-emit a row already dispatched.
+    // GUID-keyed (survives chat.db rowid churn) and persistent (holds across a
+    // restart). Claim atomically here so two copies in a reconnect burst cannot
+    // both pass; the claim is committed after handling and released on a
+    // transient dispatch failure (see handleMessageNow) so a failed message can
+    // still retry on a later re-emit. Claimed only once we will actually enqueue
+    // so a dropped row never leaks an uncommitted claim.
+    const replay = await claimIMessageInboundReplay({
+      guard: inboundReplayGuard,
+      accountId: accountInfo.accountId,
+      message: repairedMessage,
+    });
+    if (!replay.claimed) {
+      logVerbose(
+        `imessage: dropping duplicate inbound notification account=${accountInfo.accountId}`,
+      );
+      return;
+    }
+    await inboundDebouncer.enqueue({ message: repairedMessage, replayKey: replay.key });
   };
 
   await waitForTransportReady({
@@ -1142,6 +1146,14 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
         client: attemptClient,
         getSubscriptionId: () => attemptSubscriptionId,
       });
+      // since_rowid = the watermark captured before the transport-ready probe,
+      // so imsg replays messages that landed during the startup window instead
+      // of self-fencing them at subscribe-time MAX(ROWID). When the watermark
+      // is unavailable (remote bridge) imsg self-fences at the current
+      // MAX(ROWID) (MessageWatcher.start: `if cursor == 0 { cursor = maxRowID() }`),
+      // so it tails new rows only. Either way, backlog Apple writes *after*
+      // subscribe (fresh rowid, old send date) is handled by the stale-backlog
+      // age fence in handleMessage, not by since_rowid.
       const result = await attemptClient.request<{ subscription?: number }>(
         "watch.subscribe",
         {
@@ -1242,44 +1254,6 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     void pollApprovalReactions(true);
   }, APPROVAL_REACTION_DISCOVERY_INTERVAL_MS);
   void pollApprovalReactions(true);
-
-  // Catchup runs once between watch.subscribe and the live dispatch loop.
-  // Anything that arrives during the catchup pass itself flows through
-  // `handleMessage` -> `handleMessageNow`; the inbound-dedupe cache absorbs
-  // any overlap with replayed rows. Disabled by default — opt-in via
-  // `channels.imessage.catchup.enabled`. See issue #78649.
-  if (catchupCfg.enabled && !abort?.aborted) {
-    startupCatchupInProgress = true;
-    try {
-      const catchupSummary = await runIMessageCatchup({
-        client: activeClient,
-        accountId: accountInfo.accountId,
-        config: catchupCfg,
-        includeAttachments,
-        // Catchup bypasses the inbound debouncer so each row is awaited
-        // serially and dispatch failure can hold the cursor. Split-sends
-        // from before the gateway gap therefore arrive as separate turns
-        // rather than coalesced. Live notifications continue to flow through
-        // the debouncer.
-        dispatchPayload: (message) => handleMessageNow(message, { advanceCatchupCursor: false }),
-        runtime,
-      });
-      liveCatchupCursorAdvanceEnabled =
-        catchupSummary.querySucceeded && catchupSummary.fullyCaughtUp;
-      if (liveCatchupCursorAdvanceEnabled) {
-        await flushPendingLiveCatchupCursorAdvances();
-      } else {
-        pendingLiveCatchupCursorAdvances.length = 0;
-      }
-    } catch (err) {
-      pendingLiveCatchupCursorAdvances.length = 0;
-      // Catchup is opt-in recovery — surface the error but do not block the
-      // monitor. The live dispatch loop is already up and running.
-      runtime.error?.(`imessage catchup: pass failed: ${String(err)}`);
-    } finally {
-      startupCatchupInProgress = false;
-    }
-  }
 
   try {
     await activeClient.waitForClose();

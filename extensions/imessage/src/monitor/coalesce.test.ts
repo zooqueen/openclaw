@@ -103,10 +103,6 @@ describe("combineIMessagePayloads", () => {
     expect(merged.guid).toBe("row-1");
     expect(merged.created_at).toBe("2025-01-01T00:00:01.500Z");
     expect(merged.coalescedMessageGuids).toEqual(["row-1", "row-2"]);
-    expect(merged.coalescedCatchupCursor).toEqual({
-      lastSeenMs: Date.parse("2025-01-01T00:00:01.500Z"),
-      lastSeenRowid: 42,
-    });
   });
 
   it("preserves attachments instead of dropping them on merge", () => {
@@ -179,7 +175,6 @@ describe("combineIMessagePayloads", () => {
     expect(merged.text).toContain("msg 0");
     expect(merged.text).toContain("msg 24");
     expect(merged.text).not.toContain("msg 10"); // dropped by cap
-    expect(merged.coalescedCatchupCursor?.lastSeenRowid).toBe(24);
   });
 
   it("preserves reply context from any entry that carries one", () => {
