@@ -1379,10 +1379,16 @@ export function assertKitchenSinkUiDescriptors(payload, options = {}) {
   }
   const descriptor = descriptorPayload.descriptors.find((entry) => entry?.pluginId === PLUGIN_ID);
   if (!descriptor) {
+    return undefined;
+  }
+  const missingFields = ["id", "surface", "label"].filter(
+    (field) => !isNonEmptyString(descriptor[field]),
+  );
+  if (missingFields.length > 0) {
     throw new Error(
-      `plugins.uiDescriptors did not report Kitchen Sink descriptor for ${PLUGIN_ID}: ${boundedJsonPreview(
-        descriptorPayload.descriptors,
-      )}`,
+      `plugins.uiDescriptors reported incomplete Kitchen Sink descriptor for ${PLUGIN_ID}; missing ${missingFields.join(
+        ", ",
+      )}: ${boundedJsonPreview(descriptor)}`,
     );
   }
   return descriptor;
