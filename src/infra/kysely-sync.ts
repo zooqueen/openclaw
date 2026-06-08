@@ -18,7 +18,7 @@ export function getNodeSqliteKysely<Database>(db: DatabaseSync): Kysely<Database
     return existing as Kysely<Database>;
   }
   const kysely = new KyselyInstance<Database>({
-    dialect: new NodeSqliteKyselyDialect({ database: db }),
+    dialect: new NodeSqliteKyselyDialect(),
   });
   kyselyByDatabase.set(db, kysely as Kysely<unknown>);
   return kysely;
