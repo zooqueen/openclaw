@@ -54,7 +54,6 @@ type WebMediaOptions = {
   fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   requestInit?: RequestInit;
   readIdleTimeoutMs?: number;
-  trustExplicitProxyDns?: boolean;
   workspaceDir?: string;
   /** Allowed root directories for local path reads. "any" is deprecated; prefer sandboxValidated + readFile. */
   localRoots?: readonly string[] | "any";
@@ -851,7 +850,6 @@ async function loadWebMediaInternal(
     fetchImpl,
     requestInit,
     readIdleTimeoutMs,
-    trustExplicitProxyDns,
     workspaceDir,
     localRoots,
     inboundRoots,
@@ -986,7 +984,6 @@ async function loadWebMediaInternal(
       maxBytes: fetchCap,
       ssrfPolicy,
       dispatcherPolicy,
-      trustExplicitProxyDns,
     });
     const { buffer, contentType, fileName } = fetched;
     const kind = kindFromMime(contentType);

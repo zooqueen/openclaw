@@ -5,7 +5,6 @@ import { applyTemplate } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { LinkModelConfig, LinkToolsConfig } from "../config/types.tools.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
-import { fetchWithSsrFGuard, GUARDED_FETCH_MODE } from "../infra/net/fetch-guard.js";
 import { CLI_OUTPUT_MAX_BUFFER } from "../media-understanding/defaults.js";
 import { resolveTimeoutMs } from "../media-understanding/resolve.js";
 import {
@@ -13,6 +12,7 @@ import {
   resolveMediaUnderstandingScope,
 } from "../media-understanding/scope.js";
 import { runCommandWithTimeout } from "../process/exec.js";
+import { buildTimeoutAbortSignal } from "../utils/fetch-timeout.js";
 import { DEFAULT_LINK_TIMEOUT_SECONDS } from "./defaults.js";
 import { extractLinksFromMessage } from "./detect.js";
 
@@ -73,19 +73,20 @@ async function fetchLinkContent(params: {
   timeoutMs: number;
   url: string;
 }): Promise<{ content: string; finalUrl: string } | null> {
-  const { response, finalUrl, release } = await fetchWithSsrFGuard({
-    url: params.url,
+  const timeout = buildTimeoutAbortSignal({
     timeoutMs: params.timeoutMs,
-    mode: GUARDED_FETCH_MODE.STRICT,
-    auditContext: "link-understanding",
-    init: {
+    operation: "link-understanding",
+    url: params.url,
+  });
+  let response: Response | undefined;
+  try {
+    response = await fetch(params.url, {
       headers: {
         Accept: "text/*,application/json,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent": "OpenClaw-LinkUnderstanding/1.0",
       },
-    },
-  });
-  try {
+      ...(timeout.signal ? { signal: timeout.signal } : {}),
+    });
     if (!response.ok) {
       throw new Error(`Link fetch failed with HTTP ${response.status}`);
     }
@@ -94,9 +95,10 @@ async function fetchLinkContent(params: {
     if (!content) {
       return null;
     }
-    return { content, finalUrl };
+    return { content, finalUrl: response.url || params.url };
   } finally {
-    await release();
+    timeout.cleanup();
+    await response?.body?.cancel().catch(() => undefined);
   }
 }
 

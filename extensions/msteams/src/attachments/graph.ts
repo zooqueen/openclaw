@@ -1,5 +1,7 @@
 // Msteams plugin module implements graph behavior.
-import { fetchWithSsrFGuard, type SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
+
+import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalLowercaseString,
@@ -128,14 +130,12 @@ async function fetchGraphCollection(params: {
   ssrfPolicy?: SsrFPolicy;
 }): Promise<{ status: number; items: unknown[] }> {
   const fetchFn = params.fetchFn ?? fetch;
-  const { response, release } = await fetchWithSsrFGuard({
+  const { response, release } = await fetchWithResponseRelease({
     url: params.url,
     fetchImpl: fetchFn,
     init: {
       headers: ensureUserAgentHeader({ Authorization: `Bearer ${params.accessToken}` }),
     },
-    policy: params.ssrfPolicy,
-    auditContext: "msteams.graph.collection",
   });
   try {
     const status = response.status;
@@ -214,14 +214,12 @@ async function downloadGraphHostedContent(params: {
       // contentBytes not inline — fetch from the individual $value endpoint.
       try {
         const valueUrl = `${params.messageUrl}/hostedContents/${encodeURIComponent(item.id)}/$value`;
-        const { response: valRes, release } = await fetchWithSsrFGuard({
+        const { response: valRes, release } = await fetchWithResponseRelease({
           url: valueUrl,
           fetchImpl: params.fetchFn ?? fetch,
           init: {
             headers: ensureUserAgentHeader({ Authorization: `Bearer ${params.accessToken}` }),
           },
-          policy: params.ssrfPolicy,
-          auditContext: "msteams.graph.hostedContent.value",
         });
         try {
           if (!valRes.ok) {
@@ -328,14 +326,12 @@ export async function downloadMSTeamsGraphMedia(params: {
   let messageAttachments: GraphAttachment[] = [];
   let messageStatus: number | undefined;
   try {
-    const { response: msgRes, release } = await fetchWithSsrFGuard({
+    const { response: msgRes, release } = await fetchWithResponseRelease({
       url: messageUrl,
       fetchImpl: fetchFn,
       init: {
         headers: ensureUserAgentHeader({ Authorization: `Bearer ${accessToken}` }),
       },
-      policy: ssrfPolicy,
-      auditContext: "msteams.graph.message",
     });
     try {
       messageStatus = msgRes.status;

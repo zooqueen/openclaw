@@ -1,4 +1,4 @@
-// Verifies guarded provider fetch wiring, stream cleanup, proxy, and local service behavior.
+// Verifies provider fetch wiring, stream cleanup, proxy, and local service behavior.
 import { MAX_TIMER_TIMEOUT_MS } from "@openclaw/normalization-core/number-coercion";
 import { Stream } from "openai/streaming";
 import type { Model } from "openclaw/plugin-sdk/llm";
@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildGuardedModelFetch } from "./provider-transport-fetch.js";
 
 type ProviderRequestPolicyConfigMockResult = {
-  allowPrivateNetwork: boolean;
-  privateNetworkExplicitlyDenied?: boolean;
   policy?: {
     endpointClass?: string;
   };
@@ -15,12 +13,12 @@ type ProviderRequestPolicyConfigMockResult = {
 
 const {
   buildProviderRequestDispatcherPolicyMock,
+  captureHttpExchangeMock,
   fetchWithSsrFGuardMock,
   ensureModelProviderLocalServiceMock,
   mergeModelProviderRequestOverridesMock,
   resolveProviderRequestPolicyConfigMock,
   shouldUseEnvHttpProxyForUrlMock,
-  withTrustedEnvProxyGuardedFetchModeMock,
   managedStreamCleanupRegistrations,
 } = vi.hoisted(() => {
   // Mock FinalizationRegistry so stream cleanup registrations are directly assertable.
@@ -55,8 +53,9 @@ const {
 
   return {
     buildProviderRequestDispatcherPolicyMock: vi.fn<
-      (_request?: unknown) => { mode: "direct" } | undefined
+      (_request?: unknown) => { mode: "direct"; connect?: Record<string, unknown> } | undefined
     >(() => undefined),
+    captureHttpExchangeMock: vi.fn(),
     fetchWithSsrFGuardMock: vi.fn(),
     ensureModelProviderLocalServiceMock: vi.fn(),
     mergeModelProviderRequestOverridesMock: vi.fn((current, overrides) => ({
@@ -64,26 +63,25 @@ const {
       ...overrides,
     })),
     resolveProviderRequestPolicyConfigMock: vi.fn<() => ProviderRequestPolicyConfigMockResult>(
-      () => ({
-        allowPrivateNetwork: false,
-      }),
+      () => ({}),
     ),
     shouldUseEnvHttpProxyForUrlMock: vi.fn(() => false),
-    withTrustedEnvProxyGuardedFetchModeMock: vi.fn((params: Record<string, unknown>) => ({
-      ...params,
-      mode: "trusted_env_proxy",
-    })),
     managedStreamCleanupRegistrations: managedStreamCleanupRegistrationsLocal,
   };
 });
 
 vi.mock("../infra/net/fetch-guard.js", () => ({
   fetchWithSsrFGuard: fetchWithSsrFGuardMock,
-  withTrustedEnvProxyGuardedFetchMode: withTrustedEnvProxyGuardedFetchModeMock,
 }));
 
-vi.mock("../infra/net/proxy-env.js", () => ({
+vi.mock("../infra/net/proxy-env.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../infra/net/proxy-env.js")>()),
   shouldUseEnvHttpProxyForUrl: shouldUseEnvHttpProxyForUrlMock,
+}));
+
+vi.mock("../proxy-capture/runtime.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../proxy-capture/runtime.js")>()),
+  captureHttpExchange: captureHttpExchangeMock,
 }));
 
 vi.mock("./provider-local-service.js", () => ({
@@ -98,26 +96,23 @@ vi.mock("./provider-request-config.js", () => ({
 }));
 
 function latestGuardedFetchParams(): Record<string, unknown> {
-  // All transport calls should pass through the SSRF-guarded fetch seam.
   const calls = fetchWithSsrFGuardMock.mock.calls;
   const params = calls[calls.length - 1]?.[0];
   if (!params || typeof params !== "object") {
-    throw new Error("Expected guarded fetch call");
-  }
-  return params;
-}
-
-function latestTrustedEnvProxyParams(): Record<string, unknown> {
-  const calls = withTrustedEnvProxyGuardedFetchModeMock.mock.calls;
-  const params = calls[calls.length - 1]?.[0];
-  if (!params || typeof params !== "object") {
-    throw new Error("Expected trusted env proxy call");
+    throw new Error("Expected runtime fetch call");
   }
   return params;
 }
 
 function responseStreamText(text: string): ReadableStream<Uint8Array> {
   return responseStreamChunks([text]);
+}
+
+function redirectResponse(location: string, status = 307): Response {
+  return new Response(null, {
+    status,
+    headers: { location },
+  });
 }
 
 function responseStreamChunks(chunks: string[]): ReadableStream<Uint8Array> {
@@ -160,24 +155,34 @@ describe("buildGuardedModelFetch", () => {
       finalUrl: "https://api.openai.com/v1/responses",
       release: vi.fn(async () => undefined),
     });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        const result = await fetchWithSsrFGuardMock({
+          url,
+          init: input instanceof Request ? new Request(input, init) : init,
+        });
+        return result.response;
+      }),
+    );
     ensureModelProviderLocalServiceMock.mockReset().mockResolvedValue(undefined);
     buildProviderRequestDispatcherPolicyMock.mockClear().mockReturnValue(undefined);
+    captureHttpExchangeMock.mockClear();
     mergeModelProviderRequestOverridesMock.mockClear();
-    resolveProviderRequestPolicyConfigMock
-      .mockClear()
-      .mockReturnValue({ allowPrivateNetwork: false });
+    resolveProviderRequestPolicyConfigMock.mockClear().mockReturnValue({});
     shouldUseEnvHttpProxyForUrlMock.mockClear().mockReturnValue(false);
-    withTrustedEnvProxyGuardedFetchModeMock.mockClear();
     delete process.env.OPENCLAW_DEBUG_PROXY_ENABLED;
     delete process.env.OPENCLAW_DEBUG_PROXY_URL;
     delete process.env.OPENCLAW_SDK_RETRY_MAX_WAIT_SECONDS;
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     delete process.env.OPENCLAW_SDK_RETRY_MAX_WAIT_SECONDS;
   });
 
-  it("pushes provider capture metadata into the shared guarded fetch seam", async () => {
+  it("sends provider requests through the runtime fetch path", async () => {
     const model = {
       id: "gpt-5.4",
       provider: "openai",
@@ -194,13 +199,7 @@ describe("buildGuardedModelFetch", () => {
 
     const params = latestGuardedFetchParams();
     expect(params.url).toBe("https://api.openai.com/v1/responses");
-    expect(params.capture).toEqual({
-      meta: {
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-      },
-    });
+    expect(params.init).toMatchObject({ method: "POST" });
   });
 
   it("rejects successful streamed OpenAI-compatible responses with HTML content", async () => {
@@ -239,7 +238,6 @@ describe("buildGuardedModelFetch", () => {
     });
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toMatch(/baseUrl.*\/v1 path prefix/);
-    expect(release).toHaveBeenCalled();
   });
 
   it("allows missing content-type when streamed OpenAI-compatible responses contain SSE", async () => {
@@ -397,7 +395,6 @@ describe("buildGuardedModelFetch", () => {
       code: "invalid_provider_content_type",
       errorType: "invalid_response",
     });
-    expect(release).toHaveBeenCalled();
   });
 
   it("ensures configured local services before the model request", async () => {
@@ -419,6 +416,33 @@ describe("buildGuardedModelFetch", () => {
     expect(ensureModelProviderLocalServiceMock).toHaveBeenCalledWith(model, undefined, undefined);
     expect(fetchWithSsrFGuardMock).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1));
+  });
+
+  it("starts the provider fetch timeout after local service startup", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    let startupSetTimeoutCalls = -1;
+    ensureModelProviderLocalServiceMock.mockImplementationOnce(async () => {
+      startupSetTimeoutCalls = setTimeoutSpy.mock.calls.length;
+      return undefined;
+    });
+    const model = {
+      id: "qwen3:32b",
+      provider: "ollama",
+      api: "ollama",
+      baseUrl: "http://127.0.0.1:11434",
+      requestTimeoutMs: 300_000,
+    } as unknown as Model<"ollama">;
+
+    try {
+      const fetcher = buildGuardedModelFetch(model);
+      const response = await fetcher("http://127.0.0.1:11434/api/chat", { method: "POST" });
+      await response.text();
+
+      expect(startupSetTimeoutCalls).toBe(0);
+      expect(setTimeoutSpy).toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
   });
 
   it("releases guarded fetch slots when streamed bodies are abandoned", async () => {
@@ -458,7 +482,6 @@ describe("buildGuardedModelFetch", () => {
     expect(registration).toBeDefined();
     await registration?.held.finalize();
 
-    expect(release).toHaveBeenCalledTimes(1);
     expect(managedStreamCleanupRegistrations).toHaveLength(0);
   });
 
@@ -531,9 +554,7 @@ describe("buildGuardedModelFetch", () => {
         timeoutController.signal,
       );
       const params = latestGuardedFetchParams();
-      expect(params.timeoutMs).toBe(750);
-      expect(params.signal).toBeUndefined();
-      expect((params.init as RequestInit | undefined)?.signal).toBeUndefined();
+      expect((params.init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal);
     } finally {
       timeoutSpy.mockRestore();
     }
@@ -562,7 +583,9 @@ describe("buildGuardedModelFetch", () => {
         undefined,
         timeoutController.signal,
       );
-      expect(latestGuardedFetchParams().timeoutMs).toBe(MAX_TIMER_TIMEOUT_MS);
+      expect((latestGuardedFetchParams().init as RequestInit | undefined)?.signal).toBeInstanceOf(
+        AbortSignal,
+      );
     } finally {
       timeoutSpy.mockRestore();
     }
@@ -587,7 +610,7 @@ describe("buildGuardedModelFetch", () => {
 
       expect(timeoutSpy).not.toHaveBeenCalled();
       expect(ensureModelProviderLocalServiceMock).toHaveBeenCalledWith(model, undefined, undefined);
-      expect(latestGuardedFetchParams().timeoutMs).toBeUndefined();
+      expect((latestGuardedFetchParams().init as RequestInit | undefined)?.signal).toBeUndefined();
     } finally {
       timeoutSpy.mockRestore();
     }
@@ -622,8 +645,7 @@ describe("buildGuardedModelFetch", () => {
         combinedController.signal,
       );
       const params = latestGuardedFetchParams();
-      expect(params.signal).toBe(callerController.signal);
-      expect((params.init as RequestInit | undefined)?.signal).toBe(callerController.signal);
+      expect((params.init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal);
     } finally {
       timeoutSpy.mockRestore();
       anySpy.mockRestore();
@@ -649,239 +671,8 @@ describe("buildGuardedModelFetch", () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
-  it("scopes fake-IP DNS exemptions to the configured provider host", async () => {
-    const model = {
-      id: "gpt-5.4",
-      provider: "openai",
-      api: "openai-responses",
-      baseUrl: "https://api.openai.com/v1",
-    } as unknown as Model<"openai-responses">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("https://api.openai.com/v1/responses", { method: "POST" });
-
-    const policy = latestGuardedFetchParams().policy as Record<string, unknown> | undefined;
-    expect(policy).toEqual({
-      allowRfc2544BenchmarkRange: true,
-      allowIpv6UniqueLocalRange: true,
-      hostnameAllowlist: ["api.openai.com"],
-    });
-    expect(policy?.allowedHostnames).toBeUndefined();
-    expect(policy?.allowPrivateNetwork).toBeUndefined();
-    expect(policy?.dangerouslyAllowPrivateNetwork).toBeUndefined();
-  });
-
-  it("does not apply fake-IP exemptions to non-provider hosts", async () => {
-    const model = {
-      id: "gpt-5.4",
-      provider: "openai",
-      api: "openai-responses",
-      baseUrl: "https://api.openai.com/v1",
-    } as unknown as Model<"openai-responses">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("https://uploads.openai.com/v1/files", { method: "POST" });
-
-    const policy = latestGuardedFetchParams().policy;
-    expect(policy).toBeUndefined();
-  });
-
-  it("trusts exact configured custom provider hosts without broad private-network opt-in", async () => {
+  it("does not pass internal SSRF policy payloads to provider requests", async () => {
     resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "custom" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "lmstudio",
-      api: "openai-completions",
-      baseUrl: "http://10.0.0.5:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://10.0.0.5:1234/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toEqual({
-      allowedOrigins: ["http://10.0.0.5:1234"],
-    });
-    expect(policy?.allowPrivateNetwork).toBeUndefined();
-    expect(policy?.dangerouslyAllowPrivateNetwork).toBeUndefined();
-  });
-
-  it("trusts exact configured HTTPS custom provider origins", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "custom" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "custom-vllm",
-      api: "openai-completions",
-      baseUrl: "https://10.0.0.5:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("https://10.0.0.5:1234/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toEqual({
-      allowedOrigins: ["https://10.0.0.5:1234"],
-    });
-  });
-
-  it("keeps explicit private-network denial ahead of configured custom origin trust", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      privateNetworkExplicitlyDenied: true,
-      policy: { endpointClass: "custom" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "lmstudio",
-      api: "openai-completions",
-      baseUrl: "http://10.0.0.5:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://10.0.0.5:1234/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toBeUndefined();
-  });
-
-  it("trusts exact configured local provider origins", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "local" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "lmstudio",
-      api: "openai-completions",
-      baseUrl: "http://127.0.0.1:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://127.0.0.1:1234/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toEqual({
-      allowedOrigins: ["http://127.0.0.1:1234"],
-    });
-  });
-
-  it("does not trust a configured provider host on a different port", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "custom" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "lmstudio",
-      api: "openai-completions",
-      baseUrl: "http://10.0.0.5:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://10.0.0.5:4321/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toBeUndefined();
-  });
-
-  it("does not add exact-origin trust for non-custom provider endpoints", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "openai-public" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "openai",
-      api: "openai-completions",
-      baseUrl: "http://10.0.0.5:1234/v1",
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://10.0.0.5:1234/v1/chat/completions", { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toBeUndefined();
-  });
-
-  it.each([
-    {
-      label: "link-local metadata IP",
-      baseUrl: "http://169.254.169.254/v1",
-      requestUrl: "http://169.254.169.254/v1/chat/completions",
-    },
-    {
-      label: "legacy link-local metadata IP",
-      baseUrl: "http://2852039166/v1",
-      requestUrl: "http://2852039166/v1/chat/completions",
-    },
-    {
-      label: "embedded IPv6 link-local metadata IP",
-      baseUrl: "http://[64:ff9b::a9fe:a9fe]/v1",
-      requestUrl: "http://[64:ff9b::a9fe:a9fe]/v1/chat/completions",
-    },
-    {
-      label: "non-link-local cloud metadata IP",
-      baseUrl: "http://100.100.100.200/v1",
-      requestUrl: "http://100.100.100.200/v1/chat/completions",
-    },
-    {
-      label: "IPv6 cloud metadata IP",
-      baseUrl: "http://[fd00:ec2::254]/v1",
-      requestUrl: "http://[fd00:ec2::254]/v1/chat/completions",
-    },
-    {
-      label: "embedded IPv6 cloud metadata IP",
-      baseUrl: "http://[64:ff9b::6464:64c8]/v1",
-      requestUrl: "http://[64:ff9b::6464:64c8]/v1/chat/completions",
-    },
-    {
-      label: "metadata hostname",
-      baseUrl: "http://metadata.google.internal/v1",
-      requestUrl: "http://metadata.google.internal/v1/chat/completions",
-    },
-    {
-      label: "metadata short hostname",
-      baseUrl: "http://metadata/v1",
-      requestUrl: "http://metadata/v1/chat/completions",
-    },
-    {
-      label: "metadata compound hostname",
-      baseUrl: "http://metadata-server.example/v1",
-      requestUrl: "http://metadata-server.example/v1/chat/completions",
-    },
-    {
-      label: "cloud instance-data hostname",
-      baseUrl: "http://instance-data.ec2.internal/v1",
-      requestUrl: "http://instance-data.ec2.internal/v1/chat/completions",
-    },
-  ])("does not add implicit exact-origin trust for $label", async (entry) => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: false,
-      policy: { endpointClass: "custom" },
-    });
-    const model = {
-      id: "qwen3:32b",
-      provider: "custom-metadata",
-      api: "openai-completions",
-      baseUrl: entry.baseUrl,
-    } as unknown as Model<"openai-completions">;
-
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher(entry.requestUrl, { method: "POST" });
-
-    const policy = fetchWithSsrFGuardMock.mock.calls[0]?.[0]?.policy;
-    expect(policy).toBeUndefined();
-  });
-
-  it("merges explicit private-network opt-in into the provider-host policies", async () => {
-    resolveProviderRequestPolicyConfigMock.mockReturnValueOnce({
-      allowPrivateNetwork: true,
       policy: { endpointClass: "custom" },
     });
     const model = {
@@ -894,15 +685,13 @@ describe("buildGuardedModelFetch", () => {
     const fetcher = buildGuardedModelFetch(model);
     await fetcher("http://10.0.0.5:11434/api/chat", { method: "POST" });
 
-    const policy = latestGuardedFetchParams().policy;
-    expect(policy).toEqual({
-      allowedOrigins: ["http://10.0.0.5:11434"],
-      allowPrivateNetwork: true,
-    });
+    const params = latestGuardedFetchParams();
+    expect(params.url).toBe("http://10.0.0.5:11434/api/chat");
+    expect(params.policy).toBeUndefined();
   });
 
-  it("uses trusted env-proxy mode for provider calls when no explicit dispatcher policy is configured", async () => {
-    shouldUseEnvHttpProxyForUrlMock.mockReturnValueOnce(true);
+  it("uses env proxy dispatch for provider calls when no explicit dispatcher policy is configured", async () => {
+    shouldUseEnvHttpProxyForUrlMock.mockReturnValue(true);
     const model = {
       id: "gpt-5.4",
       provider: "openai",
@@ -916,23 +705,18 @@ describe("buildGuardedModelFetch", () => {
     expect(shouldUseEnvHttpProxyForUrlMock).toHaveBeenCalledWith(
       "https://api.openai.com/v1/responses",
     );
-    const trustedParams = latestTrustedEnvProxyParams();
-    expect(trustedParams.url).toBe("https://api.openai.com/v1/responses");
-    expect(trustedParams.dispatcherPolicy).toBeUndefined();
-    expect(trustedParams.policy).toEqual({
-      allowRfc2544BenchmarkRange: true,
-      allowIpv6UniqueLocalRange: true,
-      hostnameAllowlist: ["api.openai.com"],
-    });
-
-    const guardedParams = latestGuardedFetchParams();
-    expect(guardedParams.url).toBe("https://api.openai.com/v1/responses");
-    expect(guardedParams.mode).toBe("trusted_env_proxy");
+    const params = latestGuardedFetchParams();
+    expect(params.url).toBe("https://api.openai.com/v1/responses");
+    expect((params.init as { dispatcher?: unknown } | undefined)?.dispatcher).toBeDefined();
+    expect(params.policy).toBeUndefined();
   });
 
-  it("keeps explicit provider dispatcher policies in strict guarded-fetch mode", async () => {
-    shouldUseEnvHttpProxyForUrlMock.mockReturnValueOnce(true);
-    buildProviderRequestDispatcherPolicyMock.mockReturnValueOnce({ mode: "direct" });
+  it("routes direct TLS dispatcher policies through env proxy when proxy routing applies", async () => {
+    shouldUseEnvHttpProxyForUrlMock.mockReturnValue(true);
+    buildProviderRequestDispatcherPolicyMock.mockReturnValueOnce({
+      mode: "direct",
+      connect: { ca: "test-ca" },
+    });
     const model = {
       id: "gpt-5.4",
       provider: "openai",
@@ -943,11 +727,26 @@ describe("buildGuardedModelFetch", () => {
     const fetcher = buildGuardedModelFetch(model);
     await fetcher("https://api.openai.com/v1/responses", { method: "POST" });
 
-    expect(withTrustedEnvProxyGuardedFetchModeMock).not.toHaveBeenCalled();
-    expect(latestGuardedFetchParams().dispatcherPolicy).toEqual({ mode: "direct" });
+    expect(shouldUseEnvHttpProxyForUrlMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/responses",
+    );
+    expect(
+      (latestGuardedFetchParams().init as { dispatcher?: unknown } | undefined)?.dispatcher,
+    ).toBeDefined();
   });
 
-  it("threads explicit transport timeouts into the shared guarded fetch seam", async () => {
+  it("strips custom auth headers and bodies on cross-origin provider redirects", async () => {
+    fetchWithSsrFGuardMock
+      .mockResolvedValueOnce({
+        response: redirectResponse("https://redirect.example/collect", 307),
+        finalUrl: "https://api.openai.com/v1/responses",
+        release: vi.fn(async () => undefined),
+      })
+      .mockResolvedValueOnce({
+        response: new Response("ok", { status: 200 }),
+        finalUrl: "https://redirect.example/collect",
+        release: vi.fn(async () => undefined),
+      });
     const model = {
       id: "gpt-5.4",
       provider: "openai",
@@ -955,13 +754,54 @@ describe("buildGuardedModelFetch", () => {
       baseUrl: "https://api.openai.com/v1",
     } as unknown as Model<"openai-responses">;
 
-    const fetcher = buildGuardedModelFetch(model, 123_456);
-    await fetcher("https://api.openai.com/v1/responses", { method: "POST" });
+    const fetcher = buildGuardedModelFetch(model);
+    await fetcher("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Api-Key": "secret",
+      },
+      body: JSON.stringify({ input: "hello" }),
+    });
 
-    expect(latestGuardedFetchParams().timeoutMs).toBe(123_456);
+    const secondCall = fetchWithSsrFGuardMock.mock.calls[1]?.[0] as
+      | { url?: string; init?: RequestInit }
+      | undefined;
+    expect(secondCall?.url).toBe("https://redirect.example/collect");
+    expect(secondCall?.init?.body).toBeUndefined();
+    const headers = new Headers(secondCall?.init?.headers);
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.has("content-type")).toBe(false);
+    expect(headers.has("x-api-key")).toBe(false);
   });
 
-  it("threads resolved provider timeout metadata into the shared guarded fetch seam", async () => {
+  it("threads explicit transport timeouts into request abort signals", async () => {
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
+    const model = {
+      id: "gpt-5.4",
+      provider: "openai",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+    } as unknown as Model<"openai-responses">;
+
+    try {
+      const fetcher = buildGuardedModelFetch(model, 123_456);
+      await fetcher("https://api.openai.com/v1/responses", { method: "POST" });
+
+      expect(timeoutSpy).toHaveBeenCalledWith(123_456);
+      expect((latestGuardedFetchParams().init as RequestInit | undefined)?.signal).toBeInstanceOf(
+        AbortSignal,
+      );
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it("threads resolved provider timeout metadata into request abort signals", async () => {
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
     const model = {
       id: "qwen3:32b",
       provider: "ollama",
@@ -970,10 +810,17 @@ describe("buildGuardedModelFetch", () => {
       requestTimeoutMs: 300_000,
     } as unknown as Model<"ollama">;
 
-    const fetcher = buildGuardedModelFetch(model);
-    await fetcher("http://127.0.0.1:11434/api/chat", { method: "POST" });
+    try {
+      const fetcher = buildGuardedModelFetch(model);
+      await fetcher("http://127.0.0.1:11434/api/chat", { method: "POST" });
 
-    expect(latestGuardedFetchParams().timeoutMs).toBe(300_000);
+      expect(timeoutSpy).toHaveBeenCalledWith(300_000);
+      expect((latestGuardedFetchParams().init as RequestInit | undefined)?.signal).toBeInstanceOf(
+        AbortSignal,
+      );
+    } finally {
+      timeoutSpy.mockRestore();
+    }
   });
 
   it("does not force explicit debug proxy overrides onto plain HTTP model transports", async () => {
@@ -996,6 +843,40 @@ describe("buildGuardedModelFetch", () => {
     expect(mergeModelProviderRequestOverridesMock).toHaveBeenCalledWith(undefined, {
       proxy: undefined,
     });
+  });
+
+  it("records model provider HTTP exchanges for debug proxy capture", async () => {
+    process.env.OPENCLAW_DEBUG_PROXY_ENABLED = "1";
+    const model = {
+      id: "gpt-5.4",
+      provider: "openai",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+    } as unknown as Model<"openai-responses">;
+
+    const fetcher = buildGuardedModelFetch(model);
+    await fetcher("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"input":"hello"}',
+    });
+
+    expect(captureHttpExchangeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://api.openai.com/v1/responses",
+        method: "POST",
+        requestBody: '{"input":"hello"}',
+        response: expect.any(Response),
+        transport: "http",
+        meta: {
+          captureOrigin: "provider-transport",
+          provider: "openai",
+          api: "openai-responses",
+          model: "gpt-5.4",
+        },
+      }),
+      expect.objectContaining({ enabled: true }),
+    );
   });
 
   it("drops event-only SSE frames before the OpenAI SDK stream parser sees them", async () => {
@@ -1300,9 +1181,8 @@ describe("buildGuardedModelFetch", () => {
     });
   });
 
-  it("refreshes the guarded timeout while consuming streaming response chunks", async () => {
+  it("continues consuming streaming response chunks after SSE sanitation", async () => {
     const encoder = new TextEncoder();
-    const refreshTimeout = vi.fn();
     fetchWithSsrFGuardMock.mockResolvedValue({
       response: new Response(
         new ReadableStream({
@@ -1316,7 +1196,6 @@ describe("buildGuardedModelFetch", () => {
       ),
       finalUrl: "https://api.openai.com/v1/chat/completions",
       release: vi.fn(async () => undefined),
-      refreshTimeout,
     });
     const model = {
       id: "gpt-5.4",
@@ -1335,7 +1214,6 @@ describe("buildGuardedModelFetch", () => {
     }
 
     expect(items).toEqual([{ ok: true }]);
-    expect(refreshTimeout).toHaveBeenCalledTimes(2);
   });
 
   describe("long retry-after handling", () => {

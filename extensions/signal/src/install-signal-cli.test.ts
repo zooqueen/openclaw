@@ -12,8 +12,8 @@ const { fetchWithSsrFGuardMock } = vi.hoisted(() => ({
   fetchWithSsrFGuardMock: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/ssrf-runtime", () => ({
-  fetchWithSsrFGuard: fetchWithSsrFGuardMock,
+vi.mock("openclaw/plugin-sdk/fetch-runtime", () => ({
+  fetchWithResponseRelease: fetchWithSsrFGuardMock,
 }));
 
 const {
@@ -195,10 +195,8 @@ describe("downloadToFile", () => {
     expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
       url: "https://example.com/signal-cli.tgz",
       maxRedirects: 5,
-      requireHttps: true,
       timeoutMs: 5 * 60_000,
-      capture: false,
-      auditContext: "signal-cli-install-archive",
+      validateUrl: expect.any(Function),
     });
     expect(fetchResult.release).toHaveBeenCalledTimes(1);
   });
@@ -290,10 +288,8 @@ describe("installSignalCliFromRelease", () => {
     expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
       url: "https://api.github.com/repos/AsamK/signal-cli/releases/latest",
       maxRedirects: 5,
-      requireHttps: true,
       timeoutMs: 30_000,
-      capture: false,
-      auditContext: "signal-cli-release-info",
+      validateUrl: expect.any(Function),
       init: {
         headers: {
           "User-Agent": "openclaw",

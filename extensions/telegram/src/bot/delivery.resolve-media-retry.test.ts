@@ -472,7 +472,6 @@ describe("resolveMedia getFile retry", () => {
     expectRecordFields(params, {
       fetchImpl: callerFetch,
       dispatcherAttempts,
-      trustExplicitProxyDns: true,
       readIdleTimeoutMs: 30_000,
     });
     expect(typeof params.shouldRetryFetchError).toBe("function");

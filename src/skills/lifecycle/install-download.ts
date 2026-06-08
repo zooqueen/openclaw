@@ -10,10 +10,10 @@ import { isWindowsDrivePath } from "../../infra/archive-path.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { root as fsRoot } from "../../infra/fs-safe.js";
 import { assertCanonicalPathWithinBase } from "../../infra/install-safe-path.js";
-import { fetchWithSsrFGuard } from "../../infra/net/fetch-guard.js";
 import { isWithinDir } from "../../infra/path-safety.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
 import { ensureDir, resolveUserPath } from "../../utils.js";
+import { buildTimeoutAbortSignal } from "../../utils/fetch-timeout.js";
 import { resolveSkillToolsRootDir } from "../runtime/tools-dir.js";
 import type { SkillEntry, SkillInstallSpec } from "../types.js";
 import { formatInstallFailureMessage } from "./install-output.js";
@@ -89,6 +89,10 @@ async function downloadFile(params: {
   relativePath: string;
   timeoutMs: number;
 }): Promise<{ bytes: number }> {
+  const parsedUrl = new URL(params.url);
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error("Download URL must use http or https");
+  }
   const destPath = path.resolve(params.rootDir, params.relativePath);
   const stagingDir = path.join(params.rootDir, ".openclaw-download-staging");
   await ensureDir(stagingDir);
@@ -98,11 +102,14 @@ async function downloadFile(params: {
     boundaryLabel: "skill tools directory",
   });
   const tempPath = path.join(stagingDir, `${randomUUID()}.tmp`);
-  const { response, release } = await fetchWithSsrFGuard({
-    url: params.url,
+  const timeout = buildTimeoutAbortSignal({
     timeoutMs: Math.max(1_000, params.timeoutMs),
+    operation: "skill-install-download",
+    url: params.url,
   });
+  let response: Response | undefined;
   try {
+    response = await fetch(params.url, timeout.signal ? { signal: timeout.signal } : {});
     if (!response.ok || !response.body) {
       await cancelIgnoredResponseBody(response);
       throw new Error(`Download failed (${response.status} ${response.statusText})`);
@@ -118,8 +125,11 @@ async function downloadFile(params: {
     const stat = await fs.promises.stat(destPath);
     return { bytes: stat.size };
   } finally {
+    timeout.cleanup();
     await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
-    await release();
+    if (response) {
+      await cancelIgnoredResponseBody(response);
+    }
   }
 }
 

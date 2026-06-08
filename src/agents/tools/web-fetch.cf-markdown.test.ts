@@ -113,7 +113,6 @@ describe("web_fetch Cloudflare Markdown for Agents", () => {
     global.fetch = withFetchPreconnect(fetchSpy);
 
     const tool = createWebFetchTool({
-      lookupFn: lookupMock as unknown as LookupFn,
       config: {
         plugins: {
           entries: {

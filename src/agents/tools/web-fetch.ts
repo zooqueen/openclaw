@@ -1,8 +1,9 @@
 /**
  * web_fetch built-in tool.
  *
- * Fetches HTTP(S) content through SSRF guards, provider config, caching, and bounded extraction.
+ * Fetches HTTP(S) content through provider config, caching, and bounded extraction.
  */
+import { finiteSecondsToTimerSafeMilliseconds } from "@openclaw/normalization-core/number-coercion";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalLowercaseString,
@@ -10,12 +11,12 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import { Type } from "typebox";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { SsrFBlockedError, type LookupFn, type SsrFPolicy } from "../../infra/net/ssrf.js";
 import { logDebug } from "../../logger.js";
 import type { RuntimeWebFetchMetadata } from "../../secrets/runtime-web-tools.types.js";
 import { wrapExternalContent, wrapWebContent } from "../../security/external-content.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
 import { isRecord } from "../../utils.js";
+import { buildTimeoutAbortSignal } from "../../utils/fetch-timeout.js";
 import { extractReadableContent } from "../../web-fetch/content-extractors.runtime.js";
 import { resolveWebProviderConfig } from "../../web/provider-runtime-shared.js";
 import { stringEnum } from "../schema/string-enum.js";
@@ -90,26 +91,12 @@ type WebFetchRuntimeModule = Pick<
   typeof import("../../web-fetch/runtime.js"),
   "resolveWebFetchDefinition"
 >;
-type WebGuardedFetchModule = Pick<
-  typeof import("./web-guarded-fetch.js"),
-  "fetchWithWebToolsNetworkGuard"
->;
-
 const webFetchRuntimeLoader = createLazyImportLoader<WebFetchRuntimeModule>(
   () => import("../../web-fetch/runtime.js"),
-);
-const webGuardedFetchLoader = createLazyImportLoader<WebGuardedFetchModule>(
-  () => import("./web-guarded-fetch.js"),
 );
 
 async function loadWebFetchRuntime(): Promise<WebFetchRuntimeModule> {
   return await webFetchRuntimeLoader.load();
-}
-
-async function loadWebGuardedFetch(): Promise<
-  WebGuardedFetchModule["fetchWithWebToolsNetworkGuard"]
-> {
-  return (await webGuardedFetchLoader.load()).fetchWithWebToolsNetworkGuard;
 }
 
 function resolveFetchConfig(cfg?: OpenClawConfig): WebFetchConfig {
@@ -128,10 +115,6 @@ function resolveFetchReadabilityEnabled(fetch?: WebFetchConfig): boolean {
     return fetch.readability;
   }
   return true;
-}
-
-function resolveFetchUseTrustedEnvProxy(fetch?: WebFetchConfig): boolean {
-  return fetch?.useTrustedEnvProxy === true;
 }
 
 function resolveFetchMaxCharsCap(fetch?: WebFetchConfig): number {
@@ -290,13 +273,7 @@ type WebFetchRuntimeParams = {
   userAgent: string;
   readabilityEnabled: boolean;
   config?: OpenClawConfig;
-  useTrustedEnvProxy: boolean;
-  ssrfPolicy?: {
-    allowRfc2544BenchmarkRange?: boolean;
-    allowIpv6UniqueLocalRange?: boolean;
-  };
   providerCacheKey?: string;
-  lookupFn?: LookupFn;
   signal?: AbortSignal;
   resolveProviderFallback: () => Promise<WebFetchProviderFallback>;
 };
@@ -418,19 +395,76 @@ async function maybeFetchProviderWebFetchPayload(
   return payload;
 }
 
+async function fetchWebUrl(params: {
+  url: string;
+  maxRedirects: number;
+  timeoutSeconds: number;
+  signal?: AbortSignal;
+  userAgent: string;
+}): Promise<{ response: Response; finalUrl: string; release: () => Promise<void> }> {
+  const timeoutMs = finiteSecondsToTimerSafeMilliseconds(params.timeoutSeconds, {
+    floorSeconds: true,
+  });
+  const timeout = buildTimeoutAbortSignal({
+    timeoutMs,
+    signal: params.signal,
+    operation: "web-fetch",
+    url: params.url,
+  });
+  let activeResponse: Response | null = null;
+  const release = async () => {
+    timeout.cleanup();
+    await activeResponse?.body?.cancel().catch(() => undefined);
+  };
+  let currentUrl = params.url;
+  let redirectCount = 0;
+  try {
+    while (true) {
+      assertWebFetchHttpUrl(currentUrl);
+      const response = await fetch(currentUrl, {
+        headers: {
+          Accept: "text/markdown, text/html;q=0.9, */*;q=0.1",
+          "User-Agent": params.userAgent,
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "manual",
+        ...(timeout.signal ? { signal: timeout.signal } : {}),
+      });
+      activeResponse = response;
+      if (![301, 302, 303, 307, 308].includes(response.status)) {
+        return { response, finalUrl: currentUrl, release };
+      }
+      const location = response.headers.get("location");
+      await response.body?.cancel().catch(() => undefined);
+      activeResponse = null;
+      if (!location) {
+        throw new Error(`Redirect missing location header (${response.status})`);
+      }
+      redirectCount += 1;
+      if (redirectCount > params.maxRedirects) {
+        throw new Error(`Too many redirects (limit: ${params.maxRedirects})`);
+      }
+      const nextUrl = new URL(location, currentUrl).toString();
+      assertWebFetchHttpUrl(nextUrl);
+      currentUrl = nextUrl;
+      timeout.refresh();
+    }
+  } catch (error) {
+    await release();
+    throw error;
+  }
+}
+
+function assertWebFetchHttpUrl(url: string): void {
+  const protocol = new URL(url).protocol;
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw new Error("web_fetch only supports http and https URLs");
+  }
+}
+
 async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string, unknown>> {
-  const allowRfc2544BenchmarkRange = params.ssrfPolicy?.allowRfc2544BenchmarkRange === true;
-  const allowIpv6UniqueLocalRange = params.ssrfPolicy?.allowIpv6UniqueLocalRange === true;
-  const useTrustedEnvProxy = params.useTrustedEnvProxy;
-  const ssrfPolicy: SsrFPolicy | undefined =
-    allowRfc2544BenchmarkRange || allowIpv6UniqueLocalRange
-      ? {
-          ...(allowRfc2544BenchmarkRange ? { allowRfc2544BenchmarkRange } : {}),
-          ...(allowIpv6UniqueLocalRange ? { allowIpv6UniqueLocalRange } : {}),
-        }
-      : undefined;
   const cacheKey = normalizeCacheKey(
-    `fetch:${params.url}:${params.extractMode}:${params.maxChars}${params.providerCacheKey ? `:provider:${params.providerCacheKey}` : ""}${allowRfc2544BenchmarkRange ? ":allow-rfc2544" : ""}${allowIpv6UniqueLocalRange ? ":allow-ipv6-ula" : ""}${useTrustedEnvProxy ? ":trusted-env-proxy" : ""}`,
+    `fetch:${params.url}:${params.extractMode}:${params.maxChars}${params.providerCacheKey ? `:provider:${params.providerCacheKey}` : ""}`,
   );
   const cached = readCache(FETCH_CACHE, cacheKey);
   if (cached) {
@@ -452,22 +486,12 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
   let release: (() => Promise<void>) | null;
   let finalUrl = params.url;
   try {
-    const fetchWithWebToolsNetworkGuard = await loadWebGuardedFetch();
-    const result = await fetchWithWebToolsNetworkGuard({
+    const result = await fetchWebUrl({
       url: params.url,
       maxRedirects: params.maxRedirects,
       timeoutSeconds: params.timeoutSeconds,
       signal: params.signal,
-      lookupFn: params.lookupFn,
-      useEnvProxy: useTrustedEnvProxy,
-      policy: ssrfPolicy,
-      init: {
-        headers: {
-          Accept: "text/markdown, text/html;q=0.9, */*;q=0.1",
-          "User-Agent": params.userAgent,
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      },
+      userAgent: params.userAgent,
     });
     res = result.response;
     finalUrl = result.finalUrl;
@@ -481,9 +505,6 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
       );
     }
   } catch (error) {
-    if (error instanceof SsrFBlockedError) {
-      throw error;
-    }
     if (params.signal?.aborted) {
       throw error;
     }
@@ -649,7 +670,6 @@ export function createWebFetchTool(options?: {
   sandboxed?: boolean;
   runtimeWebFetch?: RuntimeWebFetchMetadata;
   lateBindRuntimeConfig?: boolean;
-  lookupFn?: LookupFn;
 }): AnyAgentTool | null {
   const fetch = resolveFetchConfig(options?.config);
   if (!resolveFetchEnabled({ fetch, sandboxed: options?.sandboxed })) {
@@ -737,10 +757,7 @@ export function createWebFetchTool(options?: {
           userAgent,
           readabilityEnabled,
           config,
-          useTrustedEnvProxy: resolveFetchUseTrustedEnvProxy(executionFetch),
-          ssrfPolicy: executionFetch?.ssrfPolicy,
           ...(providerCacheKey ? { providerCacheKey } : {}),
-          lookupFn: options?.lookupFn,
           signal,
           resolveProviderFallback,
         });

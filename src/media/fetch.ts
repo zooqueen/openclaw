@@ -7,17 +7,35 @@ import {
   readResponseTextSnippet,
   readResponseWithLimit,
 } from "@openclaw/media-core/read-response-with-limit";
+import type { Dispatcher } from "undici";
 import { formatErrorMessage } from "../infra/errors.js";
+import { normalizeHostname } from "../infra/net/hostname.js";
+import { shouldUseEnvHttpProxyForUrl } from "../infra/net/proxy-env.js";
+import { retainSafeHeadersForCrossOriginRedirect } from "../infra/net/redirect-headers.js";
 import {
-  fetchWithSsrFGuard,
-  withStrictGuardedFetchMode,
-  withTrustedExplicitProxyGuardedFetchMode,
-} from "../infra/net/fetch-guard.js";
+  fetchWithRuntimeDispatcherOrMockedGlobal,
+  type DispatcherAwareRequestInit,
+} from "../infra/net/runtime-fetch.js";
+import {
+  closeDispatcher,
+  createPinnedDispatcher,
+  matchesHostnameAllowlist,
+  normalizeHostnameAllowlist,
+  resolvePinnedHostnameWithPolicy,
+  SsrFBlockedError,
+} from "../infra/net/ssrf.js";
 import type { LookupFn, PinnedDispatcherPolicy, SsrFPolicy } from "../infra/net/ssrf.js";
+import {
+  createHttp1Agent,
+  createHttp1EnvHttpProxyAgent,
+  createHttp1ProxyAgent,
+} from "../infra/net/undici-runtime.js";
 import { retryAsync, type RetryOptions } from "../infra/retry.js";
 import { isAbortError, isTransientNetworkError } from "../infra/unhandled-rejections.js";
 import { redactSensitiveText } from "../logging/redact.js";
+import { resolveDebugProxySettings } from "../proxy-capture/env.js";
 import { resolveTimerTimeoutMs } from "../shared/number-coercion.js";
+import { buildTimeoutAbortSignal } from "../utils/fetch-timeout.js";
 import { saveMediaBuffer, saveMediaStream, type SavedMedia } from "./store.js";
 
 /** Default remote media fetch cap shared by buffer reads and store writes. */
@@ -61,6 +79,60 @@ export class MediaFetchError extends Error {
 /** Fetch-compatible injection point used by tests and guarded network callers. */
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+function dropBodyHeaders(headers?: HeadersInit): HeadersInit | undefined {
+  if (!headers) {
+    return headers;
+  }
+  const nextHeaders = new Headers(headers);
+  nextHeaders.delete("content-encoding");
+  nextHeaders.delete("content-language");
+  nextHeaders.delete("content-length");
+  nextHeaders.delete("content-location");
+  nextHeaders.delete("content-type");
+  nextHeaders.delete("transfer-encoding");
+  return nextHeaders;
+}
+
+function rewriteRedirectInitForMethod(params: {
+  init?: RequestInit;
+  status: number;
+}): RequestInit | undefined {
+  const { init, status } = params;
+  if (!init) {
+    return init;
+  }
+  const currentMethod = init.method?.toUpperCase() ?? "GET";
+  const shouldForceGet =
+    status === 303
+      ? currentMethod !== "GET" && currentMethod !== "HEAD"
+      : (status === 301 || status === 302) && currentMethod === "POST";
+  if (!shouldForceGet) {
+    return init;
+  }
+  return {
+    ...init,
+    method: "GET",
+    body: undefined,
+    headers: dropBodyHeaders(init.headers),
+  };
+}
+
+function rewriteRedirectInitForCrossOrigin(init?: RequestInit): RequestInit | undefined {
+  if (!init) {
+    return init;
+  }
+  const safeHeaders = retainSafeHeadersForCrossOriginRedirect(init.headers);
+  const currentMethod = init.method?.toUpperCase() ?? "GET";
+  if (currentMethod === "GET" || currentMethod === "HEAD") {
+    return { ...init, headers: safeHeaders };
+  }
+  return {
+    ...init,
+    body: undefined,
+    headers: dropBodyHeaders(safeHeaders),
+  };
+}
+
 /** Alternate dispatcher/lookup pair tried inside a single guarded fetch attempt. */
 export type FetchDispatcherAttempt = {
   dispatcherPolicy?: PinnedDispatcherPolicy;
@@ -88,11 +160,6 @@ type FetchMediaOptions = {
    * attempts still run inside each retry attempt.
    */
   retry?: MediaFetchRetryOptions;
-  /**
-   * Allow an operator-configured explicit proxy to resolve target DNS after
-   * hostname-policy checks instead of forcing local pinned-DNS first.
-   */
-  trustExplicitProxyDns?: boolean;
 };
 
 /** Options for validating and saving an existing Response body into the media store. */
@@ -119,6 +186,104 @@ type GuardedMediaResponse = {
   release: (() => Promise<void>) | null;
   sourceUrl: string;
 };
+
+async function createMediaDispatcher(
+  dispatcherPolicy: PinnedDispatcherPolicy | undefined,
+  timeoutMs: number | undefined,
+  params: {
+    hostname: string;
+    lookupFn?: LookupFn;
+    policy?: SsrFPolicy;
+  },
+): Promise<Dispatcher | undefined> {
+  if (!dispatcherPolicy) {
+    return undefined;
+  }
+  if (dispatcherPolicy.pinnedHostname) {
+    const pinned = await resolvePinnedHostnameWithPolicy(params.hostname, {
+      lookupFn: params.lookupFn,
+      policy: params.policy,
+    });
+    return createPinnedDispatcher(pinned, dispatcherPolicy, params.policy, timeoutMs);
+  }
+  if (dispatcherPolicy.mode === "direct") {
+    return createHttp1Agent(
+      dispatcherPolicy.connect ? { connect: { ...dispatcherPolicy.connect } } : undefined,
+      timeoutMs,
+    );
+  }
+  if (dispatcherPolicy.mode === "env-proxy") {
+    return createHttp1EnvHttpProxyAgent(
+      {
+        ...(dispatcherPolicy.connect
+          ? {
+              connect: { ...dispatcherPolicy.connect },
+              requestTls: { ...dispatcherPolicy.connect },
+            }
+          : {}),
+        ...(dispatcherPolicy.proxyTls ? { proxyTls: { ...dispatcherPolicy.proxyTls } } : {}),
+      },
+      timeoutMs,
+    );
+  }
+  const proxyUrl = dispatcherPolicy.proxyUrl.trim();
+  if (dispatcherPolicy.proxyTls) {
+    return createHttp1ProxyAgent(
+      { uri: proxyUrl, requestTls: { ...dispatcherPolicy.proxyTls } },
+      timeoutMs,
+    );
+  }
+  return createHttp1ProxyAgent({ uri: proxyUrl }, timeoutMs);
+}
+
+function resolveMediaDispatcherPolicy(params: {
+  dispatcherPolicy?: PinnedDispatcherPolicy;
+  url: string;
+}): PinnedDispatcherPolicy | undefined {
+  if (!shouldUseEnvHttpProxyForUrl(params.url)) {
+    return params.dispatcherPolicy;
+  }
+  if (!params.dispatcherPolicy) {
+    return { mode: "env-proxy" };
+  }
+  if (params.dispatcherPolicy.mode === "direct") {
+    return {
+      mode: "env-proxy",
+      ...(params.dispatcherPolicy.connect
+        ? { connect: { ...params.dispatcherPolicy.connect } }
+        : {}),
+    };
+  }
+  return params.dispatcherPolicy;
+}
+
+async function captureMediaFetchExchange(params: {
+  url: string;
+  init?: RequestInit;
+  response: Response;
+}): Promise<void> {
+  const settings = resolveDebugProxySettings();
+  if (!settings.enabled) {
+    return;
+  }
+  const { captureHttpExchange } = await import("../proxy-capture/runtime.js");
+  captureHttpExchange(
+    {
+      url: params.url,
+      method: params.init?.method ?? "GET",
+      requestHeaders: params.init?.headers as Headers | Record<string, string> | undefined,
+      requestBody:
+        (params.init as (RequestInit & { body?: BodyInit | Buffer | string | null }) | undefined)
+          ?.body ?? null,
+      response: params.response,
+      transport: "http",
+      meta: {
+        captureOrigin: "media-fetch",
+      },
+    },
+    settings,
+  );
+}
 
 function stripQuotes(value: string): string {
   return value.replace(/^["']|["']$/g, "");
@@ -179,6 +344,42 @@ function redactMediaUrl(url: string): string {
   return redactSensitiveText(url);
 }
 
+function normalizeMediaPolicyOrigin(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    parsed.hostname = parsed.hostname.replace(/\.+$/, "");
+    return parsed.origin.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function assertMediaUrlAllowedByPolicy(url: string, policy?: SsrFPolicy): void {
+  const hostnameAllowlist = normalizeHostnameAllowlist([
+    ...(policy?.allowedHostnames ?? []),
+    ...(policy?.hostnameAllowlist ?? []),
+  ]);
+  const allowedOrigins = (policy?.allowedOrigins ?? [])
+    .map((origin) => normalizeMediaPolicyOrigin(origin))
+    .filter((origin): origin is string => Boolean(origin));
+  if (hostnameAllowlist.length === 0 && allowedOrigins.length === 0) {
+    return;
+  }
+
+  const parsed = new URL(url);
+  const normalizedHostname = normalizeHostname(parsed.hostname);
+  const origin = normalizeMediaPolicyOrigin(parsed.toString());
+  const hostAllowed =
+    hostnameAllowlist.length > 0 && matchesHostnameAllowlist(normalizedHostname, hostnameAllowlist);
+  const originAllowed = origin ? allowedOrigins.includes(origin) : false;
+  if (!hostAllowed && !originAllowed) {
+    throw new SsrFBlockedError(`Blocked media hostname (not in allowlist): ${parsed.hostname}`);
+  }
+}
+
 async function fetchGuardedMediaResponse(
   options: FetchMediaOptions,
 ): Promise<GuardedMediaResponse> {
@@ -188,41 +389,111 @@ async function fetchGuardedMediaResponse(
     requestInit,
     maxRedirects,
     timeoutMs,
-    ssrfPolicy,
     lookupFn,
     dispatcherPolicy,
     dispatcherAttempts,
     shouldRetryFetchError,
-    trustExplicitProxyDns,
+    ssrfPolicy,
   } = options;
   const sourceUrl = redactMediaUrl(url);
+  void lookupFn;
 
-  // Dispatcher attempts are fallback routes inside one logical guarded fetch operation.
+  // Dispatcher attempts are fallback routes inside one logical media fetch operation.
   const attempts =
     dispatcherAttempts && dispatcherAttempts.length > 0
       ? dispatcherAttempts
       : [{ dispatcherPolicy, lookupFn }];
-  const runGuardedFetch = async (attempt: FetchDispatcherAttempt) =>
-    await fetchWithSsrFGuard(
-      (trustExplicitProxyDns && attempt.dispatcherPolicy?.mode === "explicit-proxy"
-        ? withTrustedExplicitProxyGuardedFetchMode
-        : withStrictGuardedFetchMode)({
-        url,
-        fetchImpl,
-        init: requestInit,
-        maxRedirects,
-        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-        policy: ssrfPolicy,
-        lookupFn: attempt.lookupFn ?? lookupFn,
-        dispatcherPolicy: attempt.dispatcherPolicy,
-      }),
-    );
+  const runFetch = async (attempt: FetchDispatcherAttempt): Promise<GuardedMediaResponse> => {
+    const timeout = buildTimeoutAbortSignal({
+      timeoutMs,
+      signal: requestInit?.signal ?? undefined,
+      operation: "media-fetch",
+      url,
+    });
+    let released = false;
+    let dispatcher: Dispatcher | undefined;
+    const release = async () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      timeout.cleanup();
+      await closeDispatcher(dispatcher);
+    };
+    let currentUrl = url;
+    let currentInit = requestInit ? { ...requestInit } : undefined;
+    let redirectCount = 0;
+    const redirectLimit =
+      typeof maxRedirects === "number" && Number.isFinite(maxRedirects)
+        ? Math.max(0, Math.floor(maxRedirects))
+        : 3;
+    try {
+      while (true) {
+        assertMediaUrlAllowedByPolicy(currentUrl, ssrfPolicy);
+        const parsedUrl = new URL(currentUrl);
+        dispatcher = await createMediaDispatcher(
+          resolveMediaDispatcherPolicy({
+            dispatcherPolicy: attempt.dispatcherPolicy,
+            url: currentUrl,
+          }),
+          timeoutMs,
+          {
+            hostname: parsedUrl.hostname,
+            lookupFn: attempt.lookupFn,
+            policy: ssrfPolicy,
+          },
+        );
+        const init: DispatcherAwareRequestInit = {
+          ...(currentInit ? { ...currentInit } : {}),
+          redirect: "manual",
+          ...(timeout.signal ? { signal: timeout.signal } : {}),
+          ...(dispatcher ? { dispatcher } : {}),
+        };
+        const response =
+          fetchImpl && fetchImpl !== globalThis.fetch
+            ? await fetchImpl(currentUrl, init)
+            : await fetchWithRuntimeDispatcherOrMockedGlobal(currentUrl, init);
+        await captureMediaFetchExchange({ url: currentUrl, init, response });
+        if (![301, 302, 303, 307, 308].includes(response.status)) {
+          return { response, finalUrl: currentUrl, release, sourceUrl };
+        }
+        const location = response.headers.get("location");
+        await response.body?.cancel().catch(() => undefined);
+        await closeDispatcher(dispatcher);
+        dispatcher = undefined;
+        if (!location) {
+          await release();
+          throw new Error(`Redirect missing location header (${response.status})`);
+        }
+        redirectCount += 1;
+        if (redirectCount > redirectLimit) {
+          await release();
+          throw new Error(`Too many redirects (limit: ${redirectLimit})`);
+        }
+        const parsedCurrentUrl = new URL(currentUrl);
+        const parsedNextUrl = new URL(location, parsedCurrentUrl);
+        currentInit = rewriteRedirectInitForMethod({
+          init: currentInit,
+          status: response.status,
+        });
+        if (parsedNextUrl.origin !== parsedCurrentUrl.origin) {
+          currentInit = rewriteRedirectInitForCrossOrigin(currentInit);
+        }
+        assertMediaUrlAllowedByPolicy(parsedNextUrl.toString(), ssrfPolicy);
+        currentUrl = parsedNextUrl.toString();
+        timeout.refresh();
+      }
+    } catch (error) {
+      await release();
+      throw error;
+    }
+  };
   try {
-    let result!: Awaited<ReturnType<typeof fetchWithSsrFGuard>>;
+    let result!: GuardedMediaResponse;
     const attemptErrors: unknown[] = [];
     for (let i = 0; i < attempts.length; i += 1) {
       try {
-        result = await runGuardedFetch(attempts[i]);
+        result = await runFetch(attempts[i]);
         break;
       } catch (err) {
         if (
@@ -259,6 +530,9 @@ async function fetchGuardedMediaResponse(
       sourceUrl,
     };
   } catch (err) {
+    if (err instanceof SsrFBlockedError) {
+      throw err;
+    }
     throw new MediaFetchError(
       "fetch_failed",
       `Failed to fetch media from ${sourceUrl}: ${formatErrorMessage(err)}`,
