@@ -54,6 +54,7 @@ Docs: https://docs.openclaw.ai
 - Release/CI/E2E: Telegram native approval release fixtures now seed SQLite-backed session origin metadata, keeping plugin approval routing aligned with the current session store.
 - Release/CI/E2E: Memory Core dreaming release fixtures now seed SQLite-backed session metadata, keeping stale dreaming cleanup and session ingestion proof aligned with the current session store.
 - Release/CI/E2E: Docker E2E and live Docker harness runs now apply default memory, CPU, and process ceilings while preserving explicit per-lane overrides.
+- Release/CI/E2E: Docker E2E CPU limits now cap to the runner capacity, keeping package Telegram acceptance on hosted 8-vCPU runners focused on package regressions instead of impossible Docker resource requests.
 - Release/CI/E2E: plugin lifecycle matrix resource sampling now fails phases that exceed RSS, wall-clock, or CPU ceilings instead of only logging the measurements.
 - Release/CI/E2E: Codex npm plugin live assertions now cap transcript discovery and diagnostic log reads so failure proof stays bounded.
 - Release/CI/E2E: browser snapshot, release-scenario, release-user-journey, Telegram desktop/RTT/package, web-search, Parallels update, plugin update, doctor switch, and upgrade-survivor diagnostics now stream or bound log/artifact reads so failed proof stays inspectable without unbounded output.
