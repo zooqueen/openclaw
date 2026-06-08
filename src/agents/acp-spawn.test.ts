@@ -120,6 +120,11 @@ vi.mock("../channels/plugins/index.js", () => ({
   normalizeChannelId: hoisted.normalizeChannelIdMock,
 }));
 
+vi.mock("../channels/plugins/registry.js", () => ({
+  getChannelPlugin: hoisted.getChannelPluginMock,
+  normalizeChannelId: hoisted.normalizeChannelIdMock,
+}));
+
 vi.mock("../config/sessions/paths.js", () => ({
   resolveStorePath: hoisted.resolveStorePathMock,
 }));
