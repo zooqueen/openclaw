@@ -1464,6 +1464,25 @@ describe("qa cli runtime", () => {
     });
   });
 
+  it("passes selected mock channel drivers through to the multipass runner", async () => {
+    await runQaSuiteCommand({
+      repoRoot: "/tmp/openclaw-repo",
+      runner: "multipass",
+      transportId: "telegram",
+      providerMode: "mock-openai",
+      allowFailures: true,
+      scenarioIds: ["channel-chat-baseline"],
+    });
+
+    expectFields(mockFirstObjectArg(runQaMultipass), {
+      repoRoot: path.resolve("/tmp/openclaw-repo"),
+      transportId: "telegram",
+      providerMode: "mock-openai",
+      allowFailures: true,
+      scenarioIds: ["channel-chat-baseline"],
+    });
+  });
+
   it("sets a failing exit code when multipass summary reports failed scenarios", async () => {
     const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "qa-multipass-summary-"));
     const summaryPath = path.join(repoRoot, "qa-suite-summary.json");

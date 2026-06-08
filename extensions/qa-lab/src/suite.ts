@@ -12,6 +12,10 @@ import {
   type QaReportScenario,
 } from "openclaw/plugin-sdk/qa-runtime";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
+import {
+  buildQaChannelCapabilityMatrix,
+  QA_CHANNEL_CAPABILITY_MATRIX_PATH,
+} from "./channel-capability-matrix.js";
 import { startQaGatewayChild, type QaCliBackendAuthMode } from "./gateway-child.js";
 import type {
   QaLabLatestReport,
@@ -541,6 +545,11 @@ export type QaSuiteSummaryJsonParams = {
   alternateModel: string;
   fastMode: boolean;
   concurrency: number;
+  transportId: string;
+  channelId: string;
+  channelLive: boolean;
+  mockUpstreamDriverId?: string | null;
+  channelCapabilityMatrixPath?: string | null;
   scenarioIds?: readonly string[];
   runtimePair?: [RuntimeId, RuntimeId];
 };
@@ -599,6 +608,11 @@ export function buildQaSuiteSummaryJson(params: QaSuiteSummaryJsonParams): QaSui
       alternateModelName: alternateSplit?.model ?? null,
       fastMode: params.fastMode,
       concurrency: params.concurrency,
+      transportId: params.transportId,
+      channelId: params.channelId,
+      channelLive: params.channelLive,
+      mockUpstreamDriverId: params.mockUpstreamDriverId ?? null,
+      channelCapabilityMatrixPath: params.channelCapabilityMatrixPath ?? null,
       scenarioIds:
         params.scenarioIds && params.scenarioIds.length > 0 ? [...params.scenarioIds] : null,
       runtimePair: params.runtimePair ?? null,
@@ -859,10 +873,30 @@ async function writeQaSuiteArtifacts(params: {
   });
   const reportPath = path.join(params.outputDir, "qa-suite-report.md");
   const summaryPath = path.join(params.outputDir, "qa-suite-summary.json");
+  const channelCapabilityMatrixPath = path.join(
+    params.outputDir,
+    QA_CHANNEL_CAPABILITY_MATRIX_PATH,
+  );
+  await fs.writeFile(
+    channelCapabilityMatrixPath,
+    `${JSON.stringify(buildQaChannelCapabilityMatrix(), null, 2)}\n`,
+    "utf8",
+  );
   await fs.writeFile(reportPath, report, "utf8");
   await fs.writeFile(
     summaryPath,
-    `${JSON.stringify(buildQaSuiteSummaryJson(params), null, 2)}\n`,
+    `${JSON.stringify(
+      buildQaSuiteSummaryJson({
+        ...params,
+        transportId: params.transport.id,
+        channelId: params.transport.channelId,
+        channelLive: params.transport.channelLive,
+        mockUpstreamDriverId: params.transport.mockUpstreamDriverId ?? null,
+        channelCapabilityMatrixPath: QA_CHANNEL_CAPABILITY_MATRIX_PATH,
+      }),
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
   return { report, reportPath, summaryPath };

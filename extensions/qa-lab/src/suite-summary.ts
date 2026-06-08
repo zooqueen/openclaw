@@ -52,6 +52,11 @@ export type QaSuiteSummaryJson = {
     alternateModelName: string | null;
     fastMode: boolean;
     concurrency: number;
+    transportId: string;
+    channelId: string;
+    channelLive: boolean;
+    mockUpstreamDriverId?: string | null;
+    channelCapabilityMatrixPath?: string | null;
     scenarioIds: string[] | null;
     runtimePair?: [RuntimeId, RuntimeId] | null;
   };

@@ -13,12 +13,12 @@ import type {
 } from "./qa-transport.js";
 import { qaChannelPlugin } from "./runtime-api.js";
 
-const QA_CHANNEL_ID = "qa-channel";
+export const QA_CHANNEL_ID = "qa-channel";
 const QA_CHANNEL_ACCOUNT_ID = "default";
 export const QA_CHANNEL_REQUIRED_PLUGIN_IDS = Object.freeze([QA_CHANNEL_ID]);
 export const QA_CHANNEL_DEFAULT_SUITE_CONCURRENCY = 4;
 
-async function waitForQaChannelReady(params: {
+export async function waitForQaChannelReady(params: {
   gateway: QaTransportGatewayClient;
   timeoutMs?: number;
   pollIntervalMs?: number;
@@ -110,7 +110,7 @@ function createQaChannelReportNotes(params: QaTransportReportParams) {
   ];
 }
 
-async function handleQaChannelAction(params: {
+export async function handleQaChannelAction(params: {
   action: QaTransportActionName;
   args: Record<string, unknown>;
   cfg: OpenClawConfig;
@@ -129,6 +129,8 @@ class QaChannelTransport extends QaStateBackedTransportAdapter {
   constructor(state: QaBusState) {
     super({
       id: QA_CHANNEL_ID,
+      channelId: QA_CHANNEL_ID,
+      channelLive: false,
       label: "qa-channel + qa-lab bus",
       accountId: QA_CHANNEL_ACCOUNT_ID,
       requiredPluginIds: QA_CHANNEL_REQUIRED_PLUGIN_IDS,

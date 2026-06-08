@@ -159,6 +159,9 @@ export function createFailureAwareTransportWaitForCondition(state: QaTransportSt
 
 export type QaTransportAdapter = {
   id: string;
+  channelId: string;
+  channelLive: boolean;
+  mockUpstreamDriverId?: string;
   label: string;
   accountId: string;
   requiredPluginIds: readonly string[];
@@ -186,6 +189,9 @@ export type QaTransportAdapter = {
 
 export abstract class QaStateBackedTransportAdapter implements QaTransportAdapter {
   readonly id: string;
+  readonly channelId: string;
+  readonly channelLive: boolean;
+  readonly mockUpstreamDriverId?: string;
   readonly label: string;
   readonly accountId: string;
   readonly requiredPluginIds: readonly string[];
@@ -194,12 +200,18 @@ export abstract class QaStateBackedTransportAdapter implements QaTransportAdapte
 
   protected constructor(params: {
     id: string;
+    channelId: string;
+    channelLive: boolean;
+    mockUpstreamDriverId?: string;
     label: string;
     accountId: string;
     requiredPluginIds: readonly string[];
     state: QaTransportState;
   }) {
     this.id = params.id;
+    this.channelId = params.channelId;
+    this.channelLive = params.channelLive;
+    this.mockUpstreamDriverId = params.mockUpstreamDriverId;
     this.label = params.label;
     this.accountId = params.accountId;
     this.requiredPluginIds = params.requiredPluginIds;

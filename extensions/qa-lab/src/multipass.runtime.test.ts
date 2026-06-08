@@ -147,6 +147,20 @@ describe("qa multipass runtime", () => {
     expect(plan.qaCommand).toContain("--allow-failures");
   });
 
+  it("forwards a selected mock channel driver into the guest qa suite command", () => {
+    const plan = createQaMultipassPlan({
+      repoRoot: process.cwd(),
+      outputDir: path.join(process.cwd(), ".artifacts", "qa-e2e", "multipass-telegram-test"),
+      transportId: "telegram",
+      providerMode: "mock-openai",
+      scenarioIds: ["channel-chat-baseline"],
+    });
+
+    expect(plan.transportId).toBe("telegram");
+    expect(plan.qaCommand).toEqual(expect.arrayContaining(["--transport", "telegram"]));
+    expect(plan.qaCommand).toEqual(expect.arrayContaining(["--provider-mode", "mock-openai"]));
+  });
+
   it("forwards --runtime-pair into the guest qa suite command when requested", () => {
     const plan = createQaMultipassPlan({
       repoRoot: process.cwd(),

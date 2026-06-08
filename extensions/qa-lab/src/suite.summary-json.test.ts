@@ -18,6 +18,11 @@ describe("buildQaSuiteSummaryJson", () => {
     alternateModel: "openai/gpt-5.5-alt",
     fastMode: true,
     concurrency: 2,
+    transportId: "telegram",
+    channelId: "telegram",
+    channelLive: false,
+    mockUpstreamDriverId: "telegram-normalized-bus-v1",
+    channelCapabilityMatrixPath: "channel-capability-matrix.json",
   };
 
   it("records provider/model/mode so parity gates can verify labels", () => {
@@ -33,6 +38,11 @@ describe("buildQaSuiteSummaryJson", () => {
     expect(json.run.alternateModelName).toBe("gpt-5.5-alt");
     expect(json.run.fastMode).toBe(true);
     expect(json.run.concurrency).toBe(2);
+    expect(json.run.transportId).toBe("telegram");
+    expect(json.run.channelId).toBe("telegram");
+    expect(json.run.channelLive).toBe(false);
+    expect(json.run.mockUpstreamDriverId).toBe("telegram-normalized-bus-v1");
+    expect(json.run.channelCapabilityMatrixPath).toBe("channel-capability-matrix.json");
     expect(json.run.scenarioIds).toBeNull();
   });
 
