@@ -1018,19 +1018,32 @@ describe("kitchen-sink RPC command catalog assertions", () => {
     ).toThrow("sessions.create did not return the requested Kitchen Sink session");
   });
 
-  it("requires Kitchen Sink UI descriptor coverage", () => {
+  it("validates Kitchen Sink UI descriptors when the installed package projects them", () => {
+    expect(() =>
+      assertKitchenSinkUiDescriptors({
+        ok: true,
+        descriptors: [
+          {
+            pluginId: "openclaw-kitchen-sink-fixture",
+            id: "kitchen-sink-panel",
+            surface: "session",
+            label: "Kitchen Sink",
+          },
+        ],
+      }),
+    ).not.toThrow();
+    expect(() => assertKitchenSinkUiDescriptors({ ok: true, descriptors: [] })).not.toThrow();
+
+    expect(() => assertKitchenSinkUiDescriptors({})).toThrow(
+      "plugins.uiDescriptors returned invalid payload",
+    );
     expect(() =>
       assertKitchenSinkUiDescriptors({
         ok: true,
         descriptors: [{ pluginId: "openclaw-kitchen-sink-fixture", id: "kitchen-sink-panel" }],
       }),
-    ).not.toThrow();
-
-    expect(() => assertKitchenSinkUiDescriptors({})).toThrow(
-      "plugins.uiDescriptors returned invalid payload",
-    );
-    expect(() => assertKitchenSinkUiDescriptors({ ok: true, descriptors: [] })).toThrow(
-      "plugins.uiDescriptors did not report Kitchen Sink descriptor",
+    ).toThrow(
+      "plugins.uiDescriptors reported incomplete Kitchen Sink descriptor for openclaw-kitchen-sink-fixture; missing surface, label",
     );
   });
 
