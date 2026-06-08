@@ -58,6 +58,33 @@ function createProviderAuthChoice(overrides: Record<string, unknown>) {
   return overrides;
 }
 
+function createPoisonedManifestPlugin(
+  id: string,
+  field: "id" | "providerAuthChoices" | "setup",
+): Record<string, unknown> {
+  const plugin: Record<string, unknown> = {
+    id,
+    origin: "config",
+    providerAuthChoices: [
+      createProviderAuthChoice({
+        provider: "broken",
+        method: "api-key",
+        choiceId: "broken-api-key",
+        choiceLabel: "Broken API key",
+      }),
+    ],
+    setup: {
+      providers: [{ id: "broken", authMethods: ["api-key"] }],
+    },
+  };
+  Object.defineProperty(plugin, field, {
+    get() {
+      throw new Error(`provider auth choice ${field} metadata exploded`);
+    },
+  });
+  return plugin;
+}
+
 function setManifestPlugins(plugins: Array<Record<string, unknown>>) {
   pluginRegistryMocks.loadPluginManifestRegistryForInstalledIndex.mockReturnValue({
     plugins,
@@ -158,22 +185,10 @@ describe("provider auth choice manifest helpers", () => {
   });
 
   it("keeps healthy provider auth choices after unreadable plugin metadata", () => {
-    const unreadablePlugin = {
-      get id() {
-        throw new Error("provider auth choice plugin id getter exploded");
-      },
-      origin: "config",
-      providerAuthChoices: [
-        createProviderAuthChoice({
-          provider: "broken",
-          method: "api-key",
-          choiceId: "broken-api-key",
-          choiceLabel: "Broken API key",
-        }),
-      ],
-    } as never;
     setManifestPlugins([
-      unreadablePlugin,
+      createPoisonedManifestPlugin("bad-id", "id"),
+      createPoisonedManifestPlugin("bad-provider-auth-choices", "providerAuthChoices"),
+      createPoisonedManifestPlugin("bad-setup-auth-choices", "setup"),
       {
         id: "healthy",
         origin: "bundled",
