@@ -81,6 +81,9 @@ import {
   claimIMessageInboundReplay,
   commitIMessageInboundReplay,
   createIMessageInboundReplayGuard,
+  IMESSAGE_RECOVERY_MAX_AGE_MS,
+  IMESSAGE_RECOVERY_MAX_ROWS,
+  IMESSAGE_STALE_INBOUND_THRESHOLD_MS,
   isStaleIMessageBacklog,
   releaseIMessageInboundReplay,
 } from "./inbound-dedupe.js";
@@ -93,6 +96,7 @@ import { createLoopRateLimiter } from "./loop-rate-limiter.js";
 import { stageIMessageAttachments } from "./media-staging.js";
 import { parseIMessageNotification } from "./parse-notification.js";
 import { enqueueIMessageReactionSystemEvent } from "./reaction-system-event.js";
+import { advanceIMessageRecoveryCursor, loadIMessageRecoveryCursor } from "./recovery-cursor.js";
 import { normalizeAllowList, resolveRuntime } from "./runtime.js";
 import { createSelfChatCache } from "./self-chat-cache.js";
 import type { IMessagePayload, MonitorIMessageOpts } from "./types.js";
@@ -348,23 +352,33 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     }
   }
   // Inbound replay guard: dedupes already-seen messages (imsg re-emitting a
-  // recent row on reconnect) so a recovered bridge cannot re-dispatch them.
-  // The stale-backlog age fence in `handleMessage` covers the rows this guard
-  // structurally cannot (messages sent while the gateway was down, never seen,
-  // delivered late with old send dates).
+  // recent row on reconnect, or the downtime-recovery replay overlapping rows we
+  // already handled) so nothing is dispatched twice. This is what lets recovery
+  // replay aggressively without the old catchup cursor/retry bookkeeping.
   const inboundReplayGuard = createIMessageInboundReplayGuard();
   let staleBacklogSuppressed = 0;
 
-  // Startup rowid watermark captured BEFORE the (possibly multi-second)
-  // transport-ready probe, then passed to watch.subscribe as since_rowid. imsg
-  // otherwise self-fences at MAX(ROWID) as of subscribe time, which would skip
-  // any message that lands during the startup/probe/retry window. Local only;
-  // a remote bridge cannot read chat.db so that window falls back to imsg's
-  // self-fence. The age fence still suppresses genuinely old backlog.
+  // Downtime recovery. `recoveryBoundaryRowid` (M) = the local MAX(ROWID) at
+  // startup, read before the transport probe. We ask imsg to replay from the
+  // last dispatched rowid (the recovery cursor), capped to the most recent
+  // IMESSAGE_RECOVERY_MAX_ROWS, so messages that landed while the gateway was
+  // down come back; the GUID dedupe drops anything already handled. Rows at or
+  // below M are that replay (delivered up to IMESSAGE_RECOVERY_MAX_AGE_MS old);
+  // rows above M are genuinely live (age-fenced at the tighter live threshold,
+  // which is where #89237's Push-flush backlog appears). Local only: a remote
+  // bridge cannot read chat.db, so recovery falls back to imsg's self-fence at
+  // subscribe-time MAX(ROWID) (suppress-and-move-on).
   const watchSourceDbPath = resolveIMessageWatchSourceDbPath({ cliPath, dbPath, remoteHost });
-  const watchStartupRowidWatermark = watchSourceDbPath
+  const recoveryBoundaryRowid = watchSourceDbPath
     ? await resolveIMessageStartupRowidWatermark(watchSourceDbPath)
     : null;
+  const recoveryCursorRowid = loadIMessageRecoveryCursor(accountInfo.accountId);
+  const watchSinceRowid =
+    recoveryBoundaryRowid !== null
+      ? recoveryCursorRowid !== null
+        ? Math.max(recoveryCursorRowid, recoveryBoundaryRowid - IMESSAGE_RECOVERY_MAX_ROWS)
+        : recoveryBoundaryRowid
+      : null;
 
   // When `coalesceSameSenderDms` is enabled and the user has not set an
   // explicit inbound debounce for this channel, widen the window to 2500 ms.
@@ -466,6 +480,18 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             accountId: accountInfo.accountId,
             keys,
           });
+          // Advance the recovery cursor past every handled row so the next
+          // startup replays only what landed after this. Dedupe is the backstop
+          // if the cursor is imprecise, so a best-effort max is enough.
+          let maxRowid = -Infinity;
+          for (const entry of unitEntries) {
+            if (typeof entry.message.id === "number" && Number.isFinite(entry.message.id)) {
+              maxRowid = Math.max(maxRowid, entry.message.id);
+            }
+          }
+          if (Number.isFinite(maxRowid)) {
+            advanceIMessageRecoveryCursor(accountInfo.accountId, maxRowid);
+          }
         } catch (err) {
           releaseIMessageInboundReplay({
             guard: inboundReplayGuard,
@@ -1041,16 +1067,28 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     if (!imsgEmitsBalloonMetadata && hasIMessageBalloonMetadata(message)) {
       imsgEmitsBalloonMetadata = true;
     }
-    // Age fence: Apple delivers a burst of old backlog (fresh rowid, original
-    // old send date) on the live watch after a bridge/Push recovery. Suppress
-    // it so it is not dispatched as fresh user requests. Logged at default
-    // level so suppressed traffic is never silent (issue #89237).
-    if (isStaleIMessageBacklog(message, Date.now())) {
+    // Age fence with two windows, split on the recovery boundary:
+    //  - rows at/below recoveryBoundaryRowid are the downtime-recovery replay
+    //    imsg emits from since_rowid — deliver them up to the wider recovery
+    //    age, suppressing only ancient history.
+    //  - rows above it are genuinely live — suppress at the tighter live
+    //    threshold, which is where #89237's Push-flush backlog (old send date,
+    //    fresh rowid) appears.
+    // Logged at default level so suppressed traffic is never silent (#89237).
+    const isRecoveryReplay =
+      recoveryBoundaryRowid !== null &&
+      typeof message.id === "number" &&
+      message.id <= recoveryBoundaryRowid;
+    const staleThresholdMs = isRecoveryReplay
+      ? IMESSAGE_RECOVERY_MAX_AGE_MS
+      : IMESSAGE_STALE_INBOUND_THRESHOLD_MS;
+    if (isStaleIMessageBacklog(message, Date.now(), staleThresholdMs)) {
       staleBacklogSuppressed += 1;
       runtime.log?.(
         warn(
           `imessage: suppressed stale inbound backlog account=${accountInfo.accountId} ` +
-            `sent=${message.created_at ?? "unknown"} (${staleBacklogSuppressed} suppressed since start)`,
+            `sent=${message.created_at ?? "unknown"} recovery=${isRecoveryReplay} ` +
+            `(${staleBacklogSuppressed} suppressed since start)`,
         ),
       );
       return;
@@ -1146,22 +1184,21 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
         client: attemptClient,
         getSubscriptionId: () => attemptSubscriptionId,
       });
-      // since_rowid = the watermark captured before the transport-ready probe,
-      // so imsg replays messages that landed during the startup window instead
-      // of self-fencing them at subscribe-time MAX(ROWID). When the watermark
-      // is unavailable (remote bridge) imsg self-fences at the current
-      // MAX(ROWID) (MessageWatcher.start: `if cursor == 0 { cursor = maxRowID() }`),
-      // so it tails new rows only. Either way, backlog Apple writes *after*
-      // subscribe (fresh rowid, old send date) is handled by the stale-backlog
-      // age fence in handleMessage, not by since_rowid.
+      // since_rowid = the recovery cursor (last dispatched rowid, capped),
+      // captured before the transport-ready probe, so imsg replays messages that
+      // landed while the gateway was down and during the startup window instead
+      // of self-fencing them at subscribe-time MAX(ROWID). When unavailable
+      // (remote bridge) imsg self-fences at the current MAX(ROWID)
+      // (MessageWatcher.start: `if cursor == 0 { cursor = maxRowID() }`), so it
+      // tails new rows only. The replay's age is bounded by the recovery age
+      // window in handleMessage; backlog Apple writes *after* subscribe (fresh
+      // rowid, old send date) is handled by the live age fence.
       const result = await attemptClient.request<{ subscription?: number }>(
         "watch.subscribe",
         {
           attachments: includeAttachments,
           include_reactions: true,
-          ...(watchStartupRowidWatermark !== null
-            ? { since_rowid: watchStartupRowidWatermark }
-            : {}),
+          ...(watchSinceRowid !== null ? { since_rowid: watchSinceRowid } : {}),
         },
         { timeoutMs: probeTimeoutMs },
       );

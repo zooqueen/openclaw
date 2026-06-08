@@ -7,6 +7,7 @@ import type { waitForTransportReady } from "openclaw/plugin-sdk/transport-ready-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createIMessageRpcClient } from "./client.js";
 import { monitorIMessageProvider } from "./monitor.js";
+import { advanceIMessageRecoveryCursor } from "./monitor/recovery-cursor.js";
 import {
   clearCachedIMessagePrivateApiStatus,
   setCachedIMessagePrivateApiStatus,
@@ -599,6 +600,94 @@ describe("iMessage monitor last-route updates", () => {
       { attachments: false, include_reactions: true, since_rowid: 5000 },
       { timeoutMs: 10_000 },
     );
+  });
+
+  it("recovers downtime messages: replays from the cursor and delivers replay rows older than the live fence", async () => {
+    advanceIMessageRecoveryCursor("default", 4990);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-imsg-recovery-"));
+    tempDirs.push(stateDir);
+    const dbPath = path.join(stateDir, "chat.db");
+    const { DatabaseSync } = await import("node:sqlite");
+    const database = new DatabaseSync(dbPath);
+    try {
+      database.exec("CREATE TABLE message (text TEXT);");
+      database.prepare("INSERT INTO message(rowid, text) VALUES (?, ?)").run(5000, "boundary");
+    } finally {
+      database.close();
+    }
+    // 30 min old: inside the 2h recovery window, outside the 15min live fence.
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
+    const client = {
+      request: vi.fn(async () => ({ subscription: 1 })),
+      waitForClose: vi.fn(async () => {
+        // Recovery replay row (rowid <= boundary 5000): missed during downtime,
+        // delivered despite being 30min old.
+        onNotification?.({
+          method: "message",
+          params: {
+            message: {
+              id: 4995,
+              guid: "RECOVERY-GUID-4995",
+              chat_id: 123,
+              sender: "+15550001111",
+              is_from_me: false,
+              text: "missed during downtime",
+              is_group: false,
+              created_at: thirtyMinAgo,
+            },
+          },
+        });
+        // Live row (rowid > boundary) with the same old date: this is the
+        // #89237 Push-flush backlog shape, suppressed at the live fence.
+        onNotification?.({
+          method: "message",
+          params: {
+            message: {
+              id: 5001,
+              guid: "LIVE-OLD-GUID-5001",
+              chat_id: 123,
+              sender: "+15550001111",
+              is_from_me: false,
+              text: "live backlog bomb",
+              is_group: false,
+              created_at: thirtyMinAgo,
+            },
+          },
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      }),
+      stop: vi.fn(async () => {}),
+    };
+    createIMessageRpcClientMock.mockImplementation(async (params) => {
+      if (!params?.onNotification) {
+        throw new Error("expected iMessage notification handler");
+      }
+      onNotification = params.onNotification;
+      return client as never;
+    });
+
+    await monitorIMessageProvider({
+      config: {
+        channels: { imessage: { dbPath, dmPolicy: "allowlist", allowFrom: ["+15550001111"] } },
+        messages: { inbound: { debounceMs: 0 } },
+        session: { mainKey: "main" },
+      } as never,
+      runtime: { error: vi.fn(), exit: vi.fn(), log: vi.fn() },
+    });
+
+    // since_rowid replays from the persisted cursor, not the boundary.
+    expect(client.request).toHaveBeenCalledWith(
+      "watch.subscribe",
+      { attachments: false, include_reactions: true, since_rowid: 4990 },
+      { timeoutMs: 10_000 },
+    );
+    // The recovery replay row dispatches; the live old row is suppressed.
+    await vi.waitFor(() => {
+      expect(dispatchInboundMessageMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("repairs anchorless group watch payloads before routing or cursor updates", async () => {

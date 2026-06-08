@@ -9,7 +9,7 @@ title: "iMessage"
 <Note>
 For OpenClaw iMessage deployments, use `imsg` on a signed-in macOS Messages host. If your Gateway runs on Linux or Windows, point `channels.imessage.cliPath` at an SSH wrapper that runs `imsg` on the Mac.
 
-**Inbound recovery is automatic.** After a bridge or gateway restart, iMessage dedupes already-seen messages and suppresses stale backlog so a recovered bridge does not dispatch old messages as fresh requests. There is no config to enable — see [Inbound recovery after a bridge or gateway restart](#inbound-recovery-after-a-bridge-or-gateway-restart).
+**Inbound recovery is automatic.** After a bridge or gateway restart, iMessage replays the messages missed while it was down (local setups) and suppresses the stale "backlog bomb" Apple can flush after a Push recovery, deduping so nothing is dispatched twice. There is no config to enable — see [Inbound recovery after a bridge or gateway restart](#inbound-recovery-after-a-bridge-or-gateway-restart).
 </Note>
 
 <Warning>
@@ -727,28 +727,25 @@ The "Flag on" column shows behavior on an `imsg` build that emits `balloon_bundl
 
 ## Inbound recovery after a bridge or gateway restart
 
-When the bridge (`imsg` / Messages) or the gateway recovers, Apple often writes the messages that queued during the gap into `chat.db` in a burst, and `imsg watch` emits them on the live stream. Those rows carry a fresh `chat.db` ROWID but their original (old) send date. Without protection they would be dispatched as fresh user requests — a "backlog bomb."
+iMessage recovers messages missed while the gateway was down, and at the same time suppresses the stale "backlog bomb" Apple can flush after a Push recovery. There is **no config** — the behavior is always on, built on the inbound dedupe.
 
-iMessage handles this automatically. There is **no config**; the protection is always on:
+- **Replay dedupe.** Every dispatched inbound message is recorded by its Apple GUID in persistent plugin state (`imessage.inbound-dedupe`), claimed at ingestion and committed after handling (released on a transient failure so it can retry). Anything already handled is dropped instead of dispatched twice. This is what lets recovery replay aggressively without per-message bookkeeping.
+- **Downtime recovery.** On startup the monitor remembers the last dispatched `chat.db` rowid (a persisted per-account cursor) and passes it to `imsg watch.subscribe` as `since_rowid`, so imsg replays the rows that landed while the gateway was down, then tails live. Replay is bounded to the most recent rows and to messages up to ~2 hours old, and the dedupe drops anything already handled.
+- **Stale-backlog age fence.** Rows above the startup boundary are genuinely live; one whose send date is more than ~15 minutes older than its arrival is the Push-flush backlog and is suppressed. Replayed rows (at or below the boundary) use the wider recovery window instead, so a recently-missed message is delivered while ancient history is not.
 
-- **Replay dedupe.** Every inbound message is recorded by its Apple GUID in persistent plugin state (`imessage.inbound-dedupe`). If `imsg` re-emits a row that was already dispatched (common right after a reconnect), it is dropped instead of dispatched again. The record survives a gateway restart.
-- **Stale-backlog age fence.** A live row whose send date is more than ~15 minutes older than its arrival is treated as backlog and suppressed rather than dispatched. Live conversation messages are seconds old, so they pass; a burst of hours-old backlog after a recovery is suppressed.
-
-### Tradeoff
-
-This is "suppress and move on": messages sent while the gateway was down are **not** replayed to the agent. The agent acts on live traffic from reconnect forward. This trades the (rare) loss of a delayed message for never flooding the agent with stale backlog.
+Recovery requires reading `chat.db` to anchor the rowid boundary, so it is available when the gateway runs on the Messages Mac (local `cliPath`). Over a remote SSH `cliPath` the monitor cannot read the database, so it tails from the current rowid and relies on the live age fence (suppress-and-move-on) instead.
 
 ### Operator-visible signal
 
-Suppressed backlog is logged at the default level, never silently dropped:
+Suppressed backlog is logged at the default level, never silently dropped (the `recovery` flag shows which window applied):
 
 ```
-imessage: suppressed stale inbound backlog account=<id> sent=<iso> (<N> suppressed since start)
+imessage: suppressed stale inbound backlog account=<id> sent=<iso> recovery=<bool> (<N> suppressed since start)
 ```
 
 ### Migration
 
-`channels.imessage.catchup.*` is retired. If your config still has it, `openclaw doctor --fix` removes it; the runtime ignores it in the meantime.
+`channels.imessage.catchup.*` is retired — downtime recovery is now automatic and needs no config or cursor tuning. If your config still has the `catchup` block, `openclaw doctor --fix` removes it; the runtime ignores it in the meantime.
 
 ## Troubleshooting
 
