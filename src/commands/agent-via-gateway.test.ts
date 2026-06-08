@@ -155,28 +155,16 @@ function createSignalProcess() {
 }
 
 async function waitForAgentCommandCall(expectedCalls = 1) {
-  for (
-    let attempt = 0;
-    attempt < 50 && agentCommand.mock.calls.length < expectedCalls;
-    attempt += 1
-  ) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-  }
+  await vi.waitFor(() =>
+    expect(agentCommand.mock.calls.length).toBeGreaterThanOrEqual(expectedCalls),
+  );
   expect(agentCommand).toHaveBeenCalledTimes(expectedCalls);
 }
 
 async function waitForGatewayCall(expectedCalls = 1) {
-  for (
-    let attempt = 0;
-    attempt < 50 && callGateway.mock.calls.length < expectedCalls;
-    attempt += 1
-  ) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-  }
+  await vi.waitFor(() =>
+    expect(callGateway.mock.calls.length).toBeGreaterThanOrEqual(expectedCalls),
+  );
   expect(callGateway).toHaveBeenCalledTimes(expectedCalls);
 }
 
