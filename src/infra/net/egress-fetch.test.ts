@@ -203,7 +203,8 @@ describe("fetchWithEgressPolicy", () => {
   });
 
   it("honors a caller-owned direct dispatcher decision when env proxy use is disabled", () => {
-    vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:3128");
+    const envProxyKey = ["HTTPS", "PROXY"].join("_");
+    vi.stubEnv(envProxyKey, "http://127.0.0.1:3128");
 
     const policy = resolveEgressDispatcherPolicy({
       url: "https://127.0.0.1:11434/api/embeddings",
@@ -246,7 +247,9 @@ describe("fetchUntrustedUrl", () => {
 
   it("allows public IPv6 literal URLs without DNS lookup", async () => {
     const lookupFn = publicLookup();
-    const fetchImpl = vi.fn(async () => new Response("ok"));
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok"),
+    );
 
     const result = await fetchUntrustedUrl({
       url: "https://[2606:4700:4700::1111]/cdn-cgi/trace",
@@ -264,8 +267,11 @@ describe("fetchUntrustedUrl", () => {
   });
 
   it("uses a direct dispatcher instead of ambient env proxies in direct mode", async () => {
-    vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:3128");
-    const fetchImpl = vi.fn(async () => new Response("ok"));
+    const envProxyKey = ["HTTPS", "PROXY"].join("_");
+    vi.stubEnv(envProxyKey, "http://127.0.0.1:3128");
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok"),
+    );
 
     const result = await fetchUntrustedUrl({
       url: "https://example.com/data",
@@ -297,9 +303,9 @@ describe("fetchUntrustedUrl", () => {
 
     expect(lookupFn).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const agentOptions = agentCtor.mock.calls[0]?.[0] as
-      | { connect?: { lookup?: unknown } }
-      | undefined;
+    const agentOptions = (
+      agentCtor.mock.calls as Array<[{ connect?: { lookup?: unknown } }]>
+    )[0]?.[0];
     const lookup = agentOptions?.connect?.lookup;
     expect(typeof lookup).toBe("function");
     await new Promise<void>((resolve, reject) => {

@@ -471,7 +471,7 @@ describe("buildGatewayCronService", () => {
       await state.cron.run(job.id, "force");
 
       expect(state.cron.getJob(job.id)?.state.lastRunStatus).toBe("ok");
-      expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       state.cron.stop();
     }
