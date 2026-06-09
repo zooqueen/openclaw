@@ -419,9 +419,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain text", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain text");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -534,9 +532,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expectMockArgFields(sendMessageFeishuMock, "message send params", {
       text: "tool summary",
     });
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain final answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain final answer");
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
 
@@ -632,9 +628,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain block", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain block");
   });
 
   it("does not prepend automatic mentions to streaming card closes", async () => {
@@ -647,9 +641,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nanswer\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nanswer\n```");
   });
 
   it("keeps core block streaming disabled when Feishu blockStreaming is explicitly false", async () => {
@@ -690,7 +682,6 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
       replyInThread: undefined,
       rootId: "om_root_topic",
       header: { title: "agent", template: "blue" },
-      note: "Agent: agent",
     });
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
@@ -707,9 +698,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].start).toHaveBeenCalledTimes(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial answer\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial answer\n```");
   });
 
   it("coalesces distinct final payloads into one streaming card until idle", async () => {
@@ -722,12 +711,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith(
-      "```md\n完整回复第一段 + 第二段\n```",
-      {
-        note: "Agent: agent",
-      },
-    );
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\n完整回复第一段 + 第二段\n```");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -742,9 +726,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\n同一条回复\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\n同一条回复\n```");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -772,9 +754,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nidle streamed reply\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nidle streamed reply\n```");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
@@ -792,9 +772,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].start).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain final answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain final answer");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
   });
 
@@ -823,9 +801,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain streamed answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("plain streamed answer");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
   });
 
@@ -855,9 +831,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First complete answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("First complete answer");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
@@ -953,9 +927,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("hellolo world", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("hellolo world");
   });
 
   it("skips block payloads that exactly repeat the latest partial snapshot", async () => {
@@ -980,9 +952,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\npartial\n```");
   });
 
   it("preserves previous generation blocks when partial snapshots reset after tools", async () => {
@@ -1011,9 +981,6 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].close).toHaveBeenCalledWith(
       "Preparing the lookup plan with enough text to count as one block.Found the answer.",
-      {
-        note: "Agent: agent",
-      },
     );
   });
 
@@ -1038,9 +1005,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
     await options.onIdle?.();
 
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("visible answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("visible answer");
   });
 
   it("sends media-only payloads as attachments", async () => {
@@ -1133,9 +1098,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     expect(streamingInstances).toHaveLength(1);
     expect(streamingInstances[0].discard).not.toHaveBeenCalled();
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("caption from stream", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("caption from stream");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
     expect(sendMediaFeishuMock).toHaveBeenCalledTimes(1);
@@ -1485,7 +1448,6 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
       replyToMessageId: "om_msg",
       replyInThread: true,
       header: { title: "agent", template: "blue" },
-      note: "Agent: agent",
     });
   });
 
@@ -1575,9 +1537,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
 
     const updateTexts = streamingUpdateTexts();
     expect(updateTexts.join("\n")).toContain("🔎 Web Search");
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("final answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("final answer");
   });
 
   it("shows raw command detail in streaming card tool status", async () => {
@@ -1663,12 +1623,8 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(2);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer", {
-      note: "Agent: agent",
-    });
-    expect(streamingInstances[1].close).toHaveBeenCalledWith("Second answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer");
+    expect(streamingInstances[1].close).toHaveBeenCalledWith("Second answer");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
   });
@@ -1703,12 +1659,8 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
 
     expect(streamingInstances).toHaveLength(2);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer", {
-      note: "Agent: agent",
-    });
-    expect(streamingInstances[1].close).toHaveBeenCalledWith("Recovered answer", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("First answer");
+    expect(streamingInstances[1].close).toHaveBeenCalledWith("Recovered answer");
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();
   });
 
@@ -1798,9 +1750,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await options.onIdle?.();
     await expect(result.ensureNoVisibleReplyFallback("zero-final-count")).resolves.toBe(true);
 
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nvisible answer\n```", {
-      note: "Agent: agent",
-    });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("```md\nvisible answer\n```");
     expect(sendMessageFeishuMock).toHaveBeenCalledTimes(1);
     expect(String(firstMockArg(sendMessageFeishuMock, "send message params").text)).toContain(
       "without visible content",
@@ -1843,9 +1793,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await idlePromise;
     await expect(fallbackPromise).resolves.toBe(false);
 
-    expect(closeMock).toHaveBeenCalledWith("```md\nvisible answer\n```", {
-      note: "Agent: agent",
-    });
+    expect(closeMock).toHaveBeenCalledWith("```md\nvisible answer\n```");
     expect(sendMessageFeishuMock).not.toHaveBeenCalled();
     expect(result.getVisibleReplyState()).toEqual({
       visibleReplySent: true,
@@ -1887,7 +1835,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     await expect(result.ensureNoVisibleReplyFallback("zero-final-count")).resolves.toBe(true);
 
     expect(streamingInstances).toHaveLength(1);
-    expect(streamingInstances[0].close).toHaveBeenCalledWith("", { note: "Agent: agent" });
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("");
     expect(sendMessageFeishuMock).toHaveBeenCalledTimes(1);
     expect(result.getVisibleReplyState()).toEqual({
       visibleReplySent: true,
@@ -1951,9 +1899,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
       await options.onIdle?.();
 
       expect(streamingInstances).toHaveLength(2);
-      expect(streamingInstances[1].close).toHaveBeenCalledWith("```md\nsecond\n```", {
-        note: "Agent: agent",
-      });
+      expect(streamingInstances[1].close).toHaveBeenCalledWith("```md\nsecond\n```");
     } finally {
       streamingInstances.push = origPush;
     }

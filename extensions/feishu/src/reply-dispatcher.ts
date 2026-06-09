@@ -97,23 +97,6 @@ function resolveCardHeader(
   };
 }
 
-/** Build a card note footer from agent identity and model context. */
-function resolveCardNote(
-  agentId: string,
-  identity: OutboundIdentity | undefined,
-  prefixCtx: { model?: string; provider?: string },
-): string {
-  const name = identity?.name?.trim() || agentId;
-  const parts: string[] = [`Agent: ${name}`];
-  if (prefixCtx.model) {
-    parts.push(`Model: ${prefixCtx.model}`);
-  }
-  if (prefixCtx.provider) {
-    parts.push(`Provider: ${prefixCtx.provider}`);
-  }
-  return parts.join(" | ");
-}
-
 type CreateFeishuReplyDispatcherParams = {
   cfg: ClawdbotConfig;
   agentId: string;
@@ -371,13 +354,11 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       );
       try {
         const cardHeader = resolveCardHeader(agentId, identity);
-        const cardNote = resolveCardNote(agentId, identity, prefixContext.prefixContext);
         await streaming.start(chatId, resolveReceiveIdType(chatId), {
           replyToMessageId,
           replyInThread: effectiveReplyInThread,
           rootId,
           header: cardHeader,
-          note: cardNote,
         });
         streamingStartBackoffUntilByAccount.delete(account.accountId);
       } catch (error) {
@@ -414,8 +395,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       if (streaming?.isActive()) {
         statusLine = "";
         const text = buildCombinedStreamText(reasoningText, streamText);
-        const finalNote = resolveCardNote(agentId, identity, prefixContext.prefixContext);
-        const contentVisible = await streaming.close(text, { note: finalNote });
+        const contentVisible = await streaming.close(text);
         // Track the raw streamed text so the duplicate-final check in deliver()
         // can skip the redundant text delivery that arrives after onIdle closes
         // the streaming card.
@@ -722,7 +702,6 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
 
           if (useCard) {
             const cardHeader = resolveCardHeader(agentId, identity);
-            const cardNote = resolveCardNote(agentId, identity, prefixContext.prefixContext);
             await sendChunkedTextReply({
               text,
               useCard: true,
@@ -737,7 +716,6 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
                   allowTopLevelReplyFallback,
                   accountId,
                   header: cardHeader,
-                  note: cardNote,
                 });
               },
             });
