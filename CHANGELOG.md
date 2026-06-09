@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.9-alpha.3
+
+### Fixes
+
+- Alpha/nightly package acceptance refreshes migrated SQLite session metadata when legacy transcript files move during doctor preflight, keeping upgrade-survivor package checks aligned with the migrated session store.
+
 ## 2026.6.9-alpha.2
 
 ### Fixes
