@@ -129,6 +129,15 @@ describe("package scripts", () => {
     expect(readPackageJson().scripts.start).toBe("node openclaw.mjs");
   });
 
+  it("keeps deadcode:ci wired to failing guards, not report-only commands", () => {
+    const script = readPackageJson().scripts["deadcode:ci"];
+
+    expect(script).toContain("pnpm deadcode:dependencies");
+    expect(script).toContain("pnpm deadcode:unused-files");
+    expect(script).toContain("pnpm deadcode:report:ci:ts-unused");
+    expect(script).not.toContain("deadcode:report:ci:knip");
+  });
+
   it("runs generated module formatting coverage in Windows CI", () => {
     expect(readPackageJson().scripts["test:windows:ci"]).toContain(
       "test/scripts/format-generated-module.test.ts",
