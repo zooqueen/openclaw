@@ -79,15 +79,6 @@ export async function writeFileFromPathWithinRoot(params: {
 export { extractErrorCode, formatErrorMessage } from "../infra/errors.js";
 export { hasProxyEnvConfigured } from "../infra/net/proxy-env.js";
 export { normalizeHostname } from "../infra/net/hostname.js";
-export {
-  SsrFBlockedError,
-  isBlockedHostnameOrIp,
-  isPrivateNetworkAllowedByPolicy,
-  matchesHostnameAllowlist,
-  resolvePinnedHostnameWithPolicy,
-  type LookupFn,
-  type SsrFPolicy,
-} from "../infra/net/ssrf.js";
 export { isNotFoundPathError, isPathInside } from "../infra/path-guards.js";
 export {
   assertAbsolutePathInput,

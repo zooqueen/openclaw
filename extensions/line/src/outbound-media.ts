@@ -1,6 +1,6 @@
 // Line plugin module implements outbound media behavior.
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 type LineOutboundMediaKind = "image" | "video" | "audio";

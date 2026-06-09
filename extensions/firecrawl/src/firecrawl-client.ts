@@ -14,13 +14,13 @@ import {
 } from "openclaw/plugin-sdk/provider-web-fetch";
 import { normalizeSecretInput } from "openclaw/plugin-sdk/secret-input";
 import { wrapExternalContent, wrapWebContent } from "openclaw/plugin-sdk/security-runtime";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   SsrFBlockedError,
   isBlockedHostnameOrIp,
   isPrivateIpAddress,
-} from "openclaw/plugin-sdk/ssrf-policy";
-import type { LookupFn } from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { LookupFn } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   DEFAULT_FIRECRAWL_BASE_URL,
   resolveFirecrawlApiKey,

@@ -1,5 +1,5 @@
 // Tlon plugin module implements doctor contract behavior.
-import { createLegacyPrivateNetworkDoctorContract } from "openclaw/plugin-sdk/ssrf-policy";
+import { createLegacyPrivateNetworkDoctorContract } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 
 const contract = createLegacyPrivateNetworkDoctorContract({
   channelKey: "tlon",

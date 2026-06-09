@@ -6,7 +6,7 @@ import {
   type MemoryEmbeddingProvider,
   type MemoryEmbeddingProviderCreateOptions,
 } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 
 export type VoyageEmbeddingClient = {
   baseUrl: string;

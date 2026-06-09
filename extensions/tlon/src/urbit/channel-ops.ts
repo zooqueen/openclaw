@@ -1,5 +1,5 @@
 // Tlon plugin module implements channel ops behavior.
-import type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { UrbitHttpError } from "./errors.js";
 import { urbitFetch } from "./fetch.js";
 

@@ -9,7 +9,7 @@ import {
   type MemoryEmbeddingProviderCreateOptions,
 } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
 import { resolveMemorySecretInputString } from "openclaw/plugin-sdk/memory-core-host-secret";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { LMSTUDIO_DEFAULT_EMBEDDING_MODEL, LMSTUDIO_PROVIDER_ID } from "./defaults.js";
 import { ensureLmstudioModelLoaded } from "./models.fetch.js";
 import { resolveLmstudioInferenceBase } from "./models.js";

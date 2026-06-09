@@ -13,6 +13,9 @@ import {
   matchesHostnameAllowlist,
   normalizeHostnameAllowlist,
   SsrFBlockedError,
+  ssrfPolicyFromHttpBaseUrlAllowedHostname,
+  type LookupFn,
+  type SsrFPolicy,
 } from "../infra/net/ssrf.js";
 import { createHttp1Agent } from "../infra/net/undici-runtime.js";
 import { resolveDebugProxySettings } from "../proxy-capture/env.js";
@@ -22,8 +25,6 @@ import {
   getCachedLiveCatalogValue,
 } from "./provider-catalog-shared.js";
 import type { ModelDefinitionConfig, ModelProviderConfig } from "./provider-model-shared.js";
-import { ssrfPolicyFromHttpBaseUrlAllowedHostname } from "./ssrf-policy.js";
-import type { LookupFn, SsrFPolicy } from "./ssrf-policy.js";
 
 export type LiveModelCatalogFetchGuard = (params: {
   url: string;

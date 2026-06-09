@@ -57,8 +57,6 @@
     "!dist/plugin-sdk/provider-test-contracts.d.ts",
     "!dist/plugin-sdk/reply-payload-testing.js",
     "!dist/plugin-sdk/reply-payload-testing.d.ts",
-    "!dist/plugin-sdk/ssrf-runtime-internal.js",
-    "!dist/plugin-sdk/ssrf-runtime-internal.d.ts",
     "!dist/plugin-sdk/test-env.js",
     "!dist/plugin-sdk/test-env.d.ts",
     "!dist/plugin-sdk/test-fixtures.js",
@@ -453,10 +451,6 @@
     "./plugin-sdk/talk-config-runtime": {
       "types": "./dist/plugin-sdk/talk-config-runtime.d.ts",
       "default": "./dist/plugin-sdk/talk-config-runtime.js"
-    },
-    "./plugin-sdk/ssrf-policy": {
-      "types": "./dist/plugin-sdk/ssrf-policy.d.ts",
-      "default": "./dist/plugin-sdk/ssrf-policy.js"
     },
     "./plugin-sdk/media-runtime": {
       "types": "./dist/plugin-sdk/media-runtime.d.ts",
@@ -953,10 +947,6 @@
     "./plugin-sdk/session-visibility": {
       "types": "./dist/plugin-sdk/session-visibility.d.ts",
       "default": "./dist/plugin-sdk/session-visibility.js"
-    },
-    "./plugin-sdk/ssrf-dispatcher": {
-      "types": "./dist/plugin-sdk/ssrf-dispatcher.d.ts",
-      "default": "./dist/plugin-sdk/ssrf-dispatcher.js"
     },
     "./plugin-sdk/string-coerce-runtime": {
       "types": "./dist/plugin-sdk/string-coerce-runtime.d.ts",

@@ -15,9 +15,6 @@
       "openclaw/plugin-sdk/reply-payload-testing": [
         "../../packages/plugin-sdk/dist/src/plugin-sdk/reply-payload-testing.d.ts"
       ],
-      "openclaw/plugin-sdk/ssrf-runtime-internal": [
-        "../../packages/plugin-sdk/dist/src/plugin-sdk/ssrf-runtime-internal.d.ts"
-      ],
       "openclaw/plugin-sdk/codex-native-task-runtime": [
         "../../packages/plugin-sdk/dist/src/plugin-sdk/codex-native-task-runtime.d.ts"
       ],

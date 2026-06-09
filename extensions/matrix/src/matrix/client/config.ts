@@ -7,7 +7,7 @@ import {
   coerceSecretRef,
   normalizeResolvedSecretInputString,
 } from "openclaw/plugin-sdk/secret-input-runtime";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   requiresExplicitMatrixDefaultAccount,
   resolveMatrixDefaultOrOnlyAccountId,

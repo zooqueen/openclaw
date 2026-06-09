@@ -9,7 +9,7 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
 import { buildCopilotIdeHeaders } from "openclaw/plugin-sdk/provider-auth";
 import { resolveConfiguredSecretInputString } from "openclaw/plugin-sdk/secret-input-runtime";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { resolveFirstGithubToken } from "./auth.js";
 import { DEFAULT_COPILOT_API_BASE_URL, resolveCopilotApiToken } from "./token.js";
 

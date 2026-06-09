@@ -88,6 +88,20 @@ describe("check-runtime-http-egress-boundary", () => {
     );
   });
 
+  it("catches removed public SSRF SDK subpaths", () => {
+    const violations = collect({
+      "src/agents/example-runtime.ts":
+        'import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/ssrf-policy"; import { resolvePinnedHostname } from "openclaw/plugin-sdk/ssrf-dispatcher";',
+    });
+
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("retired openclaw/plugin-sdk/ssrf-policy vocabulary"),
+        expect.stringContaining("retired openclaw/plugin-sdk/ssrf-dispatcher vocabulary"),
+      ]),
+    );
+  });
+
   it("catches public fetch-runtime re-exports of retired SSRF APIs", () => {
     const violations = collect({
       "src/plugin-sdk/fetch-runtime.ts":

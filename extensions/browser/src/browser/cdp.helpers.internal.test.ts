@@ -18,9 +18,14 @@ vi.mock("openclaw/plugin-sdk/fetch-runtime", async (importOriginal) => {
   };
 });
 
-vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", () => ({
-  registerManagedProxyBrowserCdpBypass: registerManagedProxyBrowserCdpBypassMock,
-}));
+vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("openclaw/plugin-sdk/ssrf-runtime-internal")>();
+  return {
+    ...actual,
+    registerManagedProxyBrowserCdpBypass: registerManagedProxyBrowserCdpBypassMock,
+  };
+});
 
 import { SsrFBlockedError } from "../infra/net/ssrf.js";
 import {

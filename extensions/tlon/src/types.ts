@@ -9,7 +9,7 @@ import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
   hasLegacyFlatAllowPrivateNetworkAlias,
   isPrivateNetworkOptInEnabled,
-} from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
 
 type TlonAccountConfig = {
   name?: string;

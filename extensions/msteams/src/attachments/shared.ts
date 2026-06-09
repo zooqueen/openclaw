@@ -8,7 +8,7 @@ import {
   isHttpsUrlAllowedByHostnameSuffixAllowlist,
   isPrivateIpAddress,
   normalizeHostnameSuffixAllowlist,
-} from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   isRecord,
   normalizeLowercaseStringOrEmpty,

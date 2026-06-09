@@ -5,8 +5,8 @@ import {
   createPinnedDispatcher,
   resolvePinnedHostnameWithPolicy,
   type PinnedDispatcherPolicy,
-} from "openclaw/plugin-sdk/ssrf-dispatcher";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { MatrixMediaSizeLimitError } from "../media-errors.js";
 import { readResponseWithLimit } from "./read-response-with-limit.js";
 import {

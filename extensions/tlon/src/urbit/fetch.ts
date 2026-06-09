@@ -1,8 +1,8 @@
 // Tlon plugin module implements fetch behavior.
 
 import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
-import type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { validateUrbitBaseUrl } from "./base-url.js";
 import { UrbitUrlError } from "./errors.js";
 

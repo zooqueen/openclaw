@@ -19,6 +19,14 @@ const RETIRED_GUARD_PATTERNS = [
     pattern: /openclaw\/plugin-sdk\/ssrf-runtime(?:["']|$)/u,
   },
   {
+    name: "openclaw/plugin-sdk/ssrf-policy",
+    pattern: /openclaw\/plugin-sdk\/ssrf-policy(?:["']|$)/u,
+  },
+  {
+    name: "openclaw/plugin-sdk/ssrf-dispatcher",
+    pattern: /openclaw\/plugin-sdk\/ssrf-dispatcher(?:["']|$)/u,
+  },
+  {
     name: "withTrustedEnvProxyGuardedFetchMode",
     pattern: /\bwithTrustedEnvProxyGuardedFetchMode\b/u,
   },
@@ -274,7 +282,6 @@ const RAW_FETCH_ALLOWLIST = new Map(
 
 const RETIRED_VOCABULARY_ALLOWLIST = new Set([
   "src/infra/net/ssrf.ts",
-  "src/plugin-sdk/ssrf-policy.ts",
   "src/plugin-sdk/ssrf-runtime-internal.ts",
   "src/commands/doctor/shared/legacy-config-migrate.ts",
   "src/commands/doctor/shared/legacy-web-fetch-migrate.ts",
@@ -388,7 +395,7 @@ export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = rea
       );
       if (retiredFetchRuntimeExportLine) {
         violations.push(
-          `${file}:${retiredFetchRuntimeExportLine} fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs; use src/plugin-sdk/ssrf-dispatcher.ts for narrow pinned-dispatcher helpers`,
+          `${file}:${retiredFetchRuntimeExportLine} fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs; use the canonical egress helper or an internal retained policy owner`,
         );
       }
     }

@@ -52,14 +52,21 @@ imports, manifest fields, setup APIs, hooks, and runtime registration behavior.
 </Warning>
 
 <Warning>
-  `openclaw/plugin-sdk/ssrf-runtime` has been removed from the public plugin
-  SDK. Plugins that imported `fetchWithSsrFGuard` or SSRF policy helpers from
-  that subpath should use ordinary `fetch` for HTTP requests and rely on
-  `proxy.enabled` plus an operator-managed external proxy for destination
-  policy. OpenClaw's remaining stock direct-mode guard is internal to
-  OpenClaw-owned untrusted URL surfaces and is not a plugin SDK contract. Move
-  non-fetch helpers to their supported narrow SDK homes when those helpers are
-  still needed.
+  The SSRF SDK surfaces below are an explicit breaking removal, not part of the
+  future compatibility-window note above.
+  `openclaw/plugin-sdk/ssrf-runtime`,
+  `openclaw/plugin-sdk/ssrf-policy`, and
+  `openclaw/plugin-sdk/ssrf-dispatcher` have been removed from the public
+  plugin SDK. `openclaw/plugin-sdk/security-runtime` also no longer re-exports
+  generic SSRF policy, hostname blocking, or pinned-dispatcher helpers. Plugins
+  that imported `fetchWithSsrFGuard`, generic SSRF policy helpers, or
+  pinned-dispatcher helpers should use ordinary `fetch` or the
+  supported fetch runtime helpers for HTTP requests, rely on `proxy.enabled`
+  plus an operator-managed external proxy for high-assurance destination
+  policy, and keep plugin-specific allowlist validation local when the plugin
+  owns a special protocol or redirect flow. OpenClaw's remaining stock
+  direct-mode guard is internal to OpenClaw-owned untrusted URL surfaces and is
+  not a plugin SDK contract.
 </Warning>
 
 ## Why this changed
@@ -453,7 +460,6 @@ releases.
     | Safe local-file/media path helpers | `openclaw/plugin-sdk/file-access-runtime` |
     | Dispatcher-aware fetch | `openclaw/plugin-sdk/runtime-fetch` |
     | Proxy and fetch helpers | `openclaw/plugin-sdk/fetch-runtime` |
-    | SSRF dispatcher policy types | `openclaw/plugin-sdk/ssrf-dispatcher` |
     | Approval request/resolution types | `openclaw/plugin-sdk/approval-runtime` |
     | Approval reply payload and command helpers | `openclaw/plugin-sdk/approval-reply-runtime` |
     | Error formatting helpers | `openclaw/plugin-sdk/error-runtime` |
@@ -570,7 +576,6 @@ releases.
   | `plugin-sdk/approval-reply-runtime` | Approval reply helpers | Exec/plugin approval reply payload helpers |
   | `plugin-sdk/channel-runtime-context` | Channel runtime-context helpers | Generic channel runtime-context register/get/watch helpers |
   | `plugin-sdk/security-runtime` | Security helpers | Shared trust, DM gating, root-bounded file/path helpers, external-content, and secret-collection helpers |
-  | `plugin-sdk/ssrf-policy` | SSRF policy helpers | Host allowlist and private-network policy helpers |
   | `plugin-sdk/system-event-runtime` | System event helpers | `enqueueSystemEvent`, `peekSystemEventEntries` |
   | `plugin-sdk/heartbeat-runtime` | Heartbeat helpers | Heartbeat wake, event, and visibility helpers |
   | `plugin-sdk/delivery-queue-runtime` | Delivery queue helpers | `drainPendingDeliveries` |

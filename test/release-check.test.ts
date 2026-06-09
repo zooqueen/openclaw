@@ -32,6 +32,7 @@ import {
   PACKED_BUNDLED_RUNTIME_DEPS_REPAIR_ARGS,
   PACKED_CLI_SMOKE_COMMANDS,
   PACKED_COMPLETION_SMOKE_ARGS,
+  REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS,
   packageNameFromSpecifier,
   resolveReleaseNpmCommand,
   resolveMissingPackBuildHint,
@@ -58,6 +59,10 @@ function withProcessEnv<T>(env: Record<string, string>, callback: () => T): T {
 
 const requiredPluginSdkPackPaths = [...listPluginSdkDistArtifacts(), "dist/plugin-sdk/compat.js"];
 const privateLocalOnlyPluginSdkPackPaths = listPrivateLocalOnlyPluginSdkDistArtifacts();
+const requiredPrivatePluginSdkPackPathSet = new Set<string>(REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS);
+const forbiddenPrivateLocalOnlyPluginSdkPackPaths = privateLocalOnlyPluginSdkPackPaths.filter(
+  (entry) => !requiredPrivatePluginSdkPackPathSet.has(entry),
+);
 const requiredBundledPluginPackPaths = listBundledPluginPackArtifacts();
 
 describe("collectAppcastSparkleVersionErrors", () => {
@@ -527,14 +532,17 @@ describe("collectForbiddenPackPaths", () => {
   it("blocks private local-only plugin SDK artifacts from npm pack output", () => {
     expect(
       collectForbiddenPackPaths(["dist/index.js", ...privateLocalOnlyPluginSdkPackPaths]),
-    ).toEqual([...privateLocalOnlyPluginSdkPackPaths].toSorted());
+    ).toEqual([...forbiddenPrivateLocalOnlyPluginSdkPackPaths].toSorted());
   });
 
   it("keeps private local-only plugin SDK artifacts excluded by package files", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { files?: string[] };
 
-    for (const entry of privateLocalOnlyPluginSdkPackPaths) {
+    for (const entry of forbiddenPrivateLocalOnlyPluginSdkPackPaths) {
       expect(pkg.files).toContain(`!${entry}`);
+    }
+    for (const entry of REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS) {
+      expect(pkg.files).not.toContain(`!${entry}`);
     }
   });
 
@@ -691,6 +699,7 @@ describe("collectMissingPackPaths", () => {
         "dist/extensions/acpx/mcp-proxy.mjs",
         ...requiredBundledPluginPackPaths,
         ...requiredPluginSdkPackPaths,
+        ...REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS,
         ...WORKSPACE_TEMPLATE_PACK_PATHS,
         "scripts/npm-runner.mjs",
         "scripts/prepare-git-hooks.mjs",

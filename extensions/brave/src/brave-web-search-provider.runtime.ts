@@ -28,12 +28,12 @@ import {
   writeCachedSearchPayload,
 } from "openclaw/plugin-sdk/provider-web-search";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   assertHttpUrlTargetsPrivateNetwork,
   isBlockedHostnameOrIp,
   isPrivateIpAddress,
-} from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   type BraveLlmContextResponse,
   mapBraveLlmContextResults,

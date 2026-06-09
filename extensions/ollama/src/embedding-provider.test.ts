@@ -21,9 +21,14 @@ vi.mock("openclaw/plugin-sdk/fetch-runtime", () => ({
 }));
 
 // Import-resolution gating for this private helper is covered in sdk-alias.test.ts.
-vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", () => ({
-  fetchConfiguredLocalOriginWithEgressPolicy: fetchConfiguredLocalOriginWithEgressPolicyMock,
-}));
+vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("openclaw/plugin-sdk/ssrf-runtime-internal")>();
+  return {
+    ...actual,
+    fetchConfiguredLocalOriginWithEgressPolicy: fetchConfiguredLocalOriginWithEgressPolicyMock,
+  };
+});
 
 let createOllamaEmbeddingProvider: typeof import("./embedding-provider.js").createOllamaEmbeddingProvider;
 let ollamaMemoryEmbeddingProviderAdapter: typeof import("./memory-embedding-adapter.js").ollamaMemoryEmbeddingProviderAdapter;

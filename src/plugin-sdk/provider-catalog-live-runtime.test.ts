@@ -3,7 +3,7 @@ import {
   registerActiveManagedProxyUrl,
   resetActiveManagedProxyStateForTests,
 } from "../infra/net/proxy/active-proxy-state.js";
-import { SsrFBlockedError } from "../infra/net/ssrf.js";
+import { SsrFBlockedError, type LookupFn } from "../infra/net/ssrf.js";
 import { NON_ENV_SECRETREF_MARKER } from "./provider-auth-runtime.js";
 import {
   buildLiveModelProviderConfig,
@@ -15,7 +15,6 @@ import {
   type LiveModelCatalogFetchGuard,
 } from "./provider-catalog-live-runtime.js";
 import type { ModelDefinitionConfig } from "./provider-model-shared.js";
-import type { LookupFn } from "./ssrf-policy.js";
 
 const { captureHttpExchangeMock } = vi.hoisted(() => ({
   captureHttpExchangeMock: vi.fn(),

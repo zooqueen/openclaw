@@ -7,6 +7,13 @@ import {
   findExistingAncestor,
   pathScope as sdkPathScope,
 } from "openclaw/plugin-sdk/security-runtime";
+export {
+  isPrivateNetworkAllowedByPolicy,
+  matchesHostnameAllowlist,
+  resolvePinnedHostnameWithPolicy,
+  SsrFBlockedError,
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
+export type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 
 export { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 export {
@@ -16,13 +23,10 @@ export {
   hasProxyEnvConfigured,
   isNotFoundPathError,
   isPathInside,
-  isPrivateNetworkAllowedByPolicy,
-  matchesHostnameAllowlist,
   normalizeHostname,
   pathScope,
   redactSensitiveText,
   resolveExistingPathsWithinRoot,
-  resolvePinnedHostnameWithPolicy,
   resolvePathsWithinRoot,
   resolvePathWithinRoot,
   root,
@@ -31,12 +35,10 @@ export {
   resolveStrictExistingPathsWithinRoot,
   resolveWritablePathWithinRoot,
   FsSafeError,
-  SsrFBlockedError,
   writeExternalFileWithinRoot,
   writeViaSiblingTempPath,
   wrapExternalContent,
 } from "openclaw/plugin-sdk/security-runtime";
-export type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/security-runtime";
 
 /** Ensures an absolute directory exists without escaping its nearest existing ancestor. */
 export async function ensureAbsoluteDirectory(

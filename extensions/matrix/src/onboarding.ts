@@ -12,7 +12,7 @@ import {
   promptChannelAccessConfig,
   splitSetupEntries,
 } from "openclaw/plugin-sdk/setup";
-import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/ssrf-policy";
+import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,

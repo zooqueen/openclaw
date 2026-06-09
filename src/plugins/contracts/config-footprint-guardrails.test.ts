@@ -161,8 +161,8 @@ describe("config footprint guardrails", () => {
     expect(source).not.toContain("allow?: boolean;");
   });
 
-  it("keeps plugin-sdk private-network helpers canonical-first with a narrow compat alias", () => {
-    const source = readSource("src/plugin-sdk/ssrf-policy.ts");
+  it("keeps bundled private-network helpers canonical-first with a narrow compat alias", () => {
+    const source = readSource("src/plugin-sdk/ssrf-runtime-internal.ts");
 
     expect(source).toContain("export function ssrfPolicyFromDangerouslyAllowPrivateNetwork(");
     expect(source).toContain("export function ssrfPolicyFromAllowPrivateNetwork(");

@@ -10,7 +10,7 @@ import {
   resolveSsrFPolicyForUrl,
   SsrFBlockedError,
   type SsrFPolicy,
-} from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { asPositiveSafeInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { LMSTUDIO_DEFAULT_LOAD_CONTEXT_LENGTH } from "./defaults.js";
 import {

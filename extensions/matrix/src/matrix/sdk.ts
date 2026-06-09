@@ -13,8 +13,8 @@ import {
 import type { Direction } from "matrix-js-sdk/lib/models/event-timeline.js";
 import { VerificationMethod } from "matrix-js-sdk/lib/types.js";
 import { KeyedAsyncQueue } from "openclaw/plugin-sdk/keyed-async-queue";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import {
   normalizeNullableString,
   normalizeStringEntries,

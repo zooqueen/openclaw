@@ -1,4 +1,4 @@
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 // Msteams tests cover attachments plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRuntime } from "../runtime-api.js";

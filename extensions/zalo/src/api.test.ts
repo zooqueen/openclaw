@@ -6,7 +6,7 @@ const { resolvePinnedHostnameWithPolicyMock } = vi.hoisted(() => ({
   resolvePinnedHostnameWithPolicyMock: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/ssrf-dispatcher", () => ({
+vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", () => ({
   resolvePinnedHostnameWithPolicy: (...args: unknown[]) =>
     resolvePinnedHostnameWithPolicyMock(...args),
 }));

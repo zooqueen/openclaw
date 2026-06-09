@@ -7,4 +7,4 @@ export {
 export {
   isPrivateNetworkOptInEnabled,
   ssrfPolicyFromDangerouslyAllowPrivateNetwork,
-} from "openclaw/plugin-sdk/ssrf-policy";
+} from "openclaw/plugin-sdk/ssrf-runtime-internal";

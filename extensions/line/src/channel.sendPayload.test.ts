@@ -16,12 +16,12 @@ const ssrfMocks = vi.hoisted(() => ({
   resolvePinnedHostnameWithPolicy: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/ssrf-dispatcher", () => ({
+vi.mock("openclaw/plugin-sdk/ssrf-runtime-internal", () => ({
   resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
 }));
 
 afterAll(() => {
-  vi.doUnmock("openclaw/plugin-sdk/ssrf-dispatcher");
+  vi.doUnmock("openclaw/plugin-sdk/ssrf-runtime-internal");
   vi.resetModules();
 });
 

@@ -70,12 +70,22 @@ type ReleaseCheckCommandInvocation = {
 };
 
 const rootPackageExcludedExtensionDirs = collectRootPackageExcludedExtensionDirs();
+export const REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS = [
+  "dist/plugin-sdk/ssrf-runtime-internal.js",
+  "dist/plugin-sdk/ssrf-runtime-internal.d.ts",
+] as const;
+const requiredPrivatePluginSdkPackPathSet = new Set<string>(REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS);
+const forbiddenPrivateLocalOnlyPluginSdkDistArtifacts =
+  listPrivateLocalOnlyPluginSdkDistArtifacts().filter(
+    (artifact) => !requiredPrivatePluginSdkPackPathSet.has(artifact),
+  );
 const requiredPathGroups = [
   "npm-shrinkwrap.json",
   PACKAGE_DIST_INVENTORY_RELATIVE_PATH,
   ["dist/index.js", "dist/index.mjs"],
   ["dist/entry.js", "dist/entry.mjs"],
   ...listPluginSdkDistArtifacts(),
+  ...REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS,
   ...listBundledPluginPackArtifacts(),
   ...listStaticExtensionAssetOutputs().filter((relativePath) => {
     const match = /^dist\/extensions\/([^/]+)\//u.exec(relativePath);
@@ -117,7 +127,7 @@ const forbiddenPrefixes = [
   "dist/plugin-sdk/src/plugin-sdk/qa-channel-protocol.d.ts",
   "dist/plugin-sdk/src/plugin-sdk/qa-lab.d.ts",
   "dist/plugin-sdk/src/plugin-sdk/qa-runtime.d.ts",
-  ...listPrivateLocalOnlyPluginSdkDistArtifacts(),
+  ...forbiddenPrivateLocalOnlyPluginSdkDistArtifacts,
   "dist/qa-runtime-",
   "dist/plugin-sdk/.tsbuildinfo",
   "docs/.generated/",

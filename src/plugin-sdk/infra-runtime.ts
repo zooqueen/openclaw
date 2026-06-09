@@ -46,7 +46,6 @@ export { retainSafeHeadersForCrossOriginRedirect as retainSafeHeadersForCrossOri
 export * from "../infra/net/proxy-env.js";
 export * from "../infra/net/proxy-fetch.js";
 export * from "../infra/net/undici-global-dispatcher.js";
-export * from "../infra/net/ssrf.js";
 export * from "../infra/outbound/identity.js";
 export * from "../infra/outbound/sanitize-text.js";
 export * from "../infra/parse-finite-number.js";
@@ -64,4 +63,3 @@ export * from "../infra/wsl.ts";
 export * from "../utils/fetch-timeout.js";
 export * from "../utils/run-with-concurrency.js";
 export { createRuntimeOutboundDelegates } from "../channels/plugins/runtime-forwarders.js";
-export * from "./ssrf-policy.js";

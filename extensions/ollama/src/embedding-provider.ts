@@ -12,8 +12,8 @@ import {
   hasConfiguredSecretInput,
   normalizeResolvedSecretInputString,
 } from "openclaw/plugin-sdk/secret-input";
-import { ssrfPolicyFromHttpBaseUrlAllowedOrigin } from "openclaw/plugin-sdk/ssrf-policy";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-policy";
+import { ssrfPolicyFromHttpBaseUrlAllowedOrigin } from "openclaw/plugin-sdk/ssrf-runtime-internal";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { fetchConfiguredLocalOriginWithEgressPolicy } from "openclaw/plugin-sdk/ssrf-runtime-internal";
 import { OLLAMA_CLOUD_BASE_URL } from "./defaults.js";
 import { normalizeOllamaWireModelId } from "./model-id.js";

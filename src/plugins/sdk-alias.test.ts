@@ -1189,7 +1189,7 @@ describe("plugin sdk alias helpers", () => {
     expect(shadowCodexAliases["openclaw/plugin-sdk/codex-native-task-runtime"]).toBeUndefined();
   });
 
-  it("aliases the SSRF internal helper only for bundled local IPC owner plugins", async () => {
+  it("aliases the SSRF internal helper only for migrated OpenClaw-owned plugins", async () => {
     const fixture = createPluginSdkAliasFixture({
       packageExports: {
         "./plugin-sdk/core": { default: "./dist/plugin-sdk/core.js" },
@@ -1222,6 +1222,10 @@ describe("plugin sdk alias helpers", () => {
       fixture.root,
       bundledPluginFile("browser", "index.ts"),
     );
+    const sourceBraveEntry = writePluginEntry(
+      fixture.root,
+      bundledPluginFile("brave", "index.ts"),
+    );
     const sourceOtherPluginEntry = writePluginEntry(
       fixture.root,
       bundledPluginFile("demo", "index.ts"),
@@ -1233,6 +1237,7 @@ describe("plugin sdk alias helpers", () => {
     ].join("\n");
     fs.writeFileSync(sourceOllamaEntry, entryBody, "utf-8");
     fs.writeFileSync(sourceBrowserEntry, entryBody, "utf-8");
+    fs.writeFileSync(sourceBraveEntry, entryBody, "utf-8");
     fs.writeFileSync(sourceOtherPluginEntry, entryBody, "utf-8");
     const distOllamaEntry = writePluginEntry(
       fixture.root,
@@ -1241,6 +1246,10 @@ describe("plugin sdk alias helpers", () => {
     const distBrowserEntry = writePluginEntry(
       fixture.root,
       bundledDistPluginFile("browser", "index.js"),
+    );
+    const distBraveEntry = writePluginEntry(
+      fixture.root,
+      bundledDistPluginFile("brave", "index.js"),
     );
     const distRuntimeOllamaEntry = writePluginEntry(
       fixture.root,
@@ -1252,12 +1261,18 @@ describe("plugin sdk alias helpers", () => {
     );
     fs.writeFileSync(distOllamaEntry, entryBody, "utf-8");
     fs.writeFileSync(distBrowserEntry, entryBody, "utf-8");
+    fs.writeFileSync(distBraveEntry, entryBody, "utf-8");
     fs.writeFileSync(distRuntimeOllamaEntry, entryBody, "utf-8");
     fs.writeFileSync(distRuntimeBrowserEntry, entryBody, "utf-8");
     const { packageRoot: installedOllamaRoot, pluginEntry: installedOllamaEntry } =
       writeInstalledPluginEntry({
         installRoot: path.join(makeTempDir(), ".openclaw", "npm"),
         packageName: "@openclaw/ollama",
+      });
+    const { packageRoot: installedBraveRoot, pluginEntry: installedBraveEntry } =
+      writeInstalledPluginEntry({
+        installRoot: path.join(makeTempDir(), ".openclaw", "npm"),
+        packageName: "@openclaw/brave-plugin",
       });
 
     const sourceSubpaths = withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined }, () =>
@@ -1268,6 +1283,11 @@ describe("plugin sdk alias helpers", () => {
     const sourceBrowserSubpaths = withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined }, () =>
       listPluginSdkExportedSubpaths({
         modulePath: sourceBrowserEntry,
+      }),
+    );
+    const sourceBraveSubpaths = withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined }, () =>
+      listPluginSdkExportedSubpaths({
+        modulePath: sourceBraveEntry,
       }),
     );
     const privateQaOtherSubpaths = withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: "1" }, () =>
@@ -1283,6 +1303,10 @@ describe("plugin sdk alias helpers", () => {
       { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
       () => buildPluginLoaderAliasMap(sourceBrowserEntry),
     );
+    const sourceBraveAliases = withEnv(
+      { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
+      () => buildPluginLoaderAliasMap(sourceBraveEntry),
+    );
     const distAliases = withEnv(
       { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
       () => buildPluginLoaderAliasMap(distOllamaEntry, undefined, undefined, "dist"),
@@ -1290,6 +1314,10 @@ describe("plugin sdk alias helpers", () => {
     const distBrowserAliases = withEnv(
       { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
       () => buildPluginLoaderAliasMap(distBrowserEntry, undefined, undefined, "dist"),
+    );
+    const distBraveAliases = withEnv(
+      { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
+      () => buildPluginLoaderAliasMap(distBraveEntry, undefined, undefined, "dist"),
     );
     const distRuntimeAliases = withEnv(
       { OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined },
@@ -1317,9 +1345,20 @@ describe("plugin sdk alias helpers", () => {
         ),
       ),
     );
+    const installedBraveAliases = withCwd(installedBraveRoot, () =>
+      withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined }, () =>
+        buildPluginLoaderAliasMap(
+          installedBraveEntry,
+          path.join(fixture.root, "openclaw.mjs"),
+          undefined,
+          "dist",
+        ),
+      ),
+    );
 
     expect(sourceSubpaths).toEqual(["core", "ssrf-runtime-internal"]);
     expect(sourceBrowserSubpaths).toEqual(["core", "ssrf-runtime-internal"]);
+    expect(sourceBraveSubpaths).toEqual(["core", "ssrf-runtime-internal"]);
     expect(privateQaOtherSubpaths).toEqual(["core"]);
     expect(fs.realpathSync(sourceAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? "")).toBe(
       fs.realpathSync(sourceSsrFInternalPath),
@@ -1327,11 +1366,17 @@ describe("plugin sdk alias helpers", () => {
     expect(
       fs.realpathSync(sourceBrowserAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
     ).toBe(fs.realpathSync(sourceSsrFInternalPath));
+    expect(
+      fs.realpathSync(sourceBraveAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
+    ).toBe(fs.realpathSync(sourceSsrFInternalPath));
     expect(fs.realpathSync(distAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? "")).toBe(
       fs.realpathSync(distSsrFInternalPath),
     );
     expect(
       fs.realpathSync(distBrowserAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
+    ).toBe(fs.realpathSync(distSsrFInternalPath));
+    expect(
+      fs.realpathSync(distBraveAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
     ).toBe(fs.realpathSync(distSsrFInternalPath));
     expect(
       fs.realpathSync(distRuntimeAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
@@ -1342,6 +1387,9 @@ describe("plugin sdk alias helpers", () => {
     expect(otherAliases["openclaw/plugin-sdk/ssrf-runtime-internal"]).toBeUndefined();
     expect(privateQaOtherAliases["openclaw/plugin-sdk/ssrf-runtime-internal"]).toBeUndefined();
     expect(installedAliases["openclaw/plugin-sdk/ssrf-runtime-internal"]).toBeUndefined();
+    expect(
+      fs.realpathSync(installedBraveAliases["openclaw/plugin-sdk/ssrf-runtime-internal"] ?? ""),
+    ).toBe(fs.realpathSync(distSsrFInternalPath));
 
     const createJiti = await getCreateJiti();
     const sourceLoaderBaseUrl = pathToFileURL(
@@ -1359,6 +1407,12 @@ describe("plugin sdk alias helpers", () => {
     });
     const loadedBrowser = browserLoader(sourceBrowserEntry) as { loadedSsrFInternal?: unknown };
     expect(loadedBrowser.loadedSsrFInternal).toBe(true);
+    const braveLoader = createJiti(sourceLoaderBaseUrl, {
+      ...buildPluginLoaderJitiOptions(sourceBraveAliases),
+      tryNative: false,
+    });
+    const loadedBrave = braveLoader(sourceBraveEntry) as { loadedSsrFInternal?: unknown };
+    expect(loadedBrave.loadedSsrFInternal).toBe(true);
 
     const distLoader = createJiti(sourceLoaderBaseUrl, {
       ...buildPluginLoaderJitiOptions(distAliases),
@@ -1376,6 +1430,14 @@ describe("plugin sdk alias helpers", () => {
       loadedSsrFInternal?: unknown;
     };
     expect(loadedDistBrowser.loadedSsrFInternal).toBe(true);
+    const distBraveLoader = createJiti(sourceLoaderBaseUrl, {
+      ...buildPluginLoaderJitiOptions(distBraveAliases),
+      tryNative: true,
+    });
+    const loadedDistBrave = distBraveLoader(distBraveEntry) as {
+      loadedSsrFInternal?: unknown;
+    };
+    expect(loadedDistBrave.loadedSsrFInternal).toBe(true);
 
     const distRuntimeLoader = createJiti(sourceLoaderBaseUrl, {
       ...buildPluginLoaderJitiOptions(distRuntimeAliases),
