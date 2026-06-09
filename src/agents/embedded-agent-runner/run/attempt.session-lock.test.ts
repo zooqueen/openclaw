@@ -27,6 +27,7 @@ import {
   installPromptSubmissionLockRelease,
   resetEmbeddedAttemptSessionFileOwnersForTest,
 } from "./attempt.session-lock.js";
+import { createEmbeddedTranscriptMutationController } from "./embedded-transcript-mutation-controller.js";
 
 const lockOptions = {
   sessionFile: "/tmp/session.jsonl",
@@ -1226,7 +1227,7 @@ describe("embedded attempt session lock lifecycle", () => {
     expect(firstController.hasSessionTakeover()).toBe(false);
   });
 
-  it("reproduces orphaned trailing user repair tripping the prompt fence", async () => {
+  it("publishes orphaned trailing user repair as an owned transcript mutation", async () => {
     const sessionFile = await createTempSessionFile();
     const release = vi.fn(async () => {});
     const acquireSessionWriteLockLocal39 = vi.fn(async () => ({ release }));
@@ -1234,7 +1235,7 @@ describe("embedded attempt session lock lifecycle", () => {
       acquireSessionWriteLock: acquireSessionWriteLockLocal39,
       lockOptions: { ...lockOptions, sessionFile },
     });
-    const sessionManager = SessionManager.open(sessionFile);
+    const sessionManager = guardSessionManager(SessionManager.open(sessionFile));
     const firstKeptEntryId = sessionManager.appendMessage({
       role: "user",
       content: "old question",
@@ -1270,15 +1271,22 @@ describe("embedded attempt session lock lifecycle", () => {
 
     await controller.releaseForPrompt();
 
-    // Mirrors the HF Space failure: the next turn repairs the orphaned trailing
-    // user by branching back to the compaction row, then appends the new user
-    // turn as OpenClaw-owned transcript progress while the prompt lock is
-    // released. The current fence treats that owned append as a takeover.
-    sessionManager.branch(compactionId);
-    sessionManager.appendMessage({
-      role: "user",
-      content: "please continue",
-      timestamp: 4,
+    const transcriptMutations = createEmbeddedTranscriptMutationController({
+      sessionManager,
+      withSessionWriteLock: (operation, options) =>
+        controller.withSessionWriteLock(operation, options),
+    });
+    await transcriptMutations.run("orphan-user-repair", (mutatingSessionManager) => {
+      // Mirrors the HF Space failure: the next turn repairs the orphaned
+      // trailing user by branching back to the compaction row, then appends the
+      // new user turn as OpenClaw-owned transcript progress while the prompt
+      // lock is released.
+      mutatingSessionManager.branch(compactionId);
+      mutatingSessionManager.appendMessage({
+        role: "user",
+        content: "please continue",
+        timestamp: 4,
+      });
     });
 
     await expect(controller.withSessionWriteLock(() => "finalize")).resolves.toBe("finalize");
