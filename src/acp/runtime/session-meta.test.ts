@@ -1,9 +1,9 @@
 /** Tests ACP session metadata persistence, joins, and migration helpers. */
+import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadSessionStore } from "../../config/sessions/store-load.js";
-import { writeSessionStoreForTestAsync } from "../../config/sessions/test-helpers.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
 import { withTempDir } from "../../test-helpers/temp-dir.js";
 import {
@@ -24,12 +24,16 @@ describe("ACP session metadata SQLite store", () => {
       const databasePath = path.join(dir, "state", "openclaw.sqlite");
       const cfg = { session: { store: storePath } } as OpenClawConfig;
       const sessionKey = "agent:codex:acp:binding:discord:default:feedface";
-      await writeSessionStoreForTestAsync(storePath, {
-        [sessionKey]: {
-          sessionId: "sess-acp",
-          updatedAt: 100,
-        },
-      });
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [sessionKey]: {
+            sessionId: "sess-acp",
+            updatedAt: 100,
+          },
+        }),
+        "utf8",
+      );
 
       const result = await upsertAcpSessionMeta({
         cfg,
@@ -104,12 +108,16 @@ describe("ACP session metadata SQLite store", () => {
       const cfg = { session: { store: storePath } } as OpenClawConfig;
       const storeSessionKey = "agent:codex:acp:binding:discord:default:feedface";
       const rawSessionKey = storeSessionKey.toUpperCase();
-      await writeSessionStoreForTestAsync(storePath, {
-        [storeSessionKey]: {
-          sessionId: "sess-acp",
-          updatedAt: 100,
-        },
-      });
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [storeSessionKey]: {
+            sessionId: "sess-acp",
+            updatedAt: 100,
+          },
+        }),
+        "utf8",
+      );
 
       await upsertAcpSessionMeta({
         cfg,
@@ -168,12 +176,16 @@ describe("ACP session metadata SQLite store", () => {
       const databasePath = path.join(dir, "state", "openclaw.sqlite");
       const cfg = { session: { store: storePath } } as OpenClawConfig;
       const sessionKey = "agent:codex:acp:binding:discord:default:feedface";
-      await writeSessionStoreForTestAsync(storePath, {
-        [sessionKey]: {
-          sessionId: "sess-new",
-          updatedAt: 100,
-        },
-      });
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [sessionKey]: {
+            sessionId: "sess-new",
+            updatedAt: 100,
+          },
+        }),
+        "utf8",
+      );
 
       writeAcpSessionMetaForMigration({
         databasePath,
@@ -219,13 +231,18 @@ describe("ACP session metadata SQLite store", () => {
       const databasePath = path.join(dir, "state", "openclaw.sqlite");
       const cfg = { session: { store: storePath } } as OpenClawConfig;
       const sessionKey = "agent:codex:acp:s1";
-      await writeSessionStoreForTestAsync(storePath, {
-        [sessionKey]: {
-          sessionId: "sess-acp",
-          updatedAt: 100,
-          model: "gpt-5.5",
-        },
-      });
+      await fs.mkdir(path.dirname(storePath), { recursive: true });
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [sessionKey]: {
+            sessionId: "sess-acp",
+            updatedAt: 100,
+            model: "gpt-5.5",
+          },
+        }),
+        "utf8",
+      );
       await upsertAcpSessionMeta({
         cfg,
         databasePath,
@@ -268,12 +285,17 @@ describe("ACP session metadata SQLite store", () => {
       const cfg = {} as OpenClawConfig;
       const sessionKey = "agent:codex:acp:s1";
       const storePath = path.join(dir, "agents", "codex", "sessions", "sessions.json");
-      await writeSessionStoreForTestAsync(storePath, {
-        [sessionKey]: {
-          sessionId: "sess-acp",
-          updatedAt: 100,
-        },
-      });
+      await fs.mkdir(path.dirname(storePath), { recursive: true });
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [sessionKey]: {
+            sessionId: "sess-acp",
+            updatedAt: 100,
+          },
+        }),
+        "utf8",
+      );
       await upsertAcpSessionMeta({
         cfg,
         env,

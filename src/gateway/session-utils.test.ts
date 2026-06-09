@@ -7,10 +7,6 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { resetConfigRuntimeState, setRuntimeConfigSnapshot } from "../config/config.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadSessionStore, type SessionEntry } from "../config/sessions.js";
-import {
-  readSessionStoreForTest,
-  writeSessionStoreForTest,
-} from "../config/sessions/test-helpers.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
 import { withStateDirEnv } from "../test-helpers/state-dir-env.js";
@@ -37,6 +33,10 @@ import {
   resolveSessionModelRef,
   resolveSessionStoreKey,
 } from "./session-utils.js";
+
+function resolveSyncRealpath(filePath: string): string {
+  return fs.realpathSync.native(filePath);
+}
 
 function createSymlinkOrSkip(targetPath: string, linkPath: string): boolean {
   try {
@@ -935,9 +935,11 @@ describe("gateway session utils", () => {
   test("resolveGatewaySessionStoreTarget includes legacy mixed-case store key", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-utils-case-"));
     const storePath = path.join(dir, "sessions.json");
-    writeSessionStoreForTest(storePath, {
-      "agent:ops:MySession": { sessionId: "s1", updatedAt: 1 },
-    });
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ "agent:ops:MySession": { sessionId: "s1", updatedAt: 1 } }),
+      "utf8",
+    );
     const cfg = {
       session: { mainKey: "main", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
@@ -946,7 +948,7 @@ describe("gateway session utils", () => {
     expect(target.canonicalKey).toBe("agent:ops:mysession");
     expect(target.storeKeys).toContain("agent:ops:mysession");
     expect(target.storeKeys).toContain("agent:ops:MySession");
-    const store = readSessionStoreForTest(storePath);
+    const store = JSON.parse(fs.readFileSync(storePath, "utf8"));
     const found = target.storeKeys.some((k) => Boolean(store[k]));
     expect(found).toBe(true);
   });
@@ -954,10 +956,14 @@ describe("gateway session utils", () => {
   test("resolveGatewaySessionStoreTarget includes all case-variant duplicate keys", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-utils-dupes-"));
     const storePath = path.join(dir, "sessions.json");
-    writeSessionStoreForTest(storePath, {
-      "agent:ops:mysession": { sessionId: "s-lower", updatedAt: 2 },
-      "agent:ops:MySession": { sessionId: "s-mixed", updatedAt: 1 },
-    });
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({
+        "agent:ops:mysession": { sessionId: "s-lower", updatedAt: 2 },
+        "agent:ops:MySession": { sessionId: "s-mixed", updatedAt: 1 },
+      }),
+      "utf8",
+    );
     const cfg = {
       session: { mainKey: "main", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
@@ -970,9 +976,11 @@ describe("gateway session utils", () => {
   test("resolveGatewaySessionStoreTarget finds legacy main alias key when mainKey is customized", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-utils-alias-"));
     const storePath = path.join(dir, "sessions.json");
-    writeSessionStoreForTest(storePath, {
-      "agent:ops:MAIN": { sessionId: "s1", updatedAt: 1 },
-    });
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ "agent:ops:MAIN": { sessionId: "s1", updatedAt: 1 } }),
+      "utf8",
+    );
     const cfg = {
       session: { mainKey: "work", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
@@ -987,9 +995,13 @@ describe("gateway session utils", () => {
       const retiredSessionsDir = path.join(stateDir, "agents", "Retired Agent", "sessions");
       fs.mkdirSync(retiredSessionsDir, { recursive: true });
       const retiredStorePath = path.join(retiredSessionsDir, "sessions.json");
-      writeSessionStoreForTest(retiredStorePath, {
-        "agent:retired-agent:main": { sessionId: "sess-retired", updatedAt: 1 },
-      });
+      fs.writeFileSync(
+        retiredStorePath,
+        JSON.stringify({
+          "agent:retired-agent:main": { sessionId: "sess-retired", updatedAt: 1 },
+        }),
+        "utf8",
+      );
 
       const cfg = {
         session: {
@@ -1001,7 +1013,7 @@ describe("gateway session utils", () => {
 
       const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:retired-agent:main" });
 
-      expect(target.storePath).toBe(path.resolve(retiredStorePath));
+      expect(target.storePath).toBe(resolveSyncRealpath(retiredStorePath));
     });
   });
 
@@ -1012,9 +1024,13 @@ describe("gateway session utils", () => {
         const retiredSessionsDir = path.join(stateDir, "agents", "Retired Agent", "sessions");
         fs.mkdirSync(retiredSessionsDir, { recursive: true });
         const retiredStorePath = path.join(retiredSessionsDir, "sessions.json");
-        writeSessionStoreForTest(retiredStorePath, {
-          "agent:retired-agent:main": { sessionId: "sess-retired", updatedAt: 7 },
-        });
+        fs.writeFileSync(
+          retiredStorePath,
+          JSON.stringify({
+            "agent:retired-agent:main": { sessionId: "sess-retired", updatedAt: 7 },
+          }),
+          "utf8",
+        );
         const cfg = {
           session: {
             mainKey: "main",
@@ -1026,7 +1042,7 @@ describe("gateway session utils", () => {
 
         const loaded = loadSessionEntry("agent:retired-agent:main");
 
-        expect(loaded.storePath).toBe(path.resolve(retiredStorePath));
+        expect(loaded.storePath).toBe(resolveSyncRealpath(retiredStorePath));
         expect(loaded.entry?.sessionId).toBe("sess-retired");
       });
     } finally {
@@ -1041,9 +1057,13 @@ describe("gateway session utils", () => {
         const sessionsDir = path.join(stateDir, "agents", "main", "sessions");
         fs.mkdirSync(sessionsDir, { recursive: true });
         const storePath = path.join(sessionsDir, "sessions.json");
-        writeSessionStoreForTest(storePath, {
-          "agent:main:main": { sessionId: "sess-main", updatedAt: 7 },
-        });
+        fs.writeFileSync(
+          storePath,
+          JSON.stringify({
+            "agent:main:main": { sessionId: "sess-main", updatedAt: 7 },
+          }),
+          "utf8",
+        );
         const cfg = {
           session: {
             mainKey: "main",
@@ -1109,12 +1129,20 @@ describe("gateway session utils", () => {
         fs.mkdirSync(deletedSessionsDir, { recursive: true });
         const liveStorePath = path.join(liveSessionsDir, "sessions.json");
         const deletedStorePath = path.join(deletedSessionsDir, "sessions.json");
-        writeSessionStoreForTest(liveStorePath, {
-          "agent:ops:main": { sessionId: "sess-live-default", updatedAt: 10 },
-        });
-        writeSessionStoreForTest(deletedStorePath, {
-          "agent:main:main": { sessionId: "sess-deleted-main", updatedAt: 20 },
-        });
+        fs.writeFileSync(
+          liveStorePath,
+          JSON.stringify({
+            "agent:ops:main": { sessionId: "sess-live-default", updatedAt: 10 },
+          }),
+          "utf8",
+        );
+        fs.writeFileSync(
+          deletedStorePath,
+          JSON.stringify({
+            "agent:main:main": { sessionId: "sess-deleted-main", updatedAt: 20 },
+          }),
+          "utf8",
+        );
         const cfg = {
           session: { mainKey: "main", store: storeTemplate },
           agents: { list: [{ id: "ops", default: true }] },
@@ -1126,9 +1154,9 @@ describe("gateway session utils", () => {
 
         expect(target.canonicalKey).toBe("agent:main:main");
         expect(target.agentId).toBe("main");
-        expect(target.storePath).toBe(path.resolve(deletedStorePath));
+        expect(target.storePath).toBe(resolveSyncRealpath(deletedStorePath));
         expect(loaded.canonicalKey).toBe("agent:main:main");
-        expect(loaded.storePath).toBe(path.resolve(deletedStorePath));
+        expect(loaded.storePath).toBe(resolveSyncRealpath(deletedStorePath));
         expect(loaded.entry?.sessionId).toBe("sess-deleted-main");
       });
     } finally {
@@ -1151,13 +1179,21 @@ describe("gateway session utils", () => {
         const deletedSessionsDir = path.join(stateDir, "agents", "main", "sessions");
         fs.mkdirSync(liveSessionsDir, { recursive: true });
         fs.mkdirSync(deletedSessionsDir, { recursive: true });
-        writeSessionStoreForTest(path.join(liveSessionsDir, "sessions.json"), {
-          "agent:ops:work": { sessionId: "sess-live-default", updatedAt: 10 },
-        });
+        fs.writeFileSync(
+          path.join(liveSessionsDir, "sessions.json"),
+          JSON.stringify({
+            "agent:ops:work": { sessionId: "sess-live-default", updatedAt: 10 },
+          }),
+          "utf8",
+        );
         const deletedStorePath = path.join(deletedSessionsDir, "sessions.json");
-        writeSessionStoreForTest(deletedStorePath, {
-          "agent:main:main": { sessionId: "sess-deleted-main", updatedAt: 20 },
-        });
+        fs.writeFileSync(
+          deletedStorePath,
+          JSON.stringify({
+            "agent:main:main": { sessionId: "sess-deleted-main", updatedAt: 20 },
+          }),
+          "utf8",
+        );
         const cfg = {
           session: { mainKey: "work", store: storeTemplate },
           agents: { list: [{ id: "ops", default: true }] },
@@ -1167,7 +1203,7 @@ describe("gateway session utils", () => {
         const loaded = loadSessionEntry("agent:main:work");
 
         expect(loaded.canonicalKey).toBe("agent:main:work");
-        expect(loaded.storePath).toBe(path.resolve(deletedStorePath));
+        expect(loaded.storePath).toBe(resolveSyncRealpath(deletedStorePath));
         expect(loaded.entry?.sessionId).toBe("sess-deleted-main");
       });
     } finally {
@@ -1182,10 +1218,18 @@ describe("gateway session utils", () => {
         const sessionsDir = path.join(stateDir, "agents", "main", "sessions");
         fs.mkdirSync(sessionsDir, { recursive: true });
         const storePath = path.join(sessionsDir, "sessions.json");
-        writeSessionStoreForTest(storePath, {
-          "agent:main:main": { sessionId: "sess-stale", updatedAt: 1 },
-          "agent:main:MAIN": { sessionId: "sess-fresh", updatedAt: 2 },
-        });
+        fs.writeFileSync(
+          storePath,
+          JSON.stringify(
+            {
+              "agent:main:main": { sessionId: "sess-stale", updatedAt: 1 },
+              "agent:main:MAIN": { sessionId: "sess-fresh", updatedAt: 2 },
+            },
+            null,
+            2,
+          ),
+          "utf8",
+        );
         const cfg = {
           session: {
             mainKey: "main",
@@ -1208,24 +1252,39 @@ describe("gateway session utils", () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-entry-cross-store-", async ({ stateDir }) => {
-        const configuredRoot = path.join(stateDir, "configured-state");
-        const configuredSessionsDir = path.join(configuredRoot, "agents", "main", "sessions");
-        fs.mkdirSync(configuredSessionsDir, { recursive: true });
-        writeSessionStoreForTest(path.join(configuredSessionsDir, "sessions.json"), {
-          "agent:main:main": { sessionId: "sess-configured-stale", updatedAt: 10 },
-          "agent:main:MAIN": { sessionId: "sess-configured-fresh", updatedAt: 1000 },
-        });
+        const canonicalSessionsDir = path.join(stateDir, "agents", "main", "sessions");
+        fs.mkdirSync(canonicalSessionsDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(canonicalSessionsDir, "sessions.json"),
+          JSON.stringify(
+            {
+              "agent:main:main": { sessionId: "sess-canonical-stale", updatedAt: 10 },
+              "agent:main:MAIN": { sessionId: "sess-canonical-fresh", updatedAt: 1000 },
+            },
+            null,
+            2,
+          ),
+          "utf8",
+        );
 
-        const discoveredSessionsDir = path.join(stateDir, "agents", "main", "sessions");
+        const discoveredSessionsDir = path.join(stateDir, "agents", "main ", "sessions");
         fs.mkdirSync(discoveredSessionsDir, { recursive: true });
-        writeSessionStoreForTest(path.join(discoveredSessionsDir, "sessions.json"), {
-          "agent:main:main": { sessionId: "sess-discovered-mid", updatedAt: 500 },
-        });
+        fs.writeFileSync(
+          path.join(discoveredSessionsDir, "sessions.json"),
+          JSON.stringify(
+            {
+              "agent:main:main": { sessionId: "sess-discovered-mid", updatedAt: 500 },
+            },
+            null,
+            2,
+          ),
+          "utf8",
+        );
 
         const cfg = {
           session: {
             mainKey: "main",
-            store: path.join(configuredRoot, "agents", "{agentId}", "sessions", "sessions.json"),
+            store: path.join(stateDir, "agents", "{agentId}", "sessions", "sessions.json"),
           },
           agents: { list: [{ id: "main", default: true }] },
         } as OpenClawConfig;
@@ -1233,7 +1292,7 @@ describe("gateway session utils", () => {
 
         const loaded = loadSessionEntry("agent:main:main");
 
-        expect(loaded.entry?.sessionId).toBe("sess-configured-fresh");
+        expect(loaded.entry?.sessionId).toBe("sess-canonical-fresh");
       });
     } finally {
       resetConfigRuntimeState();

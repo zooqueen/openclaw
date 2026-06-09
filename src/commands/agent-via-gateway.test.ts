@@ -14,7 +14,6 @@ const loadConfig = vi.hoisted(() => vi.fn());
 const loadConfigWithShellEnvFallback = vi.hoisted(() => vi.fn());
 const loadRuntimeConfig = vi.hoisted(() => vi.fn());
 const callGateway = vi.hoisted(() => vi.fn());
-const ensureSessionStateMigratedForCommand = vi.hoisted(() => vi.fn(async () => undefined));
 const isGatewayCredentialsRequiredError = vi.hoisted(() =>
   vi.fn(
     (value: unknown) => value instanceof Error && value.name === "GatewayCredentialsRequiredError",
@@ -224,9 +223,6 @@ vi.mock("../gateway/call.js", () => ({
   isGatewayExplicitAuthRequiredError,
   isGatewayTransportError,
   randomIdempotencyKey: () => "idem-1",
-}));
-vi.mock("./session-state-migration.js", () => ({
-  ensureSessionStateMigratedForCommand,
 }));
 vi.mock("./agent.js", () => {
   agentModuleLoadCount();

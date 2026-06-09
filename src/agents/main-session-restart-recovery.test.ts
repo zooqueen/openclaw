@@ -3,11 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionEntry } from "../config/sessions.js";
-import {
-  readSessionStoreForTest,
-  writeSessionStoreForTestAsync,
-} from "../config/sessions/test-helpers.js";
+import { loadSessionStore, type SessionEntry } from "../config/sessions.js";
 import { callGateway } from "../gateway/call.js";
 import {
   INTERNAL_RUNTIME_CONTEXT_BEGIN,
@@ -42,7 +38,7 @@ async function makeSessionsDir(agentId = "main"): Promise<string> {
 }
 
 async function writeStore(sessionsDir: string, store: Record<string, SessionEntry>): Promise<void> {
-  await writeSessionStoreForTestAsync(path.join(sessionsDir, "sessions.json"), store);
+  await fs.writeFile(path.join(sessionsDir, "sessions.json"), JSON.stringify(store, null, 2));
 }
 
 async function writeTranscript(
@@ -126,7 +122,7 @@ describe("main-session-restart-recovery", () => {
       sessionKeys: ["agent:main:main", "agent:main:completed", "agent:main:subagent:child"],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 1 });
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
     expect(store["agent:main:completed"]?.abortedLastRun).toBeUndefined();
@@ -137,13 +133,21 @@ describe("main-session-restart-recovery", () => {
 
   it("marks active sessions in a configured custom session store", async () => {
     const storePath = path.join(tmpDir, "custom", "sessions.json");
-    await writeSessionStoreForTestAsync(storePath, {
-      "agent:main:issue-82433": {
-        sessionId: "custom-session",
-        updatedAt: Date.now() - 10_000,
-        status: "running",
-      },
-    });
+    await fs.mkdir(path.dirname(storePath), { recursive: true });
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          "agent:main:issue-82433": {
+            sessionId: "custom-session",
+            updatedAt: Date.now() - 10_000,
+            status: "running",
+          },
+        } satisfies Record<string, SessionEntry>,
+        null,
+        2,
+      ),
+    );
     await writeTranscript(path.dirname(storePath), "custom-session", [
       { role: "user", content: "continue this custom-store turn" },
       { role: "toolResult", content: "custom result" },
@@ -155,7 +159,7 @@ describe("main-session-restart-recovery", () => {
       sessionKeys: ["agent:main:issue-82433"],
     });
 
-    const store = readSessionStoreForTest(storePath);
+    const store = loadSessionStore(storePath);
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:issue-82433"]?.abortedLastRun).toBe(true);
 
@@ -180,13 +184,21 @@ describe("main-session-restart-recovery", () => {
     });
 
     const storePath = path.join(tmpDir, "custom-duplicate-key", "sessions.json");
-    await writeSessionStoreForTestAsync(storePath, {
-      "agent:main:issue-82433": {
-        sessionId: "active-custom-session",
-        updatedAt: Date.now() - 10_000,
-        status: "running",
-      },
-    });
+    await fs.mkdir(path.dirname(storePath), { recursive: true });
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          "agent:main:issue-82433": {
+            sessionId: "active-custom-session",
+            updatedAt: Date.now() - 10_000,
+            status: "running",
+          },
+        } satisfies Record<string, SessionEntry>,
+        null,
+        2,
+      ),
+    );
 
     const result = await markRestartAbortedMainSessions({
       cfg: { session: { store: storePath } },
@@ -195,8 +207,8 @@ describe("main-session-restart-recovery", () => {
       sessionKeys: ["agent:main:issue-82433"],
     });
 
-    const defaultStore = readSessionStoreForTest(path.join(defaultSessionsDir, "sessions.json"));
-    const customStore = readSessionStoreForTest(storePath);
+    const defaultStore = loadSessionStore(path.join(defaultSessionsDir, "sessions.json"));
+    const customStore = loadSessionStore(storePath);
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(defaultStore["agent:main:issue-82433"]?.abortedLastRun).toBeUndefined();
     expect(customStore["agent:main:issue-82433"]?.abortedLastRun).toBe(true);
@@ -204,13 +216,21 @@ describe("main-session-restart-recovery", () => {
 
   it("marks custom-store sessions by session id when no session key is available", async () => {
     const storePath = path.join(tmpDir, "custom-by-id", "sessions.json");
-    await writeSessionStoreForTestAsync(storePath, {
-      "agent:main:custom-by-id": {
-        sessionId: "custom-session-id-only",
-        updatedAt: Date.now() - 10_000,
-        status: "running",
-      },
-    });
+    await fs.mkdir(path.dirname(storePath), { recursive: true });
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          "agent:main:custom-by-id": {
+            sessionId: "custom-session-id-only",
+            updatedAt: Date.now() - 10_000,
+            status: "running",
+          },
+        } satisfies Record<string, SessionEntry>,
+        null,
+        2,
+      ),
+    );
 
     const result = await markRestartAbortedMainSessions({
       cfg: { session: { store: storePath } },
@@ -218,7 +238,7 @@ describe("main-session-restart-recovery", () => {
       sessionIds: ["custom-session-id-only"],
     });
 
-    const store = readSessionStoreForTest(storePath);
+    const store = loadSessionStore(storePath);
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:custom-by-id"]?.abortedLastRun).toBe(true);
   });
@@ -252,7 +272,7 @@ describe("main-session-restart-recovery", () => {
       ],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 1 });
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
     expect(store["agent:main:subagent:child"]?.abortedLastRun).toBeUndefined();
@@ -277,7 +297,7 @@ describe("main-session-restart-recovery", () => {
       cleanedLocks: [cleanedLockForPath(path.join(sessionsDir, `${sessionFile}.lock`))],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:discord:channel:123:thread:1234567890"]?.abortedLastRun).toBe(true);
   });
@@ -300,7 +320,7 @@ describe("main-session-restart-recovery", () => {
       ],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 0, skipped: 0 });
     expect(store["agent:main:main"]?.abortedLastRun).toBeUndefined();
   });
@@ -327,7 +347,7 @@ describe("main-session-restart-recovery", () => {
       ],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:discord:channel:123:thread:1234567890"]?.abortedLastRun).toBe(true);
   });
@@ -348,7 +368,7 @@ describe("main-session-restart-recovery", () => {
       cleanedLocks: [cleanedLock(sessionsDir, "main-session")],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
   });
@@ -371,7 +391,7 @@ describe("main-session-restart-recovery", () => {
       cleanedLocks: [cleanedLock(sessionsDir, sessionId)],
     });
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(result).toEqual({ marked: 1, skipped: 0 });
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
   });
@@ -400,7 +420,7 @@ describe("main-session-restart-recovery", () => {
     expect(resumeParams.sessionKey).toBe("agent:main:main");
     expect(resumeParams.deliver).toBe(false);
     expect(resumeParams.lane).toBe("main");
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(store["agent:main:main"]?.abortedLastRun).toBe(false);
   });
 
@@ -533,7 +553,7 @@ describe("main-session-restart-recovery", () => {
 
     expect(result).toEqual({ recovered: 0, failed: 1, skipped: 0 });
     expect(callGateway).not.toHaveBeenCalled();
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(store["agent:main:main"]?.status).toBe("failed");
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
   });
@@ -582,7 +602,7 @@ describe("main-session-restart-recovery", () => {
     expect(firstGatewayParams().message).toContain(pendingPayload);
 
     const beforeStoreRead = Date.now();
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     const entry = store["agent:main:main"];
     expect(entry?.abortedLastRun).toBe(false);
     expect(entry?.pendingFinalDelivery).toBe(true);
@@ -633,7 +653,7 @@ describe("main-session-restart-recovery", () => {
     expect(firstGatewayParams().message).not.toContain(INTERNAL_RUNTIME_CONTEXT_BEGIN);
     expect(firstGatewayParams().message).not.toContain("Conversation info");
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(store["agent:main:main"]?.pendingFinalDeliveryText).toBe("The final answer is 42.");
   });
 
@@ -676,7 +696,7 @@ describe("main-session-restart-recovery", () => {
 
     expect(result).toEqual({ recovered: 0, failed: 1, skipped: 0 });
     expect(callGateway).not.toHaveBeenCalled();
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(store["agent:main:main"]?.status).toBe("failed");
     expect(store["agent:main:main"]?.abortedLastRun).toBe(true);
   });
@@ -724,7 +744,7 @@ describe("main-session-restart-recovery", () => {
       "couldn't safely resume",
     );
 
-    const store = readSessionStoreForTest(path.join(sessionsDir, "sessions.json"));
+    const store = loadSessionStore(path.join(sessionsDir, "sessions.json"));
     expect(store["agent:main:demo-channel:room-1"]?.status).toBe("failed");
     expect(store["agent:main:demo-channel:room-1"]?.abortedLastRun).toBe(true);
   });

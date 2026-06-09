@@ -27,6 +27,7 @@ Docs: https://docs.openclaw.ai
 - Memory: QMD search can use the new rerank toggle, and memory adapter status uses the resolved default model identity when checking plain status. (#61834)
 - Docs/tooling: add Parallel search docs, refresh weather-skill guidance toward `web_fetch`, clarify legacy `openai-codex` auth, document release/test helper scripts, and tighten changed-test routing docs for CI/debugging work. (#90028, #90250) Thanks @fuller-stack-dev.
 - Release/process: switch release trains to `YYYY.M.PATCH` monthly patch numbering, keep pre-transition tags compatible, and pin the June 2026 floor at `2026.6.5` after the published beta.
+- Release/process: defer the session-metadata SQLite migration from the `2026.6.5` beta train so this release keeps the existing JSON-backed session metadata path while the migration risk is worked on `main`.
 - Release metadata: align OpenClaw, publishable plugin manifests, generated shrinkwraps, app version metadata, iOS release notes, Matrix plugin changelog, and generated release baselines with the `2026.6.5` beta train.
 - Platform maintenance: refresh Android, Swift/macOS, Docker, CodeQL, Buildx, Docker build/push, and Codex Action dependencies for this release train. (#74980, #81757, #86481, #86483, #90601)
 
@@ -49,14 +50,9 @@ Docs: https://docs.openclaw.ai
 - Release/CI/E2E: main CI guard drift, PR merge diff scoping, live Docker credential staging, base-image qualification, installer Docker classification, Playwright dependency install recovery, API-key auth for Codex live Docker lanes, Parallels option terminators, and JSON-mode progress handling are tighter so release proof fails cleaner. (#90532, #90287, #90058) Thanks @RomneyDa, @hxy91819, and @mrunalp.
 - Release/CI/E2E: installed-package root dist verification now allows the current package's JavaScript file count while keeping dependency, per-file-size, and scan-bound checks active.
 - Release/CI/E2E: Chutes OAuth model-discovery proof now accepts standard `Headers` requests, and QR package install smoke caps Docker CPU requests to the hosted runner capacity so beta validation fails on real package regressions.
-- Release/CI/E2E: Matrix and Slack release validation fixtures now seed SQLite-backed session metadata, keeping channel proof aligned with the current session store.
-- Release/CI/E2E: Matrix exec approval and WhatsApp group activation release fixtures now seed SQLite-backed session metadata, and QA Lab capability-flip proof tolerates restart-aborted waits only after restored image media proof lands.
-- Release/CI/E2E: Discord native `/think` autocomplete release fixtures now seed SQLite-backed session overrides, keeping provider-specific reasoning choices aligned with the current session store.
-- Release/CI/E2E: Telegram native approval release fixtures now seed SQLite-backed session origin metadata, keeping plugin approval routing aligned with the current session store.
-- Release/CI/E2E: Memory Core dreaming release fixtures now seed SQLite-backed session metadata, keeping stale dreaming cleanup and session ingestion proof aligned with the current session store.
 - Release/CI/E2E: Docker E2E and live Docker harness runs now apply default memory, CPU, and process ceilings while preserving explicit per-lane overrides.
 - Release/CI/E2E: Docker E2E CPU limits now cap to the runner capacity, keeping package Telegram acceptance on hosted 8-vCPU runners focused on package regressions instead of impossible Docker resource requests.
-- Release/CI/E2E: task maintenance release checks now reset pinned config and one-time session migration state around isolated temp state dirs, keeping normal CI focused on the active session-store fixture instead of stale process snapshots.
+- Release/CI/E2E: task maintenance release checks now reset pinned config around isolated temp state dirs, keeping normal CI focused on the active session-store fixture instead of stale process snapshots.
 - Release/CI/E2E: plugin lifecycle matrix resource sampling now fails phases that exceed RSS, wall-clock, or CPU ceilings instead of only logging the measurements.
 - Release/CI/E2E: Codex npm plugin live assertions now cap transcript discovery and diagnostic log reads so failure proof stays bounded.
 - Release/CI/E2E: browser snapshot, release-scenario, release-user-journey, Telegram desktop/RTT/package, web-search, Parallels update, plugin update, doctor switch, and upgrade-survivor diagnostics now stream or bound log/artifact reads so failed proof stays inspectable without unbounded output.
