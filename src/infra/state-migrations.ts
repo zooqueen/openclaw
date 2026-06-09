@@ -22,6 +22,7 @@ import { canonicalizeMainSessionAlias } from "../config/sessions/main-session.js
 import { validateSessionId } from "../config/sessions/paths.js";
 import {
   importLegacySessionStoreIntoSqlite,
+  loadExistingSqliteSessionStoreReadOnly,
   loadSqliteSessionStore,
 } from "../config/sessions/store-sqlite.js";
 import {
@@ -3649,6 +3650,42 @@ async function migrateAdditionalSessionStoreTargets(params: {
   return { changes, warnings };
 }
 
+function repairAlreadyMigratedSqliteSessionFilePaths(params: {
+  detected: LegacyStateDetection;
+  now: () => number;
+}): { changes: string[]; warnings: string[] } {
+  const existing = loadExistingSqliteSessionStoreReadOnly(params.detected.sessions.targetStorePath);
+  const movedFiles = buildMovedSessionFiles([]);
+  const repaired = rewriteLegacySessionFilePaths({
+    store: existing,
+    legacyDir: params.detected.sessions.legacyDir,
+    targetDir: params.detected.sessions.targetDir,
+    inferFromSessionId: false,
+    movedFiles,
+  });
+  const changed = Object.entries(repaired).filter(
+    ([key, entry]) =>
+      entry.sessionFile !== (existing[key] as { sessionFile?: unknown } | undefined)?.sessionFile,
+  ).length;
+  if (changed === 0) {
+    return { changes: [], warnings: [] };
+  }
+  const { imported } = importNormalizedSessionsIntoSqlite({
+    storePath: params.detected.sessions.targetStorePath,
+    store: repaired,
+    stateDir: params.detected.stateDir,
+    now: params.now,
+    preferIncomingOnTie: true,
+  });
+  return {
+    changes: [
+      `Refreshed ${changed} migrated session metadata path(s) in agent SQLite state`,
+      `Imported ${imported} session metadata row(s) → agent SQLite state`,
+    ],
+    warnings: [],
+  };
+}
+
 export async function migrateLegacyAgentDir(
   detected: LegacyStateDetection,
   now: () => number,
@@ -3766,6 +3803,10 @@ export async function runLegacyStateMigrations(params: {
   const sessions = await migrateLegacySessions(detected, now, {
     recoverCorruptTargetStore: params.recoverCorruptTargetStore,
   });
+  const sqliteSessionPaths = repairAlreadyMigratedSqliteSessionFilePaths({
+    detected,
+    now,
+  });
   const additionalSessionStores = await migrateAdditionalSessionStoreTargets({
     detected,
     config: params.config,
@@ -3795,6 +3836,7 @@ export async function runLegacyStateMigrations(params: {
       ...deliveryQueues.changes,
       ...preSessionChannelPlans.changes,
       ...sessions.changes,
+      ...sqliteSessionPaths.changes,
       ...additionalSessionStores.changes,
       ...acpSessionMetadata.changes,
       ...pluginPlans.changes,
@@ -3809,6 +3851,7 @@ export async function runLegacyStateMigrations(params: {
       ...deliveryQueues.warnings,
       ...preSessionChannelPlans.warnings,
       ...sessions.warnings,
+      ...sqliteSessionPaths.warnings,
       ...additionalSessionStores.warnings,
       ...acpSessionMetadata.warnings,
       ...pluginPlans.warnings,
