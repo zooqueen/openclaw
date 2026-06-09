@@ -326,6 +326,9 @@ describe("install.ps1 failure handling", () => {
     expect(nodeOptionsBody).toContain("--max-old-space-size=$MinOldSpaceMb");
     expect(nodeOptionsBody).toContain("[Math]::Max");
     expect(gitInstallBody).toContain("& $pnpmCommand build");
+    expect(gitInstallBody).toContain("& $pnpmCommand ui:build");
+    expect(gitInstallBody).toContain("$LASTEXITCODE -ne 0");
+    expect(gitInstallBody).not.toContain("if (-not (& $pnpmCommand ui:build))");
     expect(gitInstallBody).toContain("$env:NODE_OPTIONS = $prevNodeOptions");
     expect(gitInstallBody).toContain(
       "$env:PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN = $prevPnpmVerifyDepsBeforeRun",
@@ -486,6 +489,74 @@ describe("install.ps1 failure handling", () => {
     ]);
 
     expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  runIfPowerShell("warns on noisy ui build failures during git installs", () => {
+    const tempDir = harness.createTempDir("openclaw-install-ps1-");
+    const repoDir = join(tempDir, "repo");
+    const pnpmPath = join(tempDir, "fake-pnpm.ps1");
+    const scriptPath = join(tempDir, "install.ps1");
+    const scriptWithoutEntryPoint = source.replace(ENTRYPOINT_RE, "");
+    writeFileSync(
+      pnpmPath,
+      [
+        "param(",
+        "  [Parameter(ValueFromRemainingArguments = $true)]",
+        "  [string[]]$Arguments",
+        ")",
+        "switch ($Arguments[0]) {",
+        '  "install" {',
+        "    Write-Output 'install ok'",
+        "    exit 0",
+        "  }",
+        '  "ui:build" {',
+        "    Write-Output 'ui failed with output'",
+        "    exit 13",
+        "  }",
+        '  "build" {',
+        '    New-Item -ItemType Directory -Force -Path "dist" | Out-Null',
+        '    Set-Content -Path "dist/entry.js" -Value "entry" -NoNewline',
+        "    exit 0",
+        "  }",
+        "}",
+        "Write-Error \"unexpected pnpm command: $($Arguments -join ' ')\"",
+        "exit 2",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(pnpmPath, 0o755);
+    writeFileSync(
+      scriptPath,
+      [
+        scriptWithoutEntryPoint,
+        "",
+        `$RepoDir = ${toPowerShellSingleQuotedLiteral(repoDir)}`,
+        `$PnpmPath = ${toPowerShellSingleQuotedLiteral(pnpmPath)}`,
+        "New-Item -ItemType Directory -Force -Path $RepoDir | Out-Null",
+        "function Ensure-Git { return $true }",
+        "function Ensure-Pnpm { param([string]$RepoDir) return }",
+        "function Remove-LegacySubmodule { param([string]$RepoDir) return }",
+        "function Get-PnpmCommandPath { return $PnpmPath }",
+        "$results = @(Install-OpenClawFromGit -RepoDir $RepoDir -SkipUpdate)",
+        'if (-not (Test-BooleanSuccessResult -Results $results)) { throw "git install returned $results" }',
+        'if (-not ($results -contains "ui failed with output")) { throw "missing noisy ui build output: $results" }',
+        "",
+      ].join("\n"),
+    );
+    chmodSync(scriptPath, 0o755);
+
+    const result = runPowerShell([
+      "-NoLogo",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      scriptPath,
+    ]);
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("UI build failed; continuing");
     expect(result.stderr).toBe("");
   });
 
