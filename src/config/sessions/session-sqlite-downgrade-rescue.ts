@@ -77,6 +77,9 @@ function sessionStoreJsonNeedsRescue(storePath: string): boolean {
     if (stat.size === 0) {
       return true;
     }
+    if (stat.size > 16) {
+      return false;
+    }
     const raw = fs.readFileSync(storePath, "utf8").trim();
     return raw === "{}";
   } catch (err) {

@@ -2,7 +2,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { requireNodeSqlite } from "../../infra/node-sqlite.js";
 import { resolveOpenClawAgentSqlitePath } from "../../state/openclaw-agent-db.paths.js";
 import { withTempDirSync } from "../../test-helpers/temp-dir.js";
@@ -126,6 +126,34 @@ describe("beta SQLite session downgrade rescue", () => {
       expect(JSON.parse(fs.readFileSync(storePath, "utf8"))).toEqual({
         json: { sessionId: "json-session", updatedAt: 2 },
       });
+    });
+  });
+
+  it("does not pre-read existing non-empty JSON session stores during rescue checks", () => {
+    withTempDirSync({ prefix: "openclaw-session-sqlite-rescue-existing-read-" }, (stateDir) => {
+      const storePath = path.join(stateDir, "agents", "main", "sessions", "sessions.json");
+      fs.mkdirSync(path.dirname(storePath), { recursive: true });
+      fs.writeFileSync(
+        storePath,
+        `${JSON.stringify({ json: { sessionId: "json-session", updatedAt: 2 } }, null, 2)}\n`,
+      );
+      const originalReadFileSync = fs.readFileSync.bind(fs);
+      let storeReads = 0;
+      const readSpy = vi.spyOn(fs, "readFileSync").mockImplementation((file, ...args) => {
+        if (file === storePath) {
+          storeReads += 1;
+        }
+        return originalReadFileSync(file, ...(args as [Parameters<typeof fs.readFileSync>[1]]));
+      });
+
+      try {
+        const store = loadSessionStore(storePath, { skipCache: true });
+
+        expect(store.json?.sessionId).toBe("json-session");
+        expect(storeReads).toBe(1);
+      } finally {
+        readSpy.mockRestore();
+      }
     });
   });
 });
