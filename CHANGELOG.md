@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.9-alpha.2
+
+### Fixes
+
+- Alpha/nightly release validation carries release-branch stabilization for package metadata, channel and plugin fixture isolation, Docker and QA waits, iMessage monitor retry tests, memory startup catch-up test coverage, and release prepack changelog packaging.
+
 ## 2026.6.5
 
 ### Highlights
