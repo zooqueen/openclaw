@@ -36,6 +36,8 @@ const RETIRED_GUARD_PATTERNS = [
       /\bssrfPolicy\b[\s\S]{0,160}\bfetch(?:With\w*|Fn|Impl)?\b|\bfetch(?:With\w*|Fn|Impl)?\b[\s\S]{0,160}\bssrfPolicy\b/u,
   },
 ];
+const RETIRED_FETCH_RUNTIME_EXPORT_PATTERN =
+  /\b(?:createPinnedLookup|PinnedDispatcherPolicy|SsrFPolicy|LookupFn|SsrFBlockedError|fetchWithSsrFGuard|GUARDED_FETCH_MODE)\b/u;
 
 const RAW_FETCH_ALLOWLIST = new Map(
   [
@@ -77,19 +79,15 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "src/agents/utils/tools-manager.ts",
-      "plugin/package metadata fetches are operator/plugin configured, not arbitrary content URLs; proxy.enabled is not yet centralized here",
-    ],
-    [
-      "src/link-understanding/runner.ts",
-      "link-understanding runner is a pre-existing follow-up surface for untrusted URL centralization; proxy.enabled is not yet centralized here",
+      "operator/plugin configured package metadata endpoint; not arbitrary user/content URL egress; proxy.enabled is not honored by this owner",
     ],
     [
       "src/skills/lifecycle/install-download.ts",
-      "skill install downloads are operator-initiated package fetches; proxy.enabled is not yet centralized here",
+      "operator-initiated skill package artifact download; not arbitrary user/content URL egress; proxy.enabled is not honored by this owner",
     ],
     [
       "packages/memory-host-sdk/src/host/remote-http.ts",
-      "memory remote HTTP has owner-specific URL validation on every hop; proxy.enabled is not centralized in this package",
+      "memory remote HTTP package owns URL validation on every hop; proxy.enabled is not honored by this package",
     ],
     [
       "src/cli/nodes-camera.ts",
@@ -113,31 +111,27 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "src/agents/auth-profiles/usage.ts",
-      "fixed OpenClaw usage endpoint, not arbitrary user/model URL egress; proxy.enabled is not centralized here",
+      "fixed OpenClaw usage endpoint, not arbitrary user/model URL egress; proxy.enabled is not honored by this owner",
     ],
     [
       "src/agents/minimax-vlm.ts",
-      "provider-owned fixed API endpoint; proxy.enabled is not yet centralized here",
+      "provider-owned fixed API endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/agents/tools/pdf-native-providers.ts",
-      "provider-owned fixed API endpoints; proxy.enabled is not yet centralized here",
-    ],
-    [
-      "src/agents/tools/web-search-citation-redirect.ts",
-      "citation redirect resolver is a pre-existing follow-up surface; proxy.enabled is not yet centralized here",
+      "provider-owned fixed API endpoints; proxy.enabled is not honored by this owner",
     ],
     [
       "src/cli/capability-cli.ts",
-      "CLI capability video import is an operator command path; proxy.enabled is not centralized here",
+      "CLI capability video import is an operator command path; proxy.enabled is not honored by this owner",
     ],
     [
       "src/commands/docs.ts",
-      "operator docs command fetches the configured docs site; proxy.enabled is not centralized here",
+      "operator docs command fetches the configured docs site; proxy.enabled is not honored by this owner",
     ],
     [
       "src/commands/onboard-custom.ts",
-      "operator onboarding checks configured endpoints; proxy.enabled is not centralized here",
+      "operator onboarding checks configured endpoints; proxy.enabled is not honored by this owner",
     ],
     [
       "src/crestodian/probes.ts",
@@ -145,7 +139,7 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "src/gateway/server-cron-notifications.ts",
-      "operator-configured webhook transport; proxy.enabled is not centralized here",
+      "operator-configured webhook transport; proxy.enabled is not honored by this owner",
     ],
     [
       "src/gateway/gateway-cli-backend.live-probe-helpers.ts",
@@ -153,23 +147,23 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "src/infra/push-apns.relay.ts",
-      "operator-configured APNS relay endpoint; proxy.enabled is not centralized here",
+      "operator-configured APNS relay endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/infra/update-check.ts",
-      "fixed OpenClaw update metadata endpoint; proxy.enabled is not centralized here",
+      "fixed OpenClaw update metadata endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/llm/providers/openai-chatgpt-responses.ts",
-      "provider transport path with provider-owned base URL; proxy.enabled is not yet centralized here",
+      "provider transport path with provider-owned base URL; proxy.enabled is not honored by this owner",
     ],
     [
       "src/llm/utils/oauth/anthropic.ts",
-      "OAuth exchange against fixed provider endpoint; proxy.enabled is not centralized here",
+      "OAuth exchange against fixed provider endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/llm/utils/oauth/github-copilot.ts",
-      "OAuth exchange against fixed provider endpoint; proxy.enabled is not centralized here",
+      "OAuth exchange against fixed provider endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/plugin-sdk/qa-runtime.ts",
@@ -181,15 +175,15 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "src/plugins/marketplace.ts",
-      "fixed OpenClaw marketplace endpoint; proxy.enabled is not centralized here",
+      "fixed OpenClaw marketplace endpoint; proxy.enabled is not honored by this owner",
     ],
     [
       "src/plugins/openai-compatible-embedding-provider.ts",
-      "provider-owned operator-configured base URL; proxy.enabled is not yet centralized here",
+      "provider-owned operator-configured base URL; proxy.enabled is not honored by this owner",
     ],
     [
       "src/plugins/provider-self-hosted-setup.ts",
-      "operator-configured self-hosted provider setup; proxy.enabled is not yet centralized here",
+      "operator-configured self-hosted provider setup; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/discord/src/monitor/rest-fetch.ts",
@@ -205,19 +199,19 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "extensions/discord/src/probe.ts",
-      "Discord fixed API probe transport; proxy.enabled is not centralized here",
+      "Discord fixed API probe transport; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/google/oauth.http.ts",
-      "Google OAuth helper owns Google API transport; proxy.enabled is not centralized here",
+      "Google OAuth helper owns Google API transport; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/google/oauth.project.ts",
-      "Google API owner uses Google OAuth helper; proxy.enabled is not centralized here",
+      "Google API owner uses Google OAuth helper; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/google/oauth.token.ts",
-      "Google OAuth token exchange uses Google OAuth helper; proxy.enabled is not centralized here",
+      "Google OAuth token exchange uses Google OAuth helper; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/googlechat/src/google-auth.runtime.ts",
@@ -233,11 +227,11 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "extensions/qa-lab/src/mantis/slack-desktop-smoke.runtime.ts",
-      "Mantis proof runtime embeds a Slack API setup probe for QA automation; proxy.enabled is not centralized here",
+      "Mantis proof runtime embeds a Slack API setup probe for QA automation; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/qa-lab/src/mantis/telegram-desktop-builder.runtime.ts",
-      "Mantis proof runtime embeds a Telegram API setup probe for QA automation; proxy.enabled is not centralized here",
+      "Mantis proof runtime embeds a Telegram API setup probe for QA automation; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/qa-lab/web/src/app.ts",
@@ -249,11 +243,11 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "extensions/qqbot/src/engine/api/api-client.ts",
-      "QQBot API transport helper owns vendor calls; proxy.enabled is not centralized here",
+      "QQBot API transport helper owns vendor calls; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/qqbot/src/engine/tools/channel-api.ts",
-      "QQBot channel API transport helper owns vendor calls; proxy.enabled is not centralized here",
+      "QQBot channel API transport helper owns vendor calls; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/qqbot/src/engine/adapter/types.ts",
@@ -273,7 +267,7 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "extensions/telegram/src/probe.ts",
-      "Telegram fixed Bot API probe transport; proxy.enabled is not centralized here",
+      "Telegram fixed Bot API probe transport; proxy.enabled is not honored by this owner",
     ],
     [
       "extensions/telegram/src/telegram-ingress-worker.runtime.ts",
@@ -281,7 +275,7 @@ const RAW_FETCH_ALLOWLIST = new Map(
     ],
     [
       "extensions/vydra/shared.ts",
-      "Vydra provider transport uses injected/fixed owner fetches; proxy.enabled is not centralized here",
+      "Vydra provider transport uses injected/fixed owner fetches; proxy.enabled is not honored by this owner",
     ],
   ].map(([file, reason]) => [file, reason]),
 );
@@ -393,6 +387,18 @@ export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = rea
       violations.push(
         `${file}:${rawFetchLine} raw runtime fetch must use src/infra/net/egress-fetch.ts or add an approved transport exception with whether proxy.enabled is honored`,
       );
+    }
+
+    if (file === "src/plugin-sdk/fetch-runtime.ts") {
+      const retiredFetchRuntimeExportLine = findMatchingRuntimeLine(
+        source,
+        RETIRED_FETCH_RUNTIME_EXPORT_PATTERN,
+      );
+      if (retiredFetchRuntimeExportLine) {
+        violations.push(
+          `${file}:${retiredFetchRuntimeExportLine} fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs; use src/plugin-sdk/ssrf-dispatcher.ts for narrow pinned-dispatcher helpers`,
+        );
+      }
     }
 
     for (const { name, pattern } of RETIRED_GUARD_PATTERNS) {

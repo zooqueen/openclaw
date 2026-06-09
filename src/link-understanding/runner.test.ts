@@ -68,24 +68,25 @@ describe("runLinkUnderstanding", () => {
 
     const result = await runLinkUnderstanding({
       cfg: cfg({ type: "cli", command: "summarize", args: ["--source", "{{LinkUrl}}"] }),
-      ctx: ctx("see https://example.com/page"),
+      ctx: ctx("see https://93.184.216.34/page"),
     });
 
     expect(result.outputs).toEqual(["summarized page"]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "https://example.com/page",
+      "https://93.184.216.34/page",
       expect.objectContaining({
         headers: {
           Accept: "text/*,application/json,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "User-Agent": "OpenClaw-LinkUnderstanding/1.0",
         },
+        redirect: "manual",
         signal: expect.any(AbortSignal),
       }),
     );
     expect(runCommandWithTimeout).toHaveBeenCalledWith(["summarize", "--source"], {
       env: {
         OPENCLAW_LINK_FINAL_URL: "https://example.com/final",
-        OPENCLAW_LINK_URL: "https://example.com/page",
+        OPENCLAW_LINK_URL: "https://93.184.216.34/page",
       },
       input: "page body",
       timeoutMs: 30000,
@@ -101,7 +102,7 @@ describe("runLinkUnderstanding", () => {
         command: "curl",
         args: ["-s", "-L", "{{LinkUrl}}"],
       }),
-      ctx: ctx("see http://192.168.1.64.nip.io:8888/aws-iam-credentials"),
+      ctx: ctx("see http://93.184.216.34/public-page"),
     });
 
     expect(result.outputs).toEqual(["fetched page body"]);
@@ -109,15 +110,25 @@ describe("runLinkUnderstanding", () => {
     expect(runCommandWithTimeout).not.toHaveBeenCalled();
   });
 
-  it("skips links rejected by direct fetch", async () => {
-    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error("fetch failed"));
-
+  it("blocks private link targets through the canonical untrusted URL guard", async () => {
     const result = await runLinkUnderstanding({
       cfg: cfg({ type: "cli", command: "summarize" }),
-      ctx: ctx("see http://169.254.169.254.nip.io/latest/meta-data/"),
+      ctx: ctx("see http://127.0.0.1:8080/admin"),
     });
 
     expect(result.outputs).toEqual([]);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(runCommandWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it("blocks metadata hostnames through the canonical untrusted URL guard", async () => {
+    const result = await runLinkUnderstanding({
+      cfg: cfg({ type: "cli", command: "summarize" }),
+      ctx: ctx("see http://metadata.google.internal/latest/meta-data/"),
+    });
+
+    expect(result.outputs).toEqual([]);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(runCommandWithTimeout).not.toHaveBeenCalled();
   });
 

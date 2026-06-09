@@ -6,9 +6,9 @@ import {
   createHttp1EnvHttpProxyAgent,
   createHttp1ProxyAgent,
   fetchWithResponseRelease,
-  type PinnedDispatcherPolicy,
 } from "openclaw/plugin-sdk/fetch-runtime";
 import { parseMediaContentLength } from "openclaw/plugin-sdk/media-runtime";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/ssrf-dispatcher";
 import { resolveUserPath } from "openclaw/plugin-sdk/text-utility-runtime";
 import type { Dispatcher } from "undici";
 import type { ResolvedGoogleChatAccount } from "./accounts.js";

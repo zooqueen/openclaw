@@ -23,6 +23,26 @@ describe("check-runtime-http-egress-boundary", () => {
     expect(violations[0]).toContain("raw runtime fetch must use src/infra/net/egress-fetch.ts");
   });
 
+  it("catches raw fetch in link-understanding", () => {
+    const violations = collect({
+      "src/link-understanding/runner.ts":
+        "export async function run(url: string) { return fetch(url); }",
+    });
+
+    expect(violations).toEqual([expect.stringContaining("src/link-understanding/runner.ts")]);
+    expect(violations[0]).toContain("raw runtime fetch must use src/infra/net/egress-fetch.ts");
+  });
+
+  it("catches raw fetch in app-owned arbitrary URL tool paths", () => {
+    const violations = collect({
+      "src/agents/tools/web-fetch.ts":
+        "export async function run(url: string) { return globalThis.fetch(url); }",
+    });
+
+    expect(violations).toEqual([expect.stringContaining("src/agents/tools/web-fetch.ts")]);
+    expect(violations[0]).toContain("raw runtime fetch must use src/infra/net/egress-fetch.ts");
+  });
+
   it("allows documented transport exceptions", () => {
     const violations = collect({
       "extensions/telegram/src/fetch.ts":
@@ -44,6 +64,19 @@ describe("check-runtime-http-egress-boundary", () => {
         expect.stringContaining("retired openclaw/plugin-sdk/ssrf-runtime vocabulary"),
       ]),
     );
+  });
+
+  it("catches public fetch-runtime re-exports of retired SSRF APIs", () => {
+    const violations = collect({
+      "src/plugin-sdk/fetch-runtime.ts":
+        'export { createPinnedLookup } from "../infra/net/ssrf.js"; export type { PinnedDispatcherPolicy } from "../infra/net/ssrf.js";',
+    });
+
+    expect(violations).toEqual([
+      expect.stringContaining(
+        "fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs",
+      ),
+    ]);
   });
 
   it("catches old per-call guard plumbing", () => {

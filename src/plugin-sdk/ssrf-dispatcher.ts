@@ -2,6 +2,7 @@
 
 export {
   closeDispatcher,
+  createPinnedLookup,
   createPinnedDispatcher,
   resolvePinnedHostname,
   resolvePinnedHostnameWithPolicy,
