@@ -5,13 +5,13 @@ const ssrfMocks = vi.hoisted(() => ({
   resolvePinnedHostnameWithPolicy: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/bundled-network-policy-runtime", async () => ({
-  ...(await vi.importActual("openclaw/plugin-sdk/bundled-network-policy-runtime")),
+vi.mock("./network-target-policy.js", async () => ({
+  ...(await vi.importActual("./network-target-policy.js")),
   resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
 }));
 
 afterAll(() => {
-  vi.doUnmock("openclaw/plugin-sdk/bundled-network-policy-runtime");
+  vi.doUnmock("./network-target-policy.js");
   vi.resetModules();
 });
 

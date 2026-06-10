@@ -1,5 +1,5 @@
 // Voice Call plugin module implements webhook exposure behavior.
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import { isBlockedHostnameOrIp } from "./network-target-policy.js";
 
 // Webhook exposure checks for providers that must reach local voice-call webhooks.
 

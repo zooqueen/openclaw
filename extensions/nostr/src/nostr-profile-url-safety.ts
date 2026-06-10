@@ -1,5 +1,5 @@
 // Nostr plugin module implements nostr profile url safety behavior.
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import { isBlockedHostnameOrIp } from "./network-target-policy.js";
 
 export function validateUrlSafety(urlStr: string): { ok: true } | { ok: false; error: string } {
   try {

@@ -3,9 +3,9 @@
  * @see https://bot.zaloplatforms.com/docs
  */
 
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
+import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
+import type { NetworkTargetPolicy } from "./network-target-policy.js";
 
 const ZALO_API_BASE = "https://bot-api.zaloplatforms.com";
 const ZALO_MEDIA_SSRF_POLICY: NetworkTargetPolicy = {};

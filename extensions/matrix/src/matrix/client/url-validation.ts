@@ -1,6 +1,6 @@
 // Matrix plugin module implements url validation behavior.
-import { assertHttpUrlTargetsPrivateNetwork } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import { assertHttpUrlTargetsPrivateNetwork } from "./network-target-policy.js";
+import type { LookupFn } from "./network-target-policy.js";
 import { isPrivateOrLoopbackHost } from "./private-network-host.js";
 
 const MATRIX_HTTP_HOMESERVER_ERROR =

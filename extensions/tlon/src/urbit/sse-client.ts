@@ -1,14 +1,11 @@
 // Tlon plugin module implements sse client behavior.
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
-import type {
-  LookupFn,
-  NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
 import { ensureUrbitChannelOpen, pokeUrbitChannel, scryUrbitPath } from "./channel-ops.js";
 import { getUrbitContext, normalizeUrbitCookie } from "./context.js";
 import { urbitFetch } from "./fetch.js";
+import type { LookupFn, NetworkTargetPolicy } from "./network-target-policy.js";
 
 type UrbitSseLogger = {
   log?: (message: string) => void;

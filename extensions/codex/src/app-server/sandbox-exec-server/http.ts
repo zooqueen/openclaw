@@ -4,11 +4,11 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { SandboxContext } from "openclaw/plugin-sdk/sandbox";
 import type { WebSocket } from "ws";
 import type { JsonObject, JsonValue } from "../protocol.js";
 import { readHttpHeaders, requireNumber, requireObject, requireString } from "./json-rpc.js";
+import { isBlockedHostnameOrIp } from "./network-target-policy.js";
 import { requireBackend } from "./runtime.js";
 import type { HttpHeader, OpenClawExecServer } from "./types.js";
 

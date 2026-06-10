@@ -12,9 +12,9 @@
  */
 
 import * as fs from "node:fs";
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
+import { isBlockedHostnameOrIp } from "../../network-target-policy.js";
 import {
   MediaFileType,
   type ChatScope,

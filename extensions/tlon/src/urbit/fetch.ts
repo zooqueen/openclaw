@@ -1,13 +1,10 @@
 // Tlon plugin module implements fetch behavior.
 
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type {
-  LookupFn,
-  NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
 import { validateUrbitBaseUrl } from "./base-url.js";
 import { UrbitUrlError } from "./errors.js";
+import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
+import type { LookupFn, NetworkTargetPolicy } from "./network-target-policy.js";
 
 type UrbitFetchOptions = {
   baseUrl: string;

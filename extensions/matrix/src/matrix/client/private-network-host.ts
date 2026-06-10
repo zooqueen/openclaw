@@ -1,2 +1,2 @@
 // Matrix plugin module implements private network host behavior.
-export { isPrivateOrLoopbackHost } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+export { isPrivateOrLoopbackHost } from "./network-target-policy.js";

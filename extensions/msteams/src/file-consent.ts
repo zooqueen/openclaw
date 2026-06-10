@@ -9,8 +9,8 @@
  */
 
 import { lookup } from "node:dns/promises";
-import { isPrivateIpAddress } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { isPrivateIpAddress } from "./network-target-policy.js";
 import { buildUserAgent } from "./user-agent.js";
 
 /**

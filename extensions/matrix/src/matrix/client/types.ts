@@ -1,6 +1,6 @@
 // Matrix type declarations define plugin contracts.
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { PinnedDispatcherPolicy } from "./network-target-policy.js";
+import type { NetworkTargetPolicy } from "./network-target-policy.js";
 
 export type MatrixResolvedConfig = {
   homeserver: string;

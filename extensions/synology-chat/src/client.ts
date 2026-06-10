@@ -5,13 +5,13 @@
 
 import * as http from "node:http";
 import * as https from "node:https";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { safeParseJsonWithSchema, safeParseWithSchema } from "openclaw/plugin-sdk/extension-shared";
 import { parseStrictNonNegativeInteger } from "openclaw/plugin-sdk/number-runtime";
 import { sleep } from "openclaw/plugin-sdk/runtime-env";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { z } from "zod";
+import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
 
 const MIN_SEND_INTERVAL_MS = 500;
 let lastSendTime = 0;

@@ -74,6 +74,15 @@ describe("check-runtime-http-egress-boundary", () => {
     expect(violations).toEqual([]);
   });
 
+  it("allows the retained narrow Ollama local-origin fetch helper", () => {
+    const violations = collect({
+      "src/plugin-sdk/ollama-local-origin-fetch.ts":
+        "export async function run(url: string) { return fetch(url); }",
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it("catches retired guard vocabulary", () => {
     const violations = collect({
       "src/agents/example-runtime.ts":
@@ -91,7 +100,7 @@ describe("check-runtime-http-egress-boundary", () => {
   it("catches removed public SSRF SDK subpaths", () => {
     const violations = collect({
       "src/agents/example-runtime.ts":
-        'import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/ssrf-policy"; import { resolvePinnedHostname } from "openclaw/plugin-sdk/ssrf-dispatcher"; import { internal } from "openclaw/plugin-sdk/ssrf-runtime-internal";',
+        'import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/ssrf-policy"; import { resolvePinnedHostname } from "openclaw/plugin-sdk/ssrf-dispatcher"; import { internal } from "openclaw/plugin-sdk/ssrf-runtime-internal"; import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";',
     });
 
     expect(violations).toEqual(
@@ -99,6 +108,9 @@ describe("check-runtime-http-egress-boundary", () => {
         expect.stringContaining("retired openclaw/plugin-sdk/ssrf-policy vocabulary"),
         expect.stringContaining("retired openclaw/plugin-sdk/ssrf-dispatcher vocabulary"),
         expect.stringContaining("retired openclaw/plugin-sdk/ssrf-runtime-internal vocabulary"),
+        expect.stringContaining(
+          "retired openclaw/plugin-sdk/bundled-network-policy-runtime vocabulary",
+        ),
       ]),
     );
   });

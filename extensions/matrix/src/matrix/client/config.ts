@@ -1,4 +1,3 @@
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Matrix helper module supports config behavior.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { resolveOptionalIntegerOption } from "openclaw/plugin-sdk/number-runtime";
@@ -30,6 +29,7 @@ import {
   networkTargetPolicyFromDangerouslyAllowPrivateNetwork,
 } from "./config-runtime-api.js";
 import { resolveGlobalMatrixEnvConfig, resolveScopedMatrixEnvConfig } from "./env-auth.js";
+import type { PinnedDispatcherPolicy } from "./network-target-policy.js";
 import { repairCurrentTokenStorageMetaDeviceId } from "./storage.js";
 import type { MatrixAuth, MatrixResolvedConfig } from "./types.js";
 import { resolveValidatedMatrixHomeserverUrl } from "./url-validation.js";

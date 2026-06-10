@@ -1,6 +1,5 @@
 // Matrix setup module handles plugin onboarding behavior.
 import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/account-id";
-import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { DmPolicy } from "openclaw/plugin-sdk/config-contracts";
 import {
   type ChannelSetupDmPolicy,
@@ -26,6 +25,7 @@ import {
   resolveMatrixAccountConfig,
 } from "./matrix/accounts.js";
 import { resolveMatrixEnvAuthReadiness } from "./matrix/client/env-auth.js";
+import { isPrivateNetworkOptInEnabled } from "./matrix/client/network-target-policy.js";
 import { isPrivateOrLoopbackHost } from "./matrix/client/private-network-host.js";
 import {
   resolveValidatedMatrixHomeserverUrl,

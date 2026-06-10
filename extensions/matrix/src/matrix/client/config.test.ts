@@ -1,4 +1,3 @@
-import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Matrix tests cover config plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installMatrixTestRuntime } from "../../test-runtime.js";
@@ -10,6 +9,7 @@ import {
   resolveValidatedMatrixHomeserverUrl,
   validateMatrixHomeserverUrl,
 } from "./config.js";
+import type { LookupFn } from "./network-target-policy.js";
 
 function createLookupFn(addresses: Array<{ address: string; family: number }>): LookupFn {
   return vi.fn(async (_hostname: string, options?: unknown) => {

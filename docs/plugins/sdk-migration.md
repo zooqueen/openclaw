@@ -57,8 +57,9 @@ imports, manifest fields, setup APIs, hooks, and runtime registration behavior.
   `openclaw/plugin-sdk/ssrf-runtime`,
   `openclaw/plugin-sdk/ssrf-policy`, and
   `openclaw/plugin-sdk/ssrf-dispatcher` have been removed from the public plugin
-  SDK, and the old private `openclaw/plugin-sdk/ssrf-runtime-internal` subpath
-  is no longer available to bundled plugins. Plugins that imported
+  SDK, and the old private `openclaw/plugin-sdk/ssrf-runtime-internal` and
+  `openclaw/plugin-sdk/bundled-network-policy-runtime` subpaths are no longer
+  available to bundled plugins. Plugins that imported
   `fetchWithSsrFGuard`, generic SSRF policy helpers, neutral `NetworkTarget*`
   policy helpers, hostname allowlist helpers, DNS pinning helpers, or
   `fetchConfiguredLocalOrigin` should use the supported fetch runtime helpers

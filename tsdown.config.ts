@@ -218,6 +218,8 @@ function shouldAlwaysBundleDependency(id: string): boolean {
   return (
     id === "@openclaw/fs-safe" ||
     id.startsWith("@openclaw/fs-safe/") ||
+    id === "@openclaw/net-policy" ||
+    id.startsWith("@openclaw/net-policy/") ||
     id === "@openclaw/normalization-core" ||
     id.startsWith("@openclaw/normalization-core/") ||
     id === "@openclaw/media-core" ||

@@ -1,3 +1,9 @@
+import {
+  createHttp1Agent,
+  createHttp1EnvHttpProxyAgent,
+  createHttp1ProxyAgent,
+} from "openclaw/plugin-sdk/fetch-runtime";
+import { fetchWithRuntimeDispatcherOrMockedGlobal } from "openclaw/plugin-sdk/runtime-fetch";
 // Matrix API module exposes the plugin public contract.
 import {
   createPinnedLookup,
@@ -10,13 +16,7 @@ import {
   type PinnedDispatcherPolicy,
   type PinnedHostname,
   type PinnedHostnameOverride,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import {
-  createHttp1Agent,
-  createHttp1EnvHttpProxyAgent,
-  createHttp1ProxyAgent,
-} from "openclaw/plugin-sdk/fetch-runtime";
-import { fetchWithRuntimeDispatcherOrMockedGlobal } from "openclaw/plugin-sdk/runtime-fetch";
+} from "../client/network-target-policy.js";
 export { buildTimeoutAbortSignal } from "./timeout-abort-signal.js";
 
 const DISPATCHER_CLOSE_TIMEOUT_MS = 100;

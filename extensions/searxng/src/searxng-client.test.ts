@@ -1,6 +1,6 @@
-// Searxng tests cover searxng client plugin behavior.
-import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Searxng tests cover searxng client plugin behavior.
+import type { LookupFn } from "./network-target-policy.js";
 
 const endpointMockState = vi.hoisted(() => ({
   calls: [] as Array<{ url: string; timeoutSeconds: number; init: RequestInit }>,

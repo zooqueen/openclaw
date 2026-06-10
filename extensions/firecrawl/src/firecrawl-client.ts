@@ -1,10 +1,3 @@
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import {
-  NetworkTargetBlockedError,
-  isBlockedHostnameOrIp,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Firecrawl plugin module implements firecrawl client behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
@@ -30,6 +23,13 @@ import {
   resolveFirecrawlScrapeTimeoutSeconds,
   resolveFirecrawlSearchTimeoutSeconds,
 } from "./config.js";
+import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
+import {
+  NetworkTargetBlockedError,
+  isBlockedHostnameOrIp,
+  isPrivateIpAddress,
+} from "./network-target-policy.js";
+import type { LookupFn } from "./network-target-policy.js";
 
 const SEARCH_CACHE = new Map<
   string,

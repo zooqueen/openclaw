@@ -7,4 +7,4 @@ export {
 export {
   isPrivateNetworkOptInEnabled,
   networkTargetPolicyFromDangerouslyAllowPrivateNetwork,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+} from "./network-target-policy.js";

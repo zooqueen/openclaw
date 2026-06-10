@@ -12,11 +12,8 @@ export {
   matchesHostnameAllowlist,
   resolvePinnedHostnameWithPolicy,
   NetworkTargetBlockedError,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-export type {
-  LookupFn,
-  NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+} from "./infra/net/ssrf.js";
+export type { LookupFn, NetworkTargetPolicy } from "./infra/net/ssrf.js";
 
 export { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 export {

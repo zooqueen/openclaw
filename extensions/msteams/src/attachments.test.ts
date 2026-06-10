@@ -1,10 +1,10 @@
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Msteams tests cover attachments plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRuntime } from "../runtime-api.js";
 import { readRemoteMediaResponse } from "./attachments.test-helpers.js";
 import { downloadMSTeamsAttachments } from "./attachments/download.js";
-import { resolveRequestUrl } from "./attachments/shared.js";
+import { isUrlAllowed, resolveRequestUrl } from "./attachments/shared.js";
+import type { NetworkTargetPolicy } from "./network-target-policy.js";
 import { setMSTeamsRuntime } from "./runtime.js";
 
 const saveResponseMediaMock = vi.hoisted(() =>
@@ -568,6 +568,11 @@ describe("msteams attachments", () => {
       );
 
       expectAttachmentMediaLength(media, 0);
+    });
+
+    it("preserves wildcard media host allowlists", () => {
+      expect(isUrlAllowed("https://example.invalid/image.png", ["*"])).toBe(true);
+      expect(isUrlAllowed("https://example.invalid/image.png", ["*."])).toBe(true);
     });
 
     it("blocks redirects to non-https URLs", async () => {

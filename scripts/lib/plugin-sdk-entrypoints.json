@@ -152,7 +152,6 @@
   "browser-cdp-proxy-bypass",
   "browser-config",
   "boolean-param",
-  "bundled-network-policy-runtime",
   "channel-contract-testing",
   "dangerous-name-runtime",
   "command-auth",

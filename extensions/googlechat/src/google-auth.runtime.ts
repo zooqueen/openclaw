@@ -1,7 +1,6 @@
 // Googlechat plugin module implements google auth behavior.
 import fs from "node:fs/promises";
 import type { ConnectionOptions } from "node:tls";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import {
   createHttp1Agent,
   createHttp1EnvHttpProxyAgent,
@@ -17,6 +16,25 @@ type ProxyRule = RegExp | URL | string;
 type TlsCert = ConnectionOptions["cert"];
 type TlsKey = ConnectionOptions["key"];
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type PinnedDispatcherPolicy =
+  | {
+      mode: "direct";
+      connect?: Record<string, unknown>;
+      pinnedHostname?: { hostname: string; addresses: string[] };
+    }
+  | {
+      mode: "env-proxy";
+      connect?: Record<string, unknown>;
+      proxyTls?: Record<string, unknown>;
+      pinnedHostname?: { hostname: string; addresses: string[] };
+    }
+  | {
+      mode: "explicit-proxy";
+      proxyUrl: string;
+      allowPrivateProxy?: boolean;
+      proxyTls?: Record<string, unknown>;
+      pinnedHostname?: { hostname: string; addresses: string[] };
+    };
 type GoogleAuthModule = typeof import("google-auth-library");
 type GaxiosModule = typeof import("gaxios");
 type GoogleAuthRuntime = {

@@ -835,7 +835,7 @@ describe("plugin sdk alias helpers", () => {
     expect(shadowCodexSubpaths).toEqual(["core"]);
   });
 
-  it("aliases private network helpers for official installed plugin packages", () => {
+  it("aliases retained private helpers for official installed plugin packages", () => {
     const fixture = createPluginSdkAliasFixture({
       packageExports: {
         "./plugin-sdk/core": { default: "./dist/plugin-sdk/core.js" },
@@ -844,12 +844,6 @@ describe("plugin sdk alias helpers", () => {
     fs.rmSync(
       path.join(fixture.root, "scripts", "lib", "plugin-sdk-private-local-only-subpaths.json"),
       { force: true },
-    );
-    const distNetworkPolicyRuntimePath = path.join(
-      fixture.root,
-      "dist",
-      "plugin-sdk",
-      "bundled-network-policy-runtime.js",
     );
     const distBrowserCdpProxyBypassPath = path.join(
       fixture.root,
@@ -864,11 +858,6 @@ describe("plugin sdk alias helpers", () => {
       "ollama-local-origin-fetch.js",
     );
     fs.writeFileSync(
-      distNetworkPolicyRuntimePath,
-      "export const bundledNetworkPolicyRuntime = true;\n",
-      "utf-8",
-    );
-    fs.writeFileSync(
       distBrowserCdpProxyBypassPath,
       "export const browserCdpProxyBypass = true;\n",
       "utf-8",
@@ -878,18 +867,7 @@ describe("plugin sdk alias helpers", () => {
       "export const ollamaLocalOriginFetch = true;\n",
       "utf-8",
     );
-    const { packageRoot: installedBraveRoot, pluginEntry: installedBraveEntry } =
-      writeInstalledPluginEntry({
-        installRoot: path.join(makeTempDir(), ".openclaw", "npm"),
-        packageName: "@openclaw/brave-plugin",
-      });
     const extensionsRoot = path.join(makeTempDir(), ".openclaw", "extensions");
-    const { packageRoot: clawHubBraveRoot, pluginEntry: clawHubBraveEntry } =
-      writeExtensionInstalledPluginEntry({
-        extensionsRoot,
-        pluginId: "brave",
-        packageName: "@openclaw/brave-plugin",
-      });
     const { packageRoot: clawHubOllamaRoot, pluginEntry: clawHubOllamaEntry } =
       writeExtensionInstalledPluginEntry({
         extensionsRoot,
@@ -907,36 +885,6 @@ describe("plugin sdk alias helpers", () => {
         installRoot: path.join(makeTempDir(), ".openclaw", "npm"),
         packageName: "@openclaw/demo",
       });
-    const shadowBraveRoot = path.join(makeTempDir(), ".openclaw", "extensions", "brave-shadow");
-    const shadowBraveEntry = path.join(shadowBraveRoot, "dist", "index.js");
-    mkdirSafeDir(path.dirname(shadowBraveEntry));
-    fs.writeFileSync(
-      path.join(shadowBraveRoot, "package.json"),
-      JSON.stringify({ name: "@openclaw/brave-plugin", type: "module" }, null, 2),
-      "utf-8",
-    );
-    fs.writeFileSync(shadowBraveEntry, 'export const plugin = "shadow";\n', "utf-8");
-
-    const installedBraveAliases = withCwd(installedBraveRoot, () =>
-      withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined }, () =>
-        buildPluginLoaderAliasMap(
-          installedBraveEntry,
-          path.join(fixture.root, "openclaw.mjs"),
-          undefined,
-          "dist",
-        ),
-      ),
-    );
-    const clawHubBraveAliases = withCwd(clawHubBraveRoot, () =>
-      withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined }, () =>
-        buildPluginLoaderAliasMap(
-          clawHubBraveEntry,
-          path.join(fixture.root, "openclaw.mjs"),
-          undefined,
-          "dist",
-        ),
-      ),
-    );
     const clawHubOllamaAliases = withCwd(clawHubOllamaRoot, () =>
       withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined }, () =>
         buildPluginLoaderAliasMap(
@@ -967,39 +915,14 @@ describe("plugin sdk alias helpers", () => {
         ),
       ),
     );
-    const shadowBraveAliases = withCwd(shadowBraveRoot, () =>
-      withEnv({ OPENCLAW_ENABLE_PRIVATE_QA_CLI: undefined, NODE_ENV: undefined }, () =>
-        buildPluginLoaderAliasMap(
-          shadowBraveEntry,
-          path.join(fixture.root, "openclaw.mjs"),
-          undefined,
-          "dist",
-        ),
-      ),
-    );
-
-    expect(
-      fs.realpathSync(
-        installedBraveAliases["openclaw/plugin-sdk/bundled-network-policy-runtime"] ?? "",
-      ),
-    ).toBe(fs.realpathSync(distNetworkPolicyRuntimePath));
-    expect(
-      fs.realpathSync(
-        clawHubBraveAliases["openclaw/plugin-sdk/bundled-network-policy-runtime"] ?? "",
-      ),
-    ).toBe(fs.realpathSync(distNetworkPolicyRuntimePath));
     expect(
       fs.realpathSync(clawHubOllamaAliases["openclaw/plugin-sdk/ollama-local-origin-fetch"] ?? ""),
     ).toBe(fs.realpathSync(distOllamaLocalOriginFetchPath));
     expect(
       fs.realpathSync(clawHubBrowserAliases["openclaw/plugin-sdk/browser-cdp-proxy-bypass"] ?? ""),
     ).toBe(fs.realpathSync(distBrowserCdpProxyBypassPath));
-    expect(
-      installedOtherAliases["openclaw/plugin-sdk/bundled-network-policy-runtime"],
-    ).toBeUndefined();
-    expect(
-      shadowBraveAliases["openclaw/plugin-sdk/bundled-network-policy-runtime"],
-    ).toBeUndefined();
+    expect(installedOtherAliases["openclaw/plugin-sdk/ollama-local-origin-fetch"]).toBeUndefined();
+    expect(installedOtherAliases["openclaw/plugin-sdk/browser-cdp-proxy-bypass"]).toBeUndefined();
   });
 
   it("does not reuse a non-private cached subpath list after private qa gets enabled", () => {

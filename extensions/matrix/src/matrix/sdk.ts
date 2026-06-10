@@ -12,8 +12,6 @@ import {
 } from "matrix-js-sdk/lib/matrix.js";
 import type { Direction } from "matrix-js-sdk/lib/models/event-timeline.js";
 import { VerificationMethod } from "matrix-js-sdk/lib/types.js";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { KeyedAsyncQueue } from "openclaw/plugin-sdk/keyed-async-queue";
 import {
   normalizeNullableString,
@@ -23,6 +21,8 @@ import {
 import { resolveMatrixRoomKeyBackupReadinessError } from "./backup-health.js";
 import { SqliteBackedMatrixSyncStore } from "./client/file-sync-store.js";
 import { createMatrixJsSdkClientLogger } from "./client/logging.js";
+import type { PinnedDispatcherPolicy } from "./client/network-target-policy.js";
+import type { NetworkTargetPolicy } from "./client/network-target-policy.js";
 import {
   formatMatrixErrorMessage,
   formatMatrixErrorReason,

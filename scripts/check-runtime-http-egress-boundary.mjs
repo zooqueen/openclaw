@@ -31,6 +31,10 @@ const RETIRED_GUARD_PATTERNS = [
     pattern: /openclaw\/plugin-sdk\/ssrf-dispatcher(?:["']|$)/u,
   },
   {
+    name: "openclaw/plugin-sdk/bundled-network-policy-runtime",
+    pattern: /openclaw\/plugin-sdk\/bundled-network-policy-runtime(?:["']|$)/u,
+  },
+  {
     name: "withTrustedEnvProxyGuardedFetchMode",
     pattern: /\bwithTrustedEnvProxyGuardedFetchMode\b/u,
   },
@@ -70,6 +74,10 @@ const RAW_FETCH_ALLOWLIST = new Map(
     [
       "src/infra/net/ssrf.ts",
       "legacy address/classifier and dispatcher owner retained for browser/CDP and low-level proxy helpers; proxy.enabled handled by callers",
+    ],
+    [
+      "src/plugin-sdk/ollama-local-origin-fetch.ts",
+      "retained narrow Ollama local-origin helper; proxy.enabled is intentionally bypassed for verified localhost provider endpoints",
     ],
     [
       "src/infra/net/proxy/managed-proxy-undici.ts",

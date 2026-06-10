@@ -1,6 +1,5 @@
 // Lmstudio plugin module implements stream behavior.
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
-import { networkTargetPolicyFromHttpBaseUrlAllowedHostname } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { streamSimple } from "openclaw/plugin-sdk/llm";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 import type { ProviderWrapStreamFnContext } from "openclaw/plugin-sdk/plugin-entry";
@@ -9,6 +8,7 @@ import { asPositiveSafeInteger } from "openclaw/plugin-sdk/string-coerce-runtime
 import { LMSTUDIO_PROVIDER_ID } from "./defaults.js";
 import { ensureLmstudioModelLoaded } from "./models.fetch.js";
 import { resolveLmstudioInferenceBase } from "./models.js";
+import { networkTargetPolicyFromHttpBaseUrlAllowedHostname } from "./network-target-policy.js";
 import { resolveLmstudioProviderHeaders, resolveLmstudioRuntimeApiKey } from "./runtime.js";
 
 const log = createSubsystemLogger("extensions/lmstudio/stream");

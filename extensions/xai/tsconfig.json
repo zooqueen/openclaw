@@ -12,6 +12,15 @@
       "openclaw/plugin-sdk/*": [
         "../../dist/plugin-sdk/*.d.ts"
       ],
+      "@openclaw/net-policy": [
+        "../../packages/net-policy/dist/index.d.mts"
+      ],
+      "@openclaw/net-policy/ip": [
+        "../../dist/plugin-sdk/packages/net-policy/src/ip.d.ts"
+      ],
+      "@openclaw/net-policy/*": [
+        "../../dist/plugin-sdk/packages/net-policy/src/*.d.ts"
+      ],
       "openclaw/plugin-sdk/reply-payload-testing": [
         "../../packages/plugin-sdk/dist/src/plugin-sdk/reply-payload-testing.d.ts"
       ],
@@ -26,9 +35,6 @@
       ],
       "openclaw/plugin-sdk/browser-cdp-proxy-bypass": [
         "../../packages/plugin-sdk/dist/src/plugin-sdk/browser-cdp-proxy-bypass.d.ts"
-      ],
-      "openclaw/plugin-sdk/bundled-network-policy-runtime": [
-        "../../packages/plugin-sdk/dist/src/plugin-sdk/bundled-network-policy-runtime.d.ts"
       ],
       "openclaw/plugin-sdk/channel-target-testing": [
         "../../packages/plugin-sdk/dist/src/plugin-sdk/channel-target-testing.d.ts"

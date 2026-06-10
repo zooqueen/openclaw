@@ -24,8 +24,8 @@ vi.mock("node:http", async () => {
   return { ...actual, default: httpModule, request: httpRequest, get: httpGet };
 });
 
-vi.mock("openclaw/plugin-sdk/bundled-network-policy-runtime", async () => ({
-  ...(await vi.importActual("openclaw/plugin-sdk/bundled-network-policy-runtime")),
+vi.mock("./network-target-policy.js", async () => ({
+  ...(await vi.importActual("./network-target-policy.js")),
   resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
 }));
 

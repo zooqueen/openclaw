@@ -1,4 +1,3 @@
-import { networkTargetPolicyFromHttpBaseUrlAllowedHostname } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 // Lmstudio provider module implements model/runtime integration.
 import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
@@ -12,6 +11,7 @@ import { resolveMemorySecretInputString } from "openclaw/plugin-sdk/memory-core-
 import { LMSTUDIO_DEFAULT_EMBEDDING_MODEL, LMSTUDIO_PROVIDER_ID } from "./defaults.js";
 import { ensureLmstudioModelLoaded } from "./models.fetch.js";
 import { resolveLmstudioInferenceBase } from "./models.js";
+import { networkTargetPolicyFromHttpBaseUrlAllowedHostname } from "./network-target-policy.js";
 import {
   buildLmstudioAuthHeaders,
   resolveLmstudioProviderHeaders,

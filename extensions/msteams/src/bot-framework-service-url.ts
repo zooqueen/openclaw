@@ -4,7 +4,7 @@ import {
   isHttpsUrlAllowedByHostnameSuffixAllowlist,
   normalizeHostnameSuffixAllowlist,
   type NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+} from "./network-target-policy.js";
 
 const DEFAULT_BOT_FRAMEWORK_SERVICE_URL_HOST_ALLOWLIST = [
   // Microsoft Teams Bot Framework serviceUrl endpoints documented for

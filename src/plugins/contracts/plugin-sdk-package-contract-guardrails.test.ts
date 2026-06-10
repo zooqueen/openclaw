@@ -791,15 +791,11 @@ describe("plugin-sdk package contract guardrails", () => {
     expect(fetchRuntimeSource).not.toContain("configuredLocalOriginBaseUrl");
   });
 
-  it("keeps network-policy and proxy-bypass helpers private-local-only", () => {
+  it("keeps retained private helpers private-local-only", () => {
     const exports = new Set(collectPluginSdkPackageExports());
     const localOnly = new Set(privateLocalOnlyPluginSdkEntrypoints);
 
-    for (const entrypoint of [
-      "browser-cdp-proxy-bypass",
-      "bundled-network-policy-runtime",
-      "ollama-local-origin-fetch",
-    ]) {
+    for (const entrypoint of ["browser-cdp-proxy-bypass", "ollama-local-origin-fetch"]) {
       expect(localOnly.has(entrypoint)).toBe(true);
       expect(exports.has(entrypoint)).toBe(false);
     }

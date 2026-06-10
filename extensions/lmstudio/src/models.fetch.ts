@@ -1,9 +1,3 @@
-import {
-  isBlockedHostnameOrIp,
-  resolveNetworkTargetPolicyForUrl,
-  NetworkTargetBlockedError,
-  type NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
 // Lmstudio plugin module implements models.fetch behavior.
 import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
@@ -20,6 +14,12 @@ import {
   resolveLoadedContextWindow,
   type LmstudioModelWire,
 } from "./models.js";
+import {
+  isBlockedHostnameOrIp,
+  resolveNetworkTargetPolicyForUrl,
+  NetworkTargetBlockedError,
+  type NetworkTargetPolicy,
+} from "./network-target-policy.js";
 import { buildLmstudioAuthHeaders } from "./runtime.js";
 
 const log = createSubsystemLogger("extensions/lmstudio/models");

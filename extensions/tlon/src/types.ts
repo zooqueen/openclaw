@@ -5,8 +5,8 @@ import {
   normalizeAccountId,
   resolveMergedAccountConfig,
 } from "openclaw/plugin-sdk/account-resolution";
-import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { isPrivateNetworkOptInEnabled } from "./urbit/network-target-policy.js";
 
 type TlonAccountConfig = {
   name?: string;

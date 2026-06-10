@@ -1,10 +1,7 @@
-// Tlon plugin module implements auth behavior.
-import type {
-  LookupFn,
-  NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { UrbitAuthError } from "./errors.js";
 import { urbitFetch } from "./fetch.js";
+// Tlon plugin module implements auth behavior.
+import type { LookupFn, NetworkTargetPolicy } from "./network-target-policy.js";
 
 type UrbitAuthenticateOptions = {
   ssrfPolicy?: NetworkTargetPolicy;

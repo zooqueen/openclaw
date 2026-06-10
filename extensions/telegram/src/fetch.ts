@@ -1,10 +1,6 @@
 // Telegram plugin module implements fetch behavior.
 import { randomUUID } from "node:crypto";
 import * as dns from "node:dns";
-import {
-  createPinnedLookup,
-  type PinnedDispatcherPolicy,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { TelegramNetworkConfig } from "openclaw/plugin-sdk/config-contracts";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import {
@@ -31,6 +27,7 @@ import {
   resolveTelegramAutoSelectFamilyDecision,
   resolveTelegramDnsResultOrderDecision,
 } from "./network-config.js";
+import { createPinnedLookup, type PinnedDispatcherPolicy } from "./network-target-policy.js";
 import { getProxyUrlFromFetch, makeProxyFetch } from "./proxy.js";
 
 const log = createSubsystemLogger("telegram/network");

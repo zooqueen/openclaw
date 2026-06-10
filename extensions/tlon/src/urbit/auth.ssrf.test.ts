@@ -1,8 +1,8 @@
-// Tlon tests cover auth.ssrf plugin behavior.
-import { NetworkTargetBlockedError } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { authenticate } from "./auth.js";
+// Tlon tests cover auth.ssrf plugin behavior.
+import { NetworkTargetBlockedError } from "./network-target-policy.js";
+import type { LookupFn } from "./network-target-policy.js";
 
 describe("tlon urbit auth ssrf", () => {
   beforeEach(() => {

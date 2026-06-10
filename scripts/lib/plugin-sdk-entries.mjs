@@ -17,7 +17,6 @@ const privateLocalOnlyPluginSdkSubpathSet = new Set(
 );
 const packagedPrivateRuntimePluginSdkSubpathSet = new Set([
   "browser-cdp-proxy-bypass",
-  "bundled-network-policy-runtime",
   "ollama-local-origin-fetch",
 ]);
 

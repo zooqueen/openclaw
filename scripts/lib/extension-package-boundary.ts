@@ -176,6 +176,9 @@ export const EXTENSION_PACKAGE_BOUNDARY_BASE_PATHS = {
     "../dist/plugin-sdk/packages/media-core/src/read-response-with-limit.d.ts",
   ],
   "@openclaw/media-core/*": ["../dist/plugin-sdk/packages/media-core/src/*.d.ts"],
+  "@openclaw/net-policy": ["../packages/net-policy/dist/index.d.mts"],
+  "@openclaw/net-policy/ip": ["../dist/plugin-sdk/packages/net-policy/src/ip.d.ts"],
+  "@openclaw/net-policy/*": ["../dist/plugin-sdk/packages/net-policy/src/*.d.ts"],
   "@openclaw/normalization-core/record-coerce": [
     "../dist/plugin-sdk/packages/normalization-core/src/record-coerce.d.ts",
   ],

@@ -1,9 +1,3 @@
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
-import {
-  assertHttpUrlTargetsPrivateNetwork,
-  isBlockedHostnameOrIp,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 /**
  * Brave Search HTTP runtime. It resolves credentials, enforces endpoint safety,
  * applies caching, and maps Brave web/LLM-context API responses.
@@ -42,6 +36,12 @@ import {
   resolveBraveConfig,
   resolveBraveMode,
 } from "./brave-web-search-provider.shared.js";
+import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
+import {
+  assertHttpUrlTargetsPrivateNetwork,
+  isBlockedHostnameOrIp,
+  isPrivateIpAddress,
+} from "./network-target-policy.js";
 
 const DEFAULT_BRAVE_BASE_URL = "https://api.search.brave.com";
 const BRAVE_SEARCH_ENDPOINT_PATH = "/res/v1/web/search";
