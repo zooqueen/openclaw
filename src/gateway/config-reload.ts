@@ -409,7 +409,7 @@ export function startGatewayConfigReloader(opts: {
   let watcherRecreateTimer: ReturnType<typeof setTimeout> | null = null;
   let hotReloadStatus: GatewayHotReloadStatus = "active";
 
-  const createWatcher = () => {
+  const createWatcher = (reconcileOnReady = false) => {
     if (stopped) {
       return;
     }
@@ -424,6 +424,9 @@ export function startGatewayConfigReloader(opts: {
     next.on("ready", () => {
       if (next === watcher) {
         watcherRecreateRetries = 0;
+        if (reconcileOnReady) {
+          scheduleFromWatcher();
+        }
       }
     });
     next.on("error", (err) => {
@@ -457,7 +460,7 @@ export function startGatewayConfigReloader(opts: {
     );
     watcherRecreateTimer = setTimeout(() => {
       watcherRecreateTimer = null;
-      createWatcher();
+      createWatcher(true);
     }, backoff);
   };
 

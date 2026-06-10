@@ -1600,23 +1600,27 @@ describe("startGatewayConfigReloader watcher error recovery", () => {
     vi.restoreAllMocks();
   });
 
-  function startReloaderWithWatchers(watchers: ReturnType<typeof createWatcherMock>[]) {
+  function startReloaderWithWatchers(
+    watchers: ReturnType<typeof createWatcherMock>[],
+    readSnapshot = vi.fn(async () => makeSnapshot()),
+  ) {
     const watchSpy = vi.spyOn(chokidar, "watch");
     for (const watcher of watchers) {
       watchSpy.mockReturnValueOnce(watcher as unknown as never);
     }
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const onHotReload = vi.fn(async () => {});
     const reloader = startGatewayConfigReloader({
       initialConfig: { gateway: { reload: { debounceMs: 0 } } },
-      readSnapshot: vi.fn(async () => makeSnapshot()),
+      readSnapshot,
       initialPluginInstallRecords: {},
       readPluginInstallRecords: async () => ({}),
-      onHotReload: vi.fn(async () => {}),
+      onHotReload,
       onRestart: vi.fn(),
       log,
       watchPath: "/tmp/openclaw.json",
     });
-    return { watchSpy, log, reloader };
+    return { watchSpy, log, reloader, onHotReload };
   }
 
   it("re-creates the watcher with backoff after a transient error", async () => {
@@ -1657,6 +1661,25 @@ describe("startGatewayConfigReloader watcher error recovery", () => {
     expect(watchSpy).toHaveBeenCalledTimes(5);
     expect(reloader.hotReloadStatus()).toBe("active");
     expect(log.error).not.toHaveBeenCalled();
+
+    await reloader.stop();
+  });
+
+  it("reconciles config changes missed during watcher recovery backoff", async () => {
+    const first = createWatcherMock();
+    const second = createWatcherMock();
+    const readSnapshot = vi.fn(async () =>
+      makeSnapshot({ config: { gateway: { reload: { debounceMs: 0 } }, port: 18790 } }),
+    );
+    const { onHotReload, reloader } = startReloaderWithWatchers([first, second], readSnapshot);
+
+    first.emit("error");
+    await vi.advanceTimersByTimeAsync(500);
+    second.emit("ready");
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(readSnapshot).toHaveBeenCalledTimes(1);
+    expect(onHotReload).toHaveBeenCalledTimes(1);
 
     await reloader.stop();
   });
