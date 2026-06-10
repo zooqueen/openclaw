@@ -1,5 +1,11 @@
 # OpenClaw iOS Changelog
 
+## 2026.6.6 - 2026-06-11
+
+Maintenance update for the current OpenClaw beta release.
+
+- Improved iPad and iPhone control surfaces and mobile session reliability.
+
 ## 2026.6.2 - 2026-06-02
 
 OpenClaw is now available on iPhone.
