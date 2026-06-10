@@ -148,9 +148,9 @@ describe("renderSkills", () => {
     );
     await Promise.resolve();
 
-    const updatedToggles = container.querySelectorAll<HTMLInputElement>(".skill-toggle");
-    expect(updatedToggles).toHaveLength(1);
-    expect(updatedToggles[0].checked).toBe(false);
+    const updatedRow = container.querySelector<HTMLElement>('[data-skill-key="apple-notes"]');
+    expect(updatedRow).not.toBeNull();
+    expect(updatedRow?.querySelector<HTMLInputElement>(".skill-toggle")?.checked).toBe(false);
   });
 
   it("defers detail dialog opening until the dialog is connected", async () => {

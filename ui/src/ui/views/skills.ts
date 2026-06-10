@@ -460,7 +460,11 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   const verdict = verdictForSkill(skill, props.clawhubVerdicts);
 
   return html`
-    <div class="list-item list-item-clickable" @click=${() => props.onDetailOpen(skill.skillKey)}>
+    <div
+      class="list-item list-item-clickable"
+      data-skill-key=${skill.skillKey}
+      @click=${() => props.onDetailOpen(skill.skillKey)}
+    >
       <div class="list-main">
         <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
           <span class="statusDot ${dotClass}"></span>
