@@ -12,7 +12,7 @@ const {
   resolveLineChannelAccessTokenMock,
   recordChannelActivityMock,
   logVerboseMock,
-  resolvePinnedHostnameWithPolicyMock,
+  assertPublicHostnameResolvesMock,
 } = vi.hoisted(() => {
   const pushMessageMockLocal = vi.fn();
   const replyMessageMockLocal = vi.fn();
@@ -31,7 +31,7 @@ const {
   const resolveLineChannelAccessTokenMockLocal = vi.fn(() => "line-token");
   const recordChannelActivityMockLocal = vi.fn();
   const logVerboseMockLocal = vi.fn();
-  const resolvePinnedHostnameWithPolicyMockLocal = vi.fn();
+  const assertPublicHostnameResolvesMockLocal = vi.fn();
   return {
     pushMessageMock: pushMessageMockLocal,
     replyMessageMock: replyMessageMockLocal,
@@ -43,7 +43,7 @@ const {
     resolveLineChannelAccessTokenMock: resolveLineChannelAccessTokenMockLocal,
     recordChannelActivityMock: recordChannelActivityMockLocal,
     logVerboseMock: logVerboseMockLocal,
-    resolvePinnedHostnameWithPolicyMock: resolvePinnedHostnameWithPolicyMockLocal,
+    assertPublicHostnameResolvesMock: assertPublicHostnameResolvesMockLocal,
   };
 });
 
@@ -79,7 +79,7 @@ vi.mock("openclaw/plugin-sdk/runtime-env", async () => {
 
 vi.mock("./network-target-policy.js", async () => ({
   ...(await vi.importActual("./network-target-policy.js")),
-  resolvePinnedHostnameWithPolicy: resolvePinnedHostnameWithPolicyMock,
+  assertPublicHostnameResolves: assertPublicHostnameResolvesMock,
 }));
 
 let sendModule: typeof import("./send.js");
@@ -124,7 +124,7 @@ describe("LINE send helpers", () => {
     resolveLineChannelAccessTokenMock.mockReset();
     recordChannelActivityMock.mockReset();
     logVerboseMock.mockReset();
-    resolvePinnedHostnameWithPolicyMock.mockReset();
+    assertPublicHostnameResolvesMock.mockReset();
 
     MessagingApiClientMock.mockImplementation(function () {
       return {
@@ -137,10 +137,7 @@ describe("LINE send helpers", () => {
     requireRuntimeConfigMock.mockImplementation((cfg: unknown) => cfg ?? LINE_TEST_CFG);
     resolveLineAccountMock.mockReturnValue({ accountId: "default" });
     resolveLineChannelAccessTokenMock.mockReturnValue("line-token");
-    resolvePinnedHostnameWithPolicyMock.mockResolvedValue({
-      hostname: "example.com",
-      addresses: ["93.184.216.34"],
-    });
+    assertPublicHostnameResolvesMock.mockResolvedValue(undefined);
     pushMessageMock.mockResolvedValue({});
     replyMessageMock.mockResolvedValue({});
     showLoadingAnimationMock.mockResolvedValue({});
@@ -315,7 +312,7 @@ describe("LINE send helpers", () => {
   });
 
   it("blocks private-network media URLs before calling LINE", async () => {
-    resolvePinnedHostnameWithPolicyMock.mockRejectedValueOnce(
+    assertPublicHostnameResolvesMock.mockRejectedValueOnce(
       new Error("SSRF blocked private network target"),
     );
 

@@ -1,7 +1,6 @@
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 // Line plugin module implements outbound media behavior.
-import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
-import type { NetworkTargetPolicy } from "./network-target-policy.js";
+import { assertPublicHostnameResolves } from "./network-target-policy.js";
 
 type LineOutboundMediaKind = "image" | "video" | "audio";
 
@@ -20,10 +19,6 @@ type ResolveLineOutboundMediaOpts = {
   trackingId?: string;
 };
 
-const LINE_OUTBOUND_MEDIA_SSRF_POLICY: NetworkTargetPolicy = {
-  allowPrivateNetwork: false,
-};
-
 export async function validateLineMediaUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
@@ -37,9 +32,7 @@ export async function validateLineMediaUrl(url: string): Promise<void> {
   if (url.length > 2000) {
     throw new Error(`LINE outbound media URL must be 2000 chars or less (got ${url.length})`);
   }
-  await resolvePinnedHostnameWithPolicy(parsed.hostname, {
-    policy: LINE_OUTBOUND_MEDIA_SSRF_POLICY,
-  });
+  await assertPublicHostnameResolves(parsed.hostname);
 }
 
 export function detectLineMediaKind(mimeType: string): LineOutboundMediaKind {

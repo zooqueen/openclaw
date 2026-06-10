@@ -2,14 +2,13 @@
 import { MAX_TIMER_TIMEOUT_MS } from "openclaw/plugin-sdk/number-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { resolvePinnedHostnameWithPolicyMock } = vi.hoisted(() => ({
-  resolvePinnedHostnameWithPolicyMock: vi.fn(),
+const { assertPublicHostnameResolvesMock } = vi.hoisted(() => ({
+  assertPublicHostnameResolvesMock: vi.fn(),
 }));
 
 vi.mock("./network-target-policy.js", async () => ({
   ...(await vi.importActual("./network-target-policy.js")),
-  resolvePinnedHostnameWithPolicy: (...args: unknown[]) =>
-    resolvePinnedHostnameWithPolicyMock(...args),
+  assertPublicHostnameResolves: (...args: unknown[]) => assertPublicHostnameResolvesMock(...args),
 }));
 
 import { deleteWebhook, getWebhookInfo, sendChatAction, sendPhoto, type ZaloFetch } from "./api.js";
@@ -40,12 +39,8 @@ async function expectPostJsonRequest(run: (token: string, fetcher: ZaloFetch) =>
 
 describe("Zalo API request methods", () => {
   beforeEach(() => {
-    resolvePinnedHostnameWithPolicyMock.mockReset();
-    resolvePinnedHostnameWithPolicyMock.mockResolvedValue({
-      hostname: "example.com",
-      addresses: ["93.184.216.34"],
-      lookup: vi.fn(),
-    });
+    assertPublicHostnameResolvesMock.mockReset();
+    assertPublicHostnameResolvesMock.mockResolvedValue(undefined);
   });
 
   it("uses POST for getWebhookInfo", async () => {
@@ -139,15 +134,13 @@ describe("Zalo API request methods", () => {
       fetcher,
     );
 
-    expect(resolvePinnedHostnameWithPolicyMock).toHaveBeenCalledWith("example.com", {
-      policy: {},
-    });
+    expect(assertPublicHostnameResolvesMock).toHaveBeenCalledWith("example.com");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("blocks private-network photo URLs before they reach the Zalo API", async () => {
     const fetcher = createOkFetcher();
-    resolvePinnedHostnameWithPolicyMock.mockRejectedValueOnce(
+    assertPublicHostnameResolvesMock.mockRejectedValueOnce(
       new Error("Blocked hostname or private/internal/special-use IP address"),
     );
 
@@ -179,7 +172,7 @@ describe("Zalo API request methods", () => {
       ),
     ).rejects.toThrow("Zalo photo URL must use HTTP or HTTPS");
 
-    expect(resolvePinnedHostnameWithPolicyMock).not.toHaveBeenCalled();
+    expect(assertPublicHostnameResolvesMock).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -197,7 +190,7 @@ describe("Zalo API request methods", () => {
       ),
     ).rejects.toThrow("Zalo photo URL must be an absolute HTTP or HTTPS URL");
 
-    expect(resolvePinnedHostnameWithPolicyMock).not.toHaveBeenCalled();
+    expect(assertPublicHostnameResolvesMock).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
 });

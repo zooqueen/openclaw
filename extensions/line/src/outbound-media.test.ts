@@ -2,12 +2,12 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ssrfMocks = vi.hoisted(() => ({
-  resolvePinnedHostnameWithPolicy: vi.fn(),
+  assertPublicHostnameResolves: vi.fn(),
 }));
 
 vi.mock("./network-target-policy.js", async () => ({
   ...(await vi.importActual("./network-target-policy.js")),
-  resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
+  assertPublicHostnameResolves: ssrfMocks.assertPublicHostnameResolves,
 }));
 
 afterAll(() => {
@@ -23,52 +23,43 @@ import {
 
 describe("validateLineMediaUrl", () => {
   beforeEach(() => {
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockReset();
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockResolvedValue({
-      hostname: "example.com",
-      addresses: ["93.184.216.34"],
-    });
+    ssrfMocks.assertPublicHostnameResolves.mockReset();
+    ssrfMocks.assertPublicHostnameResolves.mockResolvedValue(undefined);
   });
 
   it("accepts HTTPS URL", async () => {
     await expect(validateLineMediaUrl("https://example.com/image.jpg")).resolves.toBeUndefined();
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).toHaveBeenCalledWith("example.com", {
-      policy: { allowPrivateNetwork: false },
-    });
+    expect(ssrfMocks.assertPublicHostnameResolves).toHaveBeenCalledWith("example.com");
   });
 
   it("accepts uppercase HTTPS scheme", async () => {
     await expect(validateLineMediaUrl("HTTPS://EXAMPLE.COM/img.jpg")).resolves.toBeUndefined();
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).toHaveBeenCalledWith("example.com", {
-      policy: { allowPrivateNetwork: false },
-    });
+    expect(ssrfMocks.assertPublicHostnameResolves).toHaveBeenCalledWith("example.com");
   });
 
   it("rejects HTTP URL", async () => {
     await expect(validateLineMediaUrl("http://example.com/image.jpg")).rejects.toThrow(
       /must use HTTPS/i,
     );
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).not.toHaveBeenCalled();
+    expect(ssrfMocks.assertPublicHostnameResolves).not.toHaveBeenCalled();
   });
 
   it("rejects URL longer than 2000 chars", async () => {
     const longUrl = `https://example.com/${"a".repeat(1981)}`;
     expect(longUrl.length).toBeGreaterThan(2000);
     await expect(validateLineMediaUrl(longUrl)).rejects.toThrow(/2000 chars or less/i);
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).not.toHaveBeenCalled();
+    expect(ssrfMocks.assertPublicHostnameResolves).not.toHaveBeenCalled();
   });
 
   it("rejects private-network targets through the shared SSRF policy", async () => {
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockRejectedValueOnce(
+    ssrfMocks.assertPublicHostnameResolves.mockRejectedValueOnce(
       new Error("SSRF blocked private network target"),
     );
 
     await expect(validateLineMediaUrl("https://127.0.0.1/image.jpg")).rejects.toThrow(
       /private network/i,
     );
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).toHaveBeenCalledWith("127.0.0.1", {
-      policy: { allowPrivateNetwork: false },
-    });
+    expect(ssrfMocks.assertPublicHostnameResolves).toHaveBeenCalledWith("127.0.0.1");
   });
 });
 
@@ -96,11 +87,8 @@ describe("detectLineMediaKind", () => {
 
 describe("resolveLineOutboundMedia", () => {
   beforeEach(() => {
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockReset();
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockResolvedValue({
-      hostname: "example.com",
-      addresses: ["93.184.216.34"],
-    });
+    ssrfMocks.assertPublicHostnameResolves.mockReset();
+    ssrfMocks.assertPublicHostnameResolves.mockResolvedValue(undefined);
   });
 
   it("respects explicit media kind without remote MIME probing", async () => {

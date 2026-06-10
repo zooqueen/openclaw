@@ -11,7 +11,7 @@ import { parseStrictNonNegativeInteger } from "openclaw/plugin-sdk/number-runtim
 import { sleep } from "openclaw/plugin-sdk/runtime-env";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { z } from "zod";
-import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
+import { assertPublicHostnameResolves } from "./network-target-policy.js";
 
 const MIN_SEND_INTERVAL_MS = 500;
 let lastSendTime = 0;
@@ -242,7 +242,7 @@ async function assertSafeWebhookFileUrl(fileUrl: string): Promise<string> {
     throw new Error("Synology Chat file URL must use HTTP or HTTPS");
   }
 
-  await resolvePinnedHostnameWithPolicy(parsed.hostname);
+  await assertPublicHostnameResolves(parsed.hostname);
   return parsed.toString();
 }
 

@@ -4,7 +4,7 @@ import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 
 const ssrfMocks = {
-  resolvePinnedHostnameWithPolicy: vi.fn(),
+  assertPublicHostnameResolves: vi.fn(),
 };
 
 // Mock http and https modules before importing the client
@@ -26,7 +26,7 @@ vi.mock("node:http", async () => {
 
 vi.mock("./network-target-policy.js", async () => ({
   ...(await vi.importActual("./network-target-policy.js")),
-  resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
+  assertPublicHostnameResolves: ssrfMocks.assertPublicHostnameResolves,
 }));
 
 const https = await import("node:https");
@@ -117,10 +117,7 @@ function installFakeTimerHarness() {
     vi.useFakeTimers();
     fakeNowMs += 10_000;
     vi.setSystemTime(fakeNowMs);
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockResolvedValue({
-      hostname: "example.com",
-      addresses: ["93.184.216.34"],
-    });
+    ssrfMocks.assertPublicHostnameResolves.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -258,7 +255,7 @@ describe("sendFileUrl", () => {
   it("rejects malformed file URLs before making a request", async () => {
     const result = await settleTimers(sendFileUrl("https://nas.example.com/incoming", "not-a-url"));
     expect(result).toBe(false);
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).not.toHaveBeenCalled();
+    expect(ssrfMocks.assertPublicHostnameResolves).not.toHaveBeenCalled();
     expect(vi.mocked(https.request)).not.toHaveBeenCalled();
   });
 
@@ -267,19 +264,19 @@ describe("sendFileUrl", () => {
       sendFileUrl("https://nas.example.com/incoming", "file:///tmp/secret.txt"),
     );
     expect(result).toBe(false);
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).not.toHaveBeenCalled();
+    expect(ssrfMocks.assertPublicHostnameResolves).not.toHaveBeenCalled();
     expect(vi.mocked(https.request)).not.toHaveBeenCalled();
   });
 
   it("rejects SSRF-blocked hosts before making a request", async () => {
-    ssrfMocks.resolvePinnedHostnameWithPolicy.mockRejectedValueOnce(
+    ssrfMocks.assertPublicHostnameResolves.mockRejectedValueOnce(
       new Error("Blocked private network target"),
     );
     const result = await settleTimers(
       sendFileUrl("https://nas.example.com/incoming", "http://169.254.169.254/latest/meta-data"),
     );
     expect(result).toBe(false);
-    expect(ssrfMocks.resolvePinnedHostnameWithPolicy).toHaveBeenCalledWith("169.254.169.254");
+    expect(ssrfMocks.assertPublicHostnameResolves).toHaveBeenCalledWith("169.254.169.254");
     expect(vi.mocked(https.request)).not.toHaveBeenCalled();
   });
 });

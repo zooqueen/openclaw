@@ -16,7 +16,6 @@ import {
 } from "./models.js";
 import {
   isBlockedHostnameOrIp,
-  resolveNetworkTargetPolicyForUrl,
   NetworkTargetBlockedError,
   type NetworkTargetPolicy,
 } from "./network-target-policy.js";
@@ -67,10 +66,9 @@ function assertLmstudioUrlAllowedByPolicy(url: URL, policy: NetworkTargetPolicy 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("LM Studio model requests only support http and https URLs");
   }
-  const urlPolicy = resolveNetworkTargetPolicyForUrl(url, policy);
   const hostnameAllowlist = [
-    ...(urlPolicy?.allowedHostnames ?? []),
-    ...(urlPolicy?.hostnameAllowlist ?? []),
+    ...(policy?.allowedHostnames ?? []),
+    ...(policy?.hostnameAllowlist ?? []),
   ];
   if (
     hostnameAllowlist.length > 0 &&
@@ -78,7 +76,7 @@ function assertLmstudioUrlAllowedByPolicy(url: URL, policy: NetworkTargetPolicy 
   ) {
     throw new NetworkTargetBlockedError("Blocked LM Studio model request target by policy");
   }
-  if (isBlockedHostnameOrIp(url.hostname, urlPolicy)) {
+  if (isBlockedHostnameOrIp(url.hostname, policy)) {
     throw new NetworkTargetBlockedError("Blocked LM Studio model request target by policy");
   }
 }

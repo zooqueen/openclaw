@@ -1,10 +1,10 @@
+import type { MediaFetchUrlPolicy } from "openclaw/plugin-sdk/media-runtime";
 // Msteams tests cover attachments plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRuntime } from "../runtime-api.js";
 import { readRemoteMediaResponse } from "./attachments.test-helpers.js";
 import { downloadMSTeamsAttachments } from "./attachments/download.js";
 import { isUrlAllowed, resolveRequestUrl } from "./attachments/shared.js";
-import type { NetworkTargetPolicy } from "./network-target-policy.js";
 import { setMSTeamsRuntime } from "./runtime.js";
 
 const saveResponseMediaMock = vi.hoisted(() =>
@@ -49,7 +49,7 @@ type RemoteMediaFetchParams = {
   url: string;
   maxBytes?: number;
   filePathHint?: string;
-  ssrfPolicy?: NetworkTargetPolicy;
+  ssrfPolicy?: MediaFetchUrlPolicy;
   fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 };
 
@@ -76,7 +76,7 @@ function isHostnameAllowedByPattern(hostname: string, pattern: string): boolean 
   return hostname === pattern;
 }
 
-function isUrlAllowedBySsrfPolicy(url: string, policy?: NetworkTargetPolicy): boolean {
+function isUrlAllowedBySsrfPolicy(url: string, policy?: MediaFetchUrlPolicy): boolean {
   if (!policy?.hostnameAllowlist || policy.hostnameAllowlist.length === 0) {
     return true;
   }

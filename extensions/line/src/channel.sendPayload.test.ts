@@ -13,12 +13,12 @@ import { setLineRuntime } from "./runtime.js";
 import { createLineSendReceipt } from "./send-receipt.js";
 
 const ssrfMocks = vi.hoisted(() => ({
-  resolvePinnedHostnameWithPolicy: vi.fn(),
+  assertPublicHostnameResolves: vi.fn(),
 }));
 
 vi.mock("./network-target-policy.js", async () => ({
   ...(await vi.importActual("./network-target-policy.js")),
-  resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
+  assertPublicHostnameResolves: ssrfMocks.assertPublicHostnameResolves,
 }));
 
 afterAll(() => {
@@ -43,11 +43,8 @@ type LineRuntimeMocks = {
 
 beforeEach(() => {
   vi.setSystemTime(1_800_000_000_000);
-  ssrfMocks.resolvePinnedHostnameWithPolicy.mockReset();
-  ssrfMocks.resolvePinnedHostnameWithPolicy.mockResolvedValue({
-    hostname: "example.com",
-    addresses: ["93.184.216.34"],
-  });
+  ssrfMocks.assertPublicHostnameResolves.mockReset();
+  ssrfMocks.assertPublicHostnameResolves.mockResolvedValue(undefined);
 });
 
 afterEach(() => {

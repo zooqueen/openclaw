@@ -156,6 +156,34 @@ describe("check-runtime-http-egress-boundary", () => {
     ]);
   });
 
+  it("catches broad network-policy facades under newly invented plugin-sdk subpaths", () => {
+    const violations = collect({
+      "src/plugin-sdk/network-policy-runtime.ts": [
+        "export type NetworkTargetPolicy = {};",
+        "export type PinnedDispatcherPolicy = {};",
+        "export function resolvePinnedHostnameWithPolicy() {}",
+        "export function createPinnedLookup() {}",
+        "export function isPrivateIpAddress() {}",
+      ].join("\n"),
+    });
+
+    expect(violations).toEqual([
+      expect.stringContaining(
+        "plugin-sdk entrypoints must not export broad reusable network-policy",
+      ),
+    ]);
+  });
+
+  it("keeps narrow retained plugin-sdk network exceptions allowed", () => {
+    const violations = collect({
+      "src/plugin-sdk/ollama-local-origin-fetch.ts":
+        "export type PinnedDispatcherPolicy = {}; export function createPinnedLookup() {}",
+      "src/plugin-sdk/browser-cdp-proxy-bypass.ts": "export function isPrivateIpAddress() {}",
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it("catches old per-call guard plumbing", () => {
     const violations = collect({
       "src/agents/example-runtime.ts":

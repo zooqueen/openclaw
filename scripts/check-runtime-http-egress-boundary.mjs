@@ -56,6 +56,12 @@ const RETIRED_FETCH_RUNTIME_EXPORT_PATTERN =
   /\b(?:export\s+(?:type\s+)?\{[^}]*\b(?:createPinnedLookup|PinnedDispatcherPolicy|SsrFPolicy|SsrFBlockedError|NetworkTargetPolicy|NetworkTargetBlockedError|fetchWithSsrFGuard|fetchConfiguredLocalOrigin|GUARDED_FETCH_MODE)\b|export\s+(?:async\s+)?function\s+fetchConfiguredLocalOrigin\b)/u;
 const PUBLIC_SECURITY_RUNTIME_NETWORK_EXPORT_PATTERN =
   /\bexport\s+(?:type\s+)?\{[^}]*\b(?:NetworkTargetPolicy|PinnedDispatcherPolicy|PinnedHostname|PinnedHostnameOverride|PrivateIpBlockOptions|networkTargetPolicyFrom\w*|resolveNetworkTargetPolicy\w*|resolvePinnedHostname\w*|createPinnedLookup|isPrivateIpAddress|isBlockedHostname\w*|isPrivateNetworkAllowedByPolicy|isPrivateNetworkOptInEnabled|assertHttpUrlTargetsPrivateNetwork|buildHostnameAllowlistPolicyFromSuffixAllowlist|matchesHostnameAllowlist|normalizeHostnameSuffixAllowlist|isHttpsUrlAllowedByHostnameSuffixAllowlist)\b/u;
+const PLUGIN_SDK_BROAD_NETWORK_FACADE_EXPORT_PATTERN =
+  /\b(?:export\s+(?:type\s+|interface\s+)(?:NetworkTargetPolicy|PinnedDispatcherPolicy|PinnedHostname|PinnedHostnameOverride|PrivateIpBlockOptions)\b|export\s+(?:async\s+)?function\s+(?:networkTargetPolicyFrom\w*|resolveNetworkTargetPolicy\w*|resolvePinnedHostname\w*|createPinnedLookup|isPrivateIpAddress|isBlockedHostname\w*|isPrivateNetworkAllowedByPolicy|isPrivateNetworkOptInEnabled|assertHttpUrlTargetsPrivateNetwork|buildHostnameAllowlistPolicyFromSuffixAllowlist|matchesHostnameAllowlist|normalizeHostnameSuffixAllowlist|isHttpsUrlAllowedByHostnameSuffixAllowlist)\b|export\s+(?:type\s+)?\{[^}]*\b(?:NetworkTargetPolicy|PinnedDispatcherPolicy|PinnedHostname|PinnedHostnameOverride|PrivateIpBlockOptions|networkTargetPolicyFrom\w*|resolveNetworkTargetPolicy\w*|resolvePinnedHostname\w*|createPinnedLookup|isPrivateIpAddress|isBlockedHostname\w*|isPrivateNetworkAllowedByPolicy|isPrivateNetworkOptInEnabled|assertHttpUrlTargetsPrivateNetwork|buildHostnameAllowlistPolicyFromSuffixAllowlist|matchesHostnameAllowlist|normalizeHostnameSuffixAllowlist|isHttpsUrlAllowedByHostnameSuffixAllowlist)\b)/u;
+const PLUGIN_SDK_BROAD_NETWORK_FACADE_ALLOWED_FILES = new Set([
+  "src/plugin-sdk/browser-cdp-proxy-bypass.ts",
+  "src/plugin-sdk/ollama-local-origin-fetch.ts",
+]);
 
 const RAW_FETCH_ALLOWLIST = new Map(
   [
@@ -390,6 +396,10 @@ function isRetiredVocabularyAllowlisted(file, name) {
   return RETAINED_SSRF_POLICY_OWNER_PREFIXES.some((prefix) => file.startsWith(prefix));
 }
 
+function isTopLevelPluginSdkEntrypoint(file) {
+  return /^src\/plugin-sdk\/[^/]+\.ts$/u.test(file);
+}
+
 export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = readFileSync) {
   const violations = [];
   for (const file of files.map(normalizeRepoPath).filter(shouldScanRuntimeFile)) {
@@ -421,6 +431,10 @@ export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = rea
       }
     }
 
+    const hasSpecificFetchRuntimeViolation =
+      file === "src/plugin-sdk/fetch-runtime.ts" &&
+      RETIRED_FETCH_RUNTIME_EXPORT_PATTERN.test(source);
+
     if (file === "src/plugin-sdk/security-runtime.ts") {
       const publicSecurityRuntimeExportLine = findMatchingRuntimeSourceLine(
         source,
@@ -429,6 +443,27 @@ export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = rea
       if (publicSecurityRuntimeExportLine) {
         violations.push(
           `${file}:${publicSecurityRuntimeExportLine} security-runtime must not export reusable network-policy, DNS-pinning, private-network allowlist, redirect-policy, or proxy-bypass helpers`,
+        );
+      }
+    }
+
+    const hasSpecificSecurityRuntimeViolation =
+      file === "src/plugin-sdk/security-runtime.ts" &&
+      PUBLIC_SECURITY_RUNTIME_NETWORK_EXPORT_PATTERN.test(source);
+
+    if (
+      isTopLevelPluginSdkEntrypoint(file) &&
+      !PLUGIN_SDK_BROAD_NETWORK_FACADE_ALLOWED_FILES.has(file) &&
+      !hasSpecificFetchRuntimeViolation &&
+      !hasSpecificSecurityRuntimeViolation
+    ) {
+      const pluginSdkBroadNetworkFacadeLine = findMatchingRuntimeSourceLine(
+        source,
+        PLUGIN_SDK_BROAD_NETWORK_FACADE_EXPORT_PATTERN,
+      );
+      if (pluginSdkBroadNetworkFacadeLine) {
+        violations.push(
+          `${file}:${pluginSdkBroadNetworkFacadeLine} plugin-sdk entrypoints must not export broad reusable network-policy, DNS-pinning, private-network allowlist, or proxy-bypass facades`,
         );
       }
     }

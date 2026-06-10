@@ -1,9 +1,9 @@
+import type { MediaFetchUrlPolicy } from "openclaw/plugin-sdk/media-runtime";
 // Msteams plugin module implements bot framework service url behavior.
 import {
   buildHostnameAllowlistPolicyFromSuffixAllowlist,
   isHttpsUrlAllowedByHostnameSuffixAllowlist,
   normalizeHostnameSuffixAllowlist,
-  type NetworkTargetPolicy,
 } from "./network-target-policy.js";
 
 const DEFAULT_BOT_FRAMEWORK_SERVICE_URL_HOST_ALLOWLIST = [
@@ -30,7 +30,7 @@ if (!serviceUrlSsrfPolicy) {
   throw new Error("Microsoft Teams Bot Framework serviceUrl allowlist is empty");
 }
 
-export const BOT_FRAMEWORK_SERVICE_URL_SSRF_POLICY: NetworkTargetPolicy = serviceUrlSsrfPolicy;
+export const BOT_FRAMEWORK_SERVICE_URL_SSRF_POLICY: MediaFetchUrlPolicy = serviceUrlSsrfPolicy;
 
 export function describeBotFrameworkServiceUrlHost(serviceUrl: string): string {
   try {

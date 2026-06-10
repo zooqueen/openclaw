@@ -1,17 +1,11 @@
-import { afterEach, beforeAll, beforeEach, expect, vi, type Mock } from "vitest";
+import { beforeAll, beforeEach, expect, vi, type Mock } from "vitest";
 import * as harness from "./bot.media.e2e-harness.js";
-// Telegram helper module supports bot.media utils behavior.
-import * as networkTargetPolicy from "./network-target-policy.js";
 
 type StickerSpy = Mock<(...args: unknown[]) => unknown>;
 
 export const cacheStickerSpy: StickerSpy = vi.fn();
 export const getCachedStickerSpy: StickerSpy = vi.fn();
 export const describeStickerImageSpy: StickerSpy = vi.fn();
-
-const resolvePinnedHostnameWithPolicy = networkTargetPolicy.resolvePinnedHostnameWithPolicy;
-const lookupMock = vi.fn();
-let resolvePinnedHostnameSpy: ReturnType<typeof vi.spyOn> = null;
 
 export const TELEGRAM_TEST_TIMINGS = {
   mediaGroupFlushMs: 20,
@@ -147,18 +141,6 @@ beforeEach(() => {
   replySpyRef.mockClear();
   sendChatActionSpyRef.mockClear();
   vi.useRealTimers();
-  lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-  resolvePinnedHostnameSpy = vi
-    .spyOn(networkTargetPolicy, "resolvePinnedHostnameWithPolicy")
-    .mockImplementation((hostname, params) =>
-      resolvePinnedHostnameWithPolicy(hostname, { ...params, lookupFn: lookupMock }),
-    );
-});
-
-afterEach(() => {
-  lookupMock.mockClear();
-  resolvePinnedHostnameSpy?.mockRestore();
-  resolvePinnedHostnameSpy = null;
 });
 
 vi.mock("./sticker-cache.js", () => ({

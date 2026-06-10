@@ -4,11 +4,9 @@
  */
 
 import { resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
-import { resolvePinnedHostnameWithPolicy } from "./network-target-policy.js";
-import type { NetworkTargetPolicy } from "./network-target-policy.js";
+import { assertPublicHostnameResolves } from "./network-target-policy.js";
 
 const ZALO_API_BASE = "https://bot-api.zaloplatforms.com";
-const ZALO_MEDIA_SSRF_POLICY: NetworkTargetPolicy = {};
 
 export type ZaloFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -192,9 +190,7 @@ export async function sendPhoto(
     throw new Error("Zalo photo URL must use HTTP or HTTPS");
   }
 
-  await resolvePinnedHostnameWithPolicy(parsedPhotoUrl.hostname, {
-    policy: ZALO_MEDIA_SSRF_POLICY,
-  });
+  await assertPublicHostnameResolves(parsedPhotoUrl.hostname);
 
   return callZaloApi<ZaloMessage>(
     "sendPhoto",

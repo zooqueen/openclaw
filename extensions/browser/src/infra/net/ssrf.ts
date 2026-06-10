@@ -11,8 +11,6 @@ import {
   isLinkLocalIpAddress,
   parseCanonicalIpAddress,
   parseLooseIpAddress,
-  type Ipv4SpecialUseBlockOptions,
-  type Ipv6SpecialUseBlockOptions,
 } from "@openclaw/net-policy/ip";
 
 type LookupCallback = (
@@ -35,10 +33,7 @@ export type LookupFn = typeof dnsLookup;
 export type NetworkTargetPolicy = {
   allowPrivateNetwork?: boolean;
   dangerouslyAllowPrivateNetwork?: boolean;
-  allowRfc2544BenchmarkRange?: boolean;
-  allowIpv6UniqueLocalRange?: boolean;
   allowedHostnames?: string[];
-  allowedOrigins?: string[];
   hostnameAllowlist?: string[];
 };
 
@@ -47,31 +42,6 @@ export type PinnedHostname = {
   addresses: string[];
   lookup: typeof dnsLookupCb;
 };
-
-export type PinnedHostnameOverride = {
-  hostname: string;
-  addresses: string[];
-};
-
-export type PinnedDispatcherPolicy =
-  | {
-      mode: "direct";
-      connect?: Record<string, unknown>;
-      pinnedHostname?: PinnedHostnameOverride;
-    }
-  | {
-      mode: "env-proxy";
-      connect?: Record<string, unknown>;
-      proxyTls?: Record<string, unknown>;
-      pinnedHostname?: PinnedHostnameOverride;
-    }
-  | {
-      mode: "explicit-proxy";
-      proxyUrl: string;
-      allowPrivateProxy?: boolean;
-      proxyTls?: Record<string, unknown>;
-      pinnedHostname?: PinnedHostnameOverride;
-    };
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -107,40 +77,22 @@ function looksLikeUnsupportedIpv4Literal(hostname: string): boolean {
   );
 }
 
-function resolveIpv4SpecialUseBlockOptions(
-  policy?: NetworkTargetPolicy,
-): Ipv4SpecialUseBlockOptions {
-  return {
-    allowRfc2544BenchmarkRange: policy?.allowRfc2544BenchmarkRange === true,
-  };
-}
-
-function resolveIpv6SpecialUseBlockOptions(
-  policy?: NetworkTargetPolicy,
-): Ipv6SpecialUseBlockOptions {
-  return {
-    allowUniqueLocalRange: policy?.allowIpv6UniqueLocalRange === true,
-  };
-}
-
-export function isPrivateIpAddress(address: string, policy?: NetworkTargetPolicy): boolean {
+export function isPrivateIpAddress(address: string): boolean {
   const normalized = normalizeHostname(address).replace(/%[0-9a-z_.-]+$/iu, "");
   if (!normalized) {
     return false;
   }
 
-  const blockOptions = resolveIpv4SpecialUseBlockOptions(policy);
-  const ipv6BlockOptions = resolveIpv6SpecialUseBlockOptions(policy);
   const strictIp = parseCanonicalIpAddress(normalized);
   if (strictIp) {
     if (isIpv4Address(strictIp)) {
-      return isBlockedSpecialUseIpv4Address(strictIp, blockOptions);
+      return isBlockedSpecialUseIpv4Address(strictIp);
     }
-    if (isBlockedSpecialUseIpv6Address(strictIp, ipv6BlockOptions)) {
+    if (isBlockedSpecialUseIpv6Address(strictIp)) {
       return true;
     }
     const embeddedIpv4 = extractEmbeddedIpv4FromIpv6(strictIp);
-    return embeddedIpv4 ? isBlockedSpecialUseIpv4Address(embeddedIpv4, blockOptions) : false;
+    return embeddedIpv4 ? isBlockedSpecialUseIpv4Address(embeddedIpv4) : false;
   }
   if (normalized.includes(":") && !parseLooseIpAddress(normalized)) {
     return true;
@@ -161,11 +113,9 @@ export function isBlockedHostname(hostname: string): boolean {
   );
 }
 
-export function isBlockedHostnameOrIp(hostname: string, policy?: NetworkTargetPolicy): boolean {
+export function isBlockedHostnameOrIp(hostname: string): boolean {
   const normalized = normalizeHostname(hostname);
-  return (
-    Boolean(normalized) && (isBlockedHostname(normalized) || isPrivateIpAddress(normalized, policy))
-  );
+  return Boolean(normalized) && (isBlockedHostname(normalized) || isPrivateIpAddress(normalized));
 }
 
 export const isPrivateOrLoopbackHost = isBlockedHostnameOrIp;
@@ -226,7 +176,7 @@ function resolveHostnamePolicyChecks(hostname: string, policy?: NetworkTargetPol
   ) {
     throw new NetworkTargetBlockedError(`Blocked hostname (not in allowlist): ${hostname}`);
   }
-  if (!skipPrivateNetworkChecks && isBlockedHostnameOrIp(normalized, policy)) {
+  if (!skipPrivateNetworkChecks && isBlockedHostnameOrIp(normalized)) {
     throw new NetworkTargetBlockedError(
       "Blocked hostname or private/internal/special-use IP address",
     );
@@ -266,7 +216,7 @@ function assertAllowedTrustedHostnameResolvedAddresses(results: readonly LookupA
   }
 }
 
-export function createPinnedLookup(params: {
+function createPinnedLookup(params: {
   hostname: string;
   addresses: string[];
   fallback?: typeof dnsLookupCb;
@@ -337,7 +287,7 @@ export async function resolvePinnedHostnameWithPolicy(
   }
   if (!skipPrivateNetworkChecks) {
     for (const entry of results) {
-      if (isBlockedHostnameOrIp(entry.address, params.policy)) {
+      if (isBlockedHostnameOrIp(entry.address)) {
         throw new NetworkTargetBlockedError(
           "Blocked: resolves to private/internal/special-use IP address",
         );
@@ -352,148 +302,4 @@ export async function resolvePinnedHostnameWithPolicy(
     addresses,
     lookup: createPinnedLookup({ hostname: normalized, addresses }),
   };
-}
-
-export async function assertHttpUrlTargetsPrivateNetwork(
-  url: string,
-  params: {
-    dangerouslyAllowPrivateNetwork?: boolean | null;
-    allowPrivateNetwork?: boolean | null;
-    lookupFn?: LookupFn;
-    errorMessage?: string;
-  } = {},
-): Promise<void> {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "http:") {
-    return;
-  }
-  const errorMessage =
-    params.errorMessage ?? "HTTP URL must target a trusted private/internal host";
-  if (isBlockedHostnameOrIp(parsed.hostname)) {
-    return;
-  }
-  const allowPrivateNetwork =
-    typeof params.dangerouslyAllowPrivateNetwork === "boolean"
-      ? params.dangerouslyAllowPrivateNetwork
-      : params.allowPrivateNetwork;
-  if (allowPrivateNetwork !== true) {
-    throw new Error(errorMessage);
-  }
-  const pinned = await resolvePinnedHostnameWithPolicy(parsed.hostname, {
-    lookupFn: params.lookupFn,
-    policy: { allowPrivateNetwork: true },
-  });
-  if (!pinned.addresses.every((address) => isPrivateIpAddress(address))) {
-    throw new Error(errorMessage);
-  }
-}
-
-function normalizePolicyOrigin(value: string): string | undefined {
-  try {
-    const parsed = new URL(value.trim());
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return undefined;
-    }
-    parsed.hostname = normalizeHostname(parsed.hostname);
-    return parsed.origin.toLowerCase();
-  } catch {
-    return undefined;
-  }
-}
-
-export function resolveNetworkTargetPolicyForUrl(
-  url: URL,
-  policy?: NetworkTargetPolicy,
-): NetworkTargetPolicy | undefined {
-  if (!policy?.allowedOrigins?.length) {
-    return policy;
-  }
-  const requestOrigin = normalizePolicyOrigin(url.toString());
-  const allowedOrigins = policy.allowedOrigins
-    .map((origin) => normalizePolicyOrigin(origin))
-    .filter((origin): origin is string => Boolean(origin));
-  if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) {
-    return policy;
-  }
-  return {
-    ...policy,
-    allowedHostnames: Array.from(
-      new Set([...(policy.allowedHostnames ?? []), normalizeHostname(url.hostname)]),
-    ),
-  };
-}
-
-export function networkTargetPolicyFromHttpBaseUrlAllowedHostname(
-  baseUrl: string,
-): NetworkTargetPolicy | undefined {
-  try {
-    const parsed = new URL(baseUrl.trim());
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
-      ? { allowedHostnames: [parsed.hostname] }
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function networkTargetPolicyFromDangerouslyAllowPrivateNetwork(
-  dangerouslyAllowPrivateNetwork: boolean | null | undefined,
-): NetworkTargetPolicy | undefined {
-  return dangerouslyAllowPrivateNetwork === true ? { allowPrivateNetwork: true } : undefined;
-}
-
-function normalizeHostnameSuffix(value: string): string {
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed === "*" || trimmed === "*.") {
-    return "*";
-  }
-  return trimmed
-    .replace(/^\*\.?/u, "")
-    .replace(/^\.+/u, "")
-    .replace(/\.+$/u, "");
-}
-
-export function normalizeHostnameSuffixAllowlist(
-  input?: readonly string[],
-  defaults?: readonly string[],
-): string[] {
-  const source = input && input.length > 0 ? input : defaults;
-  const normalized = Array.from(
-    new Set((source ?? []).map(normalizeHostnameSuffix).filter(Boolean)),
-  );
-  return normalized.includes("*") ? ["*"] : normalized;
-}
-
-export function buildHostnameAllowlistPolicyFromSuffixAllowlist(
-  allowHosts?: readonly string[],
-): NetworkTargetPolicy | undefined {
-  const normalized = normalizeHostnameSuffixAllowlist(allowHosts);
-  if (normalized.length === 0 || normalized.includes("*")) {
-    return undefined;
-  }
-  return {
-    hostnameAllowlist: normalized.flatMap((host) => [host, `*.${host}`]),
-  };
-}
-
-export function isHttpsUrlAllowedByHostnameSuffixAllowlist(
-  url: string,
-  allowHosts?: readonly string[],
-): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
-      return false;
-    }
-    const hostname = normalizeHostname(parsed.hostname);
-    return normalizeHostnameSuffixAllowlist(allowHosts).some(
-      (allowHost) =>
-        allowHost === "*" || hostname === allowHost || hostname.endsWith(`.${allowHost}`),
-    );
-  } catch {
-    return false;
-  }
 }
