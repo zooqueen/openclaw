@@ -572,7 +572,7 @@ describe("resolveGatewayReloadSettings", () => {
 });
 
 type WatcherHandler = () => void;
-type WatcherEvent = "add" | "change" | "unlink" | "error";
+type WatcherEvent = "add" | "change" | "unlink" | "ready" | "error";
 
 function createWatcherMock() {
   const handlers = new Map<WatcherEvent, WatcherHandler[]>();

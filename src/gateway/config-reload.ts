@@ -404,6 +404,7 @@ export function startGatewayConfigReloader(opts: {
     }) ?? (() => {});
 
   let watcher: ReturnType<typeof chokidar.watch> | null = null;
+  let watcherClosePromise: Promise<void> | null = null;
   let watcherRecreateRetries = 0;
   let watcherRecreateTimer: ReturnType<typeof setTimeout> | null = null;
   let hotReloadStatus: GatewayHotReloadStatus = "active";
@@ -438,7 +439,7 @@ export function startGatewayConfigReloader(opts: {
       return;
     }
     watcher = null;
-    void source?.close().catch(() => {});
+    watcherClosePromise = source?.close().catch(() => {}) ?? null;
     if (watcherRecreateRetries >= WATCHER_RECREATE_MAX_RETRIES) {
       hotReloadStatus = "disabled";
       opts.log.error(
@@ -476,7 +477,7 @@ export function startGatewayConfigReloader(opts: {
       unsubscribeFromWrites();
       const active = watcher;
       watcher = null;
-      await active?.close().catch(() => {});
+      await Promise.all([active?.close().catch(() => {}), watcherClosePromise]);
     },
     hotReloadStatus: () => hotReloadStatus,
   };
