@@ -1669,7 +1669,9 @@ describe("startGatewayConfigReloader watcher error recovery", () => {
     const first = createWatcherMock();
     const second = createWatcherMock();
     const readSnapshot = vi.fn(async () =>
-      makeSnapshot({ config: { gateway: { reload: { debounceMs: 0 } }, port: 18790 } }),
+      makeSnapshot({
+        config: { gateway: { reload: { debounceMs: 0 } }, hooks: { enabled: true } },
+      }),
     );
     const { onHotReload, reloader } = startReloaderWithWatchers([first, second], readSnapshot);
 
