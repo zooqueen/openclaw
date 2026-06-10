@@ -5,8 +5,8 @@ import path from "node:path";
 import { build } from "tsdown";
 import {
   buildPluginSdkEntrySources,
+  packageBuildPluginSdkEntrypoints,
   pluginSdkEntrypoints,
-  publicPluginSdkEntrypoints,
 } from "./lib/plugin-sdk-entries.mjs";
 
 const RUNTIME_SHIMS: Partial<Record<string, string>> = {
@@ -85,7 +85,7 @@ const flatDeclarationTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-p
 const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 const flatDeclarationEntrypoints = shouldBuildPrivateQaEntries
   ? pluginSdkEntrypoints
-  : publicPluginSdkEntrypoints;
+  : packageBuildPluginSdkEntrypoints;
 const flatDeclarationEntrypointSet = new Set(flatDeclarationEntrypoints);
 
 try {

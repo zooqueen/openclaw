@@ -1,3 +1,10 @@
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import {
+  NetworkTargetBlockedError,
+  isBlockedHostnameOrIp,
+  isPrivateIpAddress,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Firecrawl plugin module implements firecrawl client behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
@@ -13,13 +20,6 @@ import {
   writeCache,
 } from "openclaw/plugin-sdk/provider-web-fetch";
 import { normalizeSecretInput } from "openclaw/plugin-sdk/secret-input";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/security-runtime";
-import {
-  NetworkTargetBlockedError,
-  isBlockedHostnameOrIp,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/security-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/security-runtime";
 import { wrapExternalContent, wrapWebContent } from "openclaw/plugin-sdk/security-runtime";
 import {
   DEFAULT_FIRECRAWL_BASE_URL,

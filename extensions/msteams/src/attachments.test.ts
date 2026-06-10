@@ -1,4 +1,4 @@
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Msteams tests cover attachments plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRuntime } from "../runtime-api.js";

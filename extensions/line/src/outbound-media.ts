@@ -1,6 +1,6 @@
 // Line plugin module implements outbound media behavior.
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/security-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 type LineOutboundMediaKind = "image" | "video" | "audio";

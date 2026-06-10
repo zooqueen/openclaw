@@ -39,6 +39,7 @@ import { collectPackUnpackedSizeErrors as collectNpmPackUnpackedSizeErrors } fro
 import { collectBundledPluginPackageDependencySpecs } from "./lib/plugin-package-dependencies.mjs";
 import {
   listPluginSdkDistArtifacts,
+  listPackagedPrivateRuntimePluginSdkDistArtifacts,
   listPrivateLocalOnlyPluginSdkDistArtifacts,
 } from "./lib/plugin-sdk-entries.mjs";
 import {
@@ -70,14 +71,20 @@ type ReleaseCheckCommandInvocation = {
 };
 
 const rootPackageExcludedExtensionDirs = collectRootPackageExcludedExtensionDirs();
+export const REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS =
+  listPackagedPrivateRuntimePluginSdkDistArtifacts();
+const requiredPrivatePluginSdkPackPathSet = new Set<string>(REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS);
 const forbiddenPrivateLocalOnlyPluginSdkDistArtifacts =
-  listPrivateLocalOnlyPluginSdkDistArtifacts();
+  listPrivateLocalOnlyPluginSdkDistArtifacts().filter(
+    (entry) => !requiredPrivatePluginSdkPackPathSet.has(entry),
+  );
 const requiredPathGroups = [
   "npm-shrinkwrap.json",
   PACKAGE_DIST_INVENTORY_RELATIVE_PATH,
   ["dist/index.js", "dist/index.mjs"],
   ["dist/entry.js", "dist/entry.mjs"],
   ...listPluginSdkDistArtifacts(),
+  ...REQUIRED_PRIVATE_PLUGIN_SDK_PACK_PATHS,
   ...listBundledPluginPackArtifacts(),
   ...listStaticExtensionAssetOutputs().filter((relativePath) => {
     const match = /^dist\/extensions\/([^/]+)\//u.exec(relativePath);

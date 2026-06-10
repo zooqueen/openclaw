@@ -105,13 +105,41 @@ describe("check-runtime-http-egress-boundary", () => {
 
   it("catches public fetch-runtime re-exports of retired SSRF APIs", () => {
     const violations = collect({
-      "src/plugin-sdk/fetch-runtime.ts":
-        'export { createPinnedLookup } from "../infra/net/ssrf.js"; export type { PinnedDispatcherPolicy } from "../infra/net/ssrf.js";',
+      "src/plugin-sdk/fetch-runtime.ts": [
+        "export {",
+        "  createPinnedLookup,",
+        '} from "../infra/net/ssrf.js";',
+        "export type {",
+        "  PinnedDispatcherPolicy,",
+        '} from "../infra/net/ssrf.js";',
+        "export async function fetchConfiguredLocalOrigin() {}",
+      ].join("\n"),
     });
 
     expect(violations).toEqual([
       expect.stringContaining(
         "fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs",
+      ),
+    ]);
+  });
+
+  it("catches public security-runtime network-policy replacement exports", () => {
+    const violations = collect({
+      "src/plugin-sdk/security-runtime.ts": [
+        "export {",
+        "  networkTargetPolicyFromHttpBaseUrlAllowedHostname,",
+        "  resolvePinnedHostnameWithPolicy,",
+        "  isPrivateIpAddress,",
+        '} from "../infra/net/ssrf.js";',
+        "export type {",
+        "  NetworkTargetPolicy,",
+        '} from "../infra/net/ssrf.js";',
+      ].join("\n"),
+    });
+
+    expect(violations).toEqual([
+      expect.stringContaining(
+        "security-runtime must not export reusable network-policy, DNS-pinning, private-network allowlist, redirect-policy, or proxy-bypass helpers",
       ),
     ]);
   });

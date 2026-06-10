@@ -1,5 +1,5 @@
 // Tlon plugin module implements base url behavior.
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/security-runtime";
+import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 
 type UrbitBaseUrlValidation =
   | { ok: true; baseUrl: string; hostname: string }

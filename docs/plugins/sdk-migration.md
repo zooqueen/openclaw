@@ -59,11 +59,13 @@ imports, manifest fields, setup APIs, hooks, and runtime registration behavior.
   `openclaw/plugin-sdk/ssrf-dispatcher` have been removed from the public plugin
   SDK, and the old private `openclaw/plugin-sdk/ssrf-runtime-internal` subpath
   is no longer available to bundled plugins. Plugins that imported
-  `fetchWithSsrFGuard`, generic SSRF policy helpers, or pinned-dispatcher
-  helpers should use the supported fetch runtime helpers for HTTP requests,
-  rely on `proxy.enabled` plus an operator-managed external proxy for
-  high-assurance destination policy, and keep plugin-specific allowlist
-  validation local when the plugin owns a special protocol or redirect flow.
+  `fetchWithSsrFGuard`, generic SSRF policy helpers, neutral `NetworkTarget*`
+  policy helpers, hostname allowlist helpers, DNS pinning helpers, or
+  `fetchConfiguredLocalOrigin` should use the supported fetch runtime helpers
+  for HTTP requests, rely on `proxy.enabled` plus an operator-managed external
+  proxy for high-assurance destination policy, and keep plugin-specific
+  allowlist validation local when the plugin owns a special protocol,
+  local-service rule, or redirect flow.
   OpenClaw's remaining stock direct-mode guard is internal to OpenClaw-owned
   untrusted URL surfaces and is not a plugin SDK contract.
 </Warning>
@@ -574,7 +576,7 @@ releases.
   | `plugin-sdk/approval-native-runtime` | Approval target helpers | Native approval target/account binding helpers |
   | `plugin-sdk/approval-reply-runtime` | Approval reply helpers | Exec/plugin approval reply payload helpers |
   | `plugin-sdk/channel-runtime-context` | Channel runtime-context helpers | Generic channel runtime-context register/get/watch helpers |
-  | `plugin-sdk/security-runtime` | Security helpers | Shared trust, DM gating, root-bounded file/path helpers, external-content, and secret-collection helpers |
+  | `plugin-sdk/security-runtime` | Security helpers | Shared trust, DM gating, root-bounded file/path helpers, external-content, and secret-collection helpers; no generic SSRF/network-policy, DNS-pinning, or hostname-allowlist helpers |
   | `plugin-sdk/system-event-runtime` | System event helpers | `enqueueSystemEvent`, `peekSystemEventEntries` |
   | `plugin-sdk/heartbeat-runtime` | Heartbeat helpers | Heartbeat wake, event, and visibility helpers |
   | `plugin-sdk/delivery-queue-runtime` | Delivery queue helpers | `drainPendingDeliveries` |
@@ -586,7 +588,7 @@ releases.
   | `plugin-sdk/collection-runtime` | Bounded cache helpers | `pruneMapToMaxSize` |
   | `plugin-sdk/diagnostic-runtime` | Diagnostic gating helpers | `isDiagnosticFlagEnabled`, `isDiagnosticsEnabled` |
   | `plugin-sdk/error-runtime` | Error formatting helpers | `formatUncaughtError`, `isApprovalNotFoundError`, error graph helpers |
-  | `plugin-sdk/fetch-runtime` | Wrapped fetch/proxy helpers | `resolveFetch`, proxy helpers, EnvHttpProxyAgent option helpers |
+  | `plugin-sdk/fetch-runtime` | Wrapped fetch/proxy helpers | `resolveFetch`, proxy helpers, EnvHttpProxyAgent option helpers; no generic configured-local-origin/proxy-bypass helper |
   | `plugin-sdk/host-runtime` | Host normalization helpers | `normalizeHostname`, `normalizeScpRemoteHost` |
   | `plugin-sdk/retry-runtime` | Retry helpers | `RetryConfig`, `retryAsync`, policy runners |
   | `plugin-sdk/allow-from` | Allowlist formatting and input mapping | `formatAllowFromLowercase`, `mapAllowlistResolutionInputs` |

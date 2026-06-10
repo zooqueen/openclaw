@@ -1,6 +1,6 @@
 // Tlon tests cover auth.ssrf plugin behavior.
-import { NetworkTargetBlockedError } from "openclaw/plugin-sdk/security-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/security-runtime";
+import { NetworkTargetBlockedError } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { authenticate } from "./auth.js";
 

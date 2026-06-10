@@ -1,5 +1,5 @@
 // Tlon plugin module implements context behavior.
-export { networkTargetPolicyFromDangerouslyAllowPrivateNetwork } from "openclaw/plugin-sdk/security-runtime";
+export { networkTargetPolicyFromDangerouslyAllowPrivateNetwork } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { normalizeUrbitHostname, validateUrbitBaseUrl } from "./base-url.js";
 import { UrbitUrlError } from "./errors.js";
 

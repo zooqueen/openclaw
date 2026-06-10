@@ -1,3 +1,4 @@
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Matrix helper module supports config behavior.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { resolveOptionalIntegerOption } from "openclaw/plugin-sdk/number-runtime";
@@ -7,7 +8,6 @@ import {
   coerceSecretRef,
   normalizeResolvedSecretInputString,
 } from "openclaw/plugin-sdk/secret-input-runtime";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
 import {
   requiresExplicitMatrixDefaultAccount,
   resolveMatrixDefaultOrOnlyAccountId,

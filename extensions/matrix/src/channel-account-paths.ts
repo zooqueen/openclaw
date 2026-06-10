@@ -1,10 +1,10 @@
-// Matrix plugin module implements channel account paths behavior.
-import { createPairingPrefixStripper } from "openclaw/plugin-sdk/channel-pairing";
-import { PAIRING_APPROVED_MESSAGE } from "openclaw/plugin-sdk/channel-status";
 import type {
   PinnedDispatcherPolicy,
   NetworkTargetPolicy,
-} from "openclaw/plugin-sdk/security-runtime";
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+// Matrix plugin module implements channel account paths behavior.
+import { createPairingPrefixStripper } from "openclaw/plugin-sdk/channel-pairing";
+import { PAIRING_APPROVED_MESSAGE } from "openclaw/plugin-sdk/channel-status";
 import { formatMatrixErrorMessage } from "./matrix/errors.js";
 import type { MatrixProbe } from "./matrix/probe.js";
 import type { CoreConfig } from "./types.js";

@@ -1,6 +1,10 @@
 // Telegram plugin module implements fetch behavior.
 import { randomUUID } from "node:crypto";
 import * as dns from "node:dns";
+import {
+  createPinnedLookup,
+  type PinnedDispatcherPolicy,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { TelegramNetworkConfig } from "openclaw/plugin-sdk/config-contracts";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import {
@@ -20,10 +24,6 @@ import {
 } from "openclaw/plugin-sdk/proxy-capture";
 import { resolveRequestUrl } from "openclaw/plugin-sdk/request-url";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
-import {
-  createPinnedLookup,
-  type PinnedDispatcherPolicy,
-} from "openclaw/plugin-sdk/security-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { Agent, fetch as undiciFetch } from "undici";
 import { normalizeTelegramApiRoot } from "./api-root.js";

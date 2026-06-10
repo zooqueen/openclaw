@@ -8,8 +8,8 @@ import {
 } from "./scripts/lib/bundled-plugin-build-entries.mjs";
 import {
   buildPluginSdkEntrySources,
+  packageBuildPluginSdkEntrypoints,
   pluginSdkEntrypoints,
-  publicPluginSdkEntrypoints,
 } from "./scripts/lib/plugin-sdk-entries.mjs";
 import { tsdownPackageOutputRoot } from "./scripts/lib/tsdown-output-roots.mjs";
 
@@ -159,7 +159,7 @@ const bundledPluginBuildEntries = collectBundledPluginBuildEntries();
 const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 const productionPluginSdkEntrypoints = shouldBuildPrivateQaEntries
   ? pluginSdkEntrypoints
-  : publicPluginSdkEntrypoints;
+  : packageBuildPluginSdkEntrypoints;
 
 function buildBundledHookEntries(): Record<string, string> {
   const hooksRoot = path.join(process.cwd(), "src", "hooks", "bundled");

@@ -44,6 +44,7 @@ describe("plugin SDK fetch runtime", () => {
     const module = await import("./fetch-runtime.js");
     expect(module).not.toHaveProperty("createPinnedLookup");
     expect(module).not.toHaveProperty("fetchWithSsrFGuard");
+    expect(module).not.toHaveProperty("fetchConfiguredLocalOrigin");
     expect(module).not.toHaveProperty("GUARDED_FETCH_MODE");
   });
 });

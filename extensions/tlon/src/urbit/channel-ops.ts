@@ -1,5 +1,8 @@
 // Tlon plugin module implements channel ops behavior.
-import type { LookupFn, NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
+import type {
+  LookupFn,
+  NetworkTargetPolicy,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { UrbitHttpError } from "./errors.js";
 import { urbitFetch } from "./fetch.js";
 

@@ -15,6 +15,11 @@ const privateLocalOnlyPluginSdkSubpathSet = new Set(
     (entry) => typeof entry === "string" && !entry.includes("/"),
   ),
 );
+const packagedPrivateRuntimePluginSdkSubpathSet = new Set([
+  "browser-cdp-proxy-bypass",
+  "bundled-network-policy-runtime",
+  "ollama-local-origin-fetch",
+]);
 
 /** Private plugin SDK entrypoints that are built locally but not exported publicly. */
 export const privateLocalOnlyPluginSdkEntrypoints = pluginSdkSubpaths.filter((entry) =>
@@ -25,6 +30,17 @@ export const privateLocalOnlyPluginSdkEntrypoints = pluginSdkSubpaths.filter((en
 export const publicPluginSdkEntrypoints = pluginSdkEntrypoints.filter(
   (entry) => entry === "index" || !privateLocalOnlyPluginSdkSubpathSet.has(entry),
 );
+
+/** Private runtime artifacts shipped for trusted OpenClaw-owned plugin aliases. */
+export const packagedPrivateRuntimePluginSdkEntrypoints =
+  privateLocalOnlyPluginSdkEntrypoints.filter((entry) =>
+    packagedPrivateRuntimePluginSdkSubpathSet.has(entry),
+  );
+
+/** Plugin SDK entrypoints built into normal packages, including non-exported private runtime artifacts. */
+export const packageBuildPluginSdkEntrypoints = [
+  ...new Set([...publicPluginSdkEntrypoints, ...packagedPrivateRuntimePluginSdkEntrypoints]),
+];
 
 /** Public plugin SDK subpaths, excluding the package root index. */
 export const publicPluginSdkSubpaths = publicPluginSdkEntrypoints.filter(
@@ -70,6 +86,14 @@ export function listPluginSdkDistArtifacts() {
 /** List private local-only plugin SDK dist artifacts expected after local builds. */
 export function listPrivateLocalOnlyPluginSdkDistArtifacts() {
   return privateLocalOnlyPluginSdkEntrypoints.flatMap((entry) => [
+    `dist/plugin-sdk/${entry}.js`,
+    `dist/plugin-sdk/${entry}.d.ts`,
+  ]);
+}
+
+/** List private plugin SDK runtime artifacts that normal packages intentionally include. */
+export function listPackagedPrivateRuntimePluginSdkDistArtifacts() {
+  return packagedPrivateRuntimePluginSdkEntrypoints.flatMap((entry) => [
     `dist/plugin-sdk/${entry}.js`,
     `dist/plugin-sdk/${entry}.d.ts`,
   ]);

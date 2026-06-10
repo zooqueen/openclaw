@@ -16,13 +16,13 @@ const ssrfMocks = vi.hoisted(() => ({
   resolvePinnedHostnameWithPolicy: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/security-runtime", async () => ({
-  ...(await vi.importActual("openclaw/plugin-sdk/security-runtime")),
+vi.mock("openclaw/plugin-sdk/bundled-network-policy-runtime", async () => ({
+  ...(await vi.importActual("openclaw/plugin-sdk/bundled-network-policy-runtime")),
   resolvePinnedHostnameWithPolicy: ssrfMocks.resolvePinnedHostnameWithPolicy,
 }));
 
 afterAll(() => {
-  vi.doUnmock("openclaw/plugin-sdk/security-runtime");
+  vi.doUnmock("openclaw/plugin-sdk/bundled-network-policy-runtime");
   vi.resetModules();
 });
 

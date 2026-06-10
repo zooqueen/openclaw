@@ -1,8 +1,8 @@
 // Matrix plugin module implements create client behavior.
 import fs from "node:fs";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
-import { networkTargetPolicyFromDangerouslyAllowPrivateNetwork } from "openclaw/plugin-sdk/security-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import { networkTargetPolicyFromDangerouslyAllowPrivateNetwork } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { MatrixClient } from "../sdk.js";
 import { resolveValidatedMatrixHomeserverUrl } from "./config.js";

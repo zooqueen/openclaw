@@ -1,12 +1,12 @@
+import {
+  isPrivateNetworkOptInEnabled,
+  isPrivateIpAddress,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 /**
  * Browser plugin security audit checks for auth and remote CDP exposure.
  */
 import type { OpenClawPluginSecurityAuditContext } from "openclaw/plugin-sdk/plugin-entry";
 import { hasConfiguredSecretInput } from "openclaw/plugin-sdk/secret-input";
-import {
-  isPrivateNetworkOptInEnabled,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/security-runtime";
 import { formatCliCommand } from "openclaw/plugin-sdk/setup-tools";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { redactCdpUrl, resolveBrowserConfig, resolveProfile } from "./browser/config.js";

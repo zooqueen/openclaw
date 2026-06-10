@@ -1,14 +1,14 @@
 // Msteams plugin module implements shared behavior.
 import { Buffer } from "node:buffer";
 import { lookup } from "node:dns/promises";
-import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
-import type { MediaFetchUrlPolicy } from "openclaw/plugin-sdk/media-runtime";
 import {
   buildHostnameAllowlistPolicyFromSuffixAllowlist,
   isHttpsUrlAllowedByHostnameSuffixAllowlist,
   isPrivateIpAddress,
   normalizeHostnameSuffixAllowlist,
-} from "openclaw/plugin-sdk/security-runtime";
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import { fetchWithResponseRelease } from "openclaw/plugin-sdk/fetch-runtime";
+import type { MediaFetchUrlPolicy } from "openclaw/plugin-sdk/media-runtime";
 import {
   isRecord,
   normalizeLowercaseStringOrEmpty,

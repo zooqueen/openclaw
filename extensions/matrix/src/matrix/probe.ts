@@ -1,7 +1,7 @@
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Matrix plugin module implements probe behavior.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { BaseProbeResult } from "../runtime-api.js";
 import { isBunRuntime } from "./client/runtime.js";

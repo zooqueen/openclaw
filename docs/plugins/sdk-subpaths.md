@@ -203,7 +203,7 @@ usage endpoint failed or returned no usable usage data.
     | `plugin-sdk/channel-secret-runtime` | Narrow secret-contract collection helpers for channel/plugin secret surfaces |
     | `plugin-sdk/secret-ref-runtime` | Narrow `coerceSecretRef` and SecretRef typing helpers for secret-contract/config parsing |
     | `plugin-sdk/secret-provider-integration` | Type-only SecretRef provider integration manifest and preset contracts for plugins that publish external secret provider presets |
-    | `plugin-sdk/security-runtime` | Shared trust, DM gating, root-bounded file/path helpers including create-only writes, sync/async atomic file replacement, sibling temp writes, cross-device move fallback, private file-store helpers, symlink-parent guards, external-content, sensitive text redaction, constant-time secret comparison, and secret-collection helpers |
+    | `plugin-sdk/security-runtime` | Shared trust, DM gating, root-bounded file/path helpers including create-only writes, sync/async atomic file replacement, sibling temp writes, cross-device move fallback, private file-store helpers, symlink-parent guards, external-content, sensitive text redaction, constant-time secret comparison, and secret-collection helpers. Generic SSRF/network-policy, DNS-pinning, hostname-allowlist, and private-network allowlist helpers are not public SDK API |
     | `plugin-sdk/secret-input` | Secret input parsing helpers |
     | `plugin-sdk/webhook-ingress` | Webhook request/target helpers and raw websocket/body coercion |
     | `plugin-sdk/webhook-request-guards` | Request body size/timeout helpers |
@@ -216,6 +216,7 @@ usage endpoint failed or returned no usable usage data.
     | `plugin-sdk/runtime-env` | Narrow runtime env, logger, timeout, retry, and backoff helpers |
     | `plugin-sdk/browser-config` | Supported browser config facade for normalized profile/defaults, CDP URL parsing, and browser-control auth helpers |
     | `plugin-sdk/browser-cdp-proxy-bypass` | Local-only Browser plugin CDP managed-proxy bypass bridge; not exported from the package and not for third-party plugins |
+    | `plugin-sdk/ollama-local-origin-fetch` | Local-only Ollama plugin configured local-service fetch bridge; not exported from the package and not for third-party plugins |
     | `plugin-sdk/agent-harness-task-runtime` | Generic task lifecycle and completion delivery helpers for harness-backed agents using a host-issued task scope |
     | `plugin-sdk/codex-mcp-projection` | Reserved bundled Codex helper for projecting user MCP server config into Codex thread config; not for third-party plugins |
     | `plugin-sdk/codex-native-task-runtime` | Private bundled Codex helper for native task mirror/runtime wiring; not for third-party plugins |
@@ -297,7 +298,7 @@ usage endpoint failed or returned no usable usage data.
     | `plugin-sdk/collection-runtime` | Small bounded cache helpers |
     | `plugin-sdk/diagnostic-runtime` | Diagnostic flag, event, and trace-context helpers |
     | `plugin-sdk/error-runtime` | Error graph, formatting, shared error classification helpers, `isApprovalNotFoundError` |
-    | `plugin-sdk/fetch-runtime` | Wrapped fetch, proxy, and EnvHttpProxyAgent option helpers |
+    | `plugin-sdk/fetch-runtime` | Wrapped fetch, proxy, and EnvHttpProxyAgent option helpers. Generic configured-local-origin managed-proxy bypass helpers are not public SDK API |
     | `plugin-sdk/runtime-fetch` | Dispatcher-aware runtime fetch without proxy/guarded-fetch imports |
     | `plugin-sdk/inline-image-data-url-runtime` | Inline image data URL sanitizer and signature sniffing helpers without the broad media runtime surface |
     | `plugin-sdk/response-limit-runtime` | Bounded response-body reader without the broad media runtime surface |

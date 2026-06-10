@@ -1,3 +1,9 @@
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import {
+  assertHttpUrlTargetsPrivateNetwork,
+  isBlockedHostnameOrIp,
+  isPrivateIpAddress,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 /**
  * Brave Search HTTP runtime. It resolves credentials, enforces endpoint safety,
  * applies caching, and maps Brave web/LLM-context API responses.
@@ -28,12 +34,6 @@ import {
   writeCachedSearchPayload,
 } from "openclaw/plugin-sdk/provider-web-search";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/security-runtime";
-import {
-  assertHttpUrlTargetsPrivateNetwork,
-  isBlockedHostnameOrIp,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/security-runtime";
 import {
   type BraveLlmContextResponse,
   mapBraveLlmContextResults,

@@ -2,8 +2,8 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-auth";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchConfiguredLocalOriginMock } = vi.hoisted(() => ({
-  fetchConfiguredLocalOriginMock: vi.fn(
+const { fetchOllamaConfiguredLocalOriginMock } = vi.hoisted(() => ({
+  fetchOllamaConfiguredLocalOriginMock: vi.fn(
     async ({ init, url }: { init?: RequestInit; url: string }) => ({
       response: await fetch(url, init),
       release: async () => {},
@@ -11,10 +11,8 @@ const { fetchConfiguredLocalOriginMock } = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("openclaw/plugin-sdk/fetch-runtime", () => ({
-  fetchConfiguredLocalOrigin: fetchConfiguredLocalOriginMock,
-  fetchWithResponseRelease: vi.fn(),
-  formatErrorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+vi.mock("openclaw/plugin-sdk/ollama-local-origin-fetch", () => ({
+  fetchOllamaConfiguredLocalOrigin: fetchOllamaConfiguredLocalOriginMock,
 }));
 
 let createOllamaEmbeddingProvider: typeof import("./embedding-provider.js").createOllamaEmbeddingProvider;
@@ -26,7 +24,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  fetchConfiguredLocalOriginMock.mockClear();
+  fetchOllamaConfiguredLocalOriginMock.mockClear();
 });
 
 afterEach(() => {
@@ -68,7 +66,7 @@ function readFirstEmbeddingInput(fetchMock: ReturnType<typeof mockEmbeddingFetch
 }
 
 function firstConfiguredLocalOriginFetchCall(): Record<string, unknown> {
-  const call = fetchConfiguredLocalOriginMock.mock.calls[0]?.[0];
+  const call = fetchOllamaConfiguredLocalOriginMock.mock.calls[0]?.[0];
   if (!call || typeof call !== "object") {
     throw new Error("expected configured local origin fetch call");
   }

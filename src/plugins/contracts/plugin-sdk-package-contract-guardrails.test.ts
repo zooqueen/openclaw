@@ -777,12 +777,32 @@ describe("plugin-sdk package contract guardrails", () => {
     ).toBe(true);
   });
 
-  it("keeps configured local-origin fetch helpers out of deprecated infra-runtime", () => {
+  it("keeps configured local-origin fetch helpers out of public/deprecated fetch surfaces", () => {
     const source = fs.readFileSync(resolve(REPO_ROOT, "src/plugin-sdk/infra-runtime.ts"), "utf8");
+    const fetchRuntimeSource = fs.readFileSync(
+      resolve(REPO_ROOT, "src/plugin-sdk/fetch-runtime.ts"),
+      "utf8",
+    );
 
     expect(source).not.toMatch(/export\s+\*\s+from\s+["']\.\.\/infra\/net\/fetch-guard\.js["']/);
     expect(source).not.toContain("fetchConfiguredLocalOriginWithSsrFGuard");
     expect(source).not.toContain("GuardedFetchConfiguredLocalOriginOptions");
+    expect(fetchRuntimeSource).not.toContain("fetchConfiguredLocalOrigin");
+    expect(fetchRuntimeSource).not.toContain("configuredLocalOriginBaseUrl");
+  });
+
+  it("keeps network-policy and proxy-bypass helpers private-local-only", () => {
+    const exports = new Set(collectPluginSdkPackageExports());
+    const localOnly = new Set(privateLocalOnlyPluginSdkEntrypoints);
+
+    for (const entrypoint of [
+      "browser-cdp-proxy-bypass",
+      "bundled-network-policy-runtime",
+      "ollama-local-origin-fetch",
+    ]) {
+      expect(localOnly.has(entrypoint)).toBe(true);
+      expect(exports.has(entrypoint)).toBe(false);
+    }
   });
 
   it("keeps bundled plugin SDK compatibility subpaths explicitly classified", () => {

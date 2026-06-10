@@ -1,10 +1,12 @@
 [
   "agent-runtime-test-contracts",
   "browser-cdp-proxy-bypass",
+  "bundled-network-policy-runtime",
   "channel-contract-testing",
   "channel-target-testing",
   "channel-test-helpers",
   "codex-native-task-runtime",
+  "ollama-local-origin-fetch",
   "plugin-test-api",
   "plugin-test-contracts",
   "plugin-state-test-runtime",

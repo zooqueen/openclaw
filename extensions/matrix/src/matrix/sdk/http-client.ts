@@ -1,6 +1,6 @@
 // Matrix plugin module implements http client behavior.
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { buildHttpError } from "./event-helpers.js";
 import { type HttpMethod, type QueryParams, performMatrixRequest } from "./transport.js";
 

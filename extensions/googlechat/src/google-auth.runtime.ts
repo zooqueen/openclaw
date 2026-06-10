@@ -1,6 +1,7 @@
 // Googlechat plugin module implements google auth behavior.
 import fs from "node:fs/promises";
 import type { ConnectionOptions } from "node:tls";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import {
   createHttp1Agent,
   createHttp1EnvHttpProxyAgent,
@@ -8,7 +9,6 @@ import {
   fetchWithResponseRelease,
 } from "openclaw/plugin-sdk/fetch-runtime";
 import { parseMediaContentLength } from "openclaw/plugin-sdk/media-runtime";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
 import { resolveUserPath } from "openclaw/plugin-sdk/text-utility-runtime";
 import type { Dispatcher } from "undici";
 import type { ResolvedGoogleChatAccount } from "./accounts.js";

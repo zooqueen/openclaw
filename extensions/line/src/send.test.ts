@@ -77,8 +77,8 @@ vi.mock("openclaw/plugin-sdk/runtime-env", async () => {
   };
 });
 
-vi.mock("openclaw/plugin-sdk/security-runtime", async () => ({
-  ...(await vi.importActual("openclaw/plugin-sdk/security-runtime")),
+vi.mock("openclaw/plugin-sdk/bundled-network-policy-runtime", async () => ({
+  ...(await vi.importActual("openclaw/plugin-sdk/bundled-network-policy-runtime")),
   resolvePinnedHostnameWithPolicy: resolvePinnedHostnameWithPolicyMock,
 }));
 
@@ -108,7 +108,7 @@ describe("LINE send helpers", () => {
     vi.doUnmock("./channel-access-token.js");
     vi.doUnmock("openclaw/plugin-sdk/channel-activity-runtime");
     vi.doUnmock("openclaw/plugin-sdk/runtime-env");
-    vi.doUnmock("openclaw/plugin-sdk/security-runtime");
+    vi.doUnmock("openclaw/plugin-sdk/bundled-network-policy-runtime");
     vi.resetModules();
   });
 

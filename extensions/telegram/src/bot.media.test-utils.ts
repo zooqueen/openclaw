@@ -1,5 +1,5 @@
 // Telegram helper module supports bot.media utils behavior.
-import * as networkTargetPolicy from "openclaw/plugin-sdk/security-runtime";
+import * as networkTargetPolicy from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { afterEach, beforeAll, beforeEach, expect, vi, type Mock } from "vitest";
 import * as harness from "./bot.media.e2e-harness.js";
 

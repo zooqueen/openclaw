@@ -1,7 +1,7 @@
 // Matrix setup module handles plugin onboarding behavior.
 import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/account-id";
+import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import type { DmPolicy } from "openclaw/plugin-sdk/config-contracts";
-import { isPrivateNetworkOptInEnabled } from "openclaw/plugin-sdk/security-runtime";
 import {
   type ChannelSetupDmPolicy,
   type ChannelSetupWizardAdapter,

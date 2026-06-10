@@ -49,7 +49,9 @@ const RETIRED_GUARD_PATTERNS = [
   },
 ];
 const RETIRED_FETCH_RUNTIME_EXPORT_PATTERN =
-  /\bexport\s+(?:type\s+)?\{[^}]*\b(?:createPinnedLookup|PinnedDispatcherPolicy|SsrFPolicy|SsrFBlockedError|fetchWithSsrFGuard|GUARDED_FETCH_MODE)\b/u;
+  /\b(?:export\s+(?:type\s+)?\{[^}]*\b(?:createPinnedLookup|PinnedDispatcherPolicy|SsrFPolicy|SsrFBlockedError|NetworkTargetPolicy|NetworkTargetBlockedError|fetchWithSsrFGuard|fetchConfiguredLocalOrigin|GUARDED_FETCH_MODE)\b|export\s+(?:async\s+)?function\s+fetchConfiguredLocalOrigin\b)/u;
+const PUBLIC_SECURITY_RUNTIME_NETWORK_EXPORT_PATTERN =
+  /\bexport\s+(?:type\s+)?\{[^}]*\b(?:NetworkTargetPolicy|PinnedDispatcherPolicy|PinnedHostname|PinnedHostnameOverride|PrivateIpBlockOptions|networkTargetPolicyFrom\w*|resolveNetworkTargetPolicy\w*|resolvePinnedHostname\w*|createPinnedLookup|isPrivateIpAddress|isBlockedHostname\w*|isPrivateNetworkAllowedByPolicy|isPrivateNetworkOptInEnabled|assertHttpUrlTargetsPrivateNetwork|buildHostnameAllowlistPolicyFromSuffixAllowlist|matchesHostnameAllowlist|normalizeHostnameSuffixAllowlist|isHttpsUrlAllowedByHostnameSuffixAllowlist)\b/u;
 
 const RAW_FETCH_ALLOWLIST = new Map(
   [
@@ -362,6 +364,14 @@ function findMatchingRuntimeLine(source, pattern) {
   return undefined;
 }
 
+function findMatchingRuntimeSourceLine(source, pattern) {
+  const match = pattern.exec(source);
+  if (!match || match.index === undefined) {
+    return undefined;
+  }
+  return source.slice(0, match.index).split("\n").length;
+}
+
 function isRetiredVocabularyAllowlisted(file, name) {
   if (RETIRED_VOCABULARY_ALLOWLIST.has(file)) {
     return true;
@@ -392,13 +402,25 @@ export function collectRuntimeHttpEgressBoundaryViolations(files, readFile = rea
     }
 
     if (file === "src/plugin-sdk/fetch-runtime.ts") {
-      const retiredFetchRuntimeExportLine = findMatchingRuntimeLine(
+      const retiredFetchRuntimeExportLine = findMatchingRuntimeSourceLine(
         source,
         RETIRED_FETCH_RUNTIME_EXPORT_PATTERN,
       );
       if (retiredFetchRuntimeExportLine) {
         violations.push(
           `${file}:${retiredFetchRuntimeExportLine} fetch-runtime must not export retired SSRF guard or pinned-dispatcher APIs; use the canonical egress helper or an internal retained policy owner`,
+        );
+      }
+    }
+
+    if (file === "src/plugin-sdk/security-runtime.ts") {
+      const publicSecurityRuntimeExportLine = findMatchingRuntimeSourceLine(
+        source,
+        PUBLIC_SECURITY_RUNTIME_NETWORK_EXPORT_PATTERN,
+      );
+      if (publicSecurityRuntimeExportLine) {
+        violations.push(
+          `${file}:${publicSecurityRuntimeExportLine} security-runtime must not export reusable network-policy, DNS-pinning, private-network allowlist, redirect-policy, or proxy-bypass helpers`,
         );
       }
     }

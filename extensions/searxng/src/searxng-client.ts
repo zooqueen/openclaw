@@ -1,3 +1,10 @@
+import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import {
+  assertHttpUrlTargetsPrivateNetwork,
+  isBlockedHostnameOrIp,
+  isPrivateIpAddress,
+} from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { LookupFn } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 // Searxng plugin module implements searxng client behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
@@ -15,13 +22,6 @@ import {
   wrapWebContent,
   writeCache,
 } from "openclaw/plugin-sdk/provider-web-search";
-import { resolvePinnedHostnameWithPolicy } from "openclaw/plugin-sdk/security-runtime";
-import {
-  assertHttpUrlTargetsPrivateNetwork,
-  isBlockedHostnameOrIp,
-  isPrivateIpAddress,
-} from "openclaw/plugin-sdk/security-runtime";
-import type { LookupFn } from "openclaw/plugin-sdk/security-runtime";
 import {
   resolveSearxngBaseUrl,
   resolveSearxngCategories,

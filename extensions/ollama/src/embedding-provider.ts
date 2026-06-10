@@ -1,5 +1,5 @@
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import { fetchConfiguredLocalOrigin } from "openclaw/plugin-sdk/fetch-runtime";
+import { fetchOllamaConfiguredLocalOrigin } from "openclaw/plugin-sdk/ollama-local-origin-fetch";
 // Ollama provider module implements model/runtime integration.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-auth";
 import {
@@ -90,7 +90,7 @@ async function withRemoteHttpResponse<T>(params: {
   configuredLocalOriginBaseUrl: string;
   onResponse: (response: Response) => Promise<T>;
 }): Promise<T> {
-  const { response, release } = await fetchConfiguredLocalOrigin({
+  const { response, release } = await fetchOllamaConfiguredLocalOrigin({
     url: params.url,
     init: params.init,
     signal: params.signal,

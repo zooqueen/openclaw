@@ -473,8 +473,11 @@ const cachedBundledPluginPublicSurfaceAliasMaps = new PluginLruCache<Record<stri
   MAX_PLUGIN_LOADER_ALIAS_CACHE_ENTRIES,
 );
 const PLUGIN_SDK_PACKAGE_NAMES = ["openclaw/plugin-sdk", "@openclaw/plugin-sdk"] as const;
+const BROWSER_CDP_PROXY_BYPASS_PLUGIN_SDK_SUBPATH = "browser-cdp-proxy-bypass";
 const CODEX_NATIVE_TASK_RUNTIME_PLUGIN_SDK_SUBPATH = "codex-native-task-runtime";
 const CODEX_MCP_PROJECTION_PLUGIN_SDK_SUBPATH = "codex-mcp-projection";
+const BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH = "bundled-network-policy-runtime";
+const OLLAMA_LOCAL_ORIGIN_FETCH_PLUGIN_SDK_SUBPATH = "ollama-local-origin-fetch";
 type PrivatePluginSdkSubpathOwner = {
   bundledPluginId: string;
   officialInstalledPackageName?: string;
@@ -489,12 +492,119 @@ const PRIVATE_PLUGIN_SDK_SUBPATH_OWNERS: readonly PrivatePluginSdkSubpathOwner[]
     subpaths: [
       CODEX_NATIVE_TASK_RUNTIME_PLUGIN_SDK_SUBPATH,
       CODEX_MCP_PROJECTION_PLUGIN_SDK_SUBPATH,
+      BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH,
     ],
   },
   {
     bundledPluginId: "browser",
+    officialInstalledPackageName: "@openclaw/browser-plugin",
     allowPrivateQaCli: false,
-    subpaths: ["browser-cdp-proxy-bypass"],
+    subpaths: [
+      BROWSER_CDP_PROXY_BYPASS_PLUGIN_SDK_SUBPATH,
+      BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH,
+    ],
+  },
+  {
+    bundledPluginId: "brave",
+    officialInstalledPackageName: "@openclaw/brave-plugin",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "firecrawl",
+    officialInstalledPackageName: "@openclaw/firecrawl-plugin",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "google-meet",
+    officialInstalledPackageName: "@openclaw/google-meet",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "googlechat",
+    officialInstalledPackageName: "@openclaw/googlechat",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "line",
+    officialInstalledPackageName: "@openclaw/line",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "lmstudio",
+    officialInstalledPackageName: "@openclaw/lmstudio-provider",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "matrix",
+    officialInstalledPackageName: "@openclaw/matrix",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "msteams",
+    officialInstalledPackageName: "@openclaw/msteams",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "nostr",
+    officialInstalledPackageName: "@openclaw/nostr",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "ollama",
+    officialInstalledPackageName: "@openclaw/ollama-provider",
+    allowPrivateQaCli: false,
+    subpaths: [OLLAMA_LOCAL_ORIGIN_FETCH_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "qqbot",
+    officialInstalledPackageName: "@openclaw/qqbot",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "searxng",
+    officialInstalledPackageName: "@openclaw/searxng-plugin",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "synology-chat",
+    officialInstalledPackageName: "@openclaw/synology-chat",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "telegram",
+    officialInstalledPackageName: "@openclaw/telegram",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "tlon",
+    officialInstalledPackageName: "@openclaw/tlon",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "voice-call",
+    officialInstalledPackageName: "@openclaw/voice-call",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
+  },
+  {
+    bundledPluginId: "zalo",
+    officialInstalledPackageName: "@openclaw/zalo",
+    allowPrivateQaCli: false,
+    subpaths: [BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH],
   },
 ];
 const PLUGIN_SDK_SOURCE_CANDIDATE_EXTENSIONS = [
@@ -1156,6 +1266,9 @@ function readPrivateLocalOnlyPluginSdkSubpaths(packageRoot: string): string[] {
     ...new Set([
       CODEX_NATIVE_TASK_RUNTIME_PLUGIN_SDK_SUBPATH,
       CODEX_MCP_PROJECTION_PLUGIN_SDK_SUBPATH,
+      BROWSER_CDP_PROXY_BYPASS_PLUGIN_SDK_SUBPATH,
+      BUNDLED_NETWORK_POLICY_RUNTIME_PLUGIN_SDK_SUBPATH,
+      OLLAMA_LOCAL_ORIGIN_FETCH_PLUGIN_SDK_SUBPATH,
       ...(Array.isArray(parsed)
         ? parsed.filter((subpath): subpath is string => isSafePluginSdkSubpathSegment(subpath))
         : []),
@@ -1384,6 +1497,7 @@ function isBundledPluginModulePath(params: {
 function isOfficialInstalledPluginPackageRoot(params: {
   packageRoot: string;
   packageName: string;
+  pluginId: string;
 }) {
   const [scope, name] = params.packageName.split("/");
   if (!scope || !name) {
@@ -1393,10 +1507,17 @@ function isOfficialInstalledPluginPackageRoot(params: {
   const last = segments.at(-1);
   const packageScope = segments.at(-2);
   const nodeModules = segments.at(-3);
-  return last === name && packageScope === scope && nodeModules === "node_modules";
+  if (last === name && packageScope === scope && nodeModules === "node_modules") {
+    return true;
+  }
+  return packageScope === "extensions" && (last === params.pluginId || last === name);
 }
 
-function isOfficialInstalledPluginModulePath(params: { modulePath: string; packageName: string }) {
+function isOfficialInstalledPluginModulePath(params: {
+  modulePath: string;
+  packageName: string;
+  pluginId: string;
+}) {
   let cursor = path.dirname(path.resolve(params.modulePath));
   for (let depth = 0; depth < 12; depth += 1) {
     const packageJson = tryReadJsonSync<{ name?: unknown }>(path.join(cursor, "package.json"));
@@ -1406,6 +1527,7 @@ function isOfficialInstalledPluginModulePath(params: { modulePath: string; packa
         isOfficialInstalledPluginPackageRoot({
           packageRoot: cursor,
           packageName: params.packageName,
+          pluginId: params.pluginId,
         })
       );
     }
@@ -1436,6 +1558,7 @@ function isTrustedPrivatePluginSdkOwnerPath(params: {
     ? isOfficialInstalledPluginModulePath({
         modulePath: params.modulePath,
         packageName: params.owner.officialInstalledPackageName,
+        pluginId: params.owner.bundledPluginId,
       })
     : false;
 }

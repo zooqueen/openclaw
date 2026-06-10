@@ -12,9 +12,9 @@ import {
 } from "matrix-js-sdk/lib/matrix.js";
 import type { Direction } from "matrix-js-sdk/lib/models/event-timeline.js";
 import { VerificationMethod } from "matrix-js-sdk/lib/types.js";
+import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
+import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { KeyedAsyncQueue } from "openclaw/plugin-sdk/keyed-async-queue";
-import type { PinnedDispatcherPolicy } from "openclaw/plugin-sdk/security-runtime";
-import type { NetworkTargetPolicy } from "openclaw/plugin-sdk/security-runtime";
 import {
   normalizeNullableString,
   normalizeStringEntries,

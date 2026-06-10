@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/security-runtime";
+import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk/bundled-network-policy-runtime";
 import { asRecord, normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { GoogleMeetConfig, GoogleMeetMode, GoogleMeetTransport } from "./config.js";
 
