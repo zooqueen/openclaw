@@ -67,7 +67,6 @@ import {
   REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS,
   resolveMediaToolInboundRoots,
   resolveMediaToolLocalRoots,
-  resolveRemoteMediaSsrfPolicy,
   resolvePromptAndModelOverride,
 } from "./media-tool-shared.js";
 import {
@@ -95,7 +94,6 @@ type ImageToolLoadWebMediaOptions = {
   imageCompression?: ImageCompressionPolicy;
   localRoots?: readonly string[] | "any";
   inboundRoots?: readonly string[];
-  ssrfPolicy?: ReturnType<typeof resolveRemoteMediaSsrfPolicy>;
   readIdleTimeoutMs?: number;
 };
 
@@ -748,8 +746,6 @@ export function createImageTool(options?: {
   if (!resolvedImageModelConfig && !options?.deferAutoModelResolution) {
     return null;
   }
-  const remoteMediaSsrfPolicy = resolveRemoteMediaSsrfPolicy(options?.config);
-
   // If model has native vision, images in the prompt are auto-injected
   // so this tool is only needed when image wasn't provided in the prompt
   const description = options?.modelHasVision
@@ -981,7 +977,6 @@ export function createImageTool(options?: {
                 maxBytes,
                 localRoots: mediaLocalRoots,
                 inboundRoots: mediaInboundRoots,
-                ssrfPolicy: remoteMediaSsrfPolicy,
                 ...(isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {}),
                 imageCompression,
               });

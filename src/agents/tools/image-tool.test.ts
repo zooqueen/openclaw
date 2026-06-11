@@ -1976,7 +1976,6 @@ describe("image tool implicit imageModel config", () => {
     await withTempAgentDir(async (agentDir) => {
       const cfg: OpenClawConfig = {
         ...createMinimaxImageConfig(),
-        tools: { web: { fetch: { ssrfPolicy: { allowRfc2544BenchmarkRange: true } } } },
       };
       const tool = createRequiredImageTool({ config: cfg, agentDir });
 
