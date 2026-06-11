@@ -1,4 +1,5 @@
 // App fetch transport tests cover non-SSRF redirect, timeout, cleanup, and dispatcher mechanics.
+import { readResponseWithLimit } from "@openclaw/media-core/read-response-with-limit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchWithAppNetworkTransport, type AppFetchTransportOptions } from "./fetch-transport.js";
 
@@ -15,6 +16,10 @@ function makeCancelableBody() {
 
 function headersRecord(init: RequestInit | undefined): Record<string, string> {
   return Object.fromEntries(new Headers(init?.headers).entries());
+}
+
+async function readTestResponseText(response: Response): Promise<string> {
+  return (await readResponseWithLimit(response, 64)).toString("utf8");
 }
 
 describe("fetchWithAppNetworkTransport", () => {
@@ -43,7 +48,7 @@ describe("fetchWithAppNetworkTransport", () => {
 
     try {
       expect(result.finalUrl).toBe("https://example.com/final");
-      await expect(result.response.text()).resolves.toBe("ok");
+      await expect(readTestResponseText(result.response)).resolves.toBe("ok");
       expect(firstBody.cancel).toHaveBeenCalledTimes(1);
       expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
         "https://example.com/start",
@@ -242,7 +247,7 @@ describe("fetchWithAppNetworkTransport", () => {
     });
     try {
       expect(direct.finalUrl).toBe("https://allowed.example/direct");
-      await expect(direct.response.text()).resolves.toBe("direct ok");
+      await expect(readTestResponseText(direct.response)).resolves.toBe("direct ok");
     } finally {
       await direct.release();
     }
@@ -265,7 +270,7 @@ describe("fetchWithAppNetworkTransport", () => {
     });
     try {
       expect(redirected.finalUrl).toBe("https://allowed.example/final");
-      await expect(redirected.response.text()).resolves.toBe("redirect ok");
+      await expect(readTestResponseText(redirected.response)).resolves.toBe("redirect ok");
       expect(redirectFetch.mock.calls.map((call) => call[0])).toEqual([
         "https://allowed.example/start",
         "https://allowed.example/final",
