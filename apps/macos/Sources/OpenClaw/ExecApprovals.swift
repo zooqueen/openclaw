@@ -364,17 +364,12 @@ enum ExecApprovalsStore {
             }
             close(fd)
             closed = true
-            let copied = copyfile(
-                tempURL.path,
-                targetURL.path,
-                nil,
-                copyfile_flags_t(COPYFILE_EXCL))
-            if copied == -1 {
+            let linked = link(tempURL.path, targetURL.path)
+            if linked == -1 {
                 if errno == EEXIST {
                     try? FileManager().removeItem(at: tempURL)
                     return false
                 }
-                try? FileManager().removeItem(at: targetURL)
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
             try? FileManager().removeItem(at: tempURL)
