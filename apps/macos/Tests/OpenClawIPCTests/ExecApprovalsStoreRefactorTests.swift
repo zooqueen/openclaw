@@ -43,11 +43,16 @@ struct ExecApprovalsStoreRefactorTests {
     private func withTempStateDir(
         _ body: @escaping @Sendable (URL) async throws -> Void) async throws
     {
-        let stateDir = FileManager().temporaryDirectory
+        let root = FileManager().temporaryDirectory.resolvingSymlinksInPath()
             .appendingPathComponent("openclaw-state-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager().removeItem(at: stateDir) }
+        let home = root.appendingPathComponent("home", isDirectory: true)
+        let stateDir = root.appendingPathComponent("state", isDirectory: true)
+        defer { try? FileManager().removeItem(at: root) }
 
-        try await self.withLockedEnv(["OPENCLAW_STATE_DIR": stateDir.path]) {
+        try await self.withLockedEnv([
+            "OPENCLAW_HOME": home.path,
+            "OPENCLAW_STATE_DIR": stateDir.path,
+        ]) {
             try await body(stateDir)
         }
     }
@@ -55,7 +60,7 @@ struct ExecApprovalsStoreRefactorTests {
     private func withTempHomeAndStateDir(
         _ body: @escaping @Sendable (URL, URL) async throws -> Void) async throws
     {
-        let root = FileManager().temporaryDirectory
+        let root = FileManager().temporaryDirectory.resolvingSymlinksInPath()
             .appendingPathComponent("openclaw-home-state-\(UUID().uuidString)", isDirectory: true)
         let home = root.appendingPathComponent("home", isDirectory: true)
         let stateDir = root.appendingPathComponent("state", isDirectory: true)
