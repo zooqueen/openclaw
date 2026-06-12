@@ -116,8 +116,26 @@ struct GatewayChannelConnectTests {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try await TestIsolation.withEnvValues(["OPENCLAW_STATE_DIR": tempDir.path]) {
+        func restoreStateDir(_ previousStateDir: String?) {
+            if let previousStateDir {
+                setenv("OPENCLAW_STATE_DIR", previousStateDir, 1)
+            } else {
+                unsetenv("OPENCLAW_STATE_DIR")
+            }
+        }
+
+        await TestIsolationLock.shared.acquire()
+        let previousStateDir = getenv("OPENCLAW_STATE_DIR").map { String(cString: $0) }
+        setenv("OPENCLAW_STATE_DIR", tempDir.path, 1)
+
+        do {
             try await operation()
+            restoreStateDir(previousStateDir)
+            await TestIsolationLock.shared.release()
+        } catch {
+            restoreStateDir(previousStateDir)
+            await TestIsolationLock.shared.release()
+            throw error
         }
     }
 
