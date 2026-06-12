@@ -4,6 +4,42 @@ import Testing
 
 @Suite(.serialized)
 struct ExecApprovalsStoreRefactorTests {
+    private func withLockedEnv(
+        _ values: [String: String?],
+        _ body: () async throws -> Void) async throws
+    {
+        func restoreEnv(_ values: [String: String?]) {
+            for (key, value) in values {
+                if let value {
+                    setenv(key, value, 1)
+                } else {
+                    unsetenv(key)
+                }
+            }
+        }
+
+        await TestIsolationLock.shared.acquire()
+        var previousEnv: [String: String?] = [:]
+        for (key, value) in values {
+            previousEnv[key] = getenv(key).map { String(cString: $0) }
+            if let value {
+                setenv(key, value, 1)
+            } else {
+                unsetenv(key)
+            }
+        }
+
+        do {
+            try await body()
+            restoreEnv(previousEnv)
+            await TestIsolationLock.shared.release()
+        } catch {
+            restoreEnv(previousEnv)
+            await TestIsolationLock.shared.release()
+            throw error
+        }
+    }
+
     private func withTempStateDir(
         _ body: @escaping @Sendable (URL) async throws -> Void) async throws
     {
@@ -11,7 +47,7 @@ struct ExecApprovalsStoreRefactorTests {
             .appendingPathComponent("openclaw-state-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager().removeItem(at: stateDir) }
 
-        try await TestIsolation.withEnvValues(["OPENCLAW_STATE_DIR": stateDir.path]) {
+        try await self.withLockedEnv(["OPENCLAW_STATE_DIR": stateDir.path]) {
             try await body(stateDir)
         }
     }
@@ -25,7 +61,7 @@ struct ExecApprovalsStoreRefactorTests {
         let stateDir = root.appendingPathComponent("state", isDirectory: true)
         defer { try? FileManager().removeItem(at: root) }
 
-        try await TestIsolation.withEnvValues([
+        try await self.withLockedEnv([
             "OPENCLAW_HOME": home.path,
             "OPENCLAW_STATE_DIR": stateDir.path,
         ]) {
