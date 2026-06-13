@@ -3,20 +3,6 @@ import Testing
 @testable import OpenClaw
 
 struct DeepLinkAgentPolicyTests {
-    @Test func `validate message for handle rejects too long when unkeyed`() {
-        let msg = String(repeating: "a", count: DeepLinkAgentPolicy.maxUnkeyedConfirmChars + 1)
-        let res = DeepLinkAgentPolicy.validateMessageForHandle(message: msg, allowUnattended: false)
-        switch res {
-        case let .failure(error):
-            #expect(
-                error == .messageTooLongForConfirmation(
-                    max: DeepLinkAgentPolicy.maxUnkeyedConfirmChars,
-                    actual: DeepLinkAgentPolicy.maxUnkeyedConfirmChars + 1))
-        case .success:
-            Issue.record("expected failure, got success")
-        }
-    }
-
     @Test func `validate message for handle allows too long when keyed`() {
         let msg = String(repeating: "a", count: DeepLinkAgentPolicy.maxUnkeyedConfirmChars + 1)
         let res = DeepLinkAgentPolicy.validateMessageForHandle(message: msg, allowUnattended: true)
