@@ -355,7 +355,7 @@ describe("ensureApiKeyFromEnvOrPrompt", () => {
       .fn<WizardPrompter["text"]>()
       .mockResolvedValueOnce("/providers/minimax/apiKey")
       .mockResolvedValueOnce("MINIMAX_API_KEY");
-    const note = vi.fn(async () => undefined);
+    const note = vi.fn<WizardPrompter["note"]>().mockResolvedValue(undefined);
     const setCredential = vi.fn(async () => undefined);
 
     const result = await ensureMinimaxApiKeyWithEnvRefPrompter({
