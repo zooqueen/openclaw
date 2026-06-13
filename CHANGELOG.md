@@ -2,6 +2,30 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.7
+
+### Highlights
+
+- Channel delivery is tighter across Slack, Telegram, outbound media, silent replies, progress drafts, and paged action results: same-channel Slack finals persist in transcripts, top-level `image` message-tool sends attach media, expandable Telegram blockquotes and spooled replay survive delivery, explicit silent assistant replies stay silent, progress draft startup failures are reported, and channel action result pages can be fetched incrementally. (#92498, #92407, #92416, #92281, #92073, #92083, #88993) Thanks @TurboTheTurtle, @ichirokyoto, @xydigit-sj, @joshavant, @sallyom, @hansraj316, and @fuller-stack-dev.
+- Provider and model handling is more resilient: Kimi K2.7 Code is available, Kimi native tool-call ids and replayed `reasoning_content` are repaired, Mistral skips unreadable tool schemas, Fireworks catalog parameters come from manifests, DeepSeek keeps configured static transport, provider fallbacks resolve correctly, Anthropic thinking replay is repaired, and Anthropic Vertex stops re-marking transport-budgeted cache control. (#92554, #92396, #90242, #90326, #92265, #92293, #92286, #92387) Thanks @xialonglee, @vincentkoc, @obuchowski, @joshavant, and @openperf.
+- User-visible context and auth boundaries are safer: Feishu no longer leaks prompt-preface runtime context into replies, WebSocket payload handling is hardened, CLI-backed `/btw` fallback fails closed, local setup trust is hardened, and Skill Workshop symlink writes are gated and validated before rollback metadata is written. (#92589, #92593, #92226, #92175) Thanks @jovi2014-cyber, @zhangqueping, and @joshavant.
+- Agent, memory, Codex, cron, and update recovery paths preserve the useful failure now: invalid plugin model catalogs are isolated, QMD startup failures survive fallback errors, Codex memory prompts remain registered, source message tool replies no longer stop agent progress, structured unsupported-model errors are classified, heartbeat/cron terminal state is preserved, Linux service updates hand off cleanly, and cron status reports the SQLite store path. (#92564, #92218, #92618, #92350, #92343, #92280, #92231, #92225, #92144) Thanks @tangtaizong666, @zhbcher, @mushuiyu886, @rubencu, @joshavant, and @liuhao1024.
+- UI, docs, QA, Docker, and release proof are easier to trust: accessibility contrast/focus/font fixes landed, empty Workboard columns can hide, the design-system docs are documented, uptime monitors are pointed at `/health`, Windows Hub docs pin the verified stable installer links, QA evidence and scorecard taxonomy artifacts are produced, QA Lab is bundled into Docker images, and lifecycle timeout cleanup survives leader exit. (#89822, #89615, #89827, #55768, #92608, #92605, #91484, #91500, #92087, #92566) Thanks @BunsDev, @faahim, @liuhao1024, @lzyyzznl, @RomneyDa, and @jesse-merhi.
+
+### Changes
+
+- QA and release validation now emit scorecard taxonomy and evidence artifacts, split plugin ClawHub publishing paths, use trusted plugin npm publishing, keep plugin publish checks authoritative, and align the root package, publishable plugin manifests, generated baselines, and native app versions for the 2026.6.7 beta train. (#91484, #91500) Thanks @RomneyDa.
+- Docs and operator guidance now cover Gateway uptime monitoring, design-system guidance, Windows Hub stable download pins, removed stale ClawHub navigation, WhatsApp inbound compatibility, and doctor/update progress behavior. (#55768, #92608, #89827, #92605) Thanks @faahim, @liuhao1024, @BunsDev, and @lzyyzznl.
+- Matrix plugin release metadata is aligned with the core beta train and records the version-alignment changelog entry for package publication.
+
+### Fixes
+
+- Channels and outbound flows preserve user intent across Slack transcript mirrors, Telegram polling conflicts and transient draft-preview failures, outbound image sends, explicit silent assistant replies, progress-draft startup errors, paged action results, WhatsApp inbound aliases, local setup trust, and heartbeat commitment delivery. (#92498, #92281, #92407, #92416, #92073, #92083, #88993, #92175, #92231) Thanks @TurboTheTurtle, @joshavant, @ichirokyoto, @xydigit-sj, @sallyom, @hansraj316, and @fuller-stack-dev.
+- Provider, model, and tool replay fixes cover unreadable Mistral schemas, Fireworks manifest model parameters, Kimi K2.7 Code/tool-call/reasoning replay, DeepSeek transport inheritance, managed SecretRef auth, static model fallbacks, rejected Anthropic thinking replay, Anthropic Vertex cache control, and OTLP trace correlation. (#90242, #90326, #92554, #92396, #92265, #92235, #92293, #92286, #92387, #92276) Thanks @vincentkoc, @obuchowski, @xialonglee, @joshavant, and @openperf.
+- Agent/runtime recovery now isolates invalid plugin model catalogs, preserves Codex memory prompt registration, continues after source message tool replies, classifies structured unsupported-model errors, reports QMD startup failures beside fallback errors, preserves cron timeout/cancel state, keeps disabled heartbeat one-shot retries working, and keeps Linux service auto-updates readable and handed off. (#92564, #92350, #92343, #92280, #92218, #92618, #92225, #92282, #92144) Thanks @tangtaizong666, @rubencu, @joshavant, @zhbcher, @mushuiyu886, and @liuhao1024.
+- Install, sandbox, doctor, and security surfaces render CLI skill prompts from materialized paths, fail closed for CLI-backed `/btw`, resolve doctor SecretRef previews, diagnose blocked external channel plugins, validate and gate Skill Workshop symlink writes, stop after failed Node package installs, and keep unsupported daemon service status readable. (#92508, #92226, #92229, #86629) Thanks @brokemac79, @joshavant, and @brokemac79.
+- Release, CI, E2E, Docker, and dependency gates keep lifecycle timeout cleanup alive, bundle QA Lab runtime in Docker images, update the esbuild audit pin, harden Docker process cleanup, keep plugin publish checks authoritative, and remove noisy redundant proof scripts so release failures stay bounded. (#92566, #92087, #92540) Thanks @RomneyDa and @jesse-merhi.
+
 ## 2026.6.6
 
 ### Highlights
