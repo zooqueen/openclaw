@@ -516,10 +516,10 @@ describe("kimi tool-call markup wrapper", () => {
 
     void wrapped(
       {
-        api: "openai-completions",
+        api: "anthropic-messages",
         provider: "kimi",
         id: "kimi-code",
-      } as Model<"openai-completions">,
+      } as Model<"anthropic-messages">,
       { messages: [] } as Context,
       {},
     );
