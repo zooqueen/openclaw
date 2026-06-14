@@ -1331,23 +1331,6 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
   });
 
-  it("does not force replyInThread from threadReply metadata on plain text", async () => {
-    useNonStreamingAutoAccount();
-
-    const { options } = createDispatcherHarness({
-      replyToMessageId: "om_msg",
-      replyInThread: false,
-      threadReply: true,
-      rootId: "om_root_topic",
-    });
-    await options.deliver({ text: "plain text" }, { kind: "final" });
-
-    expectMockArgFields(sendMessageFeishuMock, "message send params", {
-      replyToMessageId: "om_msg",
-      replyInThread: false,
-    });
-  });
-
   it("streams reasoning content as blockquote before answer", async () => {
     const { result, options } = createDispatcherHarness({
       runtime: createRuntimeLogger(),
@@ -1503,7 +1486,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
   });
 
-  it("keeps topic metadata without forcing streaming cards into threads", async () => {
+  it("uses streaming cards for thread replies and keeps topic metadata", async () => {
     const { options } = createDispatcherHarness({
       runtime: createRuntimeLogger(),
       replyToMessageId: "om_msg",
@@ -1516,7 +1499,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(streamingInstances).toHaveLength(1);
     expectStreamingStartOptions(0, {
       replyToMessageId: "om_msg",
-      replyInThread: false,
+      replyInThread: true,
       rootId: "om_root_topic",
     });
     expect(sendStructuredCardFeishuMock).not.toHaveBeenCalled();

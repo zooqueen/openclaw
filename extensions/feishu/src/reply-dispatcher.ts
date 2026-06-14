@@ -153,8 +153,9 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
   } = params;
   const sendReplyToMessageId = skipReplyToInMessages ? undefined : replyToMessageId;
   const threadReplyMode = threadReply === true;
+  const effectiveReplyInThread = threadReplyMode ? true : replyInThread;
   const allowTopLevelReplyFallback =
-    replyInThread === true &&
+    effectiveReplyInThread === true &&
     threadReplyMode &&
     rootId !== undefined &&
     sendReplyToMessageId !== undefined &&
@@ -371,7 +372,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         const cardNote = resolveCardNote(agentId, identity, prefixContext.prefixContext);
         await streaming.start(chatId, resolveReceiveIdType(chatId), {
           replyToMessageId,
-          replyInThread,
+          replyInThread: effectiveReplyInThread,
           rootId,
           header: cardHeader,
           note: cardNote,
@@ -498,7 +499,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           to: chatId,
           mediaUrl,
           replyToMessageId: sendReplyToMessageId,
-          replyInThread,
+          replyInThread: effectiveReplyInThread,
           accountId,
           ...(payload.audioAsVoice === true ? { audioAsVoice: true } : {}),
         });
@@ -515,7 +516,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
                 to: chatId,
                 text: chunk,
                 replyToMessageId: sendReplyToMessageId,
-                replyInThread,
+                replyInThread: effectiveReplyInThread,
                 allowTopLevelReplyFallback,
                 accountId,
               });
@@ -542,7 +543,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
                     to: chatId,
                     text: chunk,
                     replyToMessageId: sendReplyToMessageId,
-                    replyInThread,
+                    replyInThread: effectiveReplyInThread,
                     allowTopLevelReplyFallback,
                     accountId,
                   });
@@ -568,7 +569,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       to: chatId,
       text: NO_VISIBLE_REPLY_FALLBACK_TEXT,
       replyToMessageId: sendReplyToMessageId,
-      replyInThread,
+      replyInThread: effectiveReplyInThread,
       allowTopLevelReplyFallback,
       accountId,
     });
@@ -730,7 +731,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
                   to: chatId,
                   text: chunk,
                   replyToMessageId: sendReplyToMessageId,
-                  replyInThread,
+                  replyInThread: effectiveReplyInThread,
                   allowTopLevelReplyFallback,
                   accountId,
                   header: cardHeader,
@@ -749,7 +750,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
                   to: chatId,
                   text: chunk,
                   replyToMessageId: sendReplyToMessageId,
-                  replyInThread,
+                  replyInThread: effectiveReplyInThread,
                   allowTopLevelReplyFallback,
                   accountId,
                 });

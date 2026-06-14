@@ -3542,7 +3542,7 @@ describe("handleFeishuMessage command authorization", () => {
     );
   });
 
-  it("does not force thread replies when only thread_id is present and replyInThread is disabled", async () => {
+  it("forces thread replies when inbound message contains thread_id", async () => {
     mockShouldComputeCommandAuthorized.mockReturnValue(false);
 
     const cfg: ClawdbotConfig = {
@@ -3573,51 +3573,13 @@ describe("handleFeishuMessage command authorization", () => {
 
     await dispatchMessage({ cfg, event });
 
-    expect(mockCreateFeishuReplyDispatcher).toHaveBeenCalledWith(
-      expect.objectContaining({
-        replyInThread: false,
-        threadReply: false,
-      }),
+    const dispatcherOptions = mockCallArg<{ replyInThread?: boolean; threadReply?: boolean }>(
+      mockCreateFeishuReplyDispatcher,
+      0,
+      0,
     );
-  });
-
-  it("enables thread replies for thread_id-only group contexts when replyInThread is enabled", async () => {
-    mockShouldComputeCommandAuthorized.mockReturnValue(false);
-
-    const cfg: ClawdbotConfig = {
-      channels: {
-        feishu: {
-          groups: {
-            "oc-group": {
-              requireMention: false,
-              groupSessionScope: "group",
-              replyInThread: "enabled",
-            },
-          },
-        },
-      },
-    } as ClawdbotConfig;
-
-    const event: FeishuMessageEvent = {
-      sender: { sender_id: { open_id: "ou-thread-reply" } },
-      message: {
-        message_id: "msg-thread-reply-enabled",
-        chat_id: "oc-group",
-        chat_type: "group",
-        thread_id: "omt_topic_thread_reply",
-        message_type: "text",
-        content: JSON.stringify({ text: "thread content" }),
-      },
-    };
-
-    await dispatchMessage({ cfg, event });
-
-    expect(mockCreateFeishuReplyDispatcher).toHaveBeenCalledWith(
-      expect.objectContaining({
-        replyInThread: true,
-        threadReply: false,
-      }),
-    );
+    expect(dispatcherOptions.replyInThread).toBe(true);
+    expect(dispatcherOptions.threadReply).toBe(true);
   });
 
   it("bootstraps topic thread context only for a new thread session", async () => {
