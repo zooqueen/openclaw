@@ -771,7 +771,15 @@ export class CodexNativeSubagentMonitor {
     }
     const key = `${requesterSessionKey}\0${childState.childThreadId}`;
     const owner = completionDeliveryOwners.get(key);
-    if (owner && owner !== childState) {
+    if (owner) {
+      return owner === childState;
+    }
+    const runId = codexNativeSubagentRunId(childState.childThreadId);
+    if (
+      state.taskRuntime
+        ?.listTaskRecords()
+        .some((task) => task.runId === runId && task.deliveryStatus === "delivered")
+    ) {
       return false;
     }
     // Delivery no longer needs the app-server client. Keep one process owner

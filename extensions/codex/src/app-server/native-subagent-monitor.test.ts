@@ -1172,8 +1172,27 @@ describe("CodexNativeSubagentMonitor", () => {
     try {
       const firstClient = createClient();
       const replacementClient = createClient();
-      replacementClient.setThreadRead("child-thread", threadRead({ result: "child final result" }));
+      let resolveReadStarted!: () => void;
+      const readStarted = new Promise<void>((resolve) => {
+        resolveReadStarted = resolve;
+      });
+      replacementClient.setThreadReadFactory("child-thread", () => {
+        resolveReadStarted();
+        return threadRead({ result: "child final result" });
+      });
       const runtime = createRuntime();
+      let recordsVisible = false;
+      let task = taskRecord({
+        childThreadId: "child-thread",
+        status: "succeeded",
+        deliveryStatus: "not_applicable",
+        endedAt: Date.now(),
+      });
+      runtime.listTaskRecords.mockImplementation(() => (recordsVisible ? [task] : []));
+      runtime.setDetachedTaskDeliveryStatusByRunId.mockImplementation((params) => {
+        task = { ...task, deliveryStatus: params.deliveryStatus };
+        return [task];
+      });
       runtime.deliverAgentHarnessTaskCompletion
         .mockResolvedValueOnce({ delivered: false, path: "direct", error: "pending" })
         .mockResolvedValueOnce({ delivered: true, path: "direct" });
@@ -1185,21 +1204,14 @@ describe("CodexNativeSubagentMonitor", () => {
       await firstClient.notify(nativeCompletionNotification());
       expect(runtime.deliverAgentHarnessTaskCompletion).toHaveBeenCalledTimes(1);
 
-      runtime.listTaskRecords.mockReturnValue([
-        taskRecord({
-          childThreadId: "child-thread",
-          status: "succeeded",
-          deliveryStatus: "pending",
-          endedAt: Date.now(),
-        }),
-      ]);
+      recordsVisible = true;
       firstClient.close();
       const replacementMonitor = new CodexNativeSubagentMonitor(
         replacementClient as never,
         runtime,
       );
       registerParent(replacementMonitor);
-      await vi.waitFor(() => expect(replacementClient.request).toHaveBeenCalled());
+      await readStarted;
       await vi.advanceTimersByTimeAsync(0);
 
       expect(runtime.deliverAgentHarnessTaskCompletion).toHaveBeenCalledTimes(1);
