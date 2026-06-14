@@ -992,9 +992,6 @@ describe("codex conversation binding", () => {
     >();
     const client = {
       request: vi.fn(async (method: string, _requestParams?: unknown) => {
-        if (method === "turn/interrupt") {
-          throw new Error("interrupt timeout");
-        }
         if (method === "thread/resume") {
           return threadResumeResult("failed-turn-thread");
         }
@@ -1035,13 +1032,12 @@ describe("codex conversation binding", () => {
     expect(client.request.mock.calls.map(([method]) => method)).toEqual([
       "thread/resume",
       "turn/start",
-      "turn/interrupt",
     ]);
     await expect(
       testCodexAppServerBindingStore.read({ kind: "conversation", bindingId }),
     ).resolves.toMatchObject({ threadId: "failed-turn-thread" });
-    expect(sharedClientMocks.abandonSharedCodexAppServerClient).toHaveBeenCalledOnce();
-    expect(cleanupMocks.unsubscribeCodexThreadBestEffort).not.toHaveBeenCalled();
+    expect(sharedClientMocks.abandonSharedCodexAppServerClient).not.toHaveBeenCalled();
+    expect(cleanupMocks.unsubscribeCodexThreadBestEffort).toHaveBeenCalledOnce();
   });
 
   it("does not overwrite a same-thread preference patch during missing-thread recovery", async () => {

@@ -650,15 +650,17 @@ async function runBoundTurn(
       });
       replyText = completion.replyText.trim();
     } catch (error) {
-      try {
-        await activeTurn.interrupt();
-      } catch (interruptError) {
-        abandonClient = true;
-        embeddedAgentLog.debug("codex bound turn interrupt cleanup failed", {
-          threadId,
-          turnId,
-          error: interruptError,
-        });
+      if (!collector.completed) {
+        try {
+          await activeTurn.interrupt();
+        } catch (interruptError) {
+          abandonClient = true;
+          embeddedAgentLog.debug("codex bound turn interrupt cleanup failed", {
+            threadId,
+            turnId,
+            error: interruptError,
+          });
+        }
       }
       throw error;
     } finally {
