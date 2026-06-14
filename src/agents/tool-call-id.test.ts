@@ -4,6 +4,7 @@ import type { AgentMessage } from "openclaw/plugin-sdk/agent-core";
 import { describe, expect, it } from "vitest";
 import { castAgentMessages } from "./test-helpers/agent-message-fixtures.js";
 import {
+  extractToolResultId,
   isValidCloudCodeAssistToolId,
   sanitizeToolCallId,
   sanitizeToolCallIdsForCloudCodeAssist,
@@ -461,6 +462,36 @@ describe("sanitizeToolCallIdsForCloudCodeAssist", () => {
       expect(isValidCloudCodeAssistToolId("functions.read:0", "strict9")).toBe(false);
     });
 
+    it("normalizes functions-space ids for strict sanitization without changing raw result extraction", () => {
+      expect(sanitizeToolCallId("functions exec:0", "strict")).toBe("functions.exec:0");
+      expect(isValidCloudCodeAssistToolId("functions exec:0", "strict")).toBe(false);
+      expect(isValidCloudCodeAssistToolId("functions.exec:0", "strict")).toBe(true);
+
+      const [result] = castAgentMessages([
+        buildToolResult({ toolCallId: "functions exec:0", toolName: "exec", text: "ok" }),
+      ]) as Array<Extract<AgentMessage, { role: "toolResult" }>>;
+      expect(extractToolResultId(result!)).toBe("functions exec:0");
+    });
+
+    it("pairs functions-space assistant ids with canonical functions result ids", () => {
+      const input = castAgentMessages([
+        {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "functions exec:0", name: "exec", arguments: {} }],
+        },
+        buildToolResult({ toolCallId: "functions.exec:0", toolName: "exec", text: "ok" }),
+      ]);
+
+      const out = sanitizeToolCallIdsForCloudCodeAssist(input, "strict");
+      expect(out).not.toBe(input);
+      const assistant = out[0] as Extract<AgentMessage, { role: "assistant" }>;
+      const toolCall = assistant.content?.[0] as { id?: string };
+      expect(toolCall.id).toBe("functions.exec:0");
+      expect((out[1] as Extract<AgentMessage, { role: "toolResult" }>).toolCallId).toBe(
+        "functions.exec:0",
+      );
+    });
+
     it("preserves native Kimi function ids across assistant/toolResult pairs", () => {
       const input = castAgentMessages([
         {
@@ -564,6 +595,25 @@ describe("sanitizeToolCallIdsForCloudCodeAssist", () => {
       expect((out[1] as Extract<AgentMessage, { role: "toolResult" }>).toolCallId).toBe(firstId);
       expect((out[3] as Extract<AgentMessage, { role: "toolResult" }>).toolCallId).toBe(secondId);
       expect(sanitizeToolCallIdsForCloudCodeAssist(out, "strict", options)).toBe(out);
+    });
+
+    it("preserves replay-safe functions-space raw ids for signed thinking turns", () => {
+      const input = castAgentMessages([
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "internal", thinkingSignature: "sig_functions" },
+            { type: "toolCall", id: "functions exec:0", name: "exec", arguments: {} },
+          ],
+        },
+        buildToolResult({ toolCallId: "functions exec:0", toolName: "exec", text: "ok" }),
+      ]);
+
+      const out = sanitizeToolCallIdsForCloudCodeAssist(input, "strict", {
+        preserveReplaySafeThinkingToolCallIds: true,
+        allowedToolNames: ["exec"],
+      });
+      expect(out).toBe(input);
     });
 
     it("does not preserve malformed Kimi-like ids", () => {

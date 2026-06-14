@@ -86,6 +86,29 @@ describe("sanitizeToolUseResultPairing", () => {
     expect(out[3]?.role).toBe("user");
   });
 
+  it("pairs functions-space assistant ids with canonical result ids without rewriting raw result ids", () => {
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "functions exec:0", name: "exec", arguments: {} }],
+      },
+      { role: "user", content: "move after the result" },
+      {
+        role: "toolResult",
+        toolCallId: "functions.exec:0",
+        toolName: "functions.exec",
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      },
+    ]);
+
+    const out = sanitizeToolUseResultPairing(input);
+    expect(out.map((message) => message.role)).toEqual(["assistant", "toolResult", "user"]);
+    const result = out[1] as Extract<AgentMessage, { role: "toolResult" }>;
+    expect(result.toolCallId).toBe("functions.exec:0");
+    expect(result.toolName).toBe("exec");
+  });
+
   it("uses custom text for synthesized missing tool results", () => {
     const input = castAgentMessages([
       {
@@ -1149,6 +1172,29 @@ describe("sanitizeToolCallInputs allowed-name filtering", () => {
     expect((toolCalls[0] ?? {}).input).toEqual({ task: "hello" });
   });
 
+  it("normalizes functions-prefixed tool names during transcript repair", () => {
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "functions exec:0",
+            name: "functions.exec",
+            arguments: { command: "pwd" },
+          },
+        ],
+      },
+    ]);
+
+    const out = sanitizeToolCallInputs(input, { allowedToolNames: ["exec"] });
+    const toolCalls = getAssistantToolCallBlocks(out) as Array<Record<string, unknown>>;
+
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]?.name).toBe("exec");
+    expect(toolCalls[0]?.id).toBe("functions exec:0");
+  });
+
   it("preserves sessions_spawn attachments for mixed-case and padded tool names", () => {
     const input = castAgentMessages([
       {
@@ -1176,6 +1222,40 @@ describe("sanitizeToolCallInputs allowed-name filtering", () => {
     const attachments = (inputObj.attachments ?? []) as Array<Record<string, unknown>>;
     expect(attachments[0]?.content).toBe("SECRET");
   });
+
+  it("drops prefixed signed-thinking sessions_spawn attachments when the result is missing", () => {
+    const content = "PREFIXED_SIGNED_THINKING_ATTACHMENT_CONTENT";
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "Let me spawn a helper.",
+            thinkingSignature: "sig_prefixed_spawn",
+          },
+          {
+            type: "toolUse",
+            id: "call_spawn",
+            name: "functions.sessions_spawn",
+            input: {
+              task: "inspect attachment",
+              attachments: [{ name: "snapshot.txt", content }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const out = sanitizeToolCallInputs(input, {
+      allowedToolNames: ["sessions_spawn"],
+      allowProviderOwnedThinkingReplay: true,
+    });
+
+    expect(out).toEqual([]);
+    expect(JSON.stringify(out)).not.toContain(content);
+  });
+
   it("preserves other block properties when trimming tool names", () => {
     const toolCalls = sanitizeAssistantToolCalls([
       { type: "toolCall", id: "call_1", name: " read ", arguments: { path: "/tmp/test" } },

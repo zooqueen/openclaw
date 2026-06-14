@@ -5,7 +5,11 @@
  */
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "./runtime/index.js";
-import { isAllowedToolCallName, normalizeAllowedToolNames } from "./tool-call-shared.js";
+import {
+  isAllowedToolCallName,
+  normalizeAllowedToolNames,
+  normalizeFunctionsToolCallIdPrefix,
+} from "./tool-call-shared.js";
 
 export type ToolCallIdMode = "strict" | "strict9";
 const NATIVE_ANTHROPIC_TOOL_USE_ID_RE = /^toolu_[A-Za-z0-9_]+$/;
@@ -53,8 +57,9 @@ export function sanitizeToolCallId(id: string, mode: ToolCallIdMode = "strict"):
     return shortHash("sanitized", STRICT9_LEN);
   }
 
-  if (isNativeKimiToolCallId(id)) {
-    return id;
+  const normalizedFunctionsId = normalizeFunctionsToolCallIdPrefix(id);
+  if (isNativeKimiToolCallId(normalizedFunctionsId)) {
+    return normalizedFunctionsId;
   }
 
   // Some providers require strictly alphanumeric tool call IDs.
@@ -170,7 +175,10 @@ function isReplaySafeThinkingAssistantMessage(
       continue;
     }
     sawToolCall = true;
-    const toolCallId = typeof typedBlock.id === "string" ? typedBlock.id.trim() : "";
+    const toolCallId =
+      typeof typedBlock.id === "string"
+        ? normalizeFunctionsToolCallIdPrefix(typedBlock.id.trim())
+        : "";
     if (
       !hasToolCallInput(typedBlock) ||
       !toolCallId ||
@@ -201,12 +209,17 @@ function collectReplaySafeThinkingToolIds(
       continue;
     }
     const toolCalls = extractToolCallsFromAssistant(assistant);
-    if (toolCalls.some((toolCall) => reserved.has(toolCall.id))) {
+    const toolCallKeys = toolCalls.map((toolCall) =>
+      normalizeFunctionsToolCallIdPrefix(toolCall.id),
+    );
+    if (toolCallKeys.some((toolCallKey) => reserved.has(toolCallKey))) {
       continue;
     }
     preservedIndexes.add(index);
-    for (const toolCall of toolCalls) {
+    for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex += 1) {
+      const toolCall = toolCalls[toolCallIndex]!;
       reserved.add(toolCall.id);
+      reserved.add(toolCallKeys[toolCallIndex]!);
     }
   }
   return { reservedIds: reserved, preservedIndexes };
@@ -301,6 +314,7 @@ function createOccurrenceAwareResolver(
   const pendingByRawId = new Map<string, string[]>();
   const preserveNativeAnthropicToolUseIds = options?.preserveNativeAnthropicToolUseIds === true;
   const duplicateToolCallIdStyle = options?.duplicateToolCallIdStyle;
+  const resolverKey = (id: string): string => normalizeFunctionsToolCallIdPrefix(id);
 
   const allocate = (seed: string): string => {
     const next = makeUniqueToolId({ id: seed, used, mode });
@@ -341,33 +355,35 @@ function createOccurrenceAwareResolver(
   };
 
   const resolveAssistantId = (id: string): string => {
-    const occurrence = (assistantOccurrences.get(id) ?? 0) + 1;
-    assistantOccurrences.set(id, occurrence);
+    const key = resolverKey(id);
+    const occurrence = (assistantOccurrences.get(key) ?? 0) + 1;
+    assistantOccurrences.set(key, occurrence);
     const next =
       duplicateToolCallIdStyle === "openai" && occurrence > 1
-        ? allocateOpenAIStyleId(id, occurrence)
-        : allocatePreservingNativeAnthropicId(id, occurrence);
-    const pending = pendingByRawId.get(id);
+        ? allocateOpenAIStyleId(key, occurrence)
+        : allocatePreservingNativeAnthropicId(key, occurrence);
+    const pending = pendingByRawId.get(key);
     if (pending) {
       pending.push(next);
     } else {
-      pendingByRawId.set(id, [next]);
+      pendingByRawId.set(key, [next]);
     }
     return next;
   };
 
   const resolveToolResultId = (id: string): string => {
-    const pending = pendingByRawId.get(id);
+    const key = resolverKey(id);
+    const pending = pendingByRawId.get(key);
     if (pending && pending.length > 0) {
       const next = pending.shift()!;
       if (pending.length === 0) {
-        pendingByRawId.delete(id);
+        pendingByRawId.delete(key);
       }
       return next;
     }
 
-    const occurrence = (orphanToolResultOccurrences.get(id) ?? 0) + 1;
-    orphanToolResultOccurrences.set(id, occurrence);
+    const occurrence = (orphanToolResultOccurrences.get(key) ?? 0) + 1;
+    orphanToolResultOccurrences.set(key, occurrence);
     if (
       preserveNativeAnthropicToolUseIds &&
       isNativeAnthropicToolUseId(id) &&
@@ -377,16 +393,20 @@ function createOccurrenceAwareResolver(
       used.add(id);
       return id;
     }
-    return allocate(`${id}:tool_result:${occurrence}`);
+    return allocate(`${key}:tool_result:${occurrence}`);
   };
 
   const preserveAssistantId = (id: string): string => {
+    const key = resolverKey(id);
     used.add(id);
-    const pending = pendingByRawId.get(id);
+    if (key !== id) {
+      used.add(key);
+    }
+    const pending = pendingByRawId.get(key);
     if (pending) {
       pending.push(id);
     } else {
-      pendingByRawId.set(id, [id]);
+      pendingByRawId.set(key, [id]);
     }
     return id;
   };

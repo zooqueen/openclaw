@@ -7,6 +7,20 @@ import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/st
 
 const TOOL_CALL_NAME_MAX_CHARS = 64;
 const TOOL_CALL_NAME_RE = /^[A-Za-z0-9_:.-]+$/;
+const FUNCTIONS_SPACE_TOOL_CALL_ID_RE = /^functions\s+([A-Za-z0-9_-]+:\d+)$/;
+const FUNCTIONS_NAMESPACE_TOOL_NAME_RE = /^functions(?:[.\s]+)([A-Za-z0-9_.-]+)$/i;
+
+/** Normalize the Responses/Kimi functions namespace when a provider serializes it with a space. */
+export function normalizeFunctionsToolCallIdPrefix(id: string): string {
+  const match = FUNCTIONS_SPACE_TOOL_CALL_ID_RE.exec(id);
+  return match ? `functions.${match[1]}` : id;
+}
+
+/** Strip the OpenAI Responses functions namespace from a model-facing tool name. */
+export function normalizeFunctionsToolNamePrefix(name: string): string | null {
+  const match = FUNCTIONS_NAMESPACE_TOOL_NAME_RE.exec(name.trim());
+  return match?.[1] ?? null;
+}
 
 /** Normalize an optional iterable of allowed tool names for lookup. */
 export function normalizeAllowedToolNames(allowedToolNames?: Iterable<string>): Set<string> | null {
@@ -39,11 +53,13 @@ export function isAllowedToolCallName(
   if (!trimmed) {
     return false;
   }
-  if (trimmed.length > TOOL_CALL_NAME_MAX_CHARS || !TOOL_CALL_NAME_RE.test(trimmed)) {
+  const normalizedFunctionsName = normalizeFunctionsToolNamePrefix(trimmed);
+  const candidateName = normalizedFunctionsName ?? trimmed;
+  if (candidateName.length > TOOL_CALL_NAME_MAX_CHARS || !TOOL_CALL_NAME_RE.test(candidateName)) {
     return false;
   }
   if (!allowedToolNames) {
     return true;
   }
-  return allowedToolNames.has(normalizeLowercaseStringOrEmpty(trimmed));
+  return allowedToolNames.has(normalizeLowercaseStringOrEmpty(candidateName));
 }

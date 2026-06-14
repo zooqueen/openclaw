@@ -14,7 +14,12 @@ import {
   extractToolResultId,
   extractToolResultIds,
 } from "./tool-call-id.js";
-import { isAllowedToolCallName, normalizeAllowedToolNames } from "./tool-call-shared.js";
+import {
+  isAllowedToolCallName,
+  normalizeAllowedToolNames,
+  normalizeFunctionsToolCallIdPrefix,
+  normalizeFunctionsToolNamePrefix,
+} from "./tool-call-shared.js";
 
 type RawToolCallBlock = {
   type?: unknown;
@@ -72,15 +77,56 @@ function hasToolCallId(block: RawToolCallBlock): boolean {
   );
 }
 
-function sanitizeToolCallBlock(block: RawToolCallBlock): RawToolCallBlock {
+function toolCallIdKey(id: string): string {
+  return normalizeFunctionsToolCallIdPrefix(id);
+}
+
+function extractToolResultIdKey(msg: Extract<AgentMessage, { role: "toolResult" }>): string | null {
+  const id = extractToolResultId(msg);
+  return id ? toolCallIdKey(id) : null;
+}
+
+function extractToolResultIdKeys(msg: Extract<AgentMessage, { role: "toolResult" }>): string[] {
+  const ids: string[] = [];
+  for (const id of extractToolResultIds(msg)) {
+    const key = toolCallIdKey(id);
+    if (key && !ids.includes(key)) {
+      ids.push(key);
+    }
+  }
+  return ids;
+}
+
+function normalizeTranscriptToolName(
+  name: unknown,
+  allowedToolNames: Set<string> | null,
+  options?: { preserveFunctionsPrefix?: boolean },
+): string | undefined {
+  const rawName = readStringValue(name);
+  const trimmedName = rawName?.trim();
+  if (!trimmedName) {
+    return undefined;
+  }
+  if (options?.preserveFunctionsPrefix !== true) {
+    const functionsName = normalizeFunctionsToolNamePrefix(trimmedName);
+    if (functionsName && isAllowedToolCallName(functionsName, allowedToolNames)) {
+      return functionsName;
+    }
+  }
+  return trimmedName;
+}
+
+function sanitizeToolCallBlock(
+  block: RawToolCallBlock,
+  allowedToolNames: Set<string> | null,
+  options?: { preserveFunctionsPrefix?: boolean },
+): RawToolCallBlock {
   // This repair path normalizes replay shape only. Tool payloads are local
   // trusted-operator transcript state per SECURITY.md, so do not redact or
   // rewrite sessions_spawn arguments here.
   const rawName = readStringValue(block.name);
-  const trimmedName = rawName?.trim();
-  const hasTrimmedName = typeof trimmedName === "string" && trimmedName.length > 0;
-  const normalizedName = hasTrimmedName ? trimmedName : undefined;
-  const nameChanged = hasTrimmedName && rawName !== trimmedName;
+  const normalizedName = normalizeTranscriptToolName(block.name, allowedToolNames, options);
+  const nameChanged = Boolean(normalizedName) && rawName !== normalizedName;
 
   if (!nameChanged) {
     return block;
@@ -113,7 +159,7 @@ function isReplaySafeThinkingAssistantTurn(
       continue;
     }
     sawToolCall = true;
-    const toolCallId = typeof block.id === "string" ? block.id.trim() : "";
+    const toolCallId = typeof block.id === "string" ? toolCallIdKey(block.id.trim()) : "";
     if (
       !hasToolCallInput(block) ||
       !toolCallId ||
@@ -123,24 +169,35 @@ function isReplaySafeThinkingAssistantTurn(
       return false;
     }
     seenToolCallIds.add(toolCallId);
-    if (sanitizeToolCallBlock(block) !== block) {
+    if (
+      sanitizeToolCallBlock(block, allowedToolNames, { preserveFunctionsPrefix: true }) !== block
+    ) {
       return false;
     }
   }
   return sawToolCall;
 }
 
+function hasAttachmentPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const attachments = (value as { attachments?: unknown }).attachments;
+  return Array.isArray(attachments) && attachments.length > 0;
+}
+
 function hasSessionsSpawnAttachmentToolCall(content: unknown[]): boolean {
   for (const block of content) {
-    if (!isRawToolCallBlock(block) || block.name !== "sessions_spawn") {
+    if (!isRawToolCallBlock(block)) {
       continue;
     }
-    const input = block.input;
-    if (!input || typeof input !== "object") {
+    const name = normalizeTranscriptToolName(block.name, null, {
+      preserveFunctionsPrefix: false,
+    });
+    if (name?.toLowerCase() !== "sessions_spawn") {
       continue;
     }
-    const attachments = (input as { attachments?: unknown }).attachments;
-    if (Array.isArray(attachments) && attachments.length > 0) {
+    if (hasAttachmentPayload(block.input) || hasAttachmentPayload(block.arguments)) {
       return true;
     }
   }
@@ -207,7 +264,8 @@ function normalizeToolResultName(
   fallbackName?: string,
 ): Extract<AgentMessage, { role: "toolResult" }> {
   const rawToolName = (message as { toolName?: unknown }).toolName;
-  const normalizedToolName = normalizeOptionalString(rawToolName);
+  const normalizedToolName =
+    normalizeTranscriptToolName(rawToolName, null) ?? normalizeOptionalString(rawToolName);
   if (normalizedToolName) {
     if (rawToolName === normalizedToolName) {
       return message;
@@ -215,7 +273,8 @@ function normalizeToolResultName(
     return { ...message, toolName: normalizedToolName };
   }
 
-  const normalizedFallback = normalizeOptionalString(fallbackName);
+  const normalizedFallback =
+    normalizeTranscriptToolName(fallbackName, null) ?? normalizeOptionalString(fallbackName);
   if (normalizedFallback) {
     return { ...message, toolName: normalizedFallback };
   }
@@ -234,8 +293,11 @@ function normalizeLegacyToolResultId(
     return message;
   }
   const [toolCall] = toolCalls;
-  const toolResultName = normalizeOptionalString((message as { toolName?: unknown }).toolName);
-  const toolCallName = normalizeOptionalString(toolCall.name);
+  const toolResultName =
+    normalizeTranscriptToolName((message as { toolName?: unknown }).toolName, null) ??
+    normalizeOptionalString((message as { toolName?: unknown }).toolName);
+  const toolCallName =
+    normalizeTranscriptToolName(toolCall.name, null) ?? normalizeOptionalString(toolCall.name);
   if (toolResultName && toolCallName && toolResultName !== toolCallName) {
     return message;
   }
@@ -305,11 +367,11 @@ function collectFollowingToolResults(
     }
     if (message.role === "toolResult") {
       const normalizedLegacyResult = normalizeLegacyToolResultId(message, currentToolCalls);
-      const resultIds = extractToolResultIds(normalizedLegacyResult);
-      for (const id of resultIds) {
+      const resultIdKeys = extractToolResultIdKeys(normalizedLegacyResult);
+      for (const id of resultIdKeys) {
         ids.add(id);
       }
-      displaced ||= resultIds.length > 0 && sawNonToolResult;
+      displaced ||= resultIdKeys.length > 0 && sawNonToolResult;
       continue;
     }
     sawNonToolResult = true;
@@ -357,15 +419,15 @@ function repairToolCallInputs(
         isReplaySafeThinkingAssistantTurn(msg.content, allowedToolNames) &&
         replaySafeToolCalls.every(
           (toolCall) =>
-            !preservedThinkingToolCallIds.has(toolCall.id) &&
+            !preservedThinkingToolCallIds.has(toolCallIdKey(toolCall.id)) &&
             (!hasSessionsSpawnAttachmentToolCall(msg.content) ||
-              followingToolResults.ids.has(toolCall.id)) &&
-            (!followingToolResults.displaced || !priorToolCallIds.has(toolCall.id)),
+              followingToolResults.ids.has(toolCallIdKey(toolCall.id))) &&
+            (!followingToolResults.displaced || !priorToolCallIds.has(toolCallIdKey(toolCall.id))),
         )
       ) {
         for (const toolCall of replaySafeToolCalls) {
-          preservedThinkingToolCallIds.add(toolCall.id);
-          priorToolCallIds.add(toolCall.id);
+          preservedThinkingToolCallIds.add(toolCallIdKey(toolCall.id));
+          priorToolCallIds.add(toolCallIdKey(toolCall.id));
         }
         changed ||= followingToolResults.displaced;
         out.push(msg);
@@ -396,7 +458,7 @@ function repairToolCallInputs(
       }
       if (isRawToolCallBlock(block)) {
         if (RAW_TOOL_CALL_BLOCK_TYPES.has((block as { type?: string }).type ?? "")) {
-          const sanitized = sanitizeToolCallBlock(block);
+          const sanitized = sanitizeToolCallBlock(block, allowedToolNames);
           if (sanitized !== block) {
             changed = true;
             messageChanged = true;
@@ -417,7 +479,7 @@ function repairToolCallInputs(
       }
       const nextMessage = { ...msg, content: nextContent };
       for (const toolCall of extractToolCallsFromAssistant(nextMessage)) {
-        priorToolCallIds.add(toolCall.id);
+        priorToolCallIds.add(toolCallIdKey(toolCall.id));
       }
       out.push(nextMessage);
       continue;
@@ -426,14 +488,14 @@ function repairToolCallInputs(
     if (messageChanged) {
       const nextMessage = { ...msg, content: nextContent };
       for (const toolCall of extractToolCallsFromAssistant(nextMessage)) {
-        priorToolCallIds.add(toolCall.id);
+        priorToolCallIds.add(toolCallIdKey(toolCall.id));
       }
       out.push(nextMessage);
       continue;
     }
 
     for (const toolCall of extractToolCallsFromAssistant(msg)) {
-      priorToolCallIds.add(toolCall.id);
+      priorToolCallIds.add(toolCallIdKey(toolCall.id));
     }
     out.push(msg);
   }
@@ -481,7 +543,7 @@ function assistantHasToolCalls(message: AgentMessage): boolean {
 function findLaterMatchingToolResult(params: {
   messages: AgentMessage[];
   startIndex: number;
-  toolCallId: string;
+  toolCallIdKey: string;
   toolName?: string;
   toolCalls: Array<{ id: string; name?: string }>;
   seenToolResultIds: Set<string>;
@@ -492,8 +554,8 @@ function findLaterMatchingToolResult(params: {
       continue;
     }
     const normalizedLegacyResult = normalizeLegacyToolResultId(candidate, params.toolCalls);
-    const id = extractToolResultId(normalizedLegacyResult);
-    if (!id || id !== params.toolCallId || params.seenToolResultIds.has(id)) {
+    const id = extractToolResultIdKey(normalizedLegacyResult);
+    if (!id || id !== params.toolCallIdKey || params.seenToolResultIds.has(id)) {
       continue;
     }
     return normalizeToolResultName(normalizedLegacyResult, params.toolName);
@@ -521,7 +583,7 @@ export function repairToolUseResultPairing(
   let changed = false;
 
   const pushToolResult = (msg: Extract<AgentMessage, { role: "toolResult" }>) => {
-    const id = extractToolResultId(msg);
+    const id = extractToolResultIdKey(msg);
     if (id && seenToolResultIds.has(id)) {
       const existingIdx = toolResultPositions.get(id);
       if (existingIdx !== undefined) {
@@ -532,7 +594,7 @@ export function repairToolUseResultPairing(
           !isSyntheticMissingToolResult(msg)
         ) {
           out[existingIdx] = msg;
-          const addedIdx = added.findIndex((a) => extractToolResultId(a) === id);
+          const addedIdx = added.findIndex((a) => extractToolResultIdKey(a) === id);
           if (addedIdx !== -1) {
             added.splice(addedIdx, 1);
           }
@@ -584,9 +646,13 @@ export function repairToolUseResultPairing(
     const toolCallIds = new Set<string>();
     const toolCallNamesById = new Map<string, string>();
     for (const toolCall of toolCalls) {
-      toolCallIds.add(toolCall.id);
+      const key = toolCallIdKey(toolCall.id);
+      toolCallIds.add(key);
       if (typeof toolCall.name === "string") {
-        toolCallNamesById.set(toolCall.id, toolCall.name);
+        toolCallNamesById.set(
+          key,
+          normalizeTranscriptToolName(toolCall.name, null) ?? toolCall.name,
+        );
       }
     }
 
@@ -615,7 +681,7 @@ export function repairToolUseResultPairing(
           next as Extract<AgentMessage, { role: "toolResult" }>,
           toolCalls,
         );
-        const id = extractToolResultId(toolResult);
+        const id = extractToolResultIdKey(toolResult);
         if (id && seenToolResultIds.has(id)) {
           pushToolResult(normalizeToolResultName(toolResult, toolCallNamesById.get(id)));
           continue;
@@ -666,7 +732,7 @@ export function repairToolUseResultPairing(
       if (!shouldDropErroredAssistantResults(options)) {
         out.push(msg);
         for (const toolCall of toolCalls) {
-          const result = spanResultsById.get(toolCall.id);
+          const result = spanResultsById.get(toolCallIdKey(toolCall.id));
           if (!result) {
             continue;
           }
@@ -694,15 +760,16 @@ export function repairToolUseResultPairing(
     }
 
     for (const call of toolCalls) {
-      const existing = spanResultsById.get(call.id);
+      const callKey = toolCallIdKey(call.id);
+      const existing = spanResultsById.get(callKey);
       if (existing) {
         pushToolResult(existing);
       } else {
         const laterResult = findLaterMatchingToolResult({
           messages,
           startIndex: j,
-          toolCallId: call.id,
-          toolName: call.name,
+          toolCallIdKey: callKey,
+          toolName: toolCallNamesById.get(callKey) ?? call.name,
           toolCalls,
           seenToolResultIds,
         });
@@ -713,7 +780,7 @@ export function repairToolUseResultPairing(
         } else {
           const missing = makeMissingToolResult({
             toolCallId: call.id,
-            toolName: call.name,
+            toolName: toolCallNamesById.get(callKey) ?? call.name,
             text: options?.missingToolResultText,
           });
           added.push(missing);

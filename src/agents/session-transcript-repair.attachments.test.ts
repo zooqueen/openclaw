@@ -63,6 +63,32 @@ describe("sanitizeToolCallInputs preserves sessions_spawn payloads", () => {
     expect(JSON.stringify(out)).toContain(content);
   });
 
+  it("keeps attachment content when sessions_spawn arrives under the functions namespace", () => {
+    const content = "FUNCTIONS_PREFIX_ATTACHMENT_CONTENT";
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolUse",
+            id: "call_prefixed",
+            name: "functions.sessions_spawn",
+            input: {
+              task: "do thing",
+              attachments: [{ name: "x.txt", content }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const out = sanitizeToolCallInputs(input);
+    expect(JSON.stringify(out)).toContain(content);
+    const assistant = out[0] as Extract<AgentMessage, { role: "assistant" }>;
+    const toolCall = assistant.content?.[0] as { name?: string };
+    expect(toolCall.name).toBe("sessions_spawn");
+  });
+
   it("keeps non-content attachment payload fields unchanged", () => {
     const nestedValue = "NESTED_ATTACHMENT_VALUE";
     const input = castAgentMessages([
