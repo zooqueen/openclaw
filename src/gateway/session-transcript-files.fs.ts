@@ -129,6 +129,52 @@ export function resolveSessionTranscriptCandidates(
   return uniqueStrings(candidates);
 }
 
+function resolveLatestResetArchiveForTranscript(transcriptPath: string): string | undefined {
+  const base = path.basename(transcriptPath);
+  if (!base.endsWith(".jsonl")) {
+    return undefined;
+  }
+  const dir = path.dirname(transcriptPath);
+  let latest: { name: string; timestamp: number } | undefined;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.startsWith(`${base}.reset.`)) {
+        continue;
+      }
+      const timestamp = parseSessionArchiveTimestamp(entry.name, "reset");
+      if (timestamp == null) {
+        continue;
+      }
+      if (
+        !latest ||
+        timestamp > latest.timestamp ||
+        (timestamp === latest.timestamp && entry.name > latest.name)
+      ) {
+        latest = { name: entry.name, timestamp };
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return latest ? path.join(dir, latest.name) : undefined;
+}
+
+export function resolveSessionTranscriptResetArchiveCandidates(
+  sessionId: string,
+  storePath: string | undefined,
+  sessionFile?: string,
+  agentId?: string,
+): string[] {
+  return uniqueStrings(
+    resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId).flatMap(
+      (candidate) => {
+        const archive = resolveLatestResetArchiveForTranscript(candidate);
+        return archive ? [archive] : [];
+      },
+    ),
+  );
+}
+
 export function archiveFileOnDisk(filePath: string, reason: ArchiveFileReason): string {
   const ts = formatSessionArchiveTimestamp();
   const archived = `${filePath}.${reason}.${ts}`;

@@ -16,7 +16,10 @@ import { estimateStringChars, estimateTokensFromChars } from "../utils/cjk-chars
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
 import { extractToolCallNames, hasToolCall } from "../utils/transcript-tools.js";
 import { stripEnvelope } from "./chat-sanitize.js";
-import { resolveSessionTranscriptCandidates } from "./session-transcript-files.fs.js";
+import {
+  resolveSessionTranscriptCandidates,
+  resolveSessionTranscriptResetArchiveCandidates,
+} from "./session-transcript-files.fs.js";
 import {
   readSessionTranscriptIndex,
   type IndexedTranscriptEntry,
@@ -153,9 +156,7 @@ export function readSessionMessages(
   storePath: string | undefined,
   sessionFile?: string,
 ): unknown[] {
-  const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile);
-
-  const filePath = candidates.find((p) => fs.existsSync(p));
+  const filePath = findExistingTranscriptPath(sessionId, storePath, sessionFile);
   if (!filePath) {
     return [];
   }
@@ -820,6 +821,7 @@ export {
   archiveSessionTranscripts,
   cleanupArchivedSessionTranscripts,
   resolveSessionTranscriptCandidates,
+  resolveSessionTranscriptResetArchiveCandidates,
 } from "./session-transcript-files.fs.js";
 
 export function capArrayByJsonBytes<T>(
@@ -855,8 +857,7 @@ export function readSessionTitleFieldsFromTranscript(
   agentId?: string,
   opts?: { includeInterSession?: boolean },
 ): SessionTitleFields {
-  const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId);
-  const filePath = candidates.find((p) => fs.existsSync(p));
+  const filePath = findExistingTranscriptPath(sessionId, storePath, sessionFile, agentId);
   if (!filePath) {
     return { firstUserMessage: null, lastMessagePreview: null };
   }
@@ -927,8 +928,7 @@ export async function readSessionTitleFieldsFromTranscriptAsync(
   agentId?: string,
   opts?: { includeInterSession?: boolean },
 ): Promise<SessionTitleFields> {
-  const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId);
-  const filePath = candidates.find((p) => fs.existsSync(p));
+  const filePath = findExistingTranscriptPath(sessionId, storePath, sessionFile, agentId);
   if (!filePath) {
     return { firstUserMessage: null, lastMessagePreview: null };
   }
@@ -1065,7 +1065,15 @@ function findExistingTranscriptPath(
   agentId?: string,
 ): string | null {
   const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId);
-  return candidates.find((p) => fs.existsSync(p)) ?? null;
+  const activePath = candidates.find((p) => fs.existsSync(p));
+  if (activePath) {
+    return activePath;
+  }
+  return (
+    resolveSessionTranscriptResetArchiveCandidates(sessionId, storePath, sessionFile, agentId).find(
+      (p) => fs.existsSync(p),
+    ) ?? null
+  );
 }
 
 function withOpenTranscriptFd<T>(filePath: string, read: (fd: number) => T | null): T | null {

@@ -79,6 +79,17 @@ function writeTranscript(tmpDir: string, sessionId: string, lines: unknown[]): s
   return transcriptPath;
 }
 
+function writeResetArchive(
+  tmpDir: string,
+  sessionId: string,
+  timestamp: string,
+  lines: unknown[],
+): string {
+  const archivePath = path.join(tmpDir, `${sessionId}.jsonl.reset.${timestamp}`);
+  fs.writeFileSync(archivePath, lines.map((line) => JSON.stringify(line)).join("\n"), "utf-8");
+  return archivePath;
+}
+
 function appendBlockedUserMessageWithSessionManager(params: {
   sessionFile: string;
   originalText?: string;
@@ -780,6 +791,42 @@ describe("readSessionMessages", () => {
       sessionManagerOpenSpy.mockRestore();
       readFileSpy.mockRestore();
     }
+  });
+
+  test("falls back to the latest reset archive when the active transcript is missing", async () => {
+    const sessionId = "test-session-reset-archive-fallback";
+    writeResetArchive(tmpDir, sessionId, "2026-02-16T22-26-33.000Z", [
+      { type: "session", version: 1, id: sessionId },
+      { message: { role: "assistant", content: "older archive" } },
+    ]);
+    writeResetArchive(tmpDir, sessionId, "2026-02-16T22-26-34.000Z", [
+      { type: "session", version: 1, id: sessionId },
+      { message: { role: "user", content: "restored prompt" } },
+      { message: { role: "assistant", content: "restored archive" } },
+    ]);
+    clearSessionTranscriptIndexCache();
+
+    const fullMessages = await readSessionMessagesAsync(sessionId, storePath, undefined, {
+      mode: "full",
+      reason: "test reset archive fallback",
+    });
+    expect(fullMessages.map((message) => (message as { content?: unknown }).content)).toEqual([
+      "restored prompt",
+      "restored archive",
+    ]);
+    await expect(readSessionMessageCountAsync(sessionId, storePath)).resolves.toBe(2);
+
+    const recent = await readRecentSessionMessagesWithStatsAsync(sessionId, storePath, undefined, {
+      maxMessages: 1,
+      maxBytes: 2048,
+    });
+    expect(recent.totalMessages).toBe(2);
+    expect(recent.messages).toHaveLength(1);
+    expectMessageFields(recent.messages[0], {
+      role: "assistant",
+      content: "restored archive",
+      openclaw: { seq: 2 },
+    });
   });
 
   test("keeps async active branch rows when imported parent links are incomplete", async () => {
