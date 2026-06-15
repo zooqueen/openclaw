@@ -9,6 +9,7 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
 import { getChannelPlugin, normalizeChannelId } from "../channels/plugins/index.js";
+import type { ChannelMessageActionName } from "../channels/plugins/types.public.js";
 import { normalizeTargetForProvider } from "../infra/outbound/target-normalization.js";
 import { normalizeInteractiveReply, normalizeMessagePresentation } from "../interactive/payload.js";
 import { redactSensitiveFieldValue, redactToolPayloadText } from "../logging/redact.js";
@@ -776,17 +777,41 @@ export function extractToolErrorMessage(result: unknown): string | undefined {
   return text ? normalizeToolErrorText(text) : undefined;
 }
 
-function resolveMessageToolTarget(args: Record<string, unknown>): string | undefined {
-  return (
-    normalizeOptionalString(args.target) ??
-    normalizeOptionalString(args.to) ??
-    normalizeOptionalString(args.channelId)
-  );
+function resolveMessageToolTarget(params: {
+  action: string;
+  args: Record<string, unknown>;
+  providerId: string | null;
+  currentChannelId?: string;
+  currentMessagingTarget?: string;
+}): string | undefined {
+  const directTarget =
+    normalizeOptionalString(params.args.target) ??
+    normalizeOptionalString(params.args.to) ??
+    normalizeOptionalString(params.args.channelId);
+  if (directTarget) {
+    return directTarget;
+  }
+  const aliases = params.providerId
+    ? getChannelPlugin(params.providerId)?.actions?.messageActionTargetAliases?.[
+        params.action as ChannelMessageActionName
+      ]?.aliases
+    : undefined;
+  for (const alias of aliases ?? []) {
+    const aliasTarget = normalizeOptionalStringifiedId(params.args[alias]);
+    if (aliasTarget) {
+      return aliasTarget;
+    }
+  }
+  return params.currentMessagingTarget ?? params.currentChannelId;
 }
 
 export function extractMessagingToolSend(
   toolName: string,
   args: Record<string, unknown>,
+  options?: {
+    currentChannelId?: string;
+    currentMessagingTarget?: string;
+  },
 ): MessagingToolSend | undefined {
   // Provider docking: new provider tools must implement plugin.actions.extractToolSend.
   const action = normalizeOptionalString(args.action) ?? "";
@@ -795,14 +820,20 @@ export function extractMessagingToolSend(
     if (!isMessagingToolTargetEvidenceAction(toolName, args)) {
       return undefined;
     }
-    const toRaw = resolveMessageToolTarget(args);
-    if (!toRaw) {
-      return undefined;
-    }
     const providerRaw = normalizeOptionalString(args.provider) ?? "";
     const channelRaw = normalizeOptionalString(args.channel) ?? "";
     const providerHint = providerRaw || channelRaw;
     const providerId = providerHint ? normalizeChannelId(providerHint) : null;
+    const toRaw = resolveMessageToolTarget({
+      action,
+      args,
+      providerId,
+      currentChannelId: options?.currentChannelId,
+      currentMessagingTarget: options?.currentMessagingTarget,
+    });
+    if (!toRaw) {
+      return undefined;
+    }
     const provider = providerId ?? normalizeOptionalLowercaseString(providerHint) ?? "message";
     const to = normalizeTargetForProvider(provider, toRaw);
     const threadId = normalizeOptionalString(args.threadId);

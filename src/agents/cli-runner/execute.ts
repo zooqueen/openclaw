@@ -126,7 +126,9 @@ function extractCliMessagingTarget(
   if (!isMessagingToolTargetEvidenceAction(normalizedToolName, targetArgs)) {
     return undefined;
   }
-  return extractMessagingToolSend(normalizedToolName, targetArgs);
+  return extractMessagingToolSend(normalizedToolName, targetArgs, {
+    currentChannelId: context.params.currentChannelId,
+  });
 }
 
 function buildMessagingToolSendEvidenceKey(send: MessagingToolSend): string {

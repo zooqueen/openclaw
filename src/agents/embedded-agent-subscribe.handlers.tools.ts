@@ -38,7 +38,10 @@ import type { ApplyPatchSummary } from "./apply-patch.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import { sanitizeForConsole } from "./console-sanitize.js";
 import { normalizeTextForComparison } from "./embedded-agent-helpers.js";
-import { isDeliveredMessageToolOnlySourceReplyResult } from "./embedded-agent-message-tool-source-reply.js";
+import {
+  isDeliveredMessageToolOnlySourceReplyResult,
+  isDeliveredMessagingToolResult,
+} from "./embedded-agent-message-tool-source-reply.js";
 import {
   isMessagingTool,
   isMessagingToolSendAction,
@@ -1107,13 +1110,21 @@ export async function handleToolExecutionEnd(
   const isMessagingSend =
     pendingMediaUrls.length > 0 ||
     (isMessagingTool(toolName) && isMessagingToolSendAction(toolName, startArgs));
+  const didDeliverMessagingResult =
+    isMessagingTool(toolName) &&
+    isDeliveredMessagingToolResult({
+      toolName,
+      args: startArgs,
+      result,
+      isError: isToolError,
+    });
   const committedMediaUrls =
-    !isToolError && isMessagingSend
+    didDeliverMessagingResult && isMessagingSend
       ? [...pendingMediaUrls, ...collectMessagingMediaUrlsFromToolResult(result)]
       : [];
   if (pendingText) {
     ctx.state.pendingMessagingTexts.delete(toolCallId);
-    if (!isToolError) {
+    if (didDeliverMessagingResult) {
       ctx.state.messagingToolSentTexts.push(pendingText);
       ctx.state.messagingToolSentTextsNormalized.push(normalizeTextForComparison(pendingText));
       ctx.log.debug(`Committed messaging text: tool=${toolName} len=${pendingText.length}`);
@@ -1122,7 +1133,7 @@ export async function handleToolExecutionEnd(
   }
   if (pendingTarget) {
     ctx.state.pendingMessagingTargets.delete(toolCallId);
-    if (!isToolError) {
+    if (didDeliverMessagingResult) {
       ctx.state.messagingToolSentTargets.push({
         ...pendingTarget,
         ...(pendingText ? { text: pendingText } : {}),
@@ -1132,7 +1143,7 @@ export async function handleToolExecutionEnd(
     }
   }
   ctx.state.pendingMessagingMediaUrls.delete(toolCallId);
-  if (!isToolError && isMessagingSend) {
+  if (didDeliverMessagingResult && isMessagingSend) {
     if (committedMediaUrls.length > 0) {
       ctx.state.messagingToolSentMediaUrls.push(...committedMediaUrls);
       ctx.trimMessagingToolSent();
