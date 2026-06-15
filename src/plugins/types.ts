@@ -191,12 +191,14 @@ export type {
 } from "./conversation-binding.types.js";
 export type {
   CliBackendAuthEpochMode,
+  CliBackendExecutionMode,
   CliBackendNormalizeConfigContext,
   CliBackendNativeToolMode,
   CliBackendPreparedExecution,
   CliBackendPrepareExecutionContext,
   CliBackendResolveExecutionArgs,
   CliBackendResolveExecutionArgsContext,
+  CliBackendSideQuestionToolMode,
   CliBackendThinkingLevel,
   CliBackendPlugin,
   CliBundleMcpMode,
@@ -508,6 +510,7 @@ export type ProviderResolveDynamicModelContext = {
   config?: OpenClawConfig;
   agentDir?: string;
   workspaceDir?: string;
+  agentRuntimeId?: string;
   provider: string;
   modelId: string;
   modelRegistry: ModelRegistry;
