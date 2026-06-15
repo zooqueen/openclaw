@@ -794,7 +794,7 @@ function resolveMessageToolTarget(params: {
   const aliases = params.providerId
     ? getChannelPlugin(params.providerId)?.actions?.messageActionTargetAliases?.[
         params.action as ChannelMessageActionName
-      ]?.aliases
+      ]?.deliveryTargetAliases
     : undefined;
   for (const alias of aliases ?? []) {
     const aliasTarget = normalizeOptionalStringifiedId(params.args[alias]);
