@@ -5,6 +5,8 @@ import { getQaProvider, type QaProviderMode } from "./providers/index.js";
 
 export const QA_EVIDENCE_SUMMARY_KIND = "openclaw.qa.evidence-summary";
 export const QA_EVIDENCE_FILENAME = "qa-evidence.json";
+// v2 was introduced on this PR series and has no stable external readers yet.
+// Keep the version while the pre-release evidence shape settles.
 export const QA_EVIDENCE_SUMMARY_SCHEMA_VERSION = 2;
 
 const qaEvidenceStatusSchema = z.enum(["pass", "fail", "blocked", "skipped"]);
