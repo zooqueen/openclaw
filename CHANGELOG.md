@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.6.15-alpha.1
+
+### Fixes
+
+- Alpha/nightly release validation carries focused alpha publish proof support plus release-branch test stabilization for provider auth references, channel session fixtures, ACP spawn fixtures, Slack media history, Telegram approvals, iMessage monitor coverage, memory CLI coverage, Codex startup cleanup, MCP channel package protocol loading, QA Lab runtime parity, and generated release metadata.
+
 ## 2026.6.8
 
 ### Highlights
