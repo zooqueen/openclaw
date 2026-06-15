@@ -1016,6 +1016,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
       messageId: 17,
       textSnapshot: "first page",
       retain: true,
+      reason: "final-overflow",
     });
     expect(bot.api["deleteMessage"]).not.toHaveBeenCalled();
 
@@ -1643,6 +1644,28 @@ describe("dispatchTelegramMessage draft streaming", () => {
 
     expect(bot.api["deleteMessage"]).toHaveBeenCalledWith(123, 2001);
     // Cancelled: skip message_sent emission, prompt-context recording, and mirroring.
+    expect(emitInternalMessageSentHook).not.toHaveBeenCalled();
+    expect(recordOutboundMessageForPromptContext).not.toHaveBeenCalled();
+  });
+
+  it("deletes the streamed reply when message_sending rewrites it to empty text", async () => {
+    setupDraftStreams({ answerMessageId: 2001 });
+    installMessageSendingHook(async () => ({ content: "   " }));
+    const context = createContext();
+    context.ctxPayload.SessionKey = "agent:default:telegram:direct:123";
+    loadSessionStore.mockReturnValue({
+      "agent:default:telegram:direct:123": { sessionId: "s1" },
+    });
+    dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ dispatcherOptions }) => {
+      await dispatcherOptions.deliver({ text: "Secret answer" }, { kind: "final" });
+      return { queuedFinal: true };
+    });
+    const bot = createBot();
+
+    await dispatchWithContext({ context, bot });
+
+    expect(bot.api["deleteMessage"]).toHaveBeenCalledWith(123, 2001);
+    expect(editMessageTelegram).not.toHaveBeenCalled();
     expect(emitInternalMessageSentHook).not.toHaveBeenCalled();
     expect(recordOutboundMessageForPromptContext).not.toHaveBeenCalled();
   });

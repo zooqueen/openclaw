@@ -982,7 +982,10 @@ export const dispatchTelegramMessage = async ({
           renderText: renderStreamText,
           onSupersededPreview: (superseded) => {
             if (superseded.retain) {
-              lanes[laneName].activeChunkIndex += 1;
+              if (superseded.reason === "final-overflow") {
+                lanes[laneName].retainedPreviewMessageIds.push(superseded.messageId);
+                lanes[laneName].activeChunkIndex += 1;
+              }
               return;
             }
             void bot.api.deleteMessage(chatId, superseded.messageId).catch((err: unknown) => {
@@ -1001,6 +1004,7 @@ export const dispatchTelegramMessage = async ({
       hasStreamedMessage: false,
       finalized: false,
       activeChunkIndex: 0,
+      retainedPreviewMessageIds: [],
     };
   };
   const lanes: Record<LaneName, DraftLaneState> = {
@@ -1164,6 +1168,7 @@ export const dispatchTelegramMessage = async ({
     lane.hasStreamedMessage = false;
     lane.finalized = false;
     lane.activeChunkIndex = 0;
+    lane.retainedPreviewMessageIds = [];
     if (lane === answerLane) {
       resetAnswerToolProgressDraft();
       pendingAnswerBlockAssistantMessageIndex = undefined;
@@ -1668,9 +1673,50 @@ export const dispatchTelegramMessage = async ({
     };
     // Streamed previews bypass deliverReplies, so gate them before the final
     // preview is recorded or any continuation chunks are sent.
+    const deleteTelegramStreamMessages = async (
+      messageIds: readonly number[],
+      operation: string,
+    ) => {
+      let firstError: unknown;
+      for (const messageId of messageIds) {
+        try {
+          await bot.api.deleteMessage(chatId, messageId);
+        } catch (err: unknown) {
+          firstError ??= err;
+          logVerbose(
+            `telegram: ${operation} could not delete message ${messageId}: ${formatErrorMessage(
+              err,
+            )}`,
+          );
+        }
+      }
+      if (firstError) {
+        throw firstError;
+      }
+    };
+    const takeRetainedPreviewMessageIds = (lane: DraftLaneState | undefined) => {
+      if (!lane) {
+        return [];
+      }
+      const messageIds = [...new Set(lane.retainedPreviewMessageIds)];
+      lane.retainedPreviewMessageIds = [];
+      lane.activeChunkIndex = 0;
+      return messageIds;
+    };
+    const deleteRetainedPreviewMessages = async (
+      lane: DraftLaneState | undefined,
+      operation: string,
+    ) => {
+      const retainedMessageIds = takeRetainedPreviewMessageIds(lane);
+      if (retainedMessageIds.length === 0) {
+        return;
+      }
+      await deleteTelegramStreamMessages(retainedMessageIds, operation);
+    };
     const runStreamedFinalMessageSending = async (
       content: string,
       messageId: number,
+      lane?: DraftLaneState,
     ): Promise<{ cancel: true } | { content: string }> => {
       const hookRunner = getGlobalHookRunner();
       if (!hookRunner?.hasHooks("message_sending")) {
@@ -1691,17 +1737,23 @@ export const dispatchTelegramMessage = async ({
       );
       if (hookResult?.cancel) {
         try {
-          await bot.api.deleteMessage(chatId, messageId);
-        } catch (err: unknown) {
-          logVerbose(
-            `telegram: message_sending cancel could not delete streamed reply: ${formatErrorMessage(
-              err,
-            )}`,
+          await deleteTelegramStreamMessages(
+            [...takeRetainedPreviewMessageIds(lane), messageId],
+            "message_sending cancel",
           );
-        }
+        } catch {}
         return { cancel: true };
       }
       if (typeof hookResult?.content === "string" && hookResult.content !== content) {
+        if (hookResult.content.trim().length === 0) {
+          try {
+            await deleteTelegramStreamMessages(
+              [...takeRetainedPreviewMessageIds(lane), messageId],
+              "message_sending empty rewrite",
+            );
+          } catch {}
+          return { cancel: true };
+        }
         return { content: hookResult.content };
       }
       return { content };
@@ -1712,6 +1764,7 @@ export const dispatchTelegramMessage = async ({
       const gated = await runStreamedFinalMessageSending(
         result.delivery.content,
         result.delivery.messageId,
+        answerLane,
       );
       if ("cancel" in gated) {
         return { kind: "preview-cancelled" };
@@ -1729,6 +1782,14 @@ export const dispatchTelegramMessage = async ({
               linkPreview: telegramCfg.linkPreview,
             },
           );
+          try {
+            await deleteRetainedPreviewMessages(
+              answerLane,
+              "message_sending rewrite retained cleanup",
+            );
+          } catch {
+            return { kind: "preview-cancelled" };
+          }
           return {
             ...result,
             delivery: {
@@ -1856,9 +1917,15 @@ export const dispatchTelegramMessage = async ({
           buttons,
         });
       },
+      deleteStreamMessages: async ({ messageIds }) => {
+        if (isDispatchSuperseded()) {
+          return;
+        }
+        await deleteTelegramStreamMessages(messageIds, "message_sending retained stream cleanup");
+      },
       resolveFinalTextCandidate: () => resolveCurrentTurnTranscriptFinalText(),
-      beforeFinalizePreviewDelivery: async ({ content, messageId }) =>
-        await runStreamedFinalMessageSending(content, messageId),
+      beforeFinalizePreviewDelivery: async ({ content, messageId, laneName }) =>
+        await runStreamedFinalMessageSending(content, messageId, lanes[laneName]),
       log: logVerbose,
       markDelivered: () => {
         deliveryState.markDelivered();

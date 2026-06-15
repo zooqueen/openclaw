@@ -63,6 +63,7 @@ type SupersededTelegramPreview = {
   textSnapshot: string;
   visibleSinceMs?: number;
   retain?: boolean;
+  reason?: "late-send" | "final-overflow";
 };
 
 function renderTelegramDraftPreview(
@@ -199,6 +200,7 @@ export function createTelegramDraftStream(params: {
         textSnapshot: preview.text,
         visibleSinceMs,
         retain: true,
+        reason: "late-send",
       });
       return true;
     }
@@ -264,6 +266,7 @@ export function createTelegramDraftStream(params: {
             textSnapshot: supersededTextSnapshot,
             visibleSinceMs: supersededVisibleSinceMs,
             retain: true,
+            reason: "final-overflow",
           });
         }
         return await sendOrEditStreamMessage(trimmed);

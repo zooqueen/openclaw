@@ -24,6 +24,7 @@ export type DraftLaneState = {
   hasStreamedMessage: boolean;
   finalized: boolean;
   activeChunkIndex: number;
+  retainedPreviewMessageIds: number[];
 };
 
 type LanePreviewFinalizedDelivery = {
@@ -75,6 +76,10 @@ type CreateLaneTextDelivererParams = {
     messageId: number;
     text: string;
     buttons?: TelegramInlineButtons;
+  }) => Promise<void>;
+  deleteStreamMessages?: (params: {
+    laneName: LaneName;
+    messageIds: readonly number[];
   }) => Promise<void>;
   resolveFinalTextCandidate?: (params: {
     finalText: string;
@@ -277,6 +282,8 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
     await params.clearDraftLane(lane);
     lane.lastPartialText = "";
     lane.hasStreamedMessage = false;
+    lane.retainedPreviewMessageIds = [];
+    lane.activeChunkIndex = 0;
   };
 
   const discardUnmaterializedStream = async (lane: DraftLaneState) => {
@@ -288,6 +295,8 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
     lane.lastPartialText = "";
     lane.hasStreamedMessage = false;
     lane.finalized = false;
+    lane.retainedPreviewMessageIds = [];
+    lane.activeChunkIndex = 0;
   };
 
   const rotateFinalizedStream = (lane: DraftLaneState) => {
@@ -298,6 +307,8 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
     lane.lastPartialText = "";
     lane.hasStreamedMessage = false;
     lane.finalized = false;
+    lane.retainedPreviewMessageIds = [];
+    lane.activeChunkIndex = 0;
   };
 
   const streamText = async (
@@ -345,7 +356,6 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
       currentPreviewText: string;
       remainingChunks: readonly string[];
       messageId: number;
-      activeChunkIndex: number;
     }): Promise<
       | { cancel: true }
       | {
@@ -362,48 +372,47 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
         messageId: delivery.messageId,
       });
       if (gated && "cancel" in gated) {
+        await deleteRetainedPreviewMessages();
         return { cancel: true };
       }
       let buttonsAttached = false;
-      if (
-        typeof gated?.content === "string" &&
-        gated.content !== delivery.content &&
-        gated.content.trim().length > 0
-      ) {
-        if (delivery.activeChunkIndex > 0) {
-          params.log(
-            `telegram: ${laneName} stream message_sending rewrite skipped after earlier chunks were retained`,
-          );
-        } else {
-          const rewrittenChunks = splitPreviewFinalText(gated.content);
-          const rewrittenCurrentPreviewText = rewrittenChunks[0];
-          if (
-            rewrittenCurrentPreviewText &&
-            rewrittenCurrentPreviewText.length <= params.draftMaxChars
-          ) {
-            try {
-              await params.editStreamMessage({
-                laneName,
-                messageId: delivery.messageId,
-                text: rewrittenCurrentPreviewText,
-                ...(buttons !== undefined ? { buttons } : {}),
-              });
-              return {
-                content: gated.content,
-                promptContextContent: rewrittenCurrentPreviewText,
-                remainingChunks: rewrittenChunks.slice(1),
-                buttonsAttached: buttons !== undefined,
-              };
-            } catch (err) {
-              params.log(
-                `telegram: ${laneName} stream message_sending rewrite edit failed: ${String(err)}`,
-              );
+      if (typeof gated?.content === "string" && gated.content !== delivery.content) {
+        if (gated.content.trim().length === 0) {
+          await deleteCurrentAndRetainedPreviewMessages(delivery.messageId);
+          return { cancel: true };
+        }
+        const rewrittenChunks = splitPreviewFinalText(gated.content);
+        const rewrittenCurrentPreviewText = rewrittenChunks[0];
+        if (
+          rewrittenCurrentPreviewText &&
+          rewrittenCurrentPreviewText.length <= params.draftMaxChars
+        ) {
+          try {
+            await params.editStreamMessage({
+              laneName,
+              messageId: delivery.messageId,
+              text: rewrittenCurrentPreviewText,
+              ...(buttons !== undefined ? { buttons } : {}),
+            });
+            const deletedRetainedPreviews = await deleteRetainedPreviewMessages();
+            if (!deletedRetainedPreviews) {
+              return { cancel: true };
             }
-          } else {
+            return {
+              content: gated.content,
+              promptContextContent: rewrittenCurrentPreviewText,
+              remainingChunks: rewrittenChunks.slice(1),
+              buttonsAttached: buttons !== undefined,
+            };
+          } catch (err) {
             params.log(
-              `telegram: ${laneName} stream message_sending rewrite produced no sendable preview chunk`,
+              `telegram: ${laneName} stream message_sending rewrite edit failed: ${String(err)}`,
             );
           }
+        } else {
+          params.log(
+            `telegram: ${laneName} stream message_sending rewrite produced no sendable preview chunk`,
+          );
         }
       }
       if (buttons) {
@@ -447,6 +456,42 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
         buttonsAttached: finalized.buttonsAttached,
       });
 
+    const takeRetainedPreviewMessageIds = () => {
+      const messageIds = lane.retainedPreviewMessageIds;
+      lane.retainedPreviewMessageIds = [];
+      lane.activeChunkIndex = 0;
+      return [...new Set(messageIds)];
+    };
+
+    const deleteStreamMessages = async (messageIds: readonly number[]) => {
+      if (messageIds.length === 0) {
+        return true;
+      }
+      if (!params.deleteStreamMessages) {
+        params.log(
+          `telegram: ${laneName} stream message_sending could not delete retained previews; no delete callback configured`,
+        );
+        return false;
+      }
+      try {
+        await params.deleteStreamMessages({ laneName, messageIds });
+        return true;
+      } catch (err) {
+        params.log(
+          `telegram: ${laneName} stream message_sending retained preview cleanup failed: ${String(err)}`,
+        );
+        return false;
+      }
+    };
+
+    const deleteRetainedPreviewMessages = async () => {
+      return await deleteStreamMessages(takeRetainedPreviewMessageIds());
+    };
+
+    const deleteCurrentAndRetainedPreviewMessages = async (messageId: number) => {
+      return await deleteStreamMessages([...takeRetainedPreviewMessageIds(), messageId]);
+    };
+
     const finalizeDeliveredPrefix = async (
       deliveredStreamText: string,
       messageId: number,
@@ -465,7 +510,6 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
             ? compactChunks(params.splitFinalTextForStream?.(suffix) ?? [])
             : [],
         messageId,
-        activeChunkIndex: Math.max(0, deliveredChunks.length - 1),
       });
       lane.finalized = true;
       params.markDelivered();
@@ -532,7 +576,6 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
         currentPreviewText: previewText,
         remainingChunks,
         messageId,
-        activeChunkIndex,
       });
       lane.finalized = true;
       params.markDelivered();
@@ -618,7 +661,6 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
         currentPreviewText: activeChunkAfterStop,
         remainingChunks: remainingChunksAfterStop,
         messageId,
-        activeChunkIndex: activeChunkIndexAfterStop,
       });
       lane.finalized = true;
       params.markDelivered();
