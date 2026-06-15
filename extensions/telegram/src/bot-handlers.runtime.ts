@@ -2638,6 +2638,23 @@ export const registerTelegramHandlers = ({
           throw new TelegramRetryableCallbackError(err);
         }
         const { byProvider, providers, modelNames } = modelData;
+        const currentModelExists = (modelRef: string | undefined): modelRef is string => {
+          const currentModel = modelRef?.trim();
+          if (!currentModel) {
+            return false;
+          }
+          const slashIndex = currentModel.indexOf("/");
+          if (slashIndex > 0 && slashIndex < currentModel.length - 1) {
+            const provider = currentModel.slice(0, slashIndex);
+            const model = currentModel.slice(slashIndex + 1);
+            return byProvider.get(provider)?.has(model) ?? false;
+          }
+          return providers.some((provider) => byProvider.get(provider)?.has(currentModel));
+        };
+        const defaultModel = `${modelData.resolvedDefault.provider}/${modelData.resolvedDefault.model}`;
+        const currentModel = currentModelExists(sessionState.model)
+          ? sessionState.model
+          : defaultModel;
 
         const editMessageWithButtons = async (
           text: string,
@@ -2710,9 +2727,6 @@ export const registerTelegramHandlers = ({
           const pageSize = getModelsPageSize();
           const totalPages = calculateTotalPages(models.length, pageSize);
           const safePage = Math.max(1, Math.min(page, totalPages));
-
-          // Resolve current model from session (prefer overrides)
-          const currentModel = sessionState.model;
 
           const buttons = buildModelsKeyboard({
             provider,
