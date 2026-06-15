@@ -512,7 +512,11 @@ function resetRunOutcomeMocks(): void {
       runLevelError,
     }: {
       payloads: Array<{ isError?: boolean }>;
-      failureSignal?: { fatalForCron?: boolean; message?: string };
+      failureSignal?: {
+        fatalForCron?: boolean;
+        message?: string;
+        bypassCronDelivery?: boolean;
+      };
       runLevelError?: unknown;
     }) => {
       const runLevelErrorMessage =
@@ -553,6 +557,8 @@ function resetRunOutcomeMocks(): void {
         failureMessage !== undefined ||
         runLevelErrorMessage !== undefined;
       const hasFatalStructuredErrorPayload = errorPayloadMessage !== undefined;
+      const bypassCronDelivery =
+        failureSignal?.fatalForCron === true && failureSignal.bypassCronDelivery === true;
       const deliveryPayload =
         errorPayloadMessage || failureMessage || runLevelErrorMessage
           ? { text: errorPayloadMessage ?? failureMessage ?? runLevelErrorMessage, isError: true }
@@ -570,6 +576,7 @@ function resetRunOutcomeMocks(): void {
         deliveryPayloadHasStructuredContent: false,
         hasFatalErrorPayload,
         hasFatalStructuredErrorPayload,
+        bypassCronDelivery,
         embeddedRunError:
           errorPayloadMessage ?? failureMessage ?? runLevelErrorMessage ?? undefined,
       };

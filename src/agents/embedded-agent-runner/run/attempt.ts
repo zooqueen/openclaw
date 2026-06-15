@@ -440,6 +440,8 @@ import {
   wrapStreamFnRepairMalformedToolCallArguments,
 } from "./attempt.tool-call-argument-repair.js";
 import {
+  createUnknownToolLoopGuardState,
+  readUnknownToolLoopGuardReport,
   sanitizeOpenAIResponsesReplayForStream,
   sanitizeReplayToolCallIdsForStream,
   shouldApplyReplayToolCallIdSanitizer,
@@ -927,6 +929,11 @@ export async function runEmbeddedAttempt(
   }
   const effectiveCwd = sandbox?.enabled ? effectiveWorkspace : (requestedCwd ?? effectiveWorkspace);
   await fs.mkdir(effectiveWorkspace, { recursive: true });
+  // Shared guard state for the streamed unknown-tool loop detector. Lives in
+  // this scope so the terminal result block can observe whether the guard
+  // rewrote the assistant message into the injected self-debug text (#92535)
+  // and surface that to the cron runner before delivery dispatch.
+  const unknownToolGuardState = createUnknownToolLoopGuardState();
   let currentPluginMetadataSnapshotResolved = false;
   let currentPluginMetadataSnapshot: PluginMetadataSnapshot | undefined;
   const getCurrentAttemptPluginMetadataSnapshot = () => {
@@ -3059,6 +3066,7 @@ export async function runEmbeddedAttempt(
         liveAllowedToolNames,
         {
           unknownToolThreshold: resolveUnknownToolGuardThreshold(clientToolLoopDetection),
+          state: unknownToolGuardState,
         },
       );
 
@@ -5595,6 +5603,10 @@ export async function runEmbeddedAttempt(
         // truthiness predicates keep working without a `.length` check.
         clientToolCalls: completedClientToolCalls.length > 0 ? completedClientToolCalls : undefined,
         yieldDetected: yieldDetected || undefined,
+        // Surface the unknown-tool guard's rewrite event so cron can fail
+        // closed on the injected self-debug text (#92535) instead of
+        // delivering it as a normal assistant reply.
+        unknownToolLoopExhausted: readUnknownToolLoopGuardReport(unknownToolGuardState),
       };
     } finally {
       if (trajectoryRecorder && !trajectoryEndRecorded) {
