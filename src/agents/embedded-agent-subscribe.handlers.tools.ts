@@ -39,7 +39,11 @@ import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import { sanitizeForConsole } from "./console-sanitize.js";
 import { normalizeTextForComparison } from "./embedded-agent-helpers.js";
 import { isDeliveredMessageToolOnlySourceReplyResult } from "./embedded-agent-message-tool-source-reply.js";
-import { isMessagingTool, isMessagingToolSendAction } from "./embedded-agent-messaging.js";
+import {
+  isMessagingTool,
+  isMessagingToolSendAction,
+  isMessagingToolTargetEvidenceAction,
+} from "./embedded-agent-messaging.js";
 import { mergeEmbeddedRunReplayState } from "./embedded-agent-runner/replay-state.js";
 import type {
   ToolCallSummary,
@@ -872,11 +876,13 @@ export function handleToolExecutionStart(
     if (isMessagingTool(toolName)) {
       const argsRecord = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
       const isMessagingSend = isMessagingToolSendAction(toolName, argsRecord);
-      if (isMessagingSend) {
+      if (isMessagingToolTargetEvidenceAction(toolName, argsRecord)) {
         const sendTarget = extractMessagingToolSend(toolName, argsRecord);
         if (sendTarget) {
           ctx.state.pendingMessagingTargets.set(toolCallId, sendTarget);
         }
+      }
+      if (isMessagingSend) {
         // Field names vary by tool: Discord/Slack use "content", sessions_send uses "message"
         const text = (argsRecord.content as string) ?? (argsRecord.message as string);
         if (text && typeof text === "string") {
