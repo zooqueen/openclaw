@@ -56,7 +56,8 @@ function makeEvidenceSummary(status: "pass" | "fail" | "blocked" | "skipped") {
           id: "whatsapp-mention-gating",
           title: "WhatsApp mention gating",
         },
-        mapping: { profile: "release", coverage: [] },
+        profile: "release",
+        coverage: [],
         execution: {
           runner: "host",
           environment: { ref: null, os: "darwin", nodeVersion: "v24.0.0" },

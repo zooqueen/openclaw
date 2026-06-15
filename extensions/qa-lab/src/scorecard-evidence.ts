@@ -8,7 +8,7 @@ import {
   type QaEvidenceSummaryJson,
 } from "./evidence-summary.js";
 import type {
-  QaScorecardCategoryMappingReport,
+  QaScorecardCategoryCoverageReport,
   QaScorecardTaxonomyReport,
 } from "./scorecard-taxonomy.js";
 import { readQaScorecardFeatureCoverageByCategory } from "./scorecard-taxonomy.js";
@@ -18,7 +18,7 @@ type QaProfileScorecardFilters = {
   category?: string;
 };
 
-type EvidenceCoverageRole = QaEvidenceSummaryEntry["mapping"]["coverage"][number]["role"];
+type EvidenceCoverageRole = QaEvidenceSummaryEntry["coverage"][number]["role"];
 
 function uniqueSortedStrings(values: Iterable<string | undefined>) {
   return [
@@ -41,9 +41,7 @@ function coverageIdsForRole(
 ) {
   return new Set(
     entries.flatMap((entry) =>
-      entry.mapping.coverage
-        .filter((coverage) => coverage.role === role)
-        .map((coverage) => coverage.id),
+      entry.coverage.filter((coverage) => coverage.role === role).map((coverage) => coverage.id),
     ),
   );
 }
@@ -59,7 +57,7 @@ function statusForCategory(params: { featureCount: number; fulfilledFeatureCount
 }
 
 function categoryFeatureCoverageIds(params: {
-  category: QaScorecardCategoryMappingReport;
+  category: QaScorecardCategoryCoverageReport;
   featureCoverageByCategoryId?: ReadonlyMap<string, readonly (readonly string[])[]>;
 }) {
   const features = params.featureCoverageByCategoryId?.get(params.category.id);
@@ -73,7 +71,7 @@ export function buildQaProfileScorecardEvidence(params: {
   taxonomyReport: QaScorecardTaxonomyReport;
   profile: string;
   filters: QaProfileScorecardFilters;
-  categories: readonly QaScorecardCategoryMappingReport[];
+  categories: readonly QaScorecardCategoryCoverageReport[];
   featureCoverageByCategoryId?: ReadonlyMap<string, readonly (readonly string[])[]>;
 }): QaEvidenceScorecardJson {
   const primaryCoverageIds = coverageIdsForRole(params.evidence.entries, "primary");
@@ -171,7 +169,7 @@ export async function attachQaProfileScorecardEvidenceToFile(params: {
   taxonomyReport: QaScorecardTaxonomyReport;
   profile: string;
   filters: QaProfileScorecardFilters;
-  categories: readonly QaScorecardCategoryMappingReport[];
+  categories: readonly QaScorecardCategoryCoverageReport[];
 }) {
   const evidence = validateQaEvidenceSummaryJson(
     JSON.parse(await fs.readFile(params.evidencePath, "utf8")),

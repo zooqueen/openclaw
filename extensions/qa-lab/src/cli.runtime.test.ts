@@ -371,17 +371,13 @@ describe("qa cli runtime", () => {
                     path: "qa/scenarios/channels/dm-chat-baseline.yaml",
                   },
                 },
-                mapping: {
-                  profile: "smoke-ci",
-                  coverage: [
-                    {
-                      id: "channels.dm",
-                      role: "primary",
-                      surfaceIds: ["dm"],
-                      categoryIds: ["agent-runtime-and-provider-execution.agent-turn-execution"],
-                    },
-                  ],
-                },
+                profile: "smoke-ci",
+                coverage: [
+                  {
+                    id: "channels.dm",
+                    role: "primary",
+                  },
+                ],
                 execution: {
                   runner: "host",
                   environment: {

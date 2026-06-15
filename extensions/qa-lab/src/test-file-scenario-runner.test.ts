@@ -102,32 +102,27 @@ describe("qa test file scenario runner", () => {
           path: "ui/src/ui/e2e/chat-flow.e2e.test.ts",
         },
       },
-      mapping: {
-        coverage: [
-          {
-            id: "ui.control",
-            role: "primary",
-            surfaceIds: ["control-ui"],
-            categoryIds: ["browser-control-ui-and-webchat.browser-ui"],
-          },
-          {
-            id: "ui.streaming",
-            role: "secondary",
-            surfaceIds: ["control-ui"],
-            categoryIds: [],
-          },
-        ],
-        refs: [
-          {
-            kind: "docs",
-            path: "docs/concepts/qa-e2e-automation.md",
-          },
-          {
-            kind: "code",
-            path: "ui/src/ui/e2e/chat-flow.e2e.test.ts",
-          },
-        ],
-      },
+      profile: "smoke-ci",
+      coverage: [
+        {
+          id: "ui.control",
+          role: "primary",
+        },
+        {
+          id: "ui.streaming",
+          role: "secondary",
+        },
+      ],
+      refs: [
+        {
+          kind: "docs",
+          path: "docs/concepts/qa-e2e-automation.md",
+        },
+        {
+          kind: "code",
+          path: "ui/src/ui/e2e/chat-flow.e2e.test.ts",
+        },
+      ],
       execution: {
         runner: "playwright",
         artifacts: [
@@ -182,18 +177,17 @@ describe("qa test file scenario runner", () => {
           path: "extensions/qa-lab/src/coverage-report.test.ts",
         },
       },
-      mapping: {
-        coverage: [
-          {
-            id: "qa.coverage",
-            role: "primary",
-          },
-          {
-            id: "qa.reporting",
-            role: "secondary",
-          },
-        ],
-      },
+      profile: "smoke-ci",
+      coverage: [
+        {
+          id: "qa.coverage",
+          role: "primary",
+        },
+        {
+          id: "qa.reporting",
+          role: "secondary",
+        },
+      ],
       execution: {
         runner: "vitest",
         artifacts: [
