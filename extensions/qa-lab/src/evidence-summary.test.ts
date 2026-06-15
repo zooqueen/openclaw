@@ -47,6 +47,7 @@ describe("evidence summary", () => {
     expect(validateQaEvidenceSummaryJson(evidence)).toEqual(evidence);
     expect(evidence.kind).toBe(QA_EVIDENCE_SUMMARY_KIND);
     expect(evidence.schemaVersion).toBe(QA_EVIDENCE_SUMMARY_SCHEMA_VERSION);
+    expect(evidence.profile).toBeUndefined();
     expect(evidence.entries).toHaveLength(1);
     expect(evidence.entries[0]).toMatchObject({
       test: {
@@ -57,7 +58,6 @@ describe("evidence summary", () => {
           path: "qa/scenarios/channels/dm-chat-baseline.yaml",
         },
       },
-      profile: "smoke-ci",
       coverage: [
         {
           id: "channels.dm",
@@ -148,6 +148,7 @@ describe("evidence summary", () => {
     });
 
     expect(validateQaEvidenceSummaryJson(evidence)).toEqual(evidence);
+    expect(evidence.profile).toBeUndefined();
     expect(evidence.entries).toEqual([
       expect.objectContaining({
         test: {
@@ -155,7 +156,6 @@ describe("evidence summary", () => {
           id: "telegram-canary",
           title: "Telegram canary",
         },
-        profile: "release",
         coverage: [
           {
             id: "channels.telegram.live",
@@ -277,6 +277,7 @@ describe("evidence summary", () => {
     });
 
     expect(validateQaEvidenceSummaryJson(evidence)).toEqual(evidence);
+    expect(evidence.profile).toBeUndefined();
     expect(evidence.entries).toEqual([
       expect.objectContaining({
         test: {
@@ -287,7 +288,6 @@ describe("evidence summary", () => {
             path: "src/agents/agent-runner.e2e.test.ts",
           },
         },
-        profile: "smoke-ci",
         coverage: [
           {
             id: "runtime.agent-runner",
@@ -361,6 +361,7 @@ describe("evidence summary", () => {
     });
 
     expect(validateQaEvidenceSummaryJson(evidence)).toEqual(evidence);
+    expect(evidence.profile).toBeUndefined();
     expect(evidence.entries[0]).toMatchObject({
       test: {
         kind: "playwright-test",
@@ -370,7 +371,6 @@ describe("evidence summary", () => {
           path: "ui/control-ui.e2e.test.ts",
         },
       },
-      profile: "smoke-ci",
       coverage: [
         {
           id: "control-ui.browser",
@@ -437,7 +437,7 @@ describe("evidence summary", () => {
       scenarioResults: [{ name: "DM baseline conversation", status: "pass" }],
     });
 
-    expect(evidence.entries[0]?.profile).toBe("experimental-profile");
+    expect(evidence.profile).toBe("experimental-profile");
   });
 
   it("keeps mock non-OpenAI model refs attributed to their model provider", () => {

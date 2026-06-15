@@ -271,6 +271,7 @@ function buildTestFileEvidence(params: {
     kind: QA_EVIDENCE_SUMMARY_KIND,
     schemaVersion: QA_EVIDENCE_SUMMARY_SCHEMA_VERSION,
     generatedAt: params.generatedAt,
+    profile: evidence.profile,
     entries: evidence.entries,
   });
 }

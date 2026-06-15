@@ -124,14 +124,6 @@ const qaEvidenceScorecardCategorySchema = z
 
 const qaEvidenceScorecardSchema = z
   .object({
-    kind: z.literal("openclaw.qa.scorecard"),
-    profile: qaEvidenceProfileIdSchema,
-    taxonomy: z
-      .object({
-        path: nullableStringSchema,
-        title: nullableStringSchema,
-      })
-      .strict(),
     filters: z
       .object({
         surface: nullableStringSchema,
@@ -179,7 +171,6 @@ const qaEvidenceResultSchema = z
 export const qaEvidenceSummaryEntrySchema = z
   .object({
     test: qaEvidenceTestSchema,
-    profile: qaEvidenceProfileIdSchema,
     coverage: z.array(qaEvidenceCoverageSchema),
     refs: z.array(qaEvidenceRefSchema).optional(),
     runtimeParityTier: nonEmptyStringSchema.optional(),
@@ -194,6 +185,7 @@ export const qaEvidenceSummarySchema = z
     schemaVersion: z.literal(QA_EVIDENCE_SUMMARY_SCHEMA_VERSION),
     generatedAt: nonEmptyStringSchema,
     entries: z.array(qaEvidenceSummaryEntrySchema),
+    profile: qaEvidenceProfileIdSchema.optional(),
     scorecard: qaEvidenceScorecardSchema.optional(),
   })
   .strict();
@@ -350,7 +342,6 @@ function uniqueSortedStrings(values: readonly (string | undefined)[]) {
 
 function resolveQaEvidenceProfile(params: {
   env?: NodeJS.ProcessEnv;
-  fallback: QaEvidenceProfile;
   explicit?: QaEvidenceProfile;
 }) {
   if (params.explicit) {
@@ -373,7 +364,7 @@ function resolveQaEvidenceProfile(params: {
     return normalized;
   }
 
-  return params.fallback;
+  return undefined;
 }
 
 function resolveQaEvidenceRunner(params: { env?: NodeJS.ProcessEnv; fallback?: string }) {
@@ -499,12 +490,14 @@ function resultForEvidence(
 function buildQaEvidenceSummary(params: {
   entries: QaEvidenceSummaryEntry[];
   generatedAt: string;
+  profile?: QaEvidenceProfile;
 }): QaEvidenceSummaryJson {
   return qaEvidenceSummarySchema.parse({
     kind: QA_EVIDENCE_SUMMARY_KIND,
     schemaVersion: QA_EVIDENCE_SUMMARY_SCHEMA_VERSION,
     generatedAt: params.generatedAt,
     entries: params.entries,
+    profile: params.profile,
   });
 }
 
@@ -514,10 +507,12 @@ export function validateQaEvidenceSummaryJson(summary: unknown): QaEvidenceSumma
 
 export function attachQaEvidenceScorecard(params: {
   summary: QaEvidenceSummaryJson;
+  profile: QaEvidenceProfile;
   scorecard: QaEvidenceScorecardJson;
 }): QaEvidenceSummaryJson {
   return validateQaEvidenceSummaryJson({
     ...params.summary,
+    profile: params.profile,
     scorecard: params.scorecard,
   });
 }
@@ -535,7 +530,6 @@ export function buildQaSuiteEvidenceSummary(
   const runner = resolveQaEvidenceRunner({ env: params.env, fallback: params.runner });
   const profile = resolveQaEvidenceProfile({
     env: params.env,
-    fallback: provider.live ? "release" : "smoke-ci",
     explicit: params.profile,
   });
   const channelDriver = resolveQaEvidenceChannelDriver({
@@ -563,7 +557,6 @@ export function buildQaSuiteEvidenceSummary(
         title: scenario?.title ?? result.name,
         source: scenario?.sourcePath ? { path: scenario.sourcePath } : undefined,
       },
-      profile,
       coverage: buildQaEvidenceCoverage({
         primaryCoverageIds,
         secondaryCoverageIds: coverageIds.filter(
@@ -587,7 +580,7 @@ export function buildQaSuiteEvidenceSummary(
       result: resultForEvidence(result, timing),
     };
   });
-  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries });
+  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries, profile });
 }
 
 function buildTestRunnerEvidenceSummary(
@@ -607,7 +600,6 @@ function buildTestRunnerEvidenceSummary(
   });
   const profile = resolveQaEvidenceProfile({
     env: params.env,
-    fallback: provider.live ? "release" : "smoke-ci",
     explicit: params.profile,
   });
   const targetById = new Map(params.targets.map((target) => [target.id, target]));
@@ -632,7 +624,6 @@ function buildTestRunnerEvidenceSummary(
         title: target?.title ?? result.title ?? fallbackId,
         source: sourcePath ? { path: sourcePath } : undefined,
       },
-      profile,
       coverage: buildQaEvidenceCoverage({
         primaryCoverageIds: target?.primaryCoverageIds ?? [],
         secondaryCoverageIds: target?.secondaryCoverageIds ?? [],
@@ -648,7 +639,7 @@ function buildTestRunnerEvidenceSummary(
       result: resultForEvidence(result, timing),
     };
   });
-  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries });
+  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries, profile });
 }
 
 export function buildVitestEvidenceSummary(
@@ -691,7 +682,6 @@ export function buildLiveTransportEvidenceSummary(
   const runner = resolveQaEvidenceRunner({ env: params.env, fallback: params.runner });
   const profile = resolveQaEvidenceProfile({
     env: params.env,
-    fallback: "release",
     explicit: params.profile,
   });
   const channelDriver = resolveQaEvidenceChannelDriver({
@@ -720,7 +710,6 @@ export function buildLiveTransportEvidenceSummary(
         id: testId,
         title: check.title,
       },
-      profile,
       coverage,
       execution: {
         runner,
@@ -743,5 +732,5 @@ export function buildLiveTransportEvidenceSummary(
       result: resultForEvidence(check, timing),
     };
   });
-  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries });
+  return buildQaEvidenceSummary({ generatedAt: params.generatedAt, entries, profile });
 }

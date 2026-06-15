@@ -7,10 +7,7 @@ import {
   type QaEvidenceSummaryEntry,
   type QaEvidenceSummaryJson,
 } from "./evidence-summary.js";
-import type {
-  QaScorecardCategoryCoverageReport,
-  QaScorecardTaxonomyReport,
-} from "./scorecard-taxonomy.js";
+import type { QaScorecardCategoryCoverageReport } from "./scorecard-taxonomy.js";
 import { readQaScorecardFeatureCoverageByCategory } from "./scorecard-taxonomy.js";
 
 type QaProfileScorecardFilters = {
@@ -68,8 +65,6 @@ function categoryFeatureCoverageIds(params: {
 
 export function buildQaProfileScorecardEvidence(params: {
   evidence: QaEvidenceSummaryJson;
-  taxonomyReport: QaScorecardTaxonomyReport;
-  profile: string;
   filters: QaProfileScorecardFilters;
   categories: readonly QaScorecardCategoryCoverageReport[];
   featureCoverageByCategoryId?: ReadonlyMap<string, readonly (readonly string[])[]>;
@@ -134,12 +129,6 @@ export function buildQaProfileScorecardEvidence(params: {
     (category) => category.status === "missing",
   ).length;
   return {
-    kind: "openclaw.qa.scorecard",
-    profile: params.profile,
-    taxonomy: {
-      path: params.taxonomyReport.taxonomyPath,
-      title: params.taxonomyReport.title,
-    },
     filters: {
       surface: nullableFilter(params.filters.surface),
       category: nullableFilter(params.filters.category),
@@ -166,7 +155,6 @@ export function buildQaProfileScorecardEvidence(params: {
 
 export async function attachQaProfileScorecardEvidenceToFile(params: {
   evidencePath: string;
-  taxonomyReport: QaScorecardTaxonomyReport;
   profile: string;
   filters: QaProfileScorecardFilters;
   categories: readonly QaScorecardCategoryCoverageReport[];
@@ -176,13 +164,15 @@ export async function attachQaProfileScorecardEvidenceToFile(params: {
   );
   const scorecard = buildQaProfileScorecardEvidence({
     evidence,
-    taxonomyReport: params.taxonomyReport,
-    profile: params.profile,
     filters: params.filters,
     categories: params.categories,
     featureCoverageByCategoryId: readQaScorecardFeatureCoverageByCategory(),
   });
-  const nextEvidence = attachQaEvidenceScorecard({ summary: evidence, scorecard });
+  const nextEvidence = attachQaEvidenceScorecard({
+    summary: evidence,
+    profile: params.profile,
+    scorecard,
+  });
   await fs.writeFile(params.evidencePath, `${JSON.stringify(nextEvidence, null, 2)}\n`, "utf8");
   return scorecard;
 }

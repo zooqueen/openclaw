@@ -102,7 +102,6 @@ describe("qa test file scenario runner", () => {
           path: "ui/src/ui/e2e/chat-flow.e2e.test.ts",
         },
       },
-      profile: "smoke-ci",
       coverage: [
         {
           id: "ui.control",
@@ -177,7 +176,6 @@ describe("qa test file scenario runner", () => {
           path: "extensions/qa-lab/src/coverage-report.test.ts",
         },
       },
-      profile: "smoke-ci",
       coverage: [
         {
           id: "qa.coverage",

@@ -686,7 +686,6 @@ export async function runQaProfileCommand(opts: QaProfileCommandOptions) {
   }
   await attachQaProfileScorecardEvidenceToFile({
     evidencePath,
-    taxonomyReport: scorecardReport,
     profile,
     filters: {
       surface: opts.surface,
