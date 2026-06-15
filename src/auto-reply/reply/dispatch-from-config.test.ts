@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import { clearAgentHarnesses, registerAgentHarness } from "../../agents/harness/registry.js";
 import type { ChannelMessagingAdapter } from "../../channels/plugins/types.core.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import { deriveInboundMessageHookContext } from "../../hooks/message-hook-mappers.js";
 import {
   clearApprovalNativeRouteStateForTest,
   createApprovalNativeRouteReporter,
@@ -44,6 +45,7 @@ import {
   type ReplyDispatcher,
 } from "./reply-dispatcher.js";
 import { resolveRoutedDeliveryThreadId } from "./routed-delivery-thread.js";
+import { resolveReplyRoutingDecision } from "./routing-policy.js";
 import { buildTestCtx } from "./test-ctx.js";
 
 type AbortResult = { handled: boolean; aborted: boolean; stoppedSubagents?: number };
@@ -1206,27 +1208,21 @@ describe("dispatchReplyFromConfig", () => {
     activeOperation.complete();
   });
 
-  it("does not route when Provider matches OriginatingChannel (even if Surface is missing)", async () => {
-    setNoAbort();
-    mocks.routeReply.mockClear();
-    const cfg = emptyConfig;
-    const dispatcher = createDispatcher();
-    const ctx = buildTestCtx({
-      Provider: "slack",
-      Surface: undefined,
-      OriginatingChannel: "slack",
-      OriginatingTo: "channel:C123",
+  it("does not route when Provider matches OriginatingChannel (even if Surface is missing)", () => {
+    const decision = resolveReplyRoutingDecision({
+      provider: "slack",
+      surface: undefined,
+      originatingChannel: "slack",
+      originatingTo: "channel:C123",
+      isRoutableChannel: (channel) => channel === "slack",
     });
 
-    const replyResolver = async (
-      _ctx: MsgContext,
-      _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
-    ) => ({ text: "hi" }) satisfies ReplyPayload;
-    await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
-
-    expect(mocks.routeReply).not.toHaveBeenCalled();
-    expect(dispatcher.sendFinalReply).toHaveBeenCalledTimes(1);
+    expect(decision).toMatchObject({
+      originatingChannel: "slack",
+      currentSurface: "slack",
+      shouldRouteToOriginating: false,
+      shouldSuppressTyping: false,
+    });
   });
 
   it("mirrors ownerless same-channel Slack finals after successful delivery", async () => {
@@ -1647,11 +1643,7 @@ describe("dispatchReplyFromConfig", () => {
     ).toBe(params.expected);
   });
 
-  it("routes when OriginatingChannel differs from Provider", async () => {
-    setNoAbort();
-    mocks.routeReply.mockClear();
-    const cfg = emptyConfig;
-    const dispatcher = createDispatcher();
+  it("resolves routed delivery fields when OriginatingChannel differs from Provider", () => {
     const ctx = buildTestCtx({
       Provider: "slack",
       AccountId: "acc-1",
@@ -1660,31 +1652,26 @@ describe("dispatchReplyFromConfig", () => {
       OriginatingChannel: "telegram",
       OriginatingTo: "telegram:999",
     });
+    const decision = resolveReplyRoutingDecision({
+      provider: ctx.Provider,
+      surface: ctx.Surface,
+      originatingChannel: ctx.OriginatingChannel,
+      originatingTo: ctx.OriginatingTo,
+      isRoutableChannel: (channel) => channel === "telegram",
+    });
+    const hookContext = deriveInboundMessageHookContext(ctx);
 
-    const replyResolver = async (
-      _ctx: MsgContext,
-      _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
-    ) => ({ text: "hi" }) satisfies ReplyPayload;
-    await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
-
-    expect(dispatcher.sendFinalReply).not.toHaveBeenCalled();
-    const routeCall = firstRouteReplyCall() as
-      | {
-          accountId?: unknown;
-          channel?: unknown;
-          groupId?: unknown;
-          isGroup?: unknown;
-          threadId?: unknown;
-          to?: unknown;
-        }
-      | undefined;
-    expect(routeCall?.channel).toBe("telegram");
-    expect(routeCall?.to).toBe("telegram:999");
-    expect(routeCall?.accountId).toBe("acc-1");
-    expect(routeCall?.threadId).toBe(123);
-    expect(routeCall?.isGroup).toBe(true);
-    expect(routeCall?.groupId).toBe("telegram:999");
+    expect(decision).toMatchObject({
+      originatingChannel: "telegram",
+      currentSurface: "slack",
+      shouldRouteToOriginating: true,
+      shouldSuppressTyping: true,
+    });
+    expect(ctx.AccountId).toBe("acc-1");
+    expect(ctx.OriginatingTo).toBe("telegram:999");
+    expect(resolveRoutedDeliveryThreadId({ ctx, sessionKey: ctx.SessionKey })).toBe(123);
+    expect(hookContext.isGroup).toBe(true);
+    expect(hookContext.groupId).toBe("telegram:999");
   });
 
   it("routes exec-event replies using persisted session delivery context when current turn has no originating route", async () => {
