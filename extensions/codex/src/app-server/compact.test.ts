@@ -239,7 +239,19 @@ describe("maybeCompactCodexAppServerSession", () => {
 
   it("resumes and retains native review turns through completion", async () => {
     const fake = createFakeCodexClient({ autoComplete: false });
-    const sessionFile = await writeTestBinding();
+    const sessionFile = await writeTestBinding({
+      nativeContextUsage: { currentTokens: 42_000 },
+      contextEngine: {
+        schemaVersion: 1,
+        engineId: "lossless-claw",
+        policyFingerprint: "policy-1",
+        projection: {
+          schemaVersion: 1,
+          mode: "thread_bootstrap",
+          epoch: "epoch-1",
+        },
+      },
+    });
     const identity = sessionBindingIdentity({
       sessionId: "session-1",
       sessionKey: "agent:main:session-1",
@@ -264,9 +276,10 @@ describe("maybeCompactCodexAppServerSession", () => {
       "thread/resume",
       "review/start",
     ]);
-    await expect(readCodexAppServerBinding(sessionFile)).resolves.toMatchObject({
-      threadId: "thread-1",
-    });
+    const startedBinding = await readCodexAppServerBinding(sessionFile);
+    expect(startedBinding?.threadId).toBe("thread-1");
+    expect(startedBinding).not.toHaveProperty("nativeContextUsage");
+    expect(startedBinding?.contextEngine?.projection).toMatchObject({ epoch: "epoch-1" });
     fake.emit({
       method: "turn/completed",
       params: {
@@ -276,6 +289,7 @@ describe("maybeCompactCodexAppServerSession", () => {
     });
     await flushAsyncTasks();
     expect(fake.request.mock.calls.map(([method]) => method)).toContain("thread/unsubscribe");
+    expect(await readCodexAppServerBinding(sessionFile)).not.toHaveProperty("nativeContextUsage");
   });
 
   it("releases native review ownership after an exact setup error", async () => {
@@ -374,7 +388,9 @@ describe("maybeCompactCodexAppServerSession", () => {
       sessionId: "session-1",
       sessionKey: "agent:main:session-1",
     });
-    await writeTestBinding();
+    const sessionFile = await writeTestBinding({
+      nativeContextUsage: { currentTokens: 42_000 },
+    });
     const binding = await testCodexAppServerBindingStore.read(identity);
     if (!binding) {
       throw new Error("missing review binding");
@@ -395,6 +411,46 @@ describe("maybeCompactCodexAppServerSession", () => {
     expect(release).toHaveBeenCalledTimes(1);
     expect(abandon).not.toHaveBeenCalled();
     expect(fake.request.mock.calls.map(([method]) => method)).toContain("thread/unsubscribe");
+    await expect(readCodexAppServerBinding(sessionFile)).resolves.toMatchObject({
+      nativeContextUsage: { currentTokens: 42_000 },
+    });
+  });
+
+  it("keeps review usage invalidated when startup acceptance is indeterminate", async () => {
+    const fake = createFakeCodexClient({ autoComplete: false });
+    const release = vi.fn();
+    const abandon = vi.fn(async () => undefined);
+    fake.handleRequest("review/start", () => {
+      throw new Error("review response lost");
+    });
+    const identity = sessionBindingIdentity({
+      sessionId: "session-1",
+      sessionKey: "agent:main:session-1",
+    });
+    const sessionFile = await writeTestBinding({
+      nativeContextUsage: { currentTokens: 42_000 },
+    });
+    const binding = await testCodexAppServerBindingStore.read(identity);
+    if (!binding) {
+      throw new Error("missing review binding");
+    }
+
+    await expect(
+      requestCodexNativeTurnForBinding(
+        {
+          bindingIdentity: identity,
+          bindingStore: testCodexAppServerBindingStore,
+          expectedBinding: binding,
+          clientLeaseFactory: async () => ({ client: fake.client, release, abandon }),
+        },
+        "review",
+      ),
+    ).rejects.toThrow("review response lost");
+
+    expect(release).not.toHaveBeenCalled();
+    expect(abandon).toHaveBeenCalledTimes(1);
+    const stored = await readCodexAppServerBinding(sessionFile);
+    expect(stored).not.toHaveProperty("nativeContextUsage");
   });
 
   it("retires a native-turn client when wire unsubscribe fails", async () => {
@@ -1022,7 +1078,7 @@ describe("maybeCompactCodexAppServerSession", () => {
       ...testCodexAppServerBindingStore,
       mutate: async (...args: Parameters<typeof mutate>) => {
         const result = await mutate(...args);
-        if (args[1].kind === "compacted") {
+        if (args[1].kind === "invalidate-native-context") {
           abortController.abort("cancelled during invalidation");
         }
         return result;

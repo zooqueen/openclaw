@@ -909,19 +909,17 @@ async function prepareConversationThread(
           subscribedThreadId = resumeThreadId;
           // Bound conversations have no OpenClaw transcript projection to rebuild
           // continuity, so keep the native thread and let Codex own compaction.
-          response = (
-            await resumeCodexAppServerThread({
-              client,
-              abandonClient: resolved.clientLease.abandon,
-              request: buildConversationThreadResumeParams({
-                threadId: resumeThreadId,
-                model: resolved.model,
-                modelProvider: resolved.modelProvider,
-                ...buildThreadRequestRuntimeOptions(resolved),
-              }),
-              timeoutMs: requestTimeoutMs,
-            })
-          ).response;
+          response = await resumeCodexAppServerThread({
+            client,
+            abandonClient: resolved.clientLease.abandon,
+            request: buildConversationThreadResumeParams({
+              threadId: resumeThreadId,
+              model: resolved.model,
+              modelProvider: resolved.modelProvider,
+              ...buildThreadRequestRuntimeOptions(resolved),
+            }),
+            timeoutMs: requestTimeoutMs,
+          });
         } else {
           response = await validateCodexThreadCreationResponse(
             resolved.clientLease,
@@ -969,7 +967,6 @@ async function prepareConversationThread(
                   ...(modelChanged
                     ? {
                         nativeContextUsage: undefined,
-                        nativeContextUsageReplayAttempted: undefined,
                         modelContextWindow: undefined,
                       }
                     : {}),

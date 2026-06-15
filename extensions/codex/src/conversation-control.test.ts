@@ -293,7 +293,6 @@ describe("codex conversation controls", () => {
       model: "gpt-5.4",
       modelProvider: "openai",
       nativeContextUsage: { currentTokens: 90_000 },
-      nativeContextUsageReplayAttempted: true,
       modelContextWindow: 258_400,
     });
     sharedClientMocks.getSharedCodexAppServerClient.mockResolvedValue({
@@ -312,7 +311,6 @@ describe("codex conversation controls", () => {
     expect(binding?.model).toBe("gpt-5.5");
     expect(binding?.modelProvider).toBeUndefined();
     expect(binding?.nativeContextUsage).toBeUndefined();
-    expect(binding?.nativeContextUsageReplayAttempted).toBeUndefined();
     expect(binding?.modelContextWindow).toBeUndefined();
     expect(cleanupMocks.unsubscribeCodexThreadBestEffort).toHaveBeenCalledWith(
       expect.anything(),

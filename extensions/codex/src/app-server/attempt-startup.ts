@@ -125,6 +125,7 @@ export async function startCodexAttemptThread(params: {
   sandboxExecServerEnabled: boolean;
   sandbox: CodexSandboxContext;
   contextEngineProjection: CodexContextEngineThreadBootstrapProjection | undefined;
+  expectedResumeThreadId?: string;
   startupTokenGuard: CodexAppServerStartupTokenGuard;
   startupTimeoutMs: number;
   signal: AbortSignal;
@@ -406,6 +407,9 @@ export async function startCodexAttemptThread(params: {
                 appServerRuntimeFingerprint,
                 contextEngineProjection: params.contextEngineProjection,
                 freshStartOnly: options.freshStartOnly,
+                expectedResumeThreadId: options.freshStartOnly
+                  ? undefined
+                  : params.expectedResumeThreadId,
                 signal,
                 reserveResumeThread: options.freshStartOnly ? undefined : reserveStartupThread,
                 startupTokenGuard: params.startupTokenGuard,

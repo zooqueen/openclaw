@@ -75,6 +75,13 @@ type RecoveredCompletion = CodexNativeSubagentCompletion & {
 type ThreadRecovery = {
   parentThreadId?: string;
   completion?: RecoveredCompletion;
+  fallbackCompletion?: RecoveredCompletion;
+  threadState: "unavailable" | "system_error" | "other";
+};
+
+type ThreadStatusRevision = {
+  value: number;
+  readers: number;
 };
 
 type TaskRecoveryCandidate = {
@@ -155,6 +162,7 @@ export class CodexNativeSubagentMonitor {
   private readonly childStates = new Map<string, ChildState>();
   private readonly childThreadIdsByAgentPath = new Map<string, string>();
   private readonly taskReconciliations = new Map<string, Promise<void>>();
+  private readonly threadStatusRevisions = new Map<string, ThreadStatusRevision>();
   private readonly recoveryPollDelaysMs: readonly number[];
   private readonly completionDeliveryRetryDelaysMs: readonly number[];
   private readonly completionDeliveryMaxAttempts: number;
@@ -306,9 +314,24 @@ export class CodexNativeSubagentMonitor {
     const state = this.resolveMirrorState(notification);
     const params = isJsonObject(notification.params) ? notification.params : undefined;
     const threadId = params ? readString(params, "threadId")?.trim() : undefined;
+    const threadStatus = isJsonObject(params?.status)
+      ? normalizeIdentifier(readString(params.status, "type"))
+      : undefined;
+    const tracksThreadStatus = Boolean(threadId && this.threadStatusRevisions.has(threadId));
+    if (
+      notification.method === "thread/status/changed" &&
+      threadId &&
+      threadStatus &&
+      tracksThreadStatus
+    ) {
+      this.threadStatusRevisions.get(threadId)!.value += 1;
+    }
     if (
       !state &&
-      (!threadId || (!this.parentStates.has(threadId) && !this.childStates.has(threadId)))
+      (!threadId ||
+        (!this.parentStates.has(threadId) &&
+          !this.childStates.has(threadId) &&
+          !tracksThreadStatus))
     ) {
       return;
     }
@@ -322,8 +345,25 @@ export class CodexNativeSubagentMonitor {
         });
       }
     }
-    this.captureChildAssistantMessage(notification);
-    await this.handleChildTurnCompletion(notification);
+    if (notification.method === "thread/status/changed" && threadId && threadStatus) {
+      const childState = this.childStates.get(threadId);
+      if (threadStatus !== "systemerror") {
+        if (childState) {
+          this.clearSystemErrorFallback(childState);
+        }
+      } else {
+        void this.reconcileChildThread(threadId)
+          .catch((error: unknown) => {
+            this.logRecoveryFailure(threadId, error);
+            return false;
+          })
+          .then((reconciled) => {
+            if (!reconciled && childState && this.childStates.get(threadId) === childState) {
+              this.scheduleRecoveryPoll(childState);
+            }
+          });
+      }
+    }
     await this.handleCompletionNotification(notification);
   }
 
@@ -453,26 +493,49 @@ export class CodexNativeSubagentMonitor {
     if (!state) {
       return false;
     }
-    const recovery = await this.readThreadRecovery(childState.childThreadId);
-    if (recovery.parentThreadId && recovery.parentThreadId !== childState.parentThreadId) {
-      embeddedAgentLog.warn("Codex native subagent parent did not match monitor state", {
-        childThreadId: childState.childThreadId,
-        expectedParentThreadId: childState.parentThreadId,
-        actualParentThreadId: recovery.parentThreadId,
-      });
-      this.unregisterChild(childState);
-      return false;
+    const statusRead = this.retainThreadStatusRevision(childState.childThreadId);
+    try {
+      const recovery = await this.readThreadRecovery(childState.childThreadId);
+      // Notification handlers run concurrently. A later status transition wins
+      // over this read so stale history cannot complete or re-arm the child.
+      if (
+        !statusRead.isCurrent() ||
+        this.childStates.get(childState.childThreadId) !== childState
+      ) {
+        return false;
+      }
+      if (recovery.parentThreadId && recovery.parentThreadId !== childState.parentThreadId) {
+        embeddedAgentLog.warn("Codex native subagent parent did not match monitor state", {
+          childThreadId: childState.childThreadId,
+          expectedParentThreadId: childState.parentThreadId,
+          actualParentThreadId: recovery.parentThreadId,
+        });
+        this.unregisterChild(childState);
+        return false;
+      }
+      if (recovery.threadState === "other") {
+        this.clearSystemErrorFallback(childState);
+      }
+      const completion = recovery.completion;
+      if (!completion) {
+        if (recovery.fallbackCompletion) {
+          this.setRecoveryFallback(
+            childState,
+            recovery.fallbackCompletion,
+            recovery.fallbackCompletion.completedAt ?? this.now(),
+          );
+        }
+        return false;
+      }
+      if (isNoFinalCompletion(completion)) {
+        this.setRecoveryFallback(childState, completion, completion.completedAt ?? this.now());
+        return false;
+      }
+      await this.processCompletion(state, childState, completion, completion.completedAt);
+      return true;
+    } finally {
+      statusRead.release();
     }
-    const completion = recovery.completion;
-    if (!completion) {
-      return false;
-    }
-    if (isNoFinalCompletion(completion)) {
-      this.setRecoveryFallback(childState, completion, completion.completedAt ?? this.now());
-      return false;
-    }
-    await this.processCompletion(state, childState, completion, completion.completedAt);
-    return true;
   }
 
   private requestThreadRead(childThreadId: string, includeTurns: boolean) {
@@ -509,12 +572,13 @@ export class CodexNativeSubagentMonitor {
     );
     const thread = isJsonObject(response.thread) ? response.thread : undefined;
     if (!thread || readString(thread, "id")?.trim() !== childThreadId) {
-      return {};
+      return { threadState: "unavailable" };
     }
     const threadStatus = isJsonObject(thread.status)
       ? normalizeIdentifier(readString(thread.status, "type"))
       : undefined;
     let completion: RecoveredCompletion | undefined;
+    let fallbackCompletion: RecoveredCompletion | undefined;
     if (threadStatus === "active") {
       completion = undefined;
     } else if (threadStatus === "systemerror") {
@@ -534,6 +598,10 @@ export class CodexNativeSubagentMonitor {
             : [];
         const latestTurn = isJsonObject(data[0]) ? data[0] : undefined;
         completion = latestTurn ? readTurnCompletion(latestTurn, childThreadId) : undefined;
+      } else {
+        // Older supported app-servers cannot merge the live turn into thread/read.
+        // Retry first, then deliver this typed failure instead of pinning the client forever.
+        fallbackCompletion = systemErrorFallbackCompletion(childThreadId);
       }
     } else {
       completion = readThreadCompletion(thread, childThreadId);
@@ -541,6 +609,9 @@ export class CodexNativeSubagentMonitor {
     return {
       parentThreadId: readThreadParentThreadId(thread),
       completion,
+      fallbackCompletion,
+      threadState:
+        threadStatus === "systemerror" ? "system_error" : threadStatus ? "other" : "unavailable",
     };
   }
 
@@ -702,6 +773,10 @@ export class CodexNativeSubagentMonitor {
         deliveringCompletion: false,
       };
       this.childStates.set(childThreadId, childState);
+      this.threadStatusRevisions.set(
+        childThreadId,
+        this.threadStatusRevisions.get(childThreadId) ?? { value: 0, readers: 0 },
+      );
     }
     this.registerAgentPath(childState, childThreadId);
     this.parentStates
@@ -748,6 +823,10 @@ export class CodexNativeSubagentMonitor {
     }
     if (this.childStates.get(childState.childThreadId) === childState) {
       this.childStates.delete(childState.childThreadId);
+    }
+    const statusRevision = this.threadStatusRevisions.get(childState.childThreadId);
+    if (statusRevision?.readers === 0) {
+      this.threadStatusRevisions.delete(childState.childThreadId);
     }
     this.releaseClientRetentionIfIdle();
     const state = this.parentStates.get(childState.parentThreadId);
@@ -861,6 +940,43 @@ export class CodexNativeSubagentMonitor {
     this.scheduleRecoveryPoll(childState);
   }
 
+  private clearSystemErrorFallback(childState: ChildState): void {
+    if (childState.fallbackCompletion?.statusLabel !== "system_error") {
+      return;
+    }
+    childState.fallbackCompletion = undefined;
+    childState.fallbackEventAt = undefined;
+  }
+
+  private retainThreadStatusRevision(threadId: string): {
+    isCurrent: () => boolean;
+    release: () => void;
+  } {
+    const revision = this.threadStatusRevisions.get(threadId) ?? { value: 0, readers: 0 };
+    this.threadStatusRevisions.set(threadId, revision);
+    revision.readers += 1;
+    const capturedValue = revision.value;
+    let retained = true;
+    return {
+      isCurrent: () =>
+        this.threadStatusRevisions.get(threadId) === revision && revision.value === capturedValue,
+      release: () => {
+        if (!retained) {
+          return;
+        }
+        retained = false;
+        revision.readers -= 1;
+        if (
+          revision.readers === 0 &&
+          !this.childStates.has(threadId) &&
+          this.threadStatusRevisions.get(threadId) === revision
+        ) {
+          this.threadStatusRevisions.delete(threadId);
+        }
+      },
+    };
+  }
+
   private clearRecoveryTimers(childState: ChildState): void {
     if (childState.recoveryTimer) {
       clearTimeout(childState.recoveryTimer);
@@ -923,50 +1039,73 @@ export class CodexNativeSubagentMonitor {
   }
 
   private async reconcileTaskCandidateOnce(candidate: TaskRecoveryCandidate): Promise<void> {
-    let recovery: ThreadRecovery;
+    const childBeforeRead = this.childStates.get(candidate.childThreadId);
+    const statusRead = this.retainThreadStatusRevision(candidate.childThreadId);
     try {
-      recovery = await this.readThreadRecovery(candidate.childThreadId);
-    } catch (error) {
-      this.logRecoveryFailure(candidate.childThreadId, error);
-      return;
+      let recovery: ThreadRecovery;
+      try {
+        recovery = await this.readThreadRecovery(candidate.childThreadId);
+      } catch (error) {
+        this.logRecoveryFailure(candidate.childThreadId, error);
+        return;
+      }
+      if (
+        !statusRead.isCurrent() ||
+        this.childStates.get(candidate.childThreadId) !== childBeforeRead
+      ) {
+        return;
+      }
+      const parentThreadId = recovery.parentThreadId;
+      if (!parentThreadId) {
+        return;
+      }
+      let state = this.parentStates.get(parentThreadId);
+      if (state && state.requesterSessionKey !== candidate.requesterSessionKey) {
+        return;
+      }
+      if (!state) {
+        // A requester-scoped task row survives Codex parent rotation. thread/read
+        // restores that old lineage; an existing foreign requester above still wins.
+        state = {
+          parentThreadId,
+          ownerCount: 0,
+          requesterSessionKey: candidate.requesterSessionKey,
+          taskRuntimeScope: candidate.taskRuntimeScope,
+          agentId: candidate.agentId,
+          taskRuntime: candidate.taskRuntime,
+        };
+        this.prepareParentTaskRuntime(state);
+        this.parentStates.set(parentThreadId, state);
+      }
+      const childState = this.registerChildThread(parentThreadId, candidate.childThreadId);
+      if (!childState) {
+        this.pruneParentIfUnused(state);
+        return;
+      }
+      if (recovery.threadState === "other") {
+        this.clearSystemErrorFallback(childState);
+      }
+      const completion = recovery.completion;
+      if (!completion) {
+        if (recovery.fallbackCompletion) {
+          this.setRecoveryFallback(
+            childState,
+            recovery.fallbackCompletion,
+            recovery.fallbackCompletion.completedAt ?? this.now(),
+          );
+          return;
+        }
+        this.scheduleRecoveryPoll(childState);
+        return;
+      }
+      if (isNoFinalCompletion(completion)) {
+        this.setRecoveryFallback(childState, completion, completion.completedAt ?? this.now());
+        return;
+      }
+      await this.processCompletion(state, childState, completion, completion.completedAt);
+    } finally {
+      statusRead.release();
     }
-    const parentThreadId = recovery.parentThreadId;
-    if (!parentThreadId) {
-      return;
-    }
-    let state = this.parentStates.get(parentThreadId);
-    if (state && state.requesterSessionKey !== candidate.requesterSessionKey) {
-      return;
-    }
-    if (!state) {
-      // A requester-scoped task row survives Codex parent rotation. thread/read
-      // restores that old lineage; an existing foreign requester above still wins.
-      state = {
-        parentThreadId,
-        ownerCount: 0,
-        requesterSessionKey: candidate.requesterSessionKey,
-        taskRuntimeScope: candidate.taskRuntimeScope,
-        agentId: candidate.agentId,
-        taskRuntime: candidate.taskRuntime,
-      };
-      this.prepareParentTaskRuntime(state);
-      this.parentStates.set(parentThreadId, state);
-    }
-    const childState = this.registerChildThread(parentThreadId, candidate.childThreadId);
-    if (!childState) {
-      this.pruneParentIfUnused(state);
-      return;
-    }
-    const completion = recovery.completion;
-    if (!completion) {
-      this.scheduleRecoveryPoll(childState);
-      return;
-    }
-    if (isNoFinalCompletion(completion)) {
-      this.setRecoveryFallback(childState, completion, completion.completedAt ?? this.now());
-      return;
-    }
-    await this.processCompletion(state, childState, completion, completion.completedAt);
   }
 
   private shouldReconcileCodexNativeTask(task: AgentHarnessTaskRecord): boolean {
@@ -1000,6 +1139,15 @@ function readThreadCompletion(
     return readTurnCompletion(turn, childThreadId);
   }
   return undefined;
+}
+
+function systemErrorFallbackCompletion(childThreadId: string): RecoveredCompletion {
+  return {
+    childThreadId,
+    status: "failed",
+    statusLabel: "system_error",
+    result: "Codex app-server reported a system error for the native subagent thread.",
+  };
 }
 
 function readTurnCompletion(

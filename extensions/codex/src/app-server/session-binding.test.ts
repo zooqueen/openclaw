@@ -249,7 +249,7 @@ describe("Codex app-server binding store", () => {
     ).resolves.toBe(false);
     await expect(
       store.mutate(first, {
-        kind: "compacted",
+        kind: "invalidate-native-context",
         threadId: "thread-1",
       }),
     ).resolves.toBe(false);
@@ -629,7 +629,7 @@ describe("Codex app-server binding store", () => {
     });
   });
 
-  it("updates the authoritative model window with post-compaction usage", async () => {
+  it("invalidates native usage without discarding the known model window", async () => {
     const { state } = createStateStore();
     const store = createCodexAppServerBindingStore(state);
     const identity = { kind: "conversation" as const, bindingId: "binding-1" };
@@ -645,16 +645,13 @@ describe("Codex app-server binding store", () => {
 
     await expect(
       store.mutate(identity, {
-        kind: "compacted",
+        kind: "invalidate-native-context",
         threadId: "thread-1",
-        nativeContextUsage: { currentTokens: 10_000 },
-        modelContextWindow: 128_000,
       }),
     ).resolves.toBe(true);
-    await expect(store.read(identity)).resolves.toMatchObject({
-      modelContextWindow: 128_000,
-      nativeContextUsage: { currentTokens: 10_000 },
-    });
+    const binding = await store.read(identity);
+    expect(binding?.modelContextWindow).toBe(258_400);
+    expect(binding).not.toHaveProperty("nativeContextUsage");
   });
 
   it("rejects stale patches and absent-only writes", async () => {

@@ -156,7 +156,6 @@ const threadBindingSchema = z.object({
   conversationStartId: optionalStringSchema,
   conversationSourceTransferComplete: z.literal(true).optional().catch(undefined),
   nativeContextUsage: nativeContextUsageSchema.optional().catch(undefined),
-  nativeContextUsageReplayAttempted: z.literal(true).optional().catch(undefined),
   historyCoveredThrough: optionalTimestampSchema,
 });
 
@@ -181,10 +180,9 @@ type CodexAppServerBindingMutation =
       patch: Partial<Omit<CodexAppServerThreadBinding, "threadId">>;
     }
   | {
-      kind: "compacted";
+      kind: "invalidate-native-context";
       threadId: string;
-      nativeContextUsage?: CodexAppServerThreadBinding["nativeContextUsage"];
-      modelContextWindow?: number;
+      invalidateContextEngineProjection?: true;
     }
   | {
       kind: "reclaim-generation";
@@ -527,7 +525,7 @@ export function createCodexAppServerBindingStore(
               ((mutation.if?.kind === "absent" && storedActive) ||
                 (current !== undefined && !ownsGeneration) ||
                 retiredGeneration)) ||
-            ((mutation.kind === "patch" || mutation.kind === "compacted") &&
+            ((mutation.kind === "patch" || mutation.kind === "invalidate-native-context") &&
               active?.binding.threadId !== mutation.threadId) ||
             (mutation.kind === "clear" &&
               ((mutation.threadId !== undefined &&
@@ -562,11 +560,9 @@ export function createCodexAppServerBindingStore(
           } else {
             binding = stripUndefinedBinding({
               ...active!.binding,
-              nativeContextUsage: mutation.nativeContextUsage,
-              ...(mutation.modelContextWindow !== undefined
-                ? { modelContextWindow: mutation.modelContextWindow }
-                : {}),
-              ...(active!.binding.contextEngine?.projection
+              nativeContextUsage: undefined,
+              ...(mutation.invalidateContextEngineProjection &&
+              active!.binding.contextEngine?.projection
                 ? {
                     contextEngine: {
                       ...active!.binding.contextEngine,

@@ -221,10 +221,7 @@ import {
   type CodexAppServerClientLease,
   type CodexAppServerClientLeaseFactory,
 } from "./shared-client.js";
-import {
-  estimateCodexAppServerProjectedTurnTokens,
-  rotateOversizedCodexAppServerStartupBinding,
-} from "./startup-binding.js";
+import { estimateCodexAppServerProjectedTurnTokens } from "./startup-binding.js";
 import {
   buildDeveloperInstructions,
   buildContextEngineBinding,
@@ -455,7 +452,7 @@ export async function runCodexAppServerAttempt(
     : undefined;
   const isInactiveThreadBootstrapBinding = (binding: CodexAppServerThreadBinding | undefined) =>
     !activeContextEngine && binding?.contextEngine?.projection?.mode === "thread_bootstrap";
-  let startupBinding = await bindingStore.read(bindingIdentity);
+  const startupBinding = await bindingStore.read(bindingIdentity);
   preDynamicStartupStages.mark("read-binding");
   const startupAuthProfileCandidate =
     params.runtimePlan?.auth.forwardedAuthProfileId ??
@@ -808,7 +805,6 @@ export async function runCodexAppServerAttempt(
   let activeContextEngineProjectedPromptText: string | undefined;
   let activeContextEngineProjectionApplied = false;
   let precomputedStaleBindingContinuityProjectionApplied = false;
-  let staleBindingContinuityForcedFreshStart = false;
   let inactiveThreadBootstrapBindingForcedFreshStart = false;
   const applyFreshThreadContinuityProjection = () => {
     const projection = projectContextEngineAssemblyForCodex({
@@ -1123,7 +1119,6 @@ export async function runCodexAppServerAttempt(
     binding: CodexAppServerThreadBinding | undefined,
   ) => {
     precomputedStaleBindingContinuityProjectionApplied = false;
-    staleBindingContinuityForcedFreshStart = false;
     if (activeContextEngine || !binding?.threadId) {
       return false;
     }
@@ -1143,9 +1138,6 @@ export async function runCodexAppServerAttempt(
       return false;
     }
     if (action === "resumed" && precomputedStaleBindingContinuityProjectionApplied) {
-      return true;
-    }
-    if (action === "started" && staleBindingContinuityForcedFreshStart) {
       return true;
     }
     if (action === "started" && inactiveThreadBootstrapBindingForcedFreshStart) {
@@ -1173,41 +1165,6 @@ export async function runCodexAppServerAttempt(
       developerInstructions: buildRenderedCodexDeveloperInstructions(),
     }),
   });
-  const rotateStartupBindingForProjectedTurn = async () => {
-    if (!startupBinding?.threadId) {
-      return;
-    }
-    const previousThreadId = startupBinding.threadId;
-    const hadInactiveThreadBootstrapBinding = isInactiveThreadBootstrapBinding(startupBinding);
-    const startupTokenGuard = buildStartupTokenGuard();
-    startupBinding = await rotateOversizedCodexAppServerStartupBinding({
-      binding: startupBinding,
-      bindingIdentity,
-      bindingStore,
-      config: params.config,
-      ...startupTokenGuard,
-    });
-    if (startupBinding?.threadId) {
-      return;
-    }
-    inactiveThreadBootstrapBindingForcedFreshStart = hadInactiveThreadBootstrapBinding;
-    staleBindingContinuityForcedFreshStart =
-      precomputedStaleBindingContinuityProjectionApplied &&
-      !inactiveThreadBootstrapBindingForcedFreshStart;
-    if (activeContextEngine && activeContextEngineProjectedPromptText !== undefined) {
-      promptText = activeContextEngineProjectedPromptText;
-      activeContextEngineProjectionApplied = true;
-    }
-    await rebuildCodexPromptBuildFromCurrentProjection();
-    embeddedAgentLog.info("codex app-server rebuilt turn prompt after native thread rotation", {
-      sessionId: params.sessionId,
-      sessionKey: contextSessionKey,
-      previousThreadId,
-      promptChars: codexTurnPromptText.length,
-      developerInstructionChars: buildRenderedCodexDeveloperInstructions()?.length ?? 0,
-    });
-  };
-  await rotateStartupBindingForProjectedTurn();
   const systemPromptReport = buildCodexSystemPromptReport({
     attempt: params,
     sessionKey: contextSessionKey,
@@ -1433,6 +1390,7 @@ export async function runCodexAppServerAttempt(
       sandboxExecServerEnabled,
       sandbox,
       contextEngineProjection,
+      expectedResumeThreadId: startupBinding?.threadId,
       startupTokenGuard: buildStartupTokenGuard(),
       startupTimeoutMs,
       signal: runAbortController.signal,
@@ -1859,10 +1817,9 @@ export async function runCodexAppServerAttempt(
       }
       try {
         await bindingStore.mutate(bindingIdentity, {
-          kind: "compacted",
+          kind: "invalidate-native-context",
           threadId: thread.threadId,
-          nativeContextUsage: latestNativeContextUsage,
-          modelContextWindow: latestModelContextWindow,
+          invalidateContextEngineProjection: true,
         });
       } catch (error) {
         embeddedAgentLog.warn("failed to persist codex app-server compaction state", {
@@ -2342,6 +2299,29 @@ export async function runCodexAppServerAttempt(
     throw error;
   };
   let rateLimitsRevisionBeforeLastTurnStart: number | undefined;
+  const invalidateThreadNativeContextUsage = async (): Promise<void> => {
+    // A usage snapshot is authoritative only between terminal turns. Absence
+    // deliberately skips the startup fuse until a later turn reports fresh usage.
+    if (!thread.lifecycle.transient) {
+      const invalidatedUsage = await bindingStore.mutate(bindingIdentity, {
+        kind: "patch",
+        threadId: thread.threadId,
+        patch: {
+          nativeContextUsage: undefined,
+        },
+      });
+      if (!invalidatedUsage) {
+        throw new Error(
+          `Codex thread binding changed before native usage invalidation: ${thread.threadId}`,
+        );
+      }
+    }
+    latestNativeContextUsage = undefined;
+    thread = {
+      ...thread,
+      nativeContextUsage: undefined,
+    };
+  };
   const startCodexTurn = async (): Promise<CodexTurnStartResponse> => {
     const activeTurnRoute = await ensureCurrentThreadRoute();
     const clientLease = sharedClientLease;
@@ -2364,6 +2344,7 @@ export async function runCodexAppServerAttempt(
       heartbeatCollaborationInstructions:
         workspaceBootstrapContext.heartbeatCollaborationInstructions,
     });
+    await invalidateThreadNativeContextUsage();
     codexModelCallDiagnostics.setRequestPayloadBytes(utf8JsonByteLength(turnStartParams));
     // Before this point, requests from a resumed native turn flow through and
     // fail closed. Arm only when Codex may issue requests for our new turn.
@@ -2513,6 +2494,7 @@ export async function runCodexAppServerAttempt(
         threadId: thread.threadId,
       },
     });
+    await invalidateThreadNativeContextUsage();
     const nativeTurnCompleted = await waitForActiveNativeTurnCompletion();
     if (nativeTurnCompleted) {
       await turnRoute?.drain();
@@ -2615,16 +2597,6 @@ export async function runCodexAppServerAttempt(
       }
     }
     if (turn === undefined) {
-      if (latestNativeContextUsage) {
-        await patchCodexAppServerBindingAfterTurn({
-          bindingIdentity,
-          bindingStore,
-          threadId: thread.threadId,
-          coverHistory: false,
-          nativeContextUsage: latestNativeContextUsage,
-          modelContextWindow: latestModelContextWindow,
-        });
-      }
       const usageLimitError = await formatCodexTurnStartUsageLimitError({
         client,
         error: turnStartError,
@@ -3068,7 +3040,7 @@ export async function runCodexAppServerAttempt(
       !runAbortController.signal.aborted &&
       !finalAborted &&
       !finalPromptError;
-    if (shouldDelayNativeHookRelayUnregister || latestNativeContextUsage) {
+    if (!thread.lifecycle.transient && completedTurnStatus !== undefined) {
       await patchCodexAppServerBindingAfterTurn({
         bindingIdentity,
         bindingStore,
@@ -3205,13 +3177,9 @@ async function patchCodexAppServerBindingAfterTurn(params: {
     threadId: params.threadId,
     patch: {
       ...(params.coverHistory ? { historyCoveredThrough: new Date().toISOString() } : {}),
-      ...(params.nativeContextUsage
-        ? {
-            nativeContextUsage: params.nativeContextUsage,
-            ...(params.modelContextWindow !== undefined
-              ? { modelContextWindow: params.modelContextWindow }
-              : {}),
-          }
+      nativeContextUsage: params.nativeContextUsage,
+      ...(params.nativeContextUsage && params.modelContextWindow !== undefined
+        ? { modelContextWindow: params.modelContextWindow }
         : {}),
     },
   });

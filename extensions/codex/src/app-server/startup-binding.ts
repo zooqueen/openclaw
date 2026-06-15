@@ -1,14 +1,10 @@
-/** Rotates Codex threads from persisted app-server usage, without polling rollout files. */
+/** Decides whether a terminal Codex usage snapshot leaves room for the next turn. */
 import {
   embeddedAgentLog,
   type EmbeddedRunAttemptParams,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { isJsonObject } from "./protocol.js";
-import type {
-  CodexAppServerBindingIdentity,
-  CodexAppServerBindingStore,
-  CodexAppServerThreadBinding,
-} from "./session-binding.js";
+import type { CodexAppServerThreadBinding } from "./session-binding.js";
 
 const DEFAULT_NATIVE_THREAD_MAX_TOKENS = 300_000;
 const DEFAULT_NATIVE_THREAD_RESERVE_TOKENS = 20_000;
@@ -79,96 +75,40 @@ function minPositive(values: Array<number | undefined>): number | undefined {
   return present.length > 0 ? Math.min(...present) : undefined;
 }
 
-async function rotateCodexAppServerStartupBinding(params: {
-  binding: CodexAppServerThreadBinding;
-  bindingIdentity: CodexAppServerBindingIdentity;
-  bindingStore: CodexAppServerBindingStore;
-  message: string;
-  details?: Record<string, unknown>;
-}): Promise<undefined> {
-  const cleared = await params.bindingStore.mutate(params.bindingIdentity, {
-    kind: "clear",
-    threadId: params.binding.threadId,
-  });
-  if (!cleared) {
-    throw new Error(`Codex thread binding changed while rotating ${params.binding.threadId}`);
-  }
-  embeddedAgentLog.warn(params.message, {
-    threadId: params.binding.threadId,
-    ...params.details,
-  });
-  return undefined;
-}
-
-/** Clears a binding when the last app-server usage snapshot leaves too little turn headroom. */
-export async function rotateOversizedCodexAppServerStartupBinding(params: {
+/** Returns true when the last terminal usage snapshot leaves too little turn headroom. */
+export function shouldRotateCodexAppServerStartupBinding(params: {
   binding: CodexAppServerThreadBinding | undefined;
-  bindingIdentity: CodexAppServerBindingIdentity;
-  bindingStore: CodexAppServerBindingStore;
   config: EmbeddedRunAttemptParams["config"] | undefined;
   contextWindowTokens?: number;
   projectedTurnTokens?: number;
-  refreshedNativeContextUsage?: {
-    currentTokens: number;
-    modelContextWindow?: number;
-  };
-}): Promise<CodexAppServerThreadBinding | undefined> {
-  const expectedBinding = params.binding;
-  if (!expectedBinding?.threadId) {
-    return expectedBinding;
+}): boolean {
+  const binding = params.binding;
+  const currentTokens = binding?.nativeContextUsage?.currentTokens;
+  if (!binding?.threadId || currentTokens === undefined) {
+    return false;
   }
-  return await params.bindingStore.withLease(params.bindingIdentity, async () => {
-    const currentBinding = await params.bindingStore.read(params.bindingIdentity);
-    if (!currentBinding) {
-      // A concurrent reset already completed the rotation. Continue on the
-      // canonical empty state instead of reviving or rejecting its stale thread.
-      return undefined;
-    }
-    if (currentBinding.threadId !== expectedBinding.threadId) {
-      throw new Error(`Codex thread binding changed while rotating ${expectedBinding.threadId}`);
-    }
-    const refreshedUsage = params.refreshedNativeContextUsage;
-    const binding = refreshedUsage
-      ? {
-          ...currentBinding,
-          nativeContextUsage: { currentTokens: refreshedUsage.currentTokens },
-          ...(refreshedUsage.modelContextWindow !== undefined
-            ? { modelContextWindow: refreshedUsage.modelContextWindow }
-            : {}),
-        }
-      : currentBinding;
-    const usage = binding.nativeContextUsage;
-    if (!usage) {
-      return binding;
-    }
-    const modelContextWindow = minPositive([
-      binding.modelContextWindow,
-      params.contextWindowTokens,
-    ]);
-    const reserveTokens = resolveNativeThreadReserveTokens(params.config);
-    const maxTokens = resolveNativeThreadTokenFuse({
+  const modelContextWindow = minPositive([binding.modelContextWindow, params.contextWindowTokens]);
+  const reserveTokens = resolveNativeThreadReserveTokens(params.config);
+  const maxTokens = resolveNativeThreadTokenFuse({
+    modelContextWindow,
+    reserveTokens,
+    projectedTurnTokens: params.projectedTurnTokens,
+  });
+  if (currentTokens < maxTokens) {
+    return false;
+  }
+  embeddedAgentLog.warn(
+    "codex app-server thread usage left too little prompt headroom; starting a fresh thread",
+    {
+      threadId: binding.threadId,
+      currentTokens,
+      maxTokens,
       modelContextWindow,
       reserveTokens,
       projectedTurnTokens: params.projectedTurnTokens,
-    });
-    if (usage.currentTokens < maxTokens) {
-      return binding;
-    }
-    return await rotateCodexAppServerStartupBinding({
-      binding,
-      bindingIdentity: params.bindingIdentity,
-      bindingStore: params.bindingStore,
-      message:
-        "codex app-server thread usage left too little prompt headroom; starting a fresh thread",
-      details: {
-        currentTokens: usage.currentTokens,
-        maxTokens,
-        modelContextWindow,
-        reserveTokens,
-        projectedTurnTokens: params.projectedTurnTokens,
-      },
-    });
-  });
+    },
+  );
+  return true;
 }
 
 export const testing = {

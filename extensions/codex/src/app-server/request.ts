@@ -109,18 +109,16 @@ export async function requestCodexAppServerJson<T = JsonValue | undefined>(param
       let response: T;
       if (params.method === "thread/resume" && requestedThreadId) {
         subscribedThreadId = requestedThreadId;
-        response = (
-          await resumeCodexAppServerThread({
-            client,
-            abandonClient: clientLease
-              ? clientLease.abandon
-              : async () =>
-                  await client.closeAndWait({ exitTimeoutMs: 2_000, forceKillDelayMs: 250 }),
-            request: params.requestParams as CodexThreadResumeParams,
-            timeoutMs: requestTimeoutMs,
-            signal: abortController.signal,
-          })
-        ).response as T;
+        response = (await resumeCodexAppServerThread({
+          client,
+          abandonClient: clientLease
+            ? clientLease.abandon
+            : async () =>
+                await client.closeAndWait({ exitTimeoutMs: 2_000, forceKillDelayMs: 250 }),
+          request: params.requestParams as CodexThreadResumeParams,
+          timeoutMs: requestTimeoutMs,
+          signal: abortController.signal,
+        })) as T;
       } else {
         response = await client.request<T>(params.method, params.requestParams, {
           timeoutMs: requestTimeoutMs,

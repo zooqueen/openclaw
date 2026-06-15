@@ -174,7 +174,6 @@ export async function setCodexConversationModel(params: {
         ...(modelChanged
           ? {
               nativeContextUsage: undefined,
-              nativeContextUsageReplayAttempted: undefined,
               modelContextWindow: undefined,
             }
           : {}),
@@ -322,24 +321,22 @@ async function resumeThreadWithOverrides(params: {
   const client = clientLease.client;
   let abandonClient = false;
   try {
-    return (
-      await resumeCodexAppServerThread({
-        client,
-        abandonClient: clientLease.abandon,
-        request: {
-          threadId: params.threadId,
-          ...(params.model ? { model: params.model } : {}),
-          ...(params.modelProvider ? { modelProvider: params.modelProvider } : {}),
-          approvalPolicy: params.approvalPolicy ?? runtime.approvalPolicy,
-          sandbox: params.sandbox ?? runtime.sandbox,
-          approvalsReviewer: runtime.approvalsReviewer,
-          ...(params.serviceTier ? { serviceTier: params.serviceTier } : {}),
-          excludeTurns: true,
-          persistExtendedHistory: true,
-        },
-        timeoutMs: runtime.requestTimeoutMs,
-      })
-    ).response;
+    return await resumeCodexAppServerThread({
+      client,
+      abandonClient: clientLease.abandon,
+      request: {
+        threadId: params.threadId,
+        ...(params.model ? { model: params.model } : {}),
+        ...(params.modelProvider ? { modelProvider: params.modelProvider } : {}),
+        approvalPolicy: params.approvalPolicy ?? runtime.approvalPolicy,
+        sandbox: params.sandbox ?? runtime.sandbox,
+        approvalsReviewer: runtime.approvalsReviewer,
+        ...(params.serviceTier ? { serviceTier: params.serviceTier } : {}),
+        excludeTurns: true,
+        persistExtendedHistory: true,
+      },
+      timeoutMs: runtime.requestTimeoutMs,
+    });
   } catch (error) {
     abandonClient = isCodexAppServerUnsafeSubscriptionError(error);
     throw error;

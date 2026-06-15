@@ -65,7 +65,7 @@ import {
   type CodexAppServerThreadBinding,
 } from "./session-binding.js";
 import {
-  rotateOversizedCodexAppServerStartupBinding,
+  shouldRotateCodexAppServerStartupBinding,
   type CodexAppServerStartupTokenGuard,
 } from "./startup-binding.js";
 import { resumeCodexAppServerThread } from "./thread-resume.js";
@@ -93,10 +93,13 @@ class CodexThreadBindingConflictError extends Error {
   }
 }
 
-class CodexThreadRotatedAfterUsageRefreshError extends Error {
-  constructor(readonly threadId: string) {
-    super(`Codex thread usage requires rotation after resume: ${threadId}`);
-    this.name = "CodexThreadRotatedAfterUsageRefreshError";
+class CodexThreadRestartAfterResumeError extends Error {
+  constructor(
+    readonly threadId: string,
+    readonly reason: "model_changed" | "usage_limit",
+  ) {
+    super(`Codex thread requires restart after resume: ${threadId} (${reason})`);
+    this.name = "CodexThreadRestartAfterResumeError";
   }
 }
 
@@ -321,6 +324,7 @@ export async function startOrResumeThread(params: {
   pluginThreadConfig?: CodexPluginThreadConfigProvider;
   contextEngineProjection?: CodexContextEngineThreadBootstrapProjection;
   freshStartOnly?: boolean;
+  expectedResumeThreadId?: string;
   reserveResumeThread?: (threadId: string) => CodexThreadResumeReservation;
   startupTokenGuard?: CodexAppServerStartupTokenGuard;
   signal?: AbortSignal;
@@ -381,6 +385,14 @@ export async function startOrResumeThread(params: {
     if (params.freshStartOnly && binding?.threadId) {
       throw new CodexThreadBindingConflictError(binding.threadId, "starting a replacement thread");
     }
+    if (
+      params.expectedResumeThreadId !== undefined &&
+      binding?.threadId !== params.expectedResumeThreadId
+    ) {
+      throw new Error(
+        `Codex thread binding changed during startup: expected ${params.expectedResumeThreadId}`,
+      );
+    }
     let startModelProvider: string | undefined;
     if (binding?.threadId) {
       const authProfileId = params.params.authProfileId ?? binding.authProfileId;
@@ -418,6 +430,17 @@ export async function startOrResumeThread(params: {
       error.name = "AbortError";
       throw error;
     };
+    const normalizeBindingModelProvider = (
+      authProfileId: string | undefined,
+      modelProvider: string | undefined,
+    ) =>
+      normalizeCodexAppServerBindingModelProvider({
+        authProfileId,
+        modelProvider,
+        authProfileStore: params.params.authProfileStore,
+        agentDir: params.params.agentDir,
+        config: params.params.config,
+      });
     const clearCurrentBinding = async (operation: string) => {
       const current = binding;
       if (!current?.threadId) {
@@ -441,6 +464,39 @@ export async function startOrResumeThread(params: {
       );
       preserveExistingBinding = true;
       binding = undefined;
+    }
+    if (binding?.threadId) {
+      const authProfileId = params.params.authProfileId ?? binding.authProfileId;
+      const requestedModel = resolveCodexAppServerRequestModelSelection({
+        model: params.params.modelId,
+        modelProvider: startModelProvider,
+        authProfileId,
+        authProfileStore: params.params.authProfileStore,
+        agentDir: params.params.agentDir,
+        config: params.params.config,
+      });
+      const requestedModelProvider = normalizeBindingModelProvider(
+        authProfileId,
+        requestedModel.modelProvider,
+      );
+      const boundModelProvider = normalizeBindingModelProvider(
+        authProfileId,
+        binding.modelProvider,
+      );
+      const hasKnownBoundModel = Boolean(binding.model?.trim());
+      if (
+        hasKnownBoundModel &&
+        (requestedModel.model !== binding.model || requestedModelProvider !== boundModelProvider)
+      ) {
+        embeddedAgentLog.debug("codex app-server model changed; starting a new thread", {
+          threadId: binding.threadId,
+          model: requestedModel.model,
+          modelProvider: requestedModelProvider,
+          previousModel: binding.model,
+          previousModelProvider: binding.modelProvider,
+        });
+        await clearCurrentBinding("rotating model selection");
+      }
     }
     if (binding?.threadId && (binding.contextEngine || contextEngineBinding)) {
       if (
@@ -613,82 +669,55 @@ export async function startOrResumeThread(params: {
         throwIfAborted();
         const resumeReservation = params.reserveResumeThread?.(resumedBinding.threadId);
         try {
-          const refreshNativeContextUsage =
-            !resumedBinding.nativeContextUsage &&
-            resumedBinding.nativeContextUsageReplayAttempted !== true;
-          const resumeResult = await lifecycleTiming.measure("thread-resume-request", () =>
+          const response = await lifecycleTiming.measure("thread-resume-request", () =>
             resumeCodexAppServerThread({
               client: params.client,
               abandonClient: params.abandonClient,
               request: resumeParams,
               signal: params.signal,
-              refreshNativeContextUsage,
             }),
           );
-          const response = resumeResult.response;
           throwIfAborted();
-          const refreshedUsage = resumeResult.nativeContextUsage;
-          if (refreshedUsage && params.startupTokenGuard) {
-            const guardedBinding = {
-              ...resumedBinding,
-              nativeContextUsage: { currentTokens: refreshedUsage.currentTokens },
-              ...(refreshedUsage.modelContextWindow !== undefined
-                ? { modelContextWindow: refreshedUsage.modelContextWindow }
-                : {}),
-            };
-            const retained = await rotateOversizedCodexAppServerStartupBinding({
-              binding: guardedBinding,
-              bindingIdentity,
-              bindingStore: params.bindingStore,
+          const hasActiveTurn = response.thread.status?.type === "active";
+          const shouldRotateForStartupUsage =
+            params.startupTokenGuard &&
+            shouldRotateCodexAppServerStartupBinding({
+              binding: resumedBinding,
               config: params.params.config,
               ...params.startupTokenGuard,
-              refreshedNativeContextUsage: refreshedUsage,
             });
-            if (!retained) {
-              throw new CodexThreadRotatedAfterUsageRefreshError(resumedBinding.threadId);
-            }
+          // Unknown usage preserves resume/compaction continuity; an
+          // authoritative over-fuse snapshot rotates even when native work is active.
+          if (shouldRotateForStartupUsage) {
+            await clearCurrentBinding("rotating native context usage");
+            throw new CodexThreadRestartAfterResumeError(resumedBinding.threadId, "usage_limit");
           }
           const boundAuthProfileId = authProfileId;
+          const resumedModel = response.model;
+          const resumedModelProvider = normalizeBindingModelProvider(
+            boundAuthProfileId,
+            response.modelProvider,
+          );
+          const boundModelProvider = normalizeBindingModelProvider(
+            boundAuthProfileId,
+            resumedBinding.modelProvider,
+          );
+          const modelChanged =
+            Boolean(resumedBinding.model?.trim()) &&
+            (resumedModel !== resumedBinding.model || resumedModelProvider !== boundModelProvider);
+          if (modelChanged) {
+            await clearCurrentBinding("rotating an unexpected resumed model");
+            throw new CodexThreadRestartAfterResumeError(resumedBinding.threadId, "model_changed");
+          }
           const nextMcpServersFingerprint =
             params.mcpServersFingerprintEvaluated === true
               ? params.mcpServersFingerprint
               : resumedBinding.mcpServersFingerprint;
-          const resumedModel = response.model;
-          const resumedModelProvider = normalizeCodexAppServerBindingModelProvider({
-            authProfileId: boundAuthProfileId,
-            modelProvider: response.modelProvider,
-            authProfileStore: params.params.authProfileStore,
-            agentDir: params.params.agentDir,
-            config: params.params.config,
-          });
-          const modelChanged =
-            resumedModel !== resumedBinding.model ||
-            resumedModelProvider !== resumedBinding.modelProvider;
-          const refreshedUsagePatch = refreshedUsage
-            ? {
-                nativeContextUsage: { currentTokens: refreshedUsage.currentTokens },
-                ...(refreshedUsage.modelContextWindow !== undefined
-                  ? { modelContextWindow: refreshedUsage.modelContextWindow }
-                  : {}),
-              }
-            : {};
           const resumePatch = {
             cwd: params.cwd,
             authProfileId: boundAuthProfileId,
             model: resumedModel,
             modelProvider: resumedModelProvider,
-            ...(modelChanged
-              ? {
-                  // Usage is model-scoped. Clearing its snapshot must also
-                  // reopen the one-shot resume replay for the new model.
-                  nativeContextUsage: undefined,
-                  nativeContextUsageReplayAttempted: undefined,
-                  modelContextWindow: undefined,
-                }
-              : refreshedUsagePatch),
-            ...(refreshNativeContextUsage && !modelChanged
-              ? { nativeContextUsageReplayAttempted: true }
-              : {}),
             dynamicToolsFingerprint,
             dynamicToolsContainDeferred,
             userMcpServersFingerprint,
@@ -740,7 +769,6 @@ export async function startOrResumeThread(params: {
           });
           // excludeTurns keeps live thread status while omitting history, which is
           // enough to serialize our next turn behind native compact/review work.
-          const hasActiveTurn = response.thread.status?.type === "active";
           return {
             ...committedBinding,
             lifecycle: {
@@ -768,12 +796,12 @@ export async function startOrResumeThread(params: {
               { cause: error },
             );
           }
-          if (error instanceof CodexThreadRotatedAfterUsageRefreshError) {
+          if (error instanceof CodexThreadRestartAfterResumeError) {
             binding = undefined;
-            embeddedAgentLog.info(
-              "codex app-server refreshed native usage and rotated the startup thread",
-              { threadId: error.threadId },
-            );
+            embeddedAgentLog.info("codex app-server rotated the startup thread after resume", {
+              threadId: error.threadId,
+              reason: error.reason,
+            });
           } else if (
             error instanceof CodexThreadBindingConflictError ||
             isCodexAppServerConnectionClosedError(error) ||
@@ -838,13 +866,10 @@ export async function startOrResumeThread(params: {
       const startedContextEngineBinding = contextEngineBinding?.projection
         ? { ...contextEngineBinding, projection: undefined }
         : contextEngineBinding;
-      const startedModelProvider = normalizeCodexAppServerBindingModelProvider({
-        authProfileId: params.params.authProfileId,
-        modelProvider: response.modelProvider,
-        authProfileStore: params.params.authProfileStore,
-        agentDir: params.params.agentDir,
-        config: params.params.config,
-      });
+      const startedModelProvider = normalizeBindingModelProvider(
+        params.params.authProfileId,
+        response.modelProvider,
+      );
       const nextBinding: CodexAppServerThreadBinding = {
         threadId: response.thread.id,
         cwd: params.cwd,

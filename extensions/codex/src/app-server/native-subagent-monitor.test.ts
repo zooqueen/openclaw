@@ -919,6 +919,30 @@ describe("CodexNativeSubagentMonitor", () => {
     }
   });
 
+  it("keeps a typed no-final fallback across completed history reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createClient();
+      client.setThreadRead("child-thread", threadRead({ status: "completed" }));
+      const runtime = createRuntime();
+      const monitor = new CodexNativeSubagentMonitor(client as never, runtime, {
+        recoveryPollDelaysMs: [10],
+      });
+      registerParent(monitor);
+      await notifyChildStarted(client);
+
+      await client.notify(nativeCompletionNotification({ result: null }));
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(runtime.deliverAgentHarnessTaskCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({ statusLabel: "completed_without_final_message" }),
+      );
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("recovers failed child turns and their app-server error", async () => {
     const client = createClient();
     client.setThreadRead(
@@ -1036,30 +1060,147 @@ describe("CodexNativeSubagentMonitor", () => {
     client.close();
   });
 
-  it("does not trust stale system-error history from older custom app-servers", async () => {
-    const client = createClient({ serverVersion: "0.125.0" });
-    client.setThreadRead(
-      "child-thread",
-      threadRead({
-        threadStatus: "systemError",
-        status: "failed",
-        error: "possibly stale failure",
-      }),
-    );
-    const runtime = createRuntime();
-    const monitor = new CodexNativeSubagentMonitor(client as never, runtime);
-    registerParent(monitor);
-    await notifyChildStarted(client);
+  it("delivers a bounded system-error fallback on older supported app-servers", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createClient({ serverVersion: "0.125.0" });
+      client.setThreadRead(
+        "child-thread",
+        threadRead({
+          threadStatus: "systemError",
+          status: "failed",
+          error: "possibly stale failure",
+        }),
+      );
+      const runtime = createRuntime();
+      const releaseClient = vi.fn();
+      const monitor = new CodexNativeSubagentMonitor(client as never, runtime, {
+        recoveryPollDelaysMs: [10],
+        retainClient: () => releaseClient,
+      });
+      registerParent(monitor);
+      await notifyChildStarted(client);
 
-    await expect(monitor.reconcileChildThread("child-thread")).resolves.toBe(false);
+      await client.notify({
+        method: "thread/status/changed",
+        params: { threadId: "child-thread", status: { type: "systemError" } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
 
-    expect(client.request).not.toHaveBeenCalledWith(
-      "thread/turns/list",
-      expect.anything(),
-      expect.anything(),
-    );
-    expect(runtime.deliverAgentHarnessTaskCompletion).not.toHaveBeenCalled();
-    client.close();
+      expect(client.request).toHaveBeenCalledWith(
+        "thread/read",
+        expect.objectContaining({ threadId: "child-thread" }),
+        expect.anything(),
+      );
+      expect(runtime.deliverAgentHarnessTaskCompletion).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(client.request).not.toHaveBeenCalledWith(
+        "thread/turns/list",
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(runtime.deliverAgentHarnessTaskCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+          result: "Codex app-server reported a system error for the native subagent thread.",
+        }),
+      );
+      expect(releaseClient).toHaveBeenCalledTimes(1);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels an older-server system-error fallback when recovery sees an active child", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createClient({ serverVersion: "0.125.0" });
+      client.setThreadRead(
+        "child-thread",
+        threadRead({ threadStatus: "systemError", status: "failed" }),
+      );
+      const runtime = createRuntime();
+      const releaseClient = vi.fn();
+      const monitor = new CodexNativeSubagentMonitor(client as never, runtime, {
+        recoveryPollDelaysMs: [10],
+        retainClient: () => releaseClient,
+      });
+      registerParent(monitor);
+      await notifyChildStarted(client);
+
+      await client.notify({
+        method: "thread/status/changed",
+        params: { threadId: "child-thread", status: { type: "systemError" } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      client.setThreadRead(
+        "child-thread",
+        threadRead({ threadStatus: "active", status: "inProgress" }),
+      );
+      await vi.advanceTimersByTimeAsync(30);
+
+      expect(runtime.deliverAgentHarnessTaskCompletion).not.toHaveBeenCalled();
+      expect(releaseClient).not.toHaveBeenCalled();
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not re-arm an older-server fallback from a stale system-error read", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createClient({ serverVersion: "0.125.0" });
+      let resolveStaleRead!: (value: CodexThreadReadResponse) => void;
+      const staleRead = new Promise<CodexThreadReadResponse>((resolve) => {
+        resolveStaleRead = resolve;
+      });
+      let readCount = 0;
+      client.setThreadReadFactory("child-thread", async () => {
+        readCount += 1;
+        return readCount === 1
+          ? await staleRead
+          : threadRead({ threadStatus: "active", status: "inProgress" });
+      });
+      const runtime = createRuntime();
+      const releaseClient = vi.fn();
+      const monitor = new CodexNativeSubagentMonitor(client as never, runtime, {
+        recoveryPollDelaysMs: [10],
+        retainClient: () => releaseClient,
+      });
+      registerParent(monitor);
+      await notifyChildStarted(client);
+
+      await client.notify({
+        method: "thread/status/changed",
+        params: { threadId: "child-thread", status: { type: "systemError" } },
+      });
+      await Promise.resolve();
+      expect(client.request).toHaveBeenCalledWith(
+        "thread/read",
+        expect.objectContaining({ threadId: "child-thread" }),
+        expect.anything(),
+      );
+
+      await client.notify({
+        method: "thread/status/changed",
+        params: { threadId: "child-thread", status: { type: "active", activeFlags: [] } },
+      });
+      resolveStaleRead(
+        threadRead({ threadStatus: "systemError", status: "failed", error: "stale failure" }),
+      );
+      await vi.advanceTimersByTimeAsync(30);
+
+      expect(runtime.deliverAgentHarnessTaskCompletion).not.toHaveBeenCalled();
+      expect(releaseClient).not.toHaveBeenCalled();
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("recovers the final answer instead of later commentary", async () => {
@@ -1401,6 +1542,35 @@ describe("CodexNativeSubagentMonitor", () => {
     expect(runtime.deliverAgentHarnessTaskCompletion).toHaveBeenCalledTimes(1);
     first.unregister();
     second.unregister();
+    client.close();
+  });
+
+  it("discards stale task-row history when the child becomes active during the read", async () => {
+    const client = createClient({ serverVersion: "0.125.0" });
+    let resolveRead!: (value: CodexThreadReadResponse) => void;
+    const pendingRead = new Promise<CodexThreadReadResponse>((resolve) => {
+      resolveRead = resolve;
+    });
+    client.setThreadReadFactory("child-thread", async () => await pendingRead);
+    const runtime = createRuntime();
+    runtime.listTaskRecords.mockReturnValue([taskRecord({ childThreadId: "child-thread" })]);
+    const monitor = new CodexNativeSubagentMonitor(client as never, runtime, {
+      recoveryPollDelaysMs: [],
+    });
+    registerParent(monitor);
+    await vi.waitFor(() => expect(client.request).toHaveBeenCalledTimes(1));
+
+    await notifyChildStarted(client);
+    await client.notify({
+      method: "thread/status/changed",
+      params: { threadId: "child-thread", status: { type: "active", activeFlags: [] } },
+    });
+    resolveRead(threadRead({ result: "stale completed result" }));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+
+    expect(runtime.deliverAgentHarnessTaskCompletion).not.toHaveBeenCalled();
     client.close();
   });
 

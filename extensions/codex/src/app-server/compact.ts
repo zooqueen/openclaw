@@ -137,40 +137,39 @@ export async function requestCodexNativeTurnForBinding(
       let resumed;
       try {
         subscribedThreadId = currentBinding.threadId;
-        resumed = (
-          await resumeCodexAppServerThread({
-            client,
-            abandonClient: clientLease.abandon,
-            request: {
-              threadId: currentBinding.threadId,
-              excludeTurns: true,
-              persistExtendedHistory: true,
-            },
-            timeoutMs: requestTimeoutMs,
-            signal: params.abortSignal,
-          })
-        ).response;
+        resumed = await resumeCodexAppServerThread({
+          client,
+          abandonClient: clientLease.abandon,
+          request: {
+            threadId: currentBinding.threadId,
+            excludeTurns: true,
+            persistExtendedHistory: true,
+          },
+          timeoutMs: requestTimeoutMs,
+          signal: params.abortSignal,
+        });
       } catch (error) {
         abandonClient = isCodexAppServerUnsafeSubscriptionError(error);
         throw error;
       }
-      const invalidateCompactionBinding = async () => {
+      const invalidateNativeContextBinding = async () => {
         if (bindingInvalidated) {
           return;
         }
         const invalidated = await params.bindingStore.mutate(params.bindingIdentity, {
-          kind: "compacted",
+          kind: "invalidate-native-context",
           threadId: currentBinding.threadId,
+          ...(isCompaction ? { invalidateContextEngineProjection: true as const } : {}),
         });
         if (!invalidated) {
           throw new CodexNativeTurnBindingChangedError(
-            "Codex thread binding changed before native compaction",
+            `Codex thread binding changed before native ${label}`,
           );
         }
         bindingInvalidated = true;
       };
       if (isCompaction && observedContextCompaction) {
-        await invalidateCompactionBinding();
+        await invalidateNativeContextBinding();
       }
       if (resumed.thread.status?.type === "active") {
         throw new Error(
@@ -178,9 +177,7 @@ export async function requestCodexNativeTurnForBinding(
         );
       }
       throwIfCodexNativeTurnAborted(params.abortSignal, kind);
-      if (isCompaction) {
-        await invalidateCompactionBinding();
-      }
+      await invalidateNativeContextBinding();
       awaitingNativeTurnStart = true;
       let requestResult: JsonValue | undefined;
       try {
@@ -194,18 +191,17 @@ export async function requestCodexNativeTurnForBinding(
       } catch (error) {
         const requestRejected = error instanceof CodexAppServerRpcError;
         if (requestRejected) {
-          // Codex submits Op::Compact before acknowledging the request. A
-          // structured rejection makes any observed turn unrelated to this request.
-          // That same-thread compaction still invalidates the cached context facts.
+          // A structured rejection proves this request did not start a native
+          // turn. Preserve only compaction already observed on the same thread.
           completionWatch?.cancel();
           completionWatch = undefined;
-          if (isCompaction && !observedContextCompaction) {
+          if (!isCompaction || !observedContextCompaction) {
             const restored = await params.bindingStore.mutate(params.bindingIdentity, {
               kind: "set",
               binding: currentBinding,
             });
             if (!restored) {
-              throw new Error("Codex thread binding changed after native compaction was rejected", {
+              throw new Error(`Codex thread binding changed after native ${label} was rejected`, {
                 cause: error,
               });
             }

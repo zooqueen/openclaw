@@ -4,7 +4,6 @@ import { saveSessionStore } from "openclaw/plugin-sdk/session-store-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { CodexAppServerUnsafeSubscriptionError } from "./attempt-client-cleanup.js";
 import { CodexAppServerRpcError } from "./client.js";
-import type { CodexServerNotification } from "./protocol.js";
 import {
   createParams as createRunAttemptParams,
   setupRunAttemptTestHooks,
@@ -580,9 +579,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
       approvalPolicy: "never",
       sandbox: "workspace-write",
       serviceTier: "flex",
-      model: "gpt-old",
+      model: "gpt-5.4-codex",
+      modelProvider: "openai",
       nativeContextUsage: { currentTokens: 90_000 },
-      nativeContextUsageReplayAttempted: true,
       modelContextWindow: 258_400,
     });
     const request = vi.fn(async (method: string) => {
@@ -625,13 +624,76 @@ describe("Codex app-server thread lifecycle bindings", () => {
       approvalPolicy: "never",
       sandbox: "workspace-write",
       serviceTier: "priority",
+      nativeContextUsage: { currentTokens: 90_000 },
+      modelContextWindow: 258_400,
     });
-    expect(stored).not.toHaveProperty("nativeContextUsage");
-    expect(stored).not.toHaveProperty("nativeContextUsageReplayAttempted");
-    expect(stored).not.toHaveProperty("modelContextWindow");
   });
 
-  it("refreshes unknown native usage and rotates before the first turn", async () => {
+  it("rejects a resume when startup state was derived from a replaced binding", async () => {
+    const sessionFile = path.join(tempDir, "session.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace");
+    await writeCodexAppServerBinding(sessionFile, {
+      threadId: "thread-replaced",
+      cwd: workspaceDir,
+      model: "gpt-5.4-codex",
+      modelProvider: "openai",
+      dynamicToolsFingerprint: "[]",
+    });
+    const request = vi.fn();
+
+    await expect(
+      startOrResumeThread({
+        client: { request } as never,
+        params: createParams(sessionFile, workspaceDir),
+        cwd: workspaceDir,
+        dynamicTools: [],
+        appServer: createThreadLifecycleAppServerOptions(),
+        expectedResumeThreadId: "thread-startup",
+      }),
+    ).rejects.toThrow("Codex thread binding changed during startup");
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("rotates a model-changed binding before trusting its usage snapshot", async () => {
+    const sessionFile = path.join(tempDir, "session.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace");
+    await writeCodexAppServerBinding(sessionFile, {
+      threadId: "thread-existing",
+      cwd: workspaceDir,
+      model: "gpt-old",
+      modelProvider: "openai",
+      nativeContextUsage: { currentTokens: 149_000 },
+      modelContextWindow: 150_000,
+    });
+    const request = vi.fn(async (method: string) => {
+      if (method !== "thread/start") {
+        throw new Error(`unexpected method: ${method}`);
+      }
+      return threadStartResult("thread-fresh");
+    });
+
+    const binding = await startOrResumeThread({
+      client: { request } as never,
+      params: createParams(sessionFile, workspaceDir),
+      cwd: workspaceDir,
+      dynamicTools: [],
+      appServer: createThreadLifecycleAppServerOptions(),
+      startupTokenGuard: { contextWindowTokens: 150_000, projectedTurnTokens: 1_000 },
+    });
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual(["thread/start"]);
+    expect(binding).toMatchObject({
+      threadId: "thread-fresh",
+      model: "gpt-5.4-codex",
+      lifecycle: { action: "started" },
+    });
+    await expect(readCodexAppServerBinding(sessionFile)).resolves.toMatchObject({
+      threadId: "thread-fresh",
+      model: "gpt-5.4-codex",
+    });
+  });
+
+  it("rotates a terminal usage snapshot before resuming", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
     await writeCodexAppServerBinding(sessionFile, {
@@ -640,32 +702,12 @@ describe("Codex app-server thread lifecycle bindings", () => {
       model: "gpt-5.4-codex",
       modelProvider: "openai",
       dynamicToolsFingerprint: "[]",
+      nativeContextUsage: { currentTokens: 95_000 },
+      modelContextWindow: 100_000,
     });
-    const handlers = new Set<(notification: CodexServerNotification) => void>();
-    const request = vi.fn(async (method: string, requestParams?: unknown) => {
+    const request = vi.fn(async (method: string) => {
       if (method === "thread/resume") {
-        expect(requestParams).toMatchObject({
-          threadId: "thread-existing",
-          excludeTurns: false,
-        });
-        const response = threadStartResult("thread-existing");
-        response.thread.turns = [{ id: "turn-old", items: [], status: "completed" }];
-        queueMicrotask(() => {
-          for (const handler of handlers) {
-            handler({
-              method: "thread/tokenUsage/updated",
-              params: {
-                threadId: "thread-existing",
-                tokenUsage: {
-                  total: { totalTokens: 900_000 },
-                  last: { totalTokens: 95_000 },
-                  modelContextWindow: 100_000,
-                },
-              },
-            });
-          }
-        });
-        return response;
+        return threadStartResult("thread-existing");
       }
       if (method === "thread/unsubscribe") {
         return {};
@@ -675,16 +717,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
       }
       throw new Error(`unexpected method: ${method}`);
     });
-    const client = {
-      request,
-      addNotificationHandler(handler: (notification: CodexServerNotification) => void) {
-        handlers.add(handler);
-        return () => handlers.delete(handler);
-      },
-    } as never;
 
     const binding = await startOrResumeThread({
-      client,
+      client: { request } as never,
       params: createParams(sessionFile, workspaceDir),
       cwd: workspaceDir,
       dynamicTools: [],
@@ -703,7 +738,59 @@ describe("Codex app-server thread lifecycle bindings", () => {
     });
   });
 
-  it("does not replay unavailable native usage on every resume", async () => {
+  it("rotates an active resumed thread when its terminal snapshot is over the fuse", async () => {
+    const sessionFile = path.join(tempDir, "session.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace");
+    await writeCodexAppServerBinding(sessionFile, {
+      threadId: "thread-existing",
+      cwd: workspaceDir,
+      model: "gpt-5.4-codex",
+      modelProvider: "openai",
+      dynamicToolsFingerprint: "[]",
+      nativeContextUsage: { currentTokens: 95_000 },
+      modelContextWindow: 100_000,
+    });
+    const request = vi.fn(async (method: string) => {
+      if (method === "thread/resume") {
+        const response = threadStartResult("thread-existing");
+        return {
+          ...response,
+          thread: {
+            ...response.thread,
+            status: { type: "active", activeFlags: [] },
+          },
+        };
+      }
+      if (method === "thread/unsubscribe") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return threadStartResult("thread-new");
+      }
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    const binding = await startOrResumeThread({
+      client: { request } as never,
+      params: createParams(sessionFile, workspaceDir),
+      cwd: workspaceDir,
+      dynamicTools: [],
+      appServer: createThreadLifecycleAppServerOptions(),
+      startupTokenGuard: { contextWindowTokens: 100_000, projectedTurnTokens: 1_000 },
+    });
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "thread/resume",
+      "thread/unsubscribe",
+      "thread/start",
+    ]);
+    expect(binding.threadId).toBe("thread-new");
+    await expect(readCodexAppServerBinding(sessionFile)).resolves.toMatchObject({
+      threadId: "thread-new",
+    });
+  });
+
+  it("resumes without polling when no terminal usage snapshot exists", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
     await writeCodexAppServerBinding(sessionFile, {
@@ -722,31 +809,19 @@ describe("Codex app-server thread lifecycle bindings", () => {
       return threadStartResult("thread-existing");
     });
     const client = { request } as never;
-    const params = createParams(sessionFile, workspaceDir);
-
-    await startOrResumeThread({
+    const binding = await startOrResumeThread({
       client,
-      params,
+      params: createParams(sessionFile, workspaceDir),
       cwd: workspaceDir,
       dynamicTools: [],
       appServer: createThreadLifecycleAppServerOptions(),
-    });
-    await startOrResumeThread({
-      client,
-      params,
-      cwd: workspaceDir,
-      dynamicTools: [],
-      appServer: createThreadLifecycleAppServerOptions(),
+      startupTokenGuard: { contextWindowTokens: 100_000, projectedTurnTokens: 1_000 },
     });
 
     expect(requests).toEqual([
-      expect.objectContaining({ threadId: "thread-existing", excludeTurns: false }),
       expect.objectContaining({ threadId: "thread-existing", excludeTurns: true }),
     ]);
-    await expect(readCodexAppServerBinding(sessionFile)).resolves.toMatchObject({
-      threadId: "thread-existing",
-      nativeContextUsageReplayAttempted: true,
-    });
+    expect(binding.threadId).toBe("thread-existing");
   });
 
   it("keeps the bound local provider when recoverable resume failure starts a fresh thread", async () => {
@@ -755,7 +830,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     await writeCodexAppServerBinding(sessionFile, {
       threadId: "thread-existing",
       cwd: workspaceDir,
-      model: "local-model",
+      model: "local-model-2",
       modelProvider: "lmstudio",
       approvalPolicy: "on-request",
       sandbox: "workspace-write",

@@ -407,8 +407,7 @@ describe("Codex app-server main thread cleanup", () => {
     const requestHandlerCount = addRequestHandler.mock.calls.length;
     await expect(runAttempt("turn-2", 2)).resolves.toMatchObject({ aborted: false });
 
-    // The first resume adds and disposes one native-usage replay watcher.
-    expect(addNotificationHandler).toHaveBeenCalledTimes(notificationHandlerCount + 1);
+    expect(addNotificationHandler).toHaveBeenCalledTimes(notificationHandlerCount);
     expect(addRequestHandler).toHaveBeenCalledTimes(requestHandlerCount);
     expect(notificationHandlers.size).toBe(notificationHandlerCount);
     expect(requestHandlers.size).toBe(requestHandlerCount);
