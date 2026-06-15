@@ -1606,6 +1606,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       .spyOn(modelFallbackModule, "runWithModelFallback")
       .mockImplementationOnce(
         async ({ run }: { run: (provider: string, model: string) => Promise<unknown> }) => ({
+          outcome: "completed" as const,
           result: await run("openai", "gpt-5.5"),
           provider: "openai",
           model: "gpt-5.5",
