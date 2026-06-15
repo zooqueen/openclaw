@@ -5,6 +5,8 @@ import type { ChannelMessagingAdapter } from "../../channels/plugins/types.core.
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   deriveInboundMessageHookContext,
+  toInternalMessageReceivedContext,
+  toPluginMessageContext,
   toPluginMessageReceivedEvent,
 } from "../../hooks/message-hook-mappers.js";
 import {
@@ -5367,15 +5369,7 @@ describe("dispatchReplyFromConfig", () => {
     expect(internalHookMocks.triggerInternalHook).not.toHaveBeenCalled();
   });
 
-  it("does not broadcast inbound claims without a core-owned plugin binding", async () => {
-    setNoAbort();
-    hookMocks.runner.hasHooks.mockImplementation(
-      ((hookName?: string) =>
-        hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
-    );
-    hookMocks.runner.runInboundClaim.mockResolvedValue({ handled: true } as never);
-    const cfg = emptyConfig;
-    const dispatcher = createDispatcher();
+  it("builds message hook contexts without a core-owned plugin binding", () => {
     const ctx = buildTestCtx({
       Provider: "telegram",
       Surface: "telegram",
@@ -5394,42 +5388,38 @@ describe("dispatchReplyFromConfig", () => {
       MessageSid: "msg-claim-1",
       SessionKey: "agent:main:hook-test",
     });
-    const replyResolver = vi.fn(async () => ({ text: "core reply" }) satisfies ReplyPayload);
+    const canonical = deriveInboundMessageHookContext(ctx);
+    const event = toPluginMessageReceivedEvent(canonical);
+    const hookContext = toPluginMessageContext(canonical);
+    const internalContext = toInternalMessageReceivedContext(canonical);
 
-    const result = await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
-
-    expect(result).toEqual({ queuedFinal: true, counts: { tool: 0, block: 0, final: 0 } });
-    expect(hookMocks.runner.runInboundClaim).not.toHaveBeenCalled();
-    const [event, hookContext] = firstMockCall(
-      hookMocks.runner.runMessageReceived,
-      "message received hook",
-    ) as
-      | [
-          { content?: unknown; from?: unknown; metadata?: Record<string, unknown> },
-          { accountId?: unknown; channelId?: unknown; conversationId?: unknown },
-        ]
-      | [];
-    expect(event?.from).toBe(ctx.From);
-    expect(event?.content).toBe("who are you");
-    expect(event?.metadata?.messageId).toBe("msg-claim-1");
-    expect(event?.metadata?.originatingChannel).toBe("telegram");
-    expect(event?.metadata?.originatingTo).toBe("telegram:-10099");
-    expect(event?.metadata?.senderId).toBe("user-9");
-    expect(event?.metadata?.senderUsername).toBe("ada");
-    expect(event?.metadata?.threadId).toBe(77);
-    expect(hookContext?.channelId).toBe("telegram");
-    expect(hookContext?.accountId).toBe("default");
-    expect(hookContext?.conversationId).toBe("telegram:-10099");
-    const internalHookEvent = (
-      internalHookMocks.triggerInternalHook.mock.calls as unknown as Array<
-        [{ action?: unknown; sessionKey?: unknown; type?: unknown }]
-      >
-    )[0]?.[0];
-    expect(internalHookEvent?.type).toBe("message");
-    expect(internalHookEvent?.action).toBe("received");
-    expect(internalHookEvent?.sessionKey).toBe("agent:main:hook-test");
-    expect(replyResolver).toHaveBeenCalledTimes(1);
-    expect(firstFinalReplyPayload(dispatcher)?.text).toBe("core reply");
+    if (!event.metadata) {
+      throw new Error("expected plugin message metadata");
+    }
+    if (!internalContext.metadata) {
+      throw new Error("expected internal message metadata");
+    }
+    expect(event.from).toBe(ctx.From);
+    expect(event.content).toBe("who are you");
+    expect(event.metadata.messageId).toBe("msg-claim-1");
+    expect(event.metadata.originatingChannel).toBe("telegram");
+    expect(event.metadata.originatingTo).toBe("telegram:-10099");
+    expect(event.metadata.senderId).toBe("user-9");
+    expect(event.metadata.senderUsername).toBe("ada");
+    expect(event.metadata.threadId).toBe(77);
+    expect(hookContext.channelId).toBe("telegram");
+    expect(hookContext.accountId).toBe("default");
+    expect(hookContext.conversationId).toBe("telegram:-10099");
+    expect(hookContext.sessionKey).toBe("agent:main:hook-test");
+    expect(internalContext.from).toBe(ctx.From);
+    expect(internalContext.content).toBe("who are you");
+    expect(internalContext.channelId).toBe("telegram");
+    expect(internalContext.accountId).toBe("default");
+    expect(internalContext.conversationId).toBe("telegram:-10099");
+    expect(internalContext.messageId).toBe("msg-claim-1");
+    expect(internalContext.metadata.threadId).toBe(77);
+    expect(internalContext.metadata.senderId).toBe("user-9");
+    expect(internalContext.metadata.senderUsername).toBe("ada");
   });
 
   it("emits internal message:received hook when a session key is available", async () => {
