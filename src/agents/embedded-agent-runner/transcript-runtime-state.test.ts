@@ -206,6 +206,49 @@ describe("runtime transcript state", () => {
     ]);
   });
 
+  it("rolls back SQLite append-only runtime mutations as one transaction", async () => {
+    const sqlitePath = path.join(tempDir, "openclaw-agent.sqlite");
+    const scope = {
+      agentId: "main",
+      env: { ...process.env, OPENCLAW_STATE_DIR: path.join(tempDir, "state") },
+      sessionId: "session-1",
+      sessionKey: "agent:main:main",
+      storePath: sqlitePath,
+    };
+    const target = resolveSqliteRuntimeTranscriptTarget(scope);
+
+    await replaceSqliteRuntimeTranscriptEntries({
+      target,
+      entries: [createSessionHeader(), createUserMessageEntry({ id: "msg-1", content: "hello" })],
+    });
+    const readBeforeAppend = await readSqliteRuntimeTranscriptState(scope);
+    const appended = readBeforeAppend.state.appendMessage({
+      role: "user",
+      content: "there",
+      timestamp: TEST_TIMESTAMP_MS,
+    });
+    const unserializableAppend = {
+      ...createUserMessageEntry({ id: "bad-msg", content: "bad", parentId: appended.id }),
+      message: {
+        role: "user",
+        content: 1n,
+        timestamp: TEST_TIMESTAMP_MS,
+      },
+    } as unknown as SessionEntry;
+
+    await expect(
+      persistSqliteRuntimeTranscriptStateMutation({
+        appendedEntries: [appended, unserializableAppend],
+        state: readBeforeAppend.state,
+        target: readBeforeAppend.target,
+      }),
+    ).rejects.toThrow("Do not know how to serialize a BigInt");
+
+    expect((await readSqliteRuntimeTranscriptState(scope)).state.getBranch()).toEqual([
+      expect.objectContaining({ id: "msg-1" }),
+    ]);
+  });
+
   it("fully replaces SQLite transcript rows", async () => {
     const scope = {
       agentId: "main",

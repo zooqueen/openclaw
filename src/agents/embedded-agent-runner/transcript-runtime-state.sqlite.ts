@@ -3,7 +3,7 @@ import type {
   SessionTranscriptRuntimeTarget,
 } from "../../config/sessions/session-accessor.js";
 import {
-  appendSqliteTranscriptEvent,
+  appendSqliteTranscriptEvents,
   deleteSqliteTranscript,
   loadSqliteTranscriptEvents,
   replaceSqliteTranscriptEvents,
@@ -62,9 +62,7 @@ export async function persistSqliteRuntimeTranscriptStateMutation(params: {
     });
     return;
   }
-  for (const entry of params.appendedEntries) {
-    await appendSqliteTranscriptEvent(params.target, entry);
-  }
+  await appendSqliteTranscriptEvents(params.target, params.appendedEntries);
 }
 
 /** Fully replaces the SQLite transcript rows for a runtime transcript. */

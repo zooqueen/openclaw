@@ -349,6 +349,24 @@ export async function appendSqliteTranscriptEvent(
   });
 }
 
+/** Appends raw transcript events to the additive SQLite transcript store in one transaction. */
+export async function appendSqliteTranscriptEvents(
+  scope: SessionTranscriptAccessScope,
+  events: TranscriptEvent[],
+): Promise<void> {
+  if (events.length === 0) {
+    return;
+  }
+  const resolved = resolveSqliteTranscriptScope(scope);
+  await runExclusiveSqliteSessionWrite(resolved, async () => {
+    runOpenClawAgentWriteTransaction((database) => {
+      for (const event of events) {
+        appendTranscriptEventInTransaction(database, resolved, event);
+      }
+    }, toDatabaseOptions(resolved));
+  });
+}
+
 /** Appends one transcript message to the additive SQLite transcript store. */
 export async function appendSqliteTranscriptMessage<TMessage>(
   scope: SessionTranscriptWriteScope,
