@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   agentsListCommandMock: vi.fn(),
   agentsSetIdentityCommandMock: vi.fn(),
   agentsUnbindCommandMock: vi.fn(),
+  agentsViewSystemPromptCommandMock: vi.fn(),
   setVerboseMock: vi.fn(),
   runtime: {
     log: vi.fn(),
@@ -28,6 +29,7 @@ const agentsDeleteCommandMock = mocks.agentsDeleteCommandMock;
 const agentsListCommandMock = mocks.agentsListCommandMock;
 const agentsSetIdentityCommandMock = mocks.agentsSetIdentityCommandMock;
 const agentsUnbindCommandMock = mocks.agentsUnbindCommandMock;
+const agentsViewSystemPromptCommandMock = mocks.agentsViewSystemPromptCommandMock;
 const setVerboseMock = mocks.setVerboseMock;
 const runtime = mocks.runtime;
 
@@ -57,6 +59,10 @@ vi.mock("../../commands/agents.commands.list.js", () => ({
   agentsListCommand: mocks.agentsListCommandMock,
 }));
 
+vi.mock("../../commands/agents.commands.view-system-prompt.js", () => ({
+  agentsViewSystemPromptCommand: mocks.agentsViewSystemPromptCommandMock,
+}));
+
 vi.mock("../../global-state.js", () => ({
   setVerbose: mocks.setVerboseMock,
 }));
@@ -83,6 +89,7 @@ describe("registerAgentCommands", () => {
     agentsListCommandMock.mockResolvedValue(undefined);
     agentsSetIdentityCommandMock.mockResolvedValue(undefined);
     agentsUnbindCommandMock.mockResolvedValue(undefined);
+    agentsViewSystemPromptCommandMock.mockResolvedValue(undefined);
   });
 
   function commandCall(mock: { mock: { calls: unknown[][] } }, index = 0): unknown[] {
@@ -281,6 +288,27 @@ describe("registerAgentCommands", () => {
         emoji: ":lobster:",
         avatar: "https://example.com/openclaw.png",
         json: true,
+      },
+      runtime,
+    );
+  });
+
+  it("forwards agents view-system-prompt options", async () => {
+    await runCli([
+      "agents",
+      "view-system-prompt",
+      "ops",
+      "--model",
+      "openai/gpt-5.5",
+      "--channel",
+      "Telegram",
+    ]);
+
+    expect(agentsViewSystemPromptCommandMock).toHaveBeenCalledWith(
+      {
+        agentId: "ops",
+        model: "openai/gpt-5.5",
+        channel: "Telegram",
       },
       runtime,
     );

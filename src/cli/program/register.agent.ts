@@ -12,6 +12,8 @@ type AgentsBindModule = typeof import("../../commands/agents.commands.bind.js");
 type AgentsDeleteModule = typeof import("../../commands/agents.commands.delete.js");
 type AgentsIdentityModule = typeof import("../../commands/agents.commands.identity.js");
 type AgentsListModule = typeof import("../../commands/agents.commands.list.js");
+type AgentsViewSystemPromptModule =
+  typeof import("../../commands/agents.commands.view-system-prompt.js");
 type CliUtilsModule = typeof import("../cli-utils.js");
 type RuntimeModule = typeof import("../../runtime.js");
 
@@ -49,6 +51,13 @@ async function loadAgentsSetIdentityCommand(): Promise<
 
 async function loadAgentsListCommand(): Promise<AgentsListModule["agentsListCommand"]> {
   return (await import("../../commands/agents.commands.list.js")).agentsListCommand;
+}
+
+async function loadAgentsViewSystemPromptCommand(): Promise<
+  AgentsViewSystemPromptModule["agentsViewSystemPromptCommand"]
+> {
+  return (await import("../../commands/agents.commands.view-system-prompt.js"))
+    .agentsViewSystemPromptCommand;
 }
 
 async function loadAgentsActionRuntime(): Promise<{
@@ -251,6 +260,25 @@ ${formatHelpExamples([
             emoji: opts.emoji as string | undefined,
             avatar: opts.avatar as string | undefined,
             json: Boolean(opts.json),
+          },
+          runtime,
+        );
+      });
+    });
+
+  agents
+    .command("view-system-prompt [agentId]")
+    .description("Print the assembled agent system prompt without starting a run")
+    .option("--model <id>", "Model id to preview")
+    .option("--channel <id>", "Message channel context to preview")
+    .action(async (agentId, opts): Promise<void> => {
+      await runAgentsCommandAction(async (runtime) => {
+        const agentsViewSystemPromptCommand = await loadAgentsViewSystemPromptCommand();
+        await agentsViewSystemPromptCommand(
+          {
+            agentId: typeof agentId === "string" ? agentId : undefined,
+            model: opts.model as string | undefined,
+            channel: opts.channel as string | undefined,
           },
           runtime,
         );
