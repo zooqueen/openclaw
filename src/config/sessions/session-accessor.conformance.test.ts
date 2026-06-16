@@ -32,6 +32,7 @@ import {
 import {
   appendSqliteTranscriptEvent,
   appendSqliteTranscriptMessage,
+  branchSqliteCompactionCheckpointSession,
   listSqliteSessionEntries,
   loadExactSqliteSessionEntry,
   loadSqliteSessionEntry,
@@ -41,11 +42,13 @@ import {
   persistSqliteSessionTranscriptTurn,
   publishSqliteTranscriptUpdate,
   readSqliteSessionUpdatedAt,
+  replaceSqliteTranscriptEvents,
   replaceSqliteSessionEntry,
+  restoreSqliteCompactionCheckpointSession,
   updateSqliteSessionEntry,
   upsertSqliteSessionEntry,
 } from "./session-accessor.sqlite.js";
-import type { SessionEntry } from "./types.js";
+import type { SessionCompactionCheckpoint, SessionEntry } from "./types.js";
 
 type AccessorAdapter = {
   name: string;
@@ -768,6 +771,142 @@ describe("sqlite transcript turn persistence", () => {
         id: result.messages[0]?.messageId,
         type: "message",
       }),
+    ]);
+  });
+
+  it("branches a checkpoint by copying rows and creating the branch entry atomically", async () => {
+    const sourceScope = sqliteAdapter.transcriptScope(paths, "source-session");
+    const sourceEntryScope = sqliteAdapter.entryScope(paths);
+    const branchKey = "agent:main:checkpoint-branch";
+    const checkpoint: SessionCompactionCheckpoint = {
+      checkpointId: "checkpoint-1",
+      sessionKey: sourceEntryScope.sessionKey,
+      sessionId: "source-session",
+      createdAt: Date.parse("2026-01-01T00:00:00.000Z"),
+      reason: "manual",
+      tokensBefore: 42,
+      tokensAfter: 84,
+      preCompaction: {
+        sessionId: "pre-compaction-session",
+        leafId: "pre-msg",
+      },
+      postCompaction: {
+        sessionId: "source-session",
+        entryId: "msg-2",
+      },
+    };
+
+    await replaceSqliteTranscriptEvents(sourceScope, [
+      { type: "session", id: "source-session", cwd: paths.tempDir },
+      { type: "message", id: "msg-1", parentId: null, message: { content: "one" } },
+      { type: "message", id: "msg-2", parentId: "msg-1", message: { content: "two" } },
+      { type: "message", id: "msg-3", parentId: "msg-2", message: { content: "three" } },
+    ]);
+    await upsertSqliteSessionEntry(sourceEntryScope, {
+      label: "Source",
+      sessionId: "source-session",
+      updatedAt: 10,
+      compactionCheckpoints: [checkpoint],
+    });
+
+    const result = await branchSqliteCompactionCheckpointSession({
+      agentId: "main",
+      env: sourceScope.env,
+      storePath: paths.sqlitePath,
+      sourceKey: sourceEntryScope.sessionKey,
+      nextKey: branchKey,
+      checkpointId: checkpoint.checkpointId,
+    });
+    if (result.status !== "created") {
+      throw new Error(`expected branch creation, got ${result.status}`);
+    }
+
+    const branchScope = {
+      ...sourceScope,
+      sessionId: result.entry.sessionId,
+      sessionKey: branchKey,
+    };
+    expect(loadSqliteSessionEntry({ ...sourceEntryScope, sessionKey: branchKey })).toEqual(
+      result.entry,
+    );
+    expect(result.entry).toEqual(
+      expect.objectContaining({
+        label: "Source (checkpoint)",
+        parentSessionKey: sourceEntryScope.sessionKey,
+        sessionFile: expect.stringContaining(result.entry.sessionId),
+        totalTokens: 84,
+        totalTokensFresh: true,
+      }),
+    );
+    await expect(loadSqliteTranscriptEvents(branchScope)).resolves.toEqual([
+      expect.objectContaining({ type: "session", id: result.entry.sessionId }),
+      expect.objectContaining({ id: "msg-1", type: "message" }),
+      expect.objectContaining({ id: "msg-2", type: "message" }),
+    ]);
+  });
+
+  it("restores a checkpoint by copying rows and replacing the session entry atomically", async () => {
+    const sourceScope = sqliteAdapter.transcriptScope(paths, "source-session");
+    const sourceEntryScope = sqliteAdapter.entryScope(paths);
+    const checkpoint: SessionCompactionCheckpoint = {
+      checkpointId: "checkpoint-restore",
+      sessionKey: sourceEntryScope.sessionKey,
+      sessionId: "current-session",
+      createdAt: Date.parse("2026-01-01T00:00:00.000Z"),
+      reason: "manual",
+      tokensBefore: 12,
+      tokensAfter: 24,
+      preCompaction: {
+        sessionId: "pre-compaction-session",
+        leafId: "pre-msg",
+      },
+      postCompaction: {
+        sessionId: "source-session",
+        entryId: "msg-1",
+      },
+    };
+
+    await replaceSqliteTranscriptEvents(sourceScope, [
+      { type: "session", id: "source-session", cwd: paths.tempDir },
+      { type: "message", id: "msg-1", parentId: null, message: { content: "restore" } },
+      { type: "message", id: "msg-2", parentId: "msg-1", message: { content: "skip" } },
+    ]);
+    await upsertSqliteSessionEntry(sourceEntryScope, {
+      label: "Current",
+      sessionId: "current-session",
+      sessionFile: "sqlite:main:current-session",
+      updatedAt: 10,
+      compactionCheckpoints: [checkpoint],
+    });
+
+    const result = await restoreSqliteCompactionCheckpointSession({
+      agentId: "main",
+      env: sourceScope.env,
+      storePath: paths.sqlitePath,
+      sessionKey: sourceEntryScope.sessionKey,
+      checkpointId: checkpoint.checkpointId,
+    });
+    if (result.status !== "created") {
+      throw new Error(`expected restore creation, got ${result.status}`);
+    }
+
+    const restoredScope = {
+      ...sourceScope,
+      sessionId: result.entry.sessionId,
+    };
+    expect(loadSqliteSessionEntry(sourceEntryScope)).toEqual(result.entry);
+    expect(result.entry).toEqual(
+      expect.objectContaining({
+        label: "Current",
+        compactionCheckpoints: [checkpoint],
+        sessionFile: expect.stringContaining(result.entry.sessionId),
+        totalTokens: 24,
+        totalTokensFresh: true,
+      }),
+    );
+    await expect(loadSqliteTranscriptEvents(restoredScope)).resolves.toEqual([
+      expect.objectContaining({ type: "session", id: result.entry.sessionId }),
+      expect.objectContaining({ id: "msg-1", type: "message" }),
     ]);
   });
 });
