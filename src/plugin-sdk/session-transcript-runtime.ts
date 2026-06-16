@@ -203,7 +203,10 @@ export async function withSessionTranscriptWriteLock<T>(
     ...params,
     sessionFile: storageTarget.sessionFile,
   };
-  return await runSessionTranscriptAppendTransaction(
+  // Treat publishUpdate as a post-commit callback: future transactional stores
+  // must not expose updates when the scoped write callback fails.
+  const queuedUpdates: Array<TranscriptUpdatePayload | undefined> = [];
+  const result = await runSessionTranscriptAppendTransaction(
     {
       config: params.config,
       transcriptPath: storageTarget.sessionFile,
@@ -217,13 +220,18 @@ export async function withSessionTranscriptWriteLock<T>(
             ...options,
             sessionId: params.sessionId,
           }),
-        publishUpdate: (update) =>
-          publishSessionTranscriptUpdateByIdentity({
-            ...boundScope,
-            update,
-          }),
+        publishUpdate: async (update) => {
+          queuedUpdates.push(update ? { ...update } : undefined);
+        },
       }),
   );
+  for (const update of queuedUpdates) {
+    await publishSessionTranscriptUpdateByIdentity({
+      ...boundScope,
+      update,
+    });
+  }
+  return result;
 }
 
 /**

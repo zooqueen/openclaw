@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appendTranscriptEvent, upsertSessionEntry } from "../config/sessions/session-accessor.js";
 import { loadSessionStore } from "../config/sessions/store.js";
 import { withOwnedSessionTranscriptWrites } from "../config/sessions/transcript-write-context.js";
+import * as transcriptEvents from "../sessions/transcript-events.js";
 import {
   appendSessionTranscriptMessageByIdentity,
   formatSessionTranscriptMemoryHitKey,
@@ -26,6 +27,7 @@ describe("session transcript runtime SDK", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tempDir, { force: true, recursive: true });
   });
 
@@ -219,6 +221,89 @@ describe("session transcript runtime SDK", () => {
       expect.objectContaining({ type: "session" }),
       expect.objectContaining({ message: expect.objectContaining({ role: "assistant" }) }),
     ]);
+  });
+
+  it("publishes queued locked updates after callback appends are visible", async () => {
+    const scope = {
+      agentId: "main",
+      sessionFile: path.join(tempDir, "queued-publish-target.jsonl"),
+      sessionId: "queued-publish-session",
+      sessionKey: "agent:main:main",
+      storePath,
+    };
+    const observedUpdates: Array<{
+      callbackCompleted: boolean;
+      fileText: string;
+      update: unknown;
+    }> = [];
+    let callbackCompleted = false;
+    const emitSpy = vi
+      .spyOn(transcriptEvents, "emitSessionTranscriptUpdate")
+      .mockImplementation((update) => {
+        observedUpdates.push({
+          callbackCompleted,
+          fileText: fs.readFileSync(scope.sessionFile, "utf8"),
+          update,
+        });
+      });
+
+    const result = await withSessionTranscriptWriteLock(scope, async (locked) => {
+      await locked.appendMessage({
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "queued publish" }],
+          timestamp: 1,
+        },
+      });
+      await locked.publishUpdate({
+        messageId: "message-from-callback",
+        sessionKey: scope.sessionKey,
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+      callbackCompleted = true;
+      return "complete";
+    });
+
+    expect(result).toBe("complete");
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+    expect(observedUpdates).toEqual([
+      {
+        callbackCompleted: true,
+        fileText: expect.stringContaining("queued publish"),
+        update: expect.objectContaining({
+          messageId: "message-from-callback",
+          sessionFile: scope.sessionFile,
+          sessionKey: scope.sessionKey,
+        }),
+      },
+    ]);
+  });
+
+  it("does not publish queued locked updates when the callback throws", async () => {
+    const scope = {
+      agentId: "main",
+      sessionFile: path.join(tempDir, "failed-queued-publish-target.jsonl"),
+      sessionId: "failed-queued-publish-session",
+      sessionKey: "agent:main:main",
+      storePath,
+    };
+    const emitSpy = vi.spyOn(transcriptEvents, "emitSessionTranscriptUpdate");
+
+    await expect(
+      withSessionTranscriptWriteLock(scope, async (locked) => {
+        await locked.appendMessage({
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "durable but failed" }],
+            timestamp: 1,
+          },
+        });
+        await locked.publishUpdate({ sessionKey: scope.sessionKey });
+        throw new Error("stop before commit");
+      }),
+    ).rejects.toThrow("stop before commit");
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fs.readFileSync(scope.sessionFile, "utf8")).toContain("durable but failed");
   });
 
   it("round-trips encoded memory hit keys with opaque session ids", () => {
