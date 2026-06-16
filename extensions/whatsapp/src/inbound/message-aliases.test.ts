@@ -6,54 +6,10 @@ import {
 } from "./message-aliases.js";
 import type { monitorWebInbox } from "./monitor.js";
 import { createAcceptedWhatsAppSendResult } from "./send-result.test-helper.js";
+import { createTestWhatsAppInboundAdmission } from "./test-message.test-helper.js";
 import type { LegacyFlatWebInboundMessage, WebInboundCallbackMessage } from "./types.js";
 
 type MonitorWebInboxMessage = Parameters<Parameters<typeof monitorWebInbox>[0]["onMessage"]>[0];
-
-function createAdmission(): NonNullable<WebInboundCallbackMessage["admission"]> {
-  return {
-    accountId: "default",
-    isSelfChat: false,
-    account: {
-      accountId: "default",
-      enabled: true,
-      sendReadReceipts: true,
-    },
-    conversation: {
-      kind: "group",
-      id: "123@g.us",
-      groupSessionId: "123@g.us",
-    },
-    sender: {
-      id: "+15550000002",
-      isSamePhone: false,
-    },
-    ingress: {
-      admission: "dispatch",
-      decision: "allow",
-      decisiveGateId: "activation",
-      reasonCode: "activation_allowed",
-    },
-    senderAccess: {
-      allowed: true,
-      decision: "allow",
-      providerMissingFallbackApplied: false,
-      reasonCode: "group_policy_allowed",
-    },
-    commandAccess: {
-      requested: false,
-      authorized: false,
-      shouldBlockControlCommand: false,
-      reasonCode: "command_authorized",
-    },
-    activationAccess: {
-      ran: true,
-      allowed: true,
-      shouldSkip: false,
-      reasonCode: "activation_allowed",
-    },
-  };
-}
 
 function createCanonicalMessage(overrides: Partial<WebInboundCallbackMessage> = {}) {
   return withDeprecatedWebInboundMessageFlatAliases({
@@ -116,6 +72,26 @@ function createCanonicalMessage(overrides: Partial<WebInboundCallbackMessage> = 
   });
 }
 
+const callbackMessageWithoutAdmissionFacts = {
+  event: {
+    id: "event-missing-admission",
+  },
+  payload: {
+    body: "missing admission",
+  },
+  platform: {
+    chatJid: "123@g.us",
+    recipientJid: "+15550000001",
+    sendComposing: async () => undefined,
+    reply: async () => createAcceptedWhatsAppSendResult("text", "reply-missing-admission"),
+    sendMedia: async () => createAcceptedWhatsAppSendResult("media", "media-missing-admission"),
+  },
+};
+
+// @ts-expect-error Callback messages must provide admission or deprecated admission fields.
+const invalidCallbackMessage: WebInboundCallbackMessage = callbackMessageWithoutAdmissionFacts;
+void invalidCallbackMessage;
+
 describe("WhatsApp inbound flat aliases", () => {
   it("keeps deprecated admission fields typed on monitor callbacks", () => {
     expectTypeOf<MonitorWebInboxMessage>().toMatchTypeOf<{
@@ -169,7 +145,20 @@ describe("WhatsApp inbound flat aliases", () => {
   });
 
   it("keeps deprecated admission top-level fields aligned with admission", () => {
-    const msg = createCanonicalMessage({ admission: createAdmission() });
+    const msg = createCanonicalMessage({
+      admission: createTestWhatsAppInboundAdmission({
+        conversation: {
+          kind: "group",
+          id: "123@g.us",
+        },
+        sender: {
+          id: "+15550000002",
+        },
+        senderAccess: {
+          reasonCode: "group_policy_allowed",
+        },
+      }),
+    });
 
     expect(msg.from).toBe("123@g.us");
     msg.admission!.conversation.id = "456@g.us";

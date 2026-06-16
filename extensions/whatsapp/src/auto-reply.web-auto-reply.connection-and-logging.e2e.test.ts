@@ -1156,10 +1156,13 @@ describe("web auto-reply connection", () => {
           reply: vi.fn(),
           sendMedia: vi.fn(),
         },
-        from: "+1",
-        conversationId: "+1",
-        accountId: "default",
-        chatType: "direct",
+        admission: {
+          accountId: "default",
+          conversation: {
+            kind: "direct",
+            id: "+1",
+          },
+        },
       }),
     );
 
@@ -1213,10 +1216,13 @@ describe("web auto-reply connection", () => {
               reply,
               sendMedia,
             },
-            from: "+1000",
-            conversationId: "+1000",
-            chatType: "direct",
-            accountId: "default",
+            admission: {
+              accountId: "default",
+              conversation: {
+                kind: "direct",
+                id: "+1000",
+              },
+            },
           }),
         );
         return createMockWebListener();

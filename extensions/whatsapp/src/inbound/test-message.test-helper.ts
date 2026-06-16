@@ -4,6 +4,7 @@ import { withDeprecatedWebInboundMessageFlatAliases } from "./message-aliases.js
 import { createAcceptedWhatsAppSendResult } from "./send-result.test-helper.js";
 import type {
   LegacyFlatWebInboundMessage,
+  AdmittedWebInboundMessage,
   WebInboundCallbackMessage,
   WebInboundMessage,
   WhatsAppInboundEvent,
@@ -11,7 +12,7 @@ import type {
   WhatsAppInboundPlatform,
 } from "./types.js";
 
-type TestWhatsAppInboundAdmissionOverrides = Partial<
+export type TestWhatsAppInboundAdmissionOverrides = Partial<
   Omit<
     WhatsAppInboundAdmission,
     | "account"
@@ -52,7 +53,7 @@ type TestInboundMessageOverrides = Partial<
   platform?: Partial<WhatsAppInboundPlatform>;
 };
 
-function createTestWhatsAppInboundAdmission(
+export function createTestWhatsAppInboundAdmission(
   overrides: TestWhatsAppInboundAdmissionOverrides = {},
 ): WhatsAppInboundAdmission {
   const conversationId = overrides.conversation?.id ?? "+15551234567";
@@ -112,7 +113,7 @@ function createTestWhatsAppInboundAdmission(
 
 export function createTestWebInboundMessage(
   overrides: TestInboundMessageOverrides = {},
-): WebInboundMessage {
+): WebInboundMessage & AdmittedWebInboundMessage {
   const { admission: admissionOverrides, event, payload, platform, ...message } = overrides;
   const admission = createTestWhatsAppInboundAdmission(admissionOverrides);
   return withDeprecatedWebInboundMessageFlatAliases({
@@ -134,7 +135,7 @@ export function createTestWebInboundMessage(
     },
     admission,
     ...message,
-  });
+  }) as WebInboundMessage & AdmittedWebInboundMessage;
 }
 
 export function createTestLegacyFlatWebInboundMessage(
@@ -158,7 +159,7 @@ export function createTestLegacyFlatWebInboundMessage(
 
 export function createTestWebAudioInboundMessage(
   overrides: TestInboundMessageOverrides = {},
-): WebInboundMessage {
+): WebInboundMessage & AdmittedWebInboundMessage {
   const { event, payload, platform, ...message } = overrides;
   const media = Object.hasOwn(payload ?? {}, "media")
     ? payload?.media
