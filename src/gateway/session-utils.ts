@@ -66,6 +66,7 @@ import {
   resolveFreshSessionTotalTokens,
   resolveSessionGoalDisplayState,
   resolveStorePath,
+  type SessionAcpMeta,
   type SessionEntry,
   type SessionStoreTarget,
   type SessionScope,
@@ -1747,19 +1748,6 @@ export function resolveSessionModelRef(
   return resolved;
 }
 
-function findGatewayImageCapabilityModelEntry(
-  catalog: ModelCatalogEntry[],
-  params: { provider?: string; model: string },
-): ModelCatalogEntry | undefined {
-  const provider = normalizeOptionalString(params.provider);
-  if (provider) {
-    // Explicit provider lookups must fail closed; only providerless callers can
-    // use the catalog helper's unique model-only match.
-    return findModelCatalogEntry(catalog, { provider, modelId: params.model });
-  }
-  return findModelCatalogEntry(catalog, { modelId: params.model });
-}
-
 export async function resolveGatewayModelSupportsImages(params: {
   loadGatewayModelCatalog: (params?: { readOnly?: boolean }) => Promise<ModelCatalogEntry[]>;
   provider?: string;
@@ -1771,9 +1759,9 @@ export async function resolveGatewayModelSupportsImages(params: {
 
   try {
     const catalog = await params.loadGatewayModelCatalog({ readOnly: false });
-    const modelEntry = findGatewayImageCapabilityModelEntry(catalog, {
+    const modelEntry = findModelCatalogEntry(catalog, {
       provider: params.provider,
-      model: params.model,
+      modelId: params.model,
     });
     const normalizedProvider = normalizeOptionalLowercaseString(
       params.provider ?? modelEntry?.provider,
@@ -1887,6 +1875,34 @@ export function resolveSessionModelIdentityRef(
     allowPluginNormalization: options?.allowPluginNormalization,
   });
   return { provider: resolved.provider, model: resolved.model };
+}
+
+function resolveAcpSessionModelIdentityRef(params: {
+  cfg: OpenClawConfig;
+  entry?: Pick<SessionEntry, "modelProvider">;
+  agentId: string;
+  acpMeta?: SessionAcpMeta;
+  allowPluginNormalization?: boolean;
+}): { provider?: string; model: string } | undefined {
+  const runtimeModel = normalizeOptionalString(params.acpMeta?.runtimeOptions?.model);
+  if (runtimeModel) {
+    return resolveSessionModelIdentityRef(
+      params.cfg,
+      {
+        model: runtimeModel,
+        modelProvider: params.entry?.modelProvider,
+      },
+      params.agentId,
+      undefined,
+      { allowPluginNormalization: params.allowPluginNormalization },
+    );
+  }
+  if (params.acpMeta) {
+    const provider = normalizeOptionalString(params.acpMeta.backend) ?? "acpx";
+    const agent = normalizeAgentId(params.acpMeta.agent || params.agentId || "acp");
+    return { provider, model: `${agent}-acp` };
+  }
+  return undefined;
 }
 
 function resolveSessionDisplayModelIdentityRefCached(params: {
@@ -2036,6 +2052,12 @@ export function buildGatewaySessionRow(params: {
             ? resolveSubagentSessionStatus(subagentRun)
             : undefined))
     : undefined;
+  const acpSessionKey = resolveStoredSessionKeyForAgentStore({
+    cfg,
+    agentId: sessionAgentId,
+    sessionKey: key,
+  });
+  const acpMeta = readAcpSessionMetaForEntry({ sessionKey: acpSessionKey, entry });
   const subagentStartedAt = subagentRun
     ? liveSubagentRunActive
       ? getSubagentSessionStartedAt(subagentRun)
@@ -2061,15 +2083,22 @@ export function buildGatewaySessionRow(params: {
     rowContext,
     allowPluginNormalization: !lightweight,
   });
-  const resolvedModel = resolveSessionModelIdentityRef(
+  const acpModelIdentity = resolveAcpSessionModelIdentityRef({
     cfg,
     entry,
     sessionAgentId,
-    subagentRun?.model,
-    { allowPluginNormalization: !lightweight },
-  );
+    acpMeta,
+    allowPluginNormalization: !lightweight,
+  });
+  const resolvedModel =
+    acpModelIdentity ??
+    resolveSessionModelIdentityRef(cfg, entry, sessionAgentId, subagentRun?.model, {
+      allowPluginNormalization: !lightweight,
+    });
   const runtimeModelPresent =
-    Boolean(entry?.model?.trim()) || Boolean(entry?.modelProvider?.trim());
+    acpModelIdentity != null ||
+    Boolean(entry?.model?.trim()) ||
+    Boolean(entry?.modelProvider?.trim());
   const freshSessionTotalTokens = resolveNonNegativeNumber(resolveFreshSessionTotalTokens(entry));
   const needsTranscriptTotalTokens = freshSessionTotalTokens === undefined;
   const needsTranscriptContextTokens = resolvePositiveNumber(entry?.contextTokens) === undefined;
@@ -2160,12 +2189,6 @@ export function buildGatewaySessionRow(params: {
       });
   const rowModelProvider = rowModelIdentity.provider;
   const rowModel = rowModelIdentity.model;
-  const acpSessionKey = resolveStoredSessionKeyForAgentStore({
-    cfg,
-    agentId: sessionAgentId,
-    sessionKey: key,
-  });
-  const acpMeta = readAcpSessionMeta({ sessionKey: acpSessionKey });
   const agentRuntime = resolveModelAgentRuntimeMetadata({
     cfg,
     agentId: sessionAgentId,
@@ -2378,6 +2401,15 @@ function resolveSessionListSearchModelFields(params: {
   const subagentRun = params.rowContext
     ? params.rowContext.subagentRuns.getDisplaySubagentRun(params.key)
     : getSessionDisplaySubagentRunByChildSessionKey(params.key);
+  const acpSessionKey = resolveStoredSessionKeyForAgentStore({
+    cfg: params.cfg,
+    agentId,
+    sessionKey: params.key,
+  });
+  const acpMeta = readAcpSessionMetaForEntry({
+    sessionKey: acpSessionKey,
+    entry: params.entry,
+  });
   const selectedModel = resolveSessionSelectedModelRef({
     cfg: params.cfg,
     entry: params.entry,
@@ -2385,13 +2417,18 @@ function resolveSessionListSearchModelFields(params: {
     rowContext: params.rowContext,
     allowPluginNormalization: false,
   });
-  const resolvedModel = resolveSessionModelIdentityRef(
-    params.cfg,
-    params.entry,
+  const acpModelIdentity = resolveAcpSessionModelIdentityRef({
+    cfg: params.cfg,
+    entry: params.entry,
     agentId,
-    subagentRun?.model,
-    { allowPluginNormalization: false },
-  );
+    acpMeta,
+    allowPluginNormalization: false,
+  });
+  const resolvedModel =
+    acpModelIdentity ??
+    resolveSessionModelIdentityRef(params.cfg, params.entry, agentId, subagentRun?.model, {
+      allowPluginNormalization: false,
+    });
   const modelIdentity = {
     provider: resolvedModel.provider,
     model: resolvedModel.model ?? DEFAULT_MODEL,

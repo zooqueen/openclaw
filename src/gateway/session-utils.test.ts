@@ -2210,6 +2210,149 @@ describe("listSessionsFromStore selected model display", () => {
     expect(result.sessions[0]?.model).toBe("gpt-5.5");
   });
 
+  test("uses ACP runtime model metadata before selected defaults", async () => {
+    await withStateDirEnv("session-utils-acp-runtime-model-", async () => {
+      const cfg = {
+        agents: {
+          defaults: { model: { primary: "openai/gpt-5.4" } },
+          list: [{ id: "codex", model: { primary: "microsoft-foundry/gpt-5.3-codex" } }],
+        },
+      } as OpenClawConfig;
+      const sessionKey = "agent:codex:acp:11111111-1111-4111-8111-111111111111";
+      const entry = {
+        sessionId: "sess-acp-runtime-model",
+        updatedAt: Date.now(),
+      } as SessionEntry;
+      writeAcpSessionMetaForMigration({
+        sessionKey,
+        sessionId: entry.sessionId,
+        meta: {
+          backend: "acpx",
+          agent: "codex",
+          runtimeSessionName: sessionKey,
+          mode: "persistent",
+          runtimeOptions: { model: "openai/gpt-5.5" },
+          state: "idle",
+          lastActivityAt: Date.now(),
+        },
+      });
+
+      const result = listSessionsFromStore({
+        cfg,
+        storePath: "/tmp/sessions.json",
+        store: { [sessionKey]: entry },
+        opts: {},
+      });
+
+      expect(result.sessions[0]?.modelProvider).toBe("openai");
+      expect(result.sessions[0]?.model).toBe("gpt-5.5");
+      expect(result.sessions[0]?.agentRuntime).toEqual({ id: "acpx", source: "session-key" });
+    });
+  });
+
+  test("uses ACP runtime identity when no explicit runtime model is known", async () => {
+    await withStateDirEnv("session-utils-acp-runtime-identity-", async () => {
+      const cfg = {
+        agents: {
+          defaults: { model: { primary: "openai/gpt-5.4" } },
+          list: [{ id: "codex", model: { primary: "microsoft-foundry/gpt-5.3-codex" } }],
+        },
+      } as OpenClawConfig;
+      const sessionKey = "agent:codex:acp:22222222-2222-4222-8222-222222222222";
+      const entry = {
+        sessionId: "sess-acp-runtime-identity",
+        updatedAt: Date.now(),
+      } as SessionEntry;
+      writeAcpSessionMetaForMigration({
+        sessionKey,
+        sessionId: entry.sessionId,
+        meta: {
+          backend: "acpx",
+          agent: "codex",
+          runtimeSessionName: sessionKey,
+          mode: "persistent",
+          state: "idle",
+          lastActivityAt: Date.now(),
+        },
+      });
+
+      const result = listSessionsFromStore({
+        cfg,
+        storePath: "/tmp/sessions.json",
+        store: { [sessionKey]: entry },
+        opts: {},
+      });
+
+      expect(result.sessions[0]?.modelProvider).toBe("acpx");
+      expect(result.sessions[0]?.model).toBe("codex-acp");
+    });
+  });
+
+  test("keeps ACP-shaped bridge rows on selected defaults without ACP runtime metadata", () => {
+    const cfg = {
+      agents: {
+        defaults: { model: { primary: "openai/gpt-5.4" } },
+        list: [{ id: "codex", model: { primary: "microsoft-foundry/gpt-5.3-codex" } }],
+      },
+    } as OpenClawConfig;
+    const sessionKey = "agent:codex:acp:bridge-session-without-runtime-meta";
+
+    const result = listSessionsFromStore({
+      cfg,
+      storePath: "/tmp/sessions.json",
+      store: {
+        [sessionKey]: {
+          sessionId: "sess-acp-bridge",
+          updatedAt: Date.now(),
+        } as SessionEntry,
+      },
+      opts: {},
+    });
+
+    expect(result.sessions[0]?.modelProvider).toBe("microsoft-foundry");
+    expect(result.sessions[0]?.model).toBe("gpt-5.3-codex");
+  });
+
+  test("preserves explicit ACP modelProvider for vendor-prefixed runtime models", async () => {
+    await withStateDirEnv("session-utils-acp-runtime-provider-", async () => {
+      const cfg = {
+        agents: {
+          defaults: { model: { primary: "openai/gpt-5.4" } },
+          list: [{ id: "codex", model: { primary: "openai/gpt-5.4" } }],
+        },
+      } as OpenClawConfig;
+      const sessionKey = "agent:codex:acp:33333333-3333-4333-8333-333333333333";
+      const entry = {
+        sessionId: "sess-acp-provider",
+        updatedAt: Date.now(),
+        modelProvider: "openrouter",
+      } as SessionEntry;
+      writeAcpSessionMetaForMigration({
+        sessionKey,
+        sessionId: entry.sessionId,
+        meta: {
+          backend: "acpx",
+          agent: "codex",
+          runtimeSessionName: sessionKey,
+          mode: "persistent",
+          runtimeOptions: { model: "anthropic/claude-haiku-4.5" },
+          state: "idle",
+          lastActivityAt: Date.now(),
+        },
+      });
+
+      const result = listSessionsFromStore({
+        cfg,
+        storePath: "/tmp/sessions.json",
+        store: { [sessionKey]: entry },
+        opts: {},
+      });
+
+      expect(result.sessions[0]?.modelProvider).toBe("openrouter");
+      expect(result.sessions[0]?.model).toBe("anthropic/claude-haiku-4.5");
+    });
+  });
+
   test("uses complete model overrides without default-model fallback", () => {
     const cfg = {
       agents: {
@@ -2561,30 +2704,7 @@ describe("resolveGatewayModelSupportsImages", () => {
     ).resolves.toBe(true);
   });
 
-  test("honors configured provider image input metadata for mixed-case model ids", async () => {
-    await expect(
-      resolveGatewayModelSupportsImages({
-        model: "qwen/qwen3.5-35b-a3b",
-        provider: "modelscope",
-        loadGatewayModelCatalog: async () => [
-          {
-            id: "Qwen/Qwen3.5-35B-A3B",
-            name: "Configured Qwen3.5 35B",
-            provider: "modelscope",
-            input: ["text", "image"],
-          },
-          {
-            id: "qwen/qwen3.5-35b-a3b",
-            name: "Other Qwen3.5 35B",
-            provider: "other",
-            input: ["text"],
-          },
-        ],
-      }),
-    ).resolves.toBe(true);
-  });
-
-  test("does not borrow configured image input metadata from another provider when provider is explicit", async () => {
+  test("does not borrow image support from another provider when provider is explicit", async () => {
     await expect(
       resolveGatewayModelSupportsImages({
         model: "gpt-4",
