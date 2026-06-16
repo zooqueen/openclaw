@@ -12,6 +12,7 @@ import {
   resolveMemoryDreamingWorkspaces,
   resolveMemoryRemDreamingConfig,
 } from "../../memory-host-sdk/dreaming.js";
+import type { MemoryProviderStatus } from "../../memory-host-sdk/engine-storage.js";
 import { getActiveMemorySearchManager } from "../../plugins/memory-runtime.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { formatError } from "../server-utils.js";
@@ -115,6 +116,12 @@ type DoctorMemoryDreamingPayload = {
 export type DoctorMemoryStatusPayload = {
   agentId: string;
   provider?: string;
+  runtime:
+    | ({ ok: true } & MemoryProviderStatus)
+    | {
+        ok: false;
+        error: string;
+      };
   embedding: {
     ok: boolean;
     error?: string;
@@ -694,11 +701,16 @@ export const doctorHandlers: GatewayRequestHandlers = {
       purpose: "status",
     });
     if (!manager) {
+      const runtimeError = error ?? "memory search unavailable";
       const payload: DoctorMemoryStatusPayload = {
         agentId,
+        runtime: {
+          ok: false,
+          error: runtimeError,
+        },
         embedding: {
           ok: false,
-          error: error ?? "memory search unavailable",
+          error: runtimeError,
         },
       };
       respond(true, payload, undefined);
@@ -752,6 +764,10 @@ export const doctorHandlers: GatewayRequestHandlers = {
       const payload: DoctorMemoryStatusPayload = {
         agentId,
         provider: status.provider,
+        runtime: {
+          ok: true,
+          ...status,
+        },
         embedding,
         dreaming: {
           ...dreamingConfig,
@@ -774,11 +790,16 @@ export const doctorHandlers: GatewayRequestHandlers = {
       };
       respond(true, payload, undefined);
     } catch (err) {
+      const runtimeError = `gateway memory probe failed: ${formatError(err)}`;
       const payload: DoctorMemoryStatusPayload = {
         agentId,
+        runtime: {
+          ok: false,
+          error: runtimeError,
+        },
         embedding: {
           ok: false,
-          error: `gateway memory probe failed: ${formatError(err)}`,
+          error: runtimeError,
         },
       };
       respond(true, payload, undefined);

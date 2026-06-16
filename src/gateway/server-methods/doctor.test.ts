@@ -275,6 +275,7 @@ describe("doctor.memory.status", () => {
     expectRecordFields(payload, {
       agentId: "main",
       provider: "gemini",
+      runtime: { ok: true, provider: "gemini" },
       embedding: { ok: true },
     });
     const dreaming = expectRecordFields(payload.dreaming, {
@@ -291,6 +292,32 @@ describe("doctor.memory.status", () => {
     const phases = expectRecordFields(dreaming.phases, {});
     expectRecordFields(phases.deep, {
       managedCronPresent: false,
+    });
+    expect(close).toHaveBeenCalled();
+  });
+
+  it("keeps runtime/provider health separate from embedding probe failures", async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    getMemorySearchManager.mockResolvedValue({
+      manager: {
+        status: () => ({ backend: "qmd", provider: "qdrant" }),
+        probeEmbeddingAvailability: vi.fn().mockResolvedValue({
+          ok: false,
+          error: "embedding key unavailable",
+        }),
+        close,
+      },
+    });
+    const respond = vi.fn();
+
+    await invokeDoctorMemoryStatus(respond, { params: { probe: true } });
+
+    const payload = respondPayload(respond);
+    expectRecordFields(payload, {
+      agentId: "main",
+      provider: "qdrant",
+      runtime: { ok: true, backend: "qmd", provider: "qdrant" },
+      embedding: { ok: false, error: "embedding key unavailable" },
     });
     expect(close).toHaveBeenCalled();
   });

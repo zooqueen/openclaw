@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   resolveMemorySearchConfig: vi.fn(),
   getMemorySearchManager: vi.fn(),
   resolveSharedMemoryStatusSnapshot: vi.fn(),
+  callGateway: vi.fn(),
 }));
 
 vi.mock("../agents/memory-search.js", () => ({
@@ -17,6 +18,10 @@ vi.mock("./status.scan.deps.runtime.js", () => ({
 
 vi.mock("./status.scan.shared.js", () => ({
   resolveSharedMemoryStatusSnapshot: mocks.resolveSharedMemoryStatusSnapshot,
+}));
+
+vi.mock("../gateway/call.js", () => ({
+  callGateway: mocks.callGateway,
 }));
 
 function createMainAgentStatus() {
@@ -42,6 +47,19 @@ describe("status.scan-memory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveSharedMemoryStatusSnapshot.mockResolvedValue({ agentId: "main" });
+    mocks.callGateway.mockResolvedValue({
+      agentId: "main",
+      provider: "qdrant",
+      runtime: {
+        ok: true,
+        backend: "qmd",
+        provider: "qdrant",
+      },
+      embedding: {
+        ok: false,
+        checked: false,
+      },
+    });
   });
 
   it("forwards the shared memory snapshot dependencies", async () => {
@@ -64,5 +82,54 @@ describe("status.scan-memory", () => {
       getMemorySearchManager: mocks.getMemorySearchManager,
       requireDefaultStore,
     });
+    expect(mocks.callGateway).not.toHaveBeenCalled();
+  });
+
+  it("uses live gateway runtime status when local memory is unavailable", async () => {
+    const { resolveStatusMemoryStatusSnapshot } = await import("./status.scan-memory.ts");
+
+    mocks.resolveSharedMemoryStatusSnapshot.mockResolvedValue(null);
+    const agentStatus = createMainAgentStatus();
+
+    await expect(
+      resolveStatusMemoryStatusSnapshot({
+        cfg: { agents: {} },
+        agentStatus,
+        memoryPlugin: { enabled: true, slot: "memory-qdrant" },
+        gatewayReachable: true,
+      }),
+    ).resolves.toEqual({
+      agentId: "main",
+      ok: true,
+      backend: "qmd",
+      provider: "qdrant",
+    });
+
+    expect(mocks.callGateway).toHaveBeenCalledWith({
+      config: { agents: {} },
+      method: "doctor.memory.status",
+      params: { agentId: "main", probe: false },
+      timeoutMs: 2500,
+    });
+  });
+
+  it("can skip local materialization and trust live gateway memory evidence", async () => {
+    const { resolveStatusMemoryStatusSnapshot } = await import("./status.scan-memory.ts");
+
+    const agentStatus = createMainAgentStatus();
+    await expect(
+      resolveStatusMemoryStatusSnapshot({
+        cfg: { agents: {} },
+        agentStatus,
+        memoryPlugin: { enabled: true, slot: "memory-qdrant" },
+        includeLocal: false,
+        gatewayReachable: true,
+      }),
+    ).resolves.toMatchObject({
+      backend: "qmd",
+      provider: "qdrant",
+    });
+
+    expect(mocks.resolveSharedMemoryStatusSnapshot).not.toHaveBeenCalled();
   });
 });

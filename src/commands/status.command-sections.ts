@@ -168,7 +168,12 @@ export function buildStatusMemoryValue(
   }
   const parts: string[] = [];
   const dirtySuffix = params.memory.dirty ? ` · ${params.warn("dirty")}` : "";
-  parts.push(`${params.memory.files} files · ${params.memory.chunks} chunks${dirtySuffix}`);
+  if (typeof params.memory.files === "number" && typeof params.memory.chunks === "number") {
+    parts.push(`${params.memory.files} files · ${params.memory.chunks} chunks${dirtySuffix}`);
+  } else {
+    const provider = params.memory.provider ? `provider ${params.memory.provider}` : "runtime";
+    parts.push(params.ok(`${provider} available`));
+  }
   if (params.memory.sources?.length) {
     parts.push(`sources ${params.memory.sources.join(", ")}`);
   }

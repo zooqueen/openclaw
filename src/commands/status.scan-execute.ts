@@ -23,6 +23,8 @@ export async function executeStatusScanFromOverview(params: {
     cfg: StatusScanOverviewResult["cfg"];
     agentStatus: StatusScanOverviewResult["agentStatus"];
     memoryPlugin: MemoryPluginStatus;
+    gatewayReachable: boolean;
+    gatewayCallOverrides?: StatusScanOverviewResult["gatewaySnapshot"]["gatewayCallOverrides"];
     runtime?: RuntimeEnv;
   }) => Promise<MemoryStatusSnapshot | null>;
   channelIssues: StatusScanResult["channelIssues"];
@@ -36,6 +38,10 @@ export async function executeStatusScanFromOverview(params: {
       cfg: params.overview.cfg,
       agentStatus: params.overview.agentStatus,
       memoryPlugin,
+      gatewayReachable: params.overview.gatewaySnapshot.gatewayReachable,
+      ...(params.overview.gatewaySnapshot.gatewayCallOverrides
+        ? { gatewayCallOverrides: params.overview.gatewaySnapshot.gatewayCallOverrides }
+        : {}),
       ...(params.runtime ? { runtime: params.runtime } : {}),
     }),
     resolveStatusSummaryFromOverview({

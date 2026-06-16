@@ -41,6 +41,23 @@ describe("status-overview-rows", () => {
     );
   });
 
+  it("formats gateway-backed provider-only memory status as available", () => {
+    const rows = buildStatusCommandOverviewRows(
+      createStatusCommandOverviewRowsParams({
+        memory: {
+          agentId: "main",
+          backend: "qmd",
+          provider: "qdrant",
+        },
+        memoryPlugin: { enabled: true, slot: "memory-qdrant" },
+      }),
+    );
+
+    expect(findRowValue(rows, "Memory")).toBe(
+      "ok(provider qdrant available) · plugin memory-qdrant",
+    );
+  });
+
   it("shows update restart state in fast status output", () => {
     const rows = buildStatusCommandOverviewRows(
       createStatusCommandOverviewRowsParams({

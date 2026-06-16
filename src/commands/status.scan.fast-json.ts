@@ -138,14 +138,29 @@ export async function scanStatusJsonFast(
         ? undefined
         : (cfg) => opts.timeoutMs ?? Math.max(1000, cfg.gateway?.handshakeTimeoutMs ?? 0),
     resolveHasConfiguredChannels: (cfg) => hasPotentialConfiguredChannelsForStatusJson(cfg),
-    resolveMemory: async ({ cfg, agentStatus, memoryPlugin }) =>
+    resolveMemory: async ({
+      cfg,
+      agentStatus,
+      memoryPlugin,
+      gatewayReachable,
+      gatewayCallOverrides,
+    }) =>
       opts.all
         ? await resolveStatusMemoryStatusSnapshot({
             cfg,
             agentStatus,
             memoryPlugin,
             requireDefaultStore: resolveDefaultMemoryStorePath,
+            gatewayReachable,
+            gatewayCallOverrides,
           })
-        : null,
+        : await resolveStatusMemoryStatusSnapshot({
+            cfg,
+            agentStatus,
+            memoryPlugin,
+            includeLocal: false,
+            gatewayReachable,
+            gatewayCallOverrides,
+          }),
   });
 }

@@ -36,11 +36,20 @@ export async function scanStatus(
             config: cfg,
             activationSourceConfig: sourceConfig,
           }),
-        resolveMemory: async ({ cfg, agentStatus, memoryPlugin }) =>
+        resolveMemory: async ({
+          cfg,
+          agentStatus,
+          memoryPlugin,
+          gatewayReachable,
+          gatewayCallOverrides,
+        }) =>
           await resolveStatusMemoryStatusSnapshot({
             cfg,
             agentStatus,
             memoryPlugin,
+            includeLocal: false,
+            gatewayReachable,
+            gatewayCallOverrides,
           }),
       },
     );
@@ -85,15 +94,30 @@ export async function scanStatus(
       progress.setLabel("Checking memory and sessions…");
       const result = await executeStatusScanFromOverview({
         overview,
-        resolveMemory: async ({ cfg, agentStatus, memoryPlugin }) =>
+        resolveMemory: async ({
+          cfg,
+          agentStatus,
+          memoryPlugin,
+          gatewayReachable,
+          gatewayCallOverrides,
+        }) =>
           // Memory plugin probing can touch disk/plugin state; reserve it for full scans.
           opts.all
             ? await resolveStatusMemoryStatusSnapshot({
                 cfg,
                 agentStatus,
                 memoryPlugin,
+                gatewayReachable,
+                gatewayCallOverrides,
               })
-            : null,
+            : await resolveStatusMemoryStatusSnapshot({
+                cfg,
+                agentStatus,
+                memoryPlugin,
+                includeLocal: false,
+                gatewayReachable,
+                gatewayCallOverrides,
+              }),
         channelIssues: overview.channelIssues,
         channels: overview.channels,
         pluginCompatibility,
