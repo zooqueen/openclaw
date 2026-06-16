@@ -11,7 +11,7 @@ import {
   resolveWebhookPath,
 } from "../runtime-api.js";
 import type { ResolvedGoogleChatAccount } from "./accounts.js";
-import { downloadGoogleChatMedia, sendGoogleChatMessage } from "./api.js";
+import { deleteGoogleChatMessage, downloadGoogleChatMedia, sendGoogleChatMessage } from "./api.js";
 import { maybeHandleGoogleChatApprovalCardClick } from "./approval-card-click.js";
 import type { GoogleChatAudienceType } from "./auth.js";
 import { applyGoogleChatInboundAccessPolicy } from "./monitor-access.js";
@@ -439,6 +439,15 @@ async function processMessageWithPipeline(params: {
       }),
     },
   });
+
+  if (typingMessageName) {
+    await deleteGoogleChatMessage({
+      account,
+      messageName: typingMessageName,
+    }).catch((err) => {
+      runtime.error?.(`Google Chat typing cleanup failed: ${String(err)}`);
+    });
+  }
 }
 
 export const testing = {

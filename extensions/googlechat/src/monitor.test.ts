@@ -7,6 +7,7 @@ import { testing } from "./monitor.js";
 import type { GoogleChatEvent } from "./types.js";
 
 const apiMocks = vi.hoisted(() => ({
+  deleteGoogleChatMessage: vi.fn(),
   downloadGoogleChatMedia: vi.fn(),
   sendGoogleChatMessage: vi.fn(),
 }));
@@ -16,6 +17,7 @@ const accessMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./api.js", () => ({
+  deleteGoogleChatMessage: apiMocks.deleteGoogleChatMessage,
   downloadGoogleChatMedia: apiMocks.downloadGoogleChatMedia,
   sendGoogleChatMessage: apiMocks.sendGoogleChatMessage,
 }));
@@ -25,6 +27,7 @@ vi.mock("./monitor-access.js", () => ({
 }));
 
 beforeEach(() => {
+  apiMocks.deleteGoogleChatMessage.mockReset();
   apiMocks.downloadGoogleChatMedia.mockReset();
   apiMocks.sendGoogleChatMessage.mockReset();
   accessMocks.applyGoogleChatInboundAccessPolicy.mockReset();
@@ -227,6 +230,75 @@ describe("googlechat monitor direct messages", () => {
       thread: undefined,
     });
     expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("deletes typing messages when the turn completes without delivery", async () => {
+    const runTurn = vi.fn(async () => {});
+    const core = {
+      logging: { shouldLogVerbose: () => false },
+      channel: {
+        routing: {
+          resolveAgentRoute: () => ({
+            agentId: "agent-1",
+            accountId: "work",
+            sessionKey: "session-1",
+          }),
+        },
+        session: {
+          resolveStorePath: () => "/tmp/openclaw-googlechat-test",
+          readSessionUpdatedAt: () => undefined,
+          recordInboundSession: vi.fn(),
+        },
+        reply: {
+          resolveEnvelopeFormatOptions: () => ({}),
+          formatAgentEnvelope: ({ body }: { body: string }) => body,
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(),
+        },
+        inbound: { buildContext: vi.fn((payload: unknown) => payload), run: runTurn },
+      },
+    } as unknown as GoogleChatCoreRuntime;
+    const runtime = { error: vi.fn(), log: vi.fn() } satisfies GoogleChatRuntimeEnv;
+    const account = {
+      accountId: "work",
+      config: {},
+      credentialSource: "inline",
+    } as ResolvedGoogleChatAccount;
+    const event = {
+      type: "MESSAGE",
+      eventTime: "2026-03-22T00:00:00.001Z",
+      space: { name: "spaces/DM", type: "DM" },
+      message: {
+        name: "spaces/DM/messages/2",
+        text: "hello",
+        sender: { name: "users/alice", displayName: "Alice", type: "HUMAN" },
+      },
+    } satisfies GoogleChatEvent;
+
+    accessMocks.applyGoogleChatInboundAccessPolicy.mockResolvedValue({
+      ok: true,
+      commandAuthorized: undefined,
+      effectiveWasMentioned: undefined,
+      groupBotLoopProtection: undefined,
+      groupSystemPrompt: undefined,
+    });
+    apiMocks.sendGoogleChatMessage.mockResolvedValue({
+      messageName: "spaces/DM/messages/typing",
+    });
+
+    await testing.processMessageWithPipeline({
+      event,
+      account,
+      config: {},
+      runtime,
+      core,
+      mediaMaxMb: 10,
+    });
+
+    expect(runTurn).toHaveBeenCalledOnce();
+    expect(apiMocks.deleteGoogleChatMessage).toHaveBeenCalledWith({
+      account,
+      messageName: "spaces/DM/messages/typing",
+    });
   });
 
   it("omits thread metadata from DM reply context and typing messages", async () => {
