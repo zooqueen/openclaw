@@ -18,6 +18,19 @@ function normalizeSafe(homedir: () => string): string | undefined {
   }
 }
 
+const ENV_PLACEHOLDER_PATTERN = /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/gu;
+
+function expandEnvPlaceholders(input: string, env: NodeJS.ProcessEnv): string {
+  return input.replace(ENV_PLACEHOLDER_PATTERN, (match, braced: string, bare: string) => {
+    const key = braced ?? bare;
+    if (!Object.prototype.hasOwnProperty.call(env, key)) {
+      return match;
+    }
+    const value = normalize(env[key]);
+    return value ?? match;
+  });
+}
+
 function resolveTermuxHome(env: NodeJS.ProcessEnv): string | undefined {
   const prefix = normalize(env.PREFIX);
   if (!prefix || !normalize(env.ANDROID_DATA)) {
@@ -45,11 +58,12 @@ function resolveRawHomeDir(env: NodeJS.ProcessEnv, homedir: () => string): strin
   if (!explicitHome) {
     return resolveRawOsHomeDir(env, homedir);
   }
-  if (explicitHome === "~" || explicitHome.startsWith("~/") || explicitHome.startsWith("~\\")) {
+  const expandedHome = expandEnvPlaceholders(explicitHome, env);
+  if (expandedHome === "~" || expandedHome.startsWith("~/") || expandedHome.startsWith("~\\")) {
     const fallbackHome = resolveRawOsHomeDir(env, homedir);
-    return fallbackHome ? explicitHome.replace(/^~(?=$|[\\/])/, fallbackHome) : undefined;
+    return fallbackHome ? expandedHome.replace(/^~(?=$|[\\/])/, fallbackHome) : undefined;
   }
-  return explicitHome;
+  return expandedHome;
 }
 
 /** Resolves OpenClaw's effective home, honoring OPENCLAW_HOME before OS homes. */
@@ -119,15 +133,16 @@ export function resolveHomeRelativePath(
   if (!trimmed) {
     return trimmed;
   }
-  if (trimmed.startsWith("~")) {
-    const expanded = expandHomePrefix(trimmed, {
+  const expanded = expandEnvPlaceholders(trimmed, opts?.env ?? process.env);
+  if (expanded.startsWith("~")) {
+    const expandedHome = expandHomePrefix(expanded, {
       home: resolveRequiredHomeDir(opts?.env ?? process.env, opts?.homedir ?? os.homedir),
       env: opts?.env,
       homedir: opts?.homedir,
     });
-    return path.resolve(expanded);
+    return path.resolve(expandedHome);
   }
-  return path.resolve(trimmed);
+  return path.resolve(expanded);
 }
 
 /**
@@ -155,13 +170,14 @@ export function resolveOsHomeRelativePath(
   if (!trimmed) {
     return trimmed;
   }
-  if (trimmed.startsWith("~")) {
-    const expanded = expandHomePrefix(trimmed, {
+  const expanded = expandEnvPlaceholders(trimmed, opts?.env ?? process.env);
+  if (expanded.startsWith("~")) {
+    const expandedHome = expandHomePrefix(expanded, {
       home: resolveRequiredOsHomeDir(opts?.env ?? process.env, opts?.homedir ?? os.homedir),
       env: opts?.env,
       homedir: opts?.homedir,
     });
-    return path.resolve(expanded);
+    return path.resolve(expandedHome);
   }
-  return path.resolve(trimmed);
+  return path.resolve(expanded);
 }

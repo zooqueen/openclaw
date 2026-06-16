@@ -319,6 +319,32 @@ describe("skills gateway handlers (clawhub)", () => {
     expect(error).toBeUndefined();
   });
 
+  it("passes env-expanded agent workspaces to ClawHub installs", async () => {
+    const workspaceDir = "/srv/openclaw-workspaces/main";
+    resolveAgentWorkspaceDirMock.mockReturnValue(workspaceDir);
+    installSkillFromClawHubMock.mockResolvedValue({
+      ok: true,
+      slug: "calendar",
+      version: "1.2.3",
+      targetDir: `${workspaceDir}/skills/calendar`,
+    });
+
+    const { ok, error } = await callSkillsHandler("skills.install", {
+      source: "clawhub",
+      slug: "calendar",
+    });
+
+    expect(installSkillFromClawHubMock).toHaveBeenCalledWith({
+      workspaceDir,
+      slug: "calendar",
+      version: undefined,
+      force: false,
+      config: {},
+    });
+    expect(ok).toBe(true);
+    expect(error).toBeUndefined();
+  });
+
   it("accepts deprecated unsafe override without forwarding it to skill installs", async () => {
     installSkillMock.mockResolvedValue({
       ok: true,

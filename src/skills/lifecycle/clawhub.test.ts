@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveHomeRelativePath } from "../../infra/home-dir.js";
 import { createTrackedTempDirs } from "../../test-utils/tracked-temp-dirs.js";
 
 const fetchClawHubSkillDetailMock = vi.fn();
@@ -305,6 +306,35 @@ describe("skills-clawhub", () => {
       "registry",
       "version",
     ]);
+  });
+
+  it("installs ClawHub skills under env-expanded workspace paths", async () => {
+    const workspaceRoot = await tempDirs.make("openclaw-env-workspaces-");
+    const workspaceDir = resolveHomeRelativePath("$OPENCLAW_WORKSPACE_ROOT/main", {
+      env: { OPENCLAW_WORKSPACE_ROOT: workspaceRoot } as NodeJS.ProcessEnv,
+    });
+    const expectedTargetDir = path.join(workspaceDir, "skills", "agentreceipt");
+    installPackageDirMock.mockImplementationOnce(async (params: { targetDir: string }) => {
+      await fs.mkdir(params.targetDir, { recursive: true });
+      await fs.writeFile(path.join(params.targetDir, "SKILL.md"), "# AgentReceipt\n", "utf8");
+      return { ok: true, targetDir: params.targetDir };
+    });
+
+    const result = await installSkillFromClawHub({
+      workspaceDir,
+      slug: "agentreceipt",
+    });
+
+    expectInstalledSkill(result, {
+      slug: "agentreceipt",
+      version: "1.0.0",
+      targetDir: expectedTargetDir,
+    });
+    expect(reportClawHubSkillInstallTelemetryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        root: workspaceDir,
+      }),
+    );
   });
 
   it("persists install artifact and verification provenance in the ClawHub lockfile", async () => {

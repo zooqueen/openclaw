@@ -77,6 +77,23 @@ describe("resolveEffectiveHomeDir", () => {
       } as NodeJS.ProcessEnv,
       expected: "C:/Users/alice\\svc",
     },
+    {
+      name: "expands env placeholders in OPENCLAW_HOME",
+      env: {
+        OPENCLAW_HOME: "$OPENCLAW_ROOT/svc",
+        OPENCLAW_ROOT: "/srv/openclaw-root",
+      } as NodeJS.ProcessEnv,
+      expected: "/srv/openclaw-root/svc",
+    },
+    {
+      name: "expands tilde-valued env placeholders in OPENCLAW_HOME once",
+      env: {
+        OPENCLAW_HOME: "${OPENCLAW_ROOT}/svc",
+        OPENCLAW_ROOT: "~/root",
+        HOME: "/home/alice",
+      } as NodeJS.ProcessEnv,
+      expected: "/home/alice/root/svc",
+    },
   ])("$name", ({ env, expected }) => {
     expect(resolveEffectiveHomeDir(env)).toBe(path.resolve(expected));
   });
@@ -253,8 +270,63 @@ describe("resolveHomeRelativePath", () => {
       },
       expected: path.resolve(process.cwd()),
     },
+    {
+      name: "expands bare env placeholders before resolving",
+      input: "$OPENCLAW_WORKSPACE_ROOT/project",
+      opts: {
+        env: { OPENCLAW_WORKSPACE_ROOT: "/srv/workspaces" } as NodeJS.ProcessEnv,
+      },
+      expected: path.resolve("/srv/workspaces/project"),
+    },
+    {
+      name: "expands braced env placeholders before resolving",
+      input: "${OPENCLAW_WORKSPACE_ROOT}/project",
+      opts: {
+        env: { OPENCLAW_WORKSPACE_ROOT: "/srv/workspaces" } as NodeJS.ProcessEnv,
+      },
+      expected: path.resolve("/srv/workspaces/project"),
+    },
+    {
+      name: "expands tilde-valued env placeholders once",
+      input: "$OPENCLAW_WORKSPACE_ROOT/project",
+      opts: {
+        env: {
+          OPENCLAW_WORKSPACE_ROOT: "~/workspaces",
+          HOME: "/home/alice",
+        } as NodeJS.ProcessEnv,
+      },
+      expected: path.resolve("/home/alice/workspaces/project"),
+    },
+    {
+      name: "preserves missing placeholders instead of resolving them as empty",
+      input: "$OPENCLAW_MISSING/project",
+      opts: {
+        env: {} as NodeJS.ProcessEnv,
+      },
+      expected: path.resolve("$OPENCLAW_MISSING/project"),
+    },
+    {
+      name: "preserves empty placeholders instead of resolving them as empty",
+      input: "${OPENCLAW_EMPTY}/project",
+      opts: {
+        env: { OPENCLAW_EMPTY: " " } as NodeJS.ProcessEnv,
+      },
+      expected: path.resolve("${OPENCLAW_EMPTY}/project"),
+    },
   ])("$name", ({ input, opts, expected }) => {
     expect(resolveHomeRelativePath(input, opts)).toBe(expected);
+  });
+
+  it("does not read inherited env keys while expanding placeholders", () => {
+    const env = Object.create({
+      get OPENCLAW_INHERITED_ROOT() {
+        throw new Error("inherited env key should not be read");
+      },
+    }) as NodeJS.ProcessEnv;
+
+    expect(resolveHomeRelativePath("$OPENCLAW_INHERITED_ROOT/project", { env })).toBe(
+      path.resolve("$OPENCLAW_INHERITED_ROOT/project"),
+    );
   });
 });
 
