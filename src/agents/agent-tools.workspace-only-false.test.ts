@@ -58,17 +58,6 @@ describe("FS tools with workspaceOnly=false", () => {
     }
   };
 
-  const stubHostHome = async () => {
-    const homeDir = path.join(tmpDir, "home");
-    await fs.mkdir(homeDir, { recursive: true });
-    vi.stubEnv("HOME", homeDir);
-    vi.stubEnv("USERPROFILE", homeDir);
-    vi.stubEnv("OPENCLAW_HOME", homeDir);
-    vi.stubEnv("OPENCLAW_STATE_DIR", path.join(tmpDir, "state"));
-    vi.stubEnv("OPENCLAW_OAUTH_DIR", path.join(tmpDir, "oauth"));
-    return homeDir;
-  };
-
   const toolsFor = (workspaceOnly: boolean | undefined): AnyAgentTool[] => {
     const read = createOpenClawReadTool(createReadTool(workspaceDir) as unknown as AnyAgentTool);
     const write = createHostWorkspaceWriteTool(workspaceDir, { workspaceOnly });
@@ -147,25 +136,26 @@ describe("FS tools with workspaceOnly=false", () => {
     await expect(fs.readFile(realFile, "utf-8")).resolves.toBe("after");
   });
 
-  it("denies writes through hardlink aliases to sensitive host paths when workspaceOnly=false", async () => {
+  it("should allow write through a non-sensitive hardlink when workspaceOnly=false", async () => {
     if (process.platform === "win32") {
       return;
     }
-    const homeDir = await stubHostHome();
-    const target = path.join(homeDir, ".netrc");
-    const alias = path.join(tmpDir, "netrc-hardlink-alias");
-    await fs.writeFile(target, "machine example.com\n", "utf-8");
-    await fs.link(target, alias);
-    const writeTool = requireTool(toolsFor(false), "write");
+    const realFile = path.join(tmpDir, "hardlink-real.txt");
+    const alias = path.join(tmpDir, "hardlink-alias.txt");
+    await fs.writeFile(realFile, "before", "utf-8");
+    await fs.link(realFile, alias);
 
-    await expectDeniedMutation(() =>
-      writeTool.execute("test-call-deny-sensitive-hardlink-write", {
+    await runFsTool(
+      "write",
+      "test-call-hardlink-write",
+      {
         path: alias,
-        content: "machine evil.example.com\n",
-      }),
+        content: "after",
+      },
+      false,
     );
 
-    await expect(fs.readFile(target, "utf-8")).resolves.toBe("machine example.com\n");
+    await expect(fs.readFile(realFile, "utf-8")).resolves.toBe("after");
   });
 
   it("should allow write outside workspace via ../ path when workspaceOnly=false", async () => {
@@ -298,69 +288,50 @@ describe("FS tools with workspaceOnly=false", () => {
     expect(content).toBe("after");
   });
 
-  it("denies writes to sensitive host paths when workspaceOnly=false", async () => {
-    const homeDir = await stubHostHome();
-    const target = path.join(homeDir, ".ssh", "authorized_keys");
+  it("allows credential-like home paths when workspaceOnly=false", async () => {
+    const target = path.join(tmpDir, "home", ".ssh", "authorized_keys");
+
+    await runFsTool(
+      "write",
+      "test-call-allow-home-credential-like-path",
+      {
+        path: target,
+        content: "ssh-rsa now-allowed-for-scope-control",
+      },
+      false,
+    );
+
+    await expect(fs.readFile(target, "utf-8")).resolves.toBe(
+      "ssh-rsa now-allowed-for-scope-control",
+    );
+  });
+
+  it("denies writes to privilege and login authority paths when workspaceOnly=false", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
     const writeTool = requireTool(toolsFor(false), "write");
 
     await expectDeniedMutation(() =>
-      writeTool.execute("test-call-deny-sensitive-write", {
-        path: target,
-        content: "ssh-rsa should-not-write",
+      writeTool.execute("test-call-deny-login-authority-write", {
+        path: "/etc/sudoers.d/openclaw-test",
+        content: "should-not-write",
       }),
     );
-
-    await expect(fs.stat(target)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("denies edits to sensitive host paths when workspaceOnly=false", async () => {
-    const homeDir = await stubHostHome();
-    const target = path.join(homeDir, ".netrc");
-    await fs.writeFile(target, "machine example.com\n", "utf-8");
-    const editTool = requireTool(toolsFor(false), "edit");
+  it("denies privilege and login authority paths inside workspaceOnly=true roots", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const writeTool = createHostWorkspaceWriteTool("/etc", { workspaceOnly: true });
 
     await expectDeniedMutation(() =>
-      editTool.execute("test-call-deny-sensitive-edit", {
-        path: target,
-        edits: [{ oldText: "example.com", newText: "evil.example.com" }],
+      writeTool.execute("test-call-deny-login-authority-workspace-write", {
+        path: "/etc/passwd",
+        content: "should-not-write",
       }),
     );
-
-    await expect(fs.readFile(target, "utf-8")).resolves.toBe("machine example.com\n");
-  });
-
-  it("denies writes to configured agent auth stores when workspaceOnly=false", async () => {
-    await stubHostHome();
-    const agentDir = path.join(tmpDir, "configured-agent");
-    const target = path.join(agentDir, "auth-profiles.json");
-    const writeTool = createHostWorkspaceWriteTool(workspaceDir, {
-      workspaceOnly: false,
-      denyMutationAgentDirs: [agentDir],
-    });
-
-    await expectDeniedMutation(() =>
-      writeTool.execute("test-call-deny-configured-agent-auth", {
-        path: target,
-        content: "{}\n",
-      }),
-    );
-
-    await expect(fs.stat(target)).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("denies sensitive paths inside the workspace root when workspaceOnly=true", async () => {
-    const homeDir = await stubHostHome();
-    const target = path.join(homeDir, ".ssh", "authorized_keys");
-    const writeTool = createHostWorkspaceWriteTool(homeDir, { workspaceOnly: true });
-
-    await expectDeniedMutation(() =>
-      writeTool.execute("test-call-deny-sensitive-workspace-write", {
-        path: target,
-        content: "ssh-rsa should-not-write",
-      }),
-    );
-
-    await expect(fs.stat(target)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("should block write outside workspace when workspaceOnly=true", async () => {

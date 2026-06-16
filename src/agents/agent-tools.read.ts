@@ -33,7 +33,6 @@ import {
   buildSensitiveHostDenyMutations,
   mkdirHostPathWithDenyMutations,
   resolveHostToolPath,
-  type SensitiveHostDenyMutationOptions,
   writeHostFileWithDenyMutations,
 } from "./host-mutation-policy.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
@@ -840,7 +839,6 @@ type SandboxToolParams = {
 
 type HostToolMutationOptions = {
   workspaceOnly?: boolean;
-  denyMutationAgentDirs?: readonly string[];
 };
 
 /** Create a sandbox-backed read tool with OpenClaw result normalization. */
@@ -971,23 +969,8 @@ async function assertSandboxFileExists(params: SandboxToolParams, absolutePath: 
   }
 }
 
-function hostDenyMutationOptions(
-  options: HostToolMutationOptions | undefined,
-): SensitiveHostDenyMutationOptions {
-  const agentDirs = options?.denyMutationAgentDirs;
-  return agentDirs ? { agentDirs } : {};
-}
-
-async function writeHostFile(
-  absolutePath: string,
-  content: string,
-  options?: HostToolMutationOptions,
-) {
-  await writeHostFileWithDenyMutations(
-    resolveHostToolPath(absolutePath),
-    content,
-    hostDenyMutationOptions(options),
-  );
+async function writeHostFile(absolutePath: string, content: string) {
+  await writeHostFileWithDenyMutations(resolveHostToolPath(absolutePath), content);
 }
 
 async function statHostFile(absolutePath: string) {
@@ -1028,13 +1011,9 @@ function createHostWriteOperations(root: string, options?: HostToolMutationOptio
     // Host writes remain broad, but still honor the sensitive path deny policy.
     return {
       mkdir: async (dir: string) => {
-        await mkdirHostPathWithDenyMutations(
-          resolveHostToolPath(dir),
-          hostDenyMutationOptions(options),
-        );
+        await mkdirHostPathWithDenyMutations(resolveHostToolPath(dir));
       },
-      writeFile: (absolutePath: string, content: string) =>
-        writeHostFile(absolutePath, content, options),
+      writeFile: writeHostFile,
       readFile: async (absolutePath: string) => fs.readFile(resolveHostToolPath(absolutePath)),
       statFile: (absolutePath: string) => statHostFile(resolveHostToolPath(absolutePath)),
     } as const;
@@ -1042,7 +1021,7 @@ function createHostWriteOperations(root: string, options?: HostToolMutationOptio
 
   // When workspaceOnly is true, enforce workspace boundary.
   const rootPromise = fsRoot(root, {
-    denyMutations: buildSensitiveHostDenyMutations(process.env, hostDenyMutationOptions(options)),
+    denyMutations: buildSensitiveHostDenyMutations(),
   });
   return {
     mkdir: async (dir: string) => {
@@ -1078,8 +1057,7 @@ function createHostEditOperations(root: string, options?: HostToolMutationOption
       readFile: async (absolutePath: string) => {
         return await fs.readFile(resolveHostToolPath(absolutePath));
       },
-      writeFile: (absolutePath: string, content: string) =>
-        writeHostFile(absolutePath, content, options),
+      writeFile: writeHostFile,
       access: async (absolutePath: string) => {
         await fs.access(resolveHostToolPath(absolutePath));
       },
@@ -1088,7 +1066,7 @@ function createHostEditOperations(root: string, options?: HostToolMutationOption
 
   // When workspaceOnly is true, enforce workspace boundary.
   const rootPromise = fsRoot(root, {
-    denyMutations: buildSensitiveHostDenyMutations(process.env, hostDenyMutationOptions(options)),
+    denyMutations: buildSensitiveHostDenyMutations(),
   });
   return {
     readFile: async (absolutePath: string) => {

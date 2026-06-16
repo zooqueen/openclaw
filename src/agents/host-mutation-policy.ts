@@ -1,7 +1,6 @@
 import { constants as fsConstants, type Stats } from "node:fs";
 import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { resolveOAuthDir, resolveStateDir } from "../config/paths.js";
 import {
   FsSafeError,
   isPathInside,
@@ -9,48 +8,10 @@ import {
   sameFileIdentity,
   type DenyMutationPolicy,
 } from "../infra/fs-safe.js";
-import { expandHomePrefix, resolveEffectiveHomeDir, resolveOsHomeDir } from "../infra/home-dir.js";
-
-const HOME_DENIED_PATHS = [
-  [".ssh", "authorized_keys"],
-  [".ssh", "id_rsa"],
-  [".ssh", "id_ed25519"],
-  [".ssh", "config"],
-  [".bashrc"],
-  [".zshrc"],
-  [".profile"],
-  [".bash_profile"],
-  [".zprofile"],
-  [".netrc"],
-  [".pgpass"],
-  [".npmrc"],
-  [".pypirc"],
-] as const;
-
-const HOME_DENIED_PREFIXES = [
-  [".ssh"],
-  [".aws"],
-  [".gnupg"],
-  [".kube"],
-  [".docker"],
-  [".azure"],
-  [".config", "gh"],
-] as const;
+import { expandHomePrefix, resolveOsHomeDir } from "../infra/home-dir.js";
 
 const POSIX_DENIED_PATHS = ["/etc/sudoers", "/etc/passwd", "/etc/shadow"] as const;
-const POSIX_DENIED_PREFIXES = ["/etc/sudoers.d", "/etc/systemd"] as const;
-
-export type SensitiveHostDenyMutationOptions = {
-  agentDirs?: readonly string[];
-};
-
-function normalizeEnvPath(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
-    return undefined;
-  }
-  return trimmed;
-}
+const POSIX_DENIED_PREFIXES = ["/etc/sudoers.d"] as const;
 
 function addAbsolutePath(paths: Set<string>, candidate: string | undefined): void {
   if (!candidate) {
@@ -177,10 +138,6 @@ async function statExistingPath(filePath: string): Promise<Stats | undefined> {
   }
 }
 
-function isHardlinkedRegularFile(stat: Stats): boolean {
-  return stat.isFile() && stat.nlink > 1;
-}
-
 async function assertOpenedFileNotDeniedByIdentity(
   openedStat: Stats,
   policy: DenyMutationPolicy,
@@ -190,12 +147,6 @@ async function assertOpenedFileNotDeniedByIdentity(
     if (deniedStat && sameFileIdentity(openedStat, deniedStat)) {
       throwDeniedMutation();
     }
-  }
-
-  // Hardlinks have no unique path. Without scanning every sensitive prefix on
-  // each write, a harmless-looking alias can still mutate a denied inode.
-  if (isHardlinkedRegularFile(openedStat)) {
-    throwDeniedMutation();
   }
 }
 
@@ -235,79 +186,9 @@ async function writeOpenedHostFileWithDenyMutations(
   }
 }
 
-function addHomeSensitivePaths(home: string, paths: Set<string>, prefixes: Set<string>): void {
-  const resolvedHome = path.resolve(home);
-  if (resolvedHome === path.parse(resolvedHome).root) {
-    return;
-  }
-  for (const suffix of HOME_DENIED_PATHS) {
-    addAbsolutePath(paths, path.join(resolvedHome, ...suffix));
-  }
-  for (const suffix of HOME_DENIED_PREFIXES) {
-    addAbsolutePath(prefixes, path.join(resolvedHome, ...suffix));
-  }
-}
-
-function addHomeRoot(roots: Set<string>, candidate: string | undefined, env: NodeJS.ProcessEnv) {
-  const normalized = normalizeEnvPath(candidate);
-  if (!normalized) {
-    return;
-  }
-  roots.add(path.resolve(expandHomePrefix(normalized, { env })));
-}
-
-function collectHomeRoots(env: NodeJS.ProcessEnv): string[] {
-  const roots = new Set<string>();
-  for (const candidate of [resolveOsHomeDir(env), resolveEffectiveHomeDir(env)]) {
-    if (candidate) {
-      roots.add(candidate);
-    }
-  }
-  addHomeRoot(roots, env.HOME, env);
-  addHomeRoot(roots, env.USERPROFILE, env);
-  return [...roots];
-}
-
-function collectStatePaths(env: NodeJS.ProcessEnv, paths: Set<string>, prefixes: Set<string>) {
-  const stateDir = resolveStateDir(env);
-  const oauthDir = resolveOAuthDir(env, stateDir);
-  addAbsolutePath(paths, path.join(stateDir, ".env"));
-  addAbsolutePath(prefixes, path.join(stateDir, "credentials"));
-  addAbsolutePath(prefixes, path.join(stateDir, "agents"));
-  addAbsolutePath(prefixes, oauthDir);
-}
-
-function collectAgentAuthProfilePaths(
-  env: NodeJS.ProcessEnv,
-  paths: Set<string>,
-  options?: SensitiveHostDenyMutationOptions,
-) {
-  for (const agentDir of [
-    env.OPENCLAW_AGENT_DIR,
-    env.PI_CODING_AGENT_DIR,
-    ...(options?.agentDirs ?? []),
-  ]) {
-    if (!agentDir?.trim()) {
-      continue;
-    }
-    const resolved = path.resolve(expandHomePrefix(agentDir, { env }));
-    addAbsolutePath(paths, path.join(resolved, "auth-profiles.json"));
-    addAbsolutePath(paths, path.join(resolved, "agent", "auth-profiles.json"));
-  }
-}
-
-export function buildSensitiveHostDenyMutations(
-  env: NodeJS.ProcessEnv = process.env,
-  options?: SensitiveHostDenyMutationOptions,
-): DenyMutationPolicy {
+export function buildSensitiveHostDenyMutations(): DenyMutationPolicy {
   const paths = new Set<string>();
   const prefixes = new Set<string>();
-
-  for (const home of collectHomeRoots(env)) {
-    addHomeSensitivePaths(home, paths, prefixes);
-  }
-  collectStatePaths(env, paths, prefixes);
-  collectAgentAuthProfilePaths(env, paths, options);
 
   if (process.platform !== "win32") {
     for (const blockedPath of POSIX_DENIED_PATHS) {
@@ -330,23 +211,16 @@ export function resolveHostToolPath(filePath: string): string {
   return path.resolve(expanded);
 }
 
-export async function assertHostMutationAllowed(
-  absolutePath: string,
-  options?: SensitiveHostDenyMutationOptions,
-): Promise<void> {
-  await assertMutationNotDenied(
-    path.resolve(absolutePath),
-    buildSensitiveHostDenyMutations(process.env, options),
-  );
+export async function assertHostMutationAllowed(absolutePath: string): Promise<void> {
+  await assertMutationNotDenied(path.resolve(absolutePath), buildSensitiveHostDenyMutations());
 }
 
 export async function writeHostFileWithDenyMutations(
   absolutePath: string,
   content: string,
-  options?: SensitiveHostDenyMutationOptions,
 ): Promise<void> {
   const resolved = path.resolve(absolutePath);
-  const policy = buildSensitiveHostDenyMutations(process.env, options);
+  const policy = buildSensitiveHostDenyMutations();
   await assertMutationNotDenied(resolved, policy);
   const existingHandle = await openExistingHostFileForWrite(resolved);
   if (existingHandle) {
@@ -370,20 +244,14 @@ export async function writeHostFileWithDenyMutations(
   }
 }
 
-export async function mkdirHostPathWithDenyMutations(
-  dir: string,
-  options?: SensitiveHostDenyMutationOptions,
-): Promise<void> {
+export async function mkdirHostPathWithDenyMutations(dir: string): Promise<void> {
   const resolved = path.resolve(dir);
-  await assertHostMutationAllowed(resolved, options);
+  await assertHostMutationAllowed(resolved);
   await fs.mkdir(resolved, { recursive: true });
 }
 
-export async function removeHostPathWithDenyMutations(
-  filePath: string,
-  options?: SensitiveHostDenyMutationOptions,
-): Promise<void> {
+export async function removeHostPathWithDenyMutations(filePath: string): Promise<void> {
   const resolved = path.resolve(filePath);
-  await assertHostMutationAllowed(resolved, options);
+  await assertHostMutationAllowed(resolved);
   await fs.rm(resolved);
 }

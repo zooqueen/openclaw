@@ -813,10 +813,7 @@ export function createOpenClawCodingTools(options?: {
         if (sandboxRoot) {
           continue;
         }
-        const wrapped = createHostWorkspaceWriteTool(codingRoot, {
-          workspaceOnly,
-          denyMutationAgentDirs: options?.agentDir ? [options.agentDir] : undefined,
-        });
+        const wrapped = createHostWorkspaceWriteTool(codingRoot, { workspaceOnly });
         base.push(workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, codingRoot) : wrapped);
         continue;
       }
@@ -824,10 +821,7 @@ export function createOpenClawCodingTools(options?: {
         if (sandboxRoot) {
           continue;
         }
-        const wrapped = createHostWorkspaceEditTool(codingRoot, {
-          workspaceOnly,
-          denyMutationAgentDirs: options?.agentDir ? [options.agentDir] : undefined,
-        });
+        const wrapped = createHostWorkspaceEditTool(codingRoot, { workspaceOnly });
         base.push(workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, codingRoot) : wrapped);
         continue;
       }

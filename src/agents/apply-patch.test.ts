@@ -444,79 +444,40 @@ describe("applyPatch", () => {
     });
   });
 
-  it("denies hardlink aliases to sensitive host paths when workspaceOnly is explicitly disabled", async () => {
+  it("allows updating a non-sensitive hardlink when workspaceOnly is explicitly disabled", async () => {
     if (process.platform === "win32") {
       return;
     }
     await withTempDir(async (dir) => {
-      const homeDir = path.join(dir, "home");
-      await fs.mkdir(homeDir, { recursive: true });
-      vi.stubEnv("HOME", homeDir);
-      vi.stubEnv("USERPROFILE", homeDir);
-      vi.stubEnv("OPENCLAW_HOME", homeDir);
-      vi.stubEnv("OPENCLAW_STATE_DIR", path.join(dir, "state"));
-      vi.stubEnv("OPENCLAW_OAUTH_DIR", path.join(dir, "oauth"));
-
-      const target = path.join(homeDir, ".netrc");
-      const alias = path.join(dir, "netrc-hardlink-alias");
-      await fs.writeFile(target, "machine example.com\n", "utf8");
-      await fs.link(target, alias);
+      const realFile = path.join(dir, "hardlink-real.txt");
+      const alias = path.join(dir, "hardlink-alias.txt");
+      await fs.writeFile(realFile, "before\n", "utf8");
+      await fs.link(realFile, alias);
       const patch = `*** Begin Patch
 *** Update File: ${alias}
 @@
--machine example.com
-+machine evil.example.com
+-before
++after
 *** End Patch`;
 
-      try {
-        await expect(applyPatch(patch, { cwd: dir, workspaceOnly: false })).rejects.toThrow(
-          /denied-path|denied|mutation policy/i,
-        );
-        await expect(fs.readFile(target, "utf8")).resolves.toBe("machine example.com\n");
-      } finally {
-        vi.unstubAllEnvs();
-      }
+      const result = await applyPatch(patch, { cwd: dir, workspaceOnly: false });
+
+      expect(result.summary.modified).toEqual(["hardlink-alias.txt"]);
+      await expect(fs.readFile(realFile, "utf8")).resolves.toBe("after\n");
     });
   });
 
-  it("denies sensitive host paths when workspaceOnly is explicitly disabled", async () => {
+  it("denies privilege and login authority paths when workspaceOnly is explicitly disabled", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
     await withTempDir(async (dir) => {
-      const homeDir = path.join(dir, "home");
-      await fs.mkdir(homeDir, { recursive: true });
-      vi.stubEnv("HOME", homeDir);
-      vi.stubEnv("USERPROFILE", homeDir);
-      vi.stubEnv("OPENCLAW_HOME", homeDir);
-      vi.stubEnv("OPENCLAW_STATE_DIR", path.join(dir, "state"));
-      vi.stubEnv("OPENCLAW_OAUTH_DIR", path.join(dir, "oauth"));
-
-      const target = path.join(homeDir, ".netrc");
+      const target = "/etc/sudoers.d/openclaw-test";
       const patch = buildAddFilePatch(target);
 
-      try {
-        await expect(applyPatch(patch, { cwd: dir, workspaceOnly: false })).rejects.toThrow(
-          /denied-path|denied|mutation policy/i,
-        );
-        await expectMissingPath(fs.readFile(target, "utf8"));
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    });
-  });
-
-  it("denies configured agent auth stores when workspaceOnly is explicitly disabled", async () => {
-    await withTempDir(async (dir) => {
-      const agentDir = path.join(dir, "configured-agent");
-      const target = path.join(agentDir, "auth-profiles.json");
-      const patch = buildAddFilePatch(target);
-
-      await expect(
-        applyPatch(patch, {
-          cwd: dir,
-          workspaceOnly: false,
-          denyMutationAgentDirs: [agentDir],
-        }),
-      ).rejects.toThrow(/denied-path|denied|mutation policy/i);
-      await expectMissingPath(fs.readFile(target, "utf8"));
+      await expect(applyPatch(patch, { cwd: dir, workspaceOnly: false })).rejects.toThrow(
+        /denied-path|denied|mutation policy/i,
+      );
     });
   });
 
