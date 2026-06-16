@@ -322,6 +322,28 @@ describe("shouldRunMemoryFlush", () => {
     ).toBe(true);
   });
 
+  it("clamps reserve floor to keep a usable threshold on small context windows", () => {
+    const params = {
+      contextWindowTokens: 16_000,
+      reserveTokensFloor: 20_000,
+      softThresholdTokens: 4_000,
+    };
+
+    expect(shouldRunMemoryFlush({ entry: { totalTokens: 7_999 }, ...params })).toBe(false);
+    expect(shouldRunMemoryFlush({ entry: { totalTokens: 8_000 }, ...params })).toBe(true);
+  });
+
+  it("does not collapse oversized soft thresholds to a one-token flush threshold", () => {
+    const params = {
+      contextWindowTokens: 16_000,
+      reserveTokensFloor: 16_000,
+      softThresholdTokens: 20_000,
+    };
+
+    expect(shouldRunMemoryFlush({ entry: { totalTokens: 1 }, ...params })).toBe(false);
+    expect(shouldRunMemoryFlush({ entry: { totalTokens: 8_000 }, ...params })).toBe(true);
+  });
+
   it("skips when already flushed for current compaction count", () => {
     expect(
       shouldRunMemoryFlush({
@@ -398,6 +420,30 @@ describe("shouldRunPreflightCompaction", () => {
         softThresholdTokens: 2_000,
       }),
     ).toBe(true);
+  });
+
+  it("clamps reserve floor before evaluating projected small-window compaction", () => {
+    const params = {
+      entry: { totalTokens: 10, totalTokensFresh: false },
+      contextWindowTokens: 16_000,
+      reserveTokensFloor: 20_000,
+      softThresholdTokens: 4_000,
+    };
+
+    expect(shouldRunPreflightCompaction({ ...params, tokenCount: 7_999 })).toBe(false);
+    expect(shouldRunPreflightCompaction({ ...params, tokenCount: 8_000 })).toBe(true);
+  });
+
+  it("keeps oversized soft thresholds from disabling preflight compaction", () => {
+    const params = {
+      entry: { totalTokens: 10, totalTokensFresh: false },
+      contextWindowTokens: 16_000,
+      reserveTokensFloor: 16_000,
+      softThresholdTokens: 20_000,
+    };
+
+    expect(shouldRunPreflightCompaction({ ...params, tokenCount: 1 })).toBe(false);
+    expect(shouldRunPreflightCompaction({ ...params, tokenCount: 8_000 })).toBe(true);
   });
 });
 

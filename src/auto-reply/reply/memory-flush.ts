@@ -1,3 +1,7 @@
+import {
+  MIN_PROMPT_BUDGET_RATIO,
+  MIN_PROMPT_BUDGET_TOKENS,
+} from "../../agents/agent-compaction-constants.js";
 // Builds memory flush prompts when conversation context exceeds model budget.
 import { resolveContextTokensForModel } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
@@ -36,6 +40,30 @@ function resolvePositiveTokenCount(value: number | undefined): number | undefine
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : undefined;
+}
+
+export function resolveMemoryFlushGateThreshold(params: {
+  contextWindowTokens: number;
+  reserveTokensFloor: number;
+  softThresholdTokens: number;
+  minimumThresholdTokens?: number;
+}): number {
+  const contextWindow = Math.max(1, Math.floor(params.contextWindowTokens));
+  const softThreshold = Math.max(0, Math.floor(params.softThresholdTokens));
+  const minimumPromptThreshold = Math.min(
+    MIN_PROMPT_BUDGET_TOKENS,
+    Math.max(1, Math.floor(contextWindow * MIN_PROMPT_BUDGET_RATIO)),
+  );
+  const minimumThreshold = Math.max(
+    minimumPromptThreshold,
+    Math.floor(params.minimumThresholdTokens ?? 0),
+  );
+  const maxReserveTokens = Math.max(0, contextWindow - softThreshold - minimumThreshold);
+  const reserveTokens = Math.min(
+    Math.max(0, Math.floor(params.reserveTokensFloor)),
+    maxReserveTokens,
+  );
+  return Math.max(minimumThreshold, contextWindow - reserveTokens - softThreshold);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -118,17 +146,7 @@ function resolveMemoryFlushGateState<
     return null;
   }
 
-  const contextWindow = Math.max(1, Math.floor(params.contextWindowTokens));
-  const reserveTokens = Math.max(0, Math.floor(params.reserveTokensFloor));
-  const softThreshold = Math.max(0, Math.floor(params.softThresholdTokens));
-  const threshold = Math.max(
-    0,
-    contextWindow - reserveTokens - softThreshold,
-    Math.floor(params.minimumThresholdTokens ?? 0),
-  );
-  if (threshold <= 0) {
-    return null;
-  }
+  const threshold = resolveMemoryFlushGateThreshold(params);
 
   return { entry: params.entry, totalTokens, threshold };
 }
