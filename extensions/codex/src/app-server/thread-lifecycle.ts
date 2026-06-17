@@ -101,6 +101,7 @@ export type CodexContextEngineThreadBootstrapProjection = {
 
 export type CodexPluginThreadConfigProvider = {
   enabled: boolean;
+  codexPluginsEnabled?: boolean;
   inputFingerprint?: string;
   enabledPluginConfigKeys?: readonly string[];
   build: () => Promise<CodexPluginThreadConfig>;
@@ -526,7 +527,10 @@ export async function startOrResumeThread(params: {
   }
   if (binding?.threadId) {
     let pluginBindingStale = isCodexPluginThreadBindingStale({
-      codexPluginsEnabled: params.pluginThreadConfig?.enabled ?? false,
+      codexPluginsEnabled:
+        params.pluginThreadConfig?.codexPluginsEnabled ??
+        params.pluginThreadConfig?.enabled ??
+        false,
       bindingFingerprint: binding.pluginAppsFingerprint,
       bindingInputFingerprint: binding.pluginAppsInputFingerprint,
       currentInputFingerprint: params.pluginThreadConfig?.inputFingerprint,

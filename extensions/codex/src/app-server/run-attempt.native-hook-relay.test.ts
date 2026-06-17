@@ -16,6 +16,7 @@ import {
   runCodexAppServerAttempt,
   setupRunAttemptTestHooks,
   tempDir,
+  threadStartResult,
 } from "./run-attempt-test-harness.js";
 import { testing } from "./run-attempt.js";
 import {
@@ -30,9 +31,7 @@ const DISABLED_CODEX_WEB_SEARCH_THREAD_CONFIG_FINGERPRINT = JSON.stringify({
   web_search: "disabled",
 });
 
-function writeCodexAppServerBinding(
-  ...args: Parameters<typeof writeRawCodexAppServerBinding>
-) {
+function writeCodexAppServerBinding(...args: Parameters<typeof writeRawCodexAppServerBinding>) {
   const [sessionFile, binding, lookup] = args;
   return writeRawCodexAppServerBinding(
     sessionFile,
@@ -42,6 +41,41 @@ function writeCodexAppServerBinding(
     },
     lookup,
   );
+}
+
+type CodexAppServerBindingInput = Parameters<typeof writeCodexAppServerBinding>[1];
+
+async function writeCurrentCodexAppServerBinding(
+  sessionFile: string,
+  workspaceDir: string,
+  binding: CodexAppServerBindingInput,
+): Promise<void> {
+  const harness = createStartedThreadHarness(async (method) => {
+    if (method === "thread/start") {
+      return threadStartResult(binding.threadId);
+    }
+    return undefined;
+  });
+  const run = runCodexAppServerAttempt(createParams(sessionFile, workspaceDir));
+  await harness.waitForMethod("turn/start");
+  await harness.completeTurn({ threadId: binding.threadId, turnId: "turn-1" });
+  await run;
+  const currentBinding = await readCodexAppServerBinding(sessionFile);
+  if (!currentBinding) {
+    throw new Error("expected current Codex app-server binding");
+  }
+  await writeCodexAppServerBinding(sessionFile, {
+    dynamicToolsFingerprint: currentBinding.dynamicToolsFingerprint,
+    dynamicToolsContainDeferred: currentBinding.dynamicToolsContainDeferred,
+    webSearchThreadConfigFingerprint: currentBinding.webSearchThreadConfigFingerprint,
+    userMcpServersFingerprint: currentBinding.userMcpServersFingerprint,
+    mcpServersFingerprint: currentBinding.mcpServersFingerprint,
+    pluginAppsFingerprint: currentBinding.pluginAppsFingerprint,
+    pluginAppsInputFingerprint: currentBinding.pluginAppsInputFingerprint,
+    pluginAppPolicyContext: currentBinding.pluginAppPolicyContext,
+    environmentSelectionFingerprint: currentBinding.environmentSelectionFingerprint,
+    ...binding,
+  });
 }
 
 describe("runCodexAppServerAttempt native hook relay", () => {
@@ -514,7 +548,7 @@ describe("runCodexAppServerAttempt native hook relay", () => {
   it("accepts a stale first hook generation when resuming a pre-generation binding", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
-    await writeCodexAppServerBinding(sessionFile, {
+    await writeCurrentCodexAppServerBinding(sessionFile, workspaceDir, {
       threadId: "thread-existing",
       cwd: workspaceDir,
       model: "gpt-5.4-codex",
@@ -577,7 +611,7 @@ describe("runCodexAppServerAttempt native hook relay", () => {
   it("rotates native hook relay generations when an existing binding starts a fresh thread", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
-    await writeCodexAppServerBinding(sessionFile, {
+    await writeCurrentCodexAppServerBinding(sessionFile, workspaceDir, {
       threadId: "thread-existing",
       cwd: workspaceDir,
       model: "gpt-5.4-codex",
@@ -626,7 +660,7 @@ describe("runCodexAppServerAttempt native hook relay", () => {
   it("rotates native hook relay generations when resume fails over to a fresh thread", async () => {
     const sessionFile = path.join(tempDir, "session.jsonl");
     const workspaceDir = path.join(tempDir, "workspace");
-    await writeCodexAppServerBinding(sessionFile, {
+    await writeCurrentCodexAppServerBinding(sessionFile, workspaceDir, {
       threadId: "thread-existing",
       cwd: workspaceDir,
       model: "gpt-5.4-codex",
