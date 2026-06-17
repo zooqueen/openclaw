@@ -1,3 +1,4 @@
+import { normalizeBasePath } from "../routes/route-registry.ts";
 // Control UI module implements app chat behavior.
 import { setLastActiveSessionKey } from "./app-last-active-session.ts";
 import { scheduleChatScroll, resetChatScroll } from "./app-scroll.ts";
@@ -63,7 +64,6 @@ import {
   type SessionsState,
 } from "./controllers/sessions.ts";
 import { GatewayRequestError, type GatewayBrowserClient, type GatewayHelloOk } from "./gateway.ts";
-import { normalizeBasePath } from "./navigation.ts";
 import {
   areUiSessionKeysEquivalent,
   DEFAULT_AGENT_ID,

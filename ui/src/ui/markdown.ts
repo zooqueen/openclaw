@@ -19,8 +19,12 @@ import MarkdownIt from "markdown-it";
 import markdownItTaskLists from "markdown-it-task-lists";
 import { stripUnsupportedCitationControlMarkers } from "../../../src/shared/text/citation-control-markers.js";
 import { i18n, t } from "../i18n/index.ts";
+import {
+  inferBasePathFromPathname,
+  normalizeBasePath,
+  tabFromPath,
+} from "../routes/route-registry.ts";
 import { truncateText } from "./format.ts";
-import { inferBasePathFromPathname, normalizeBasePath, tabFromPath } from "./navigation.ts";
 import { normalizeLowercaseStringOrEmpty } from "./string-coerce.ts";
 
 const allowedTags = [
