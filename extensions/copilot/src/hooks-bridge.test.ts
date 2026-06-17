@@ -5,7 +5,7 @@ import { createHooksBridge, type CopilotHooksConfig } from "./hooks-bridge.js";
 describe("createHooksBridge", () => {
   const hookBase = {
     sessionId: "runtime-session",
-    timestamp: 0,
+    timestamp: new Date(0),
     cwd: "/",
     workingDirectory: "/",
   };

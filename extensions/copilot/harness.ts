@@ -268,7 +268,7 @@ async function compactTrackedSdkSession(params: {
     ...params.sessionConfig,
     continuePendingWork: false,
     ...(params.gitHubToken ? { gitHubToken: params.gitHubToken } : {}),
-    disableResume: true,
+    suppressResumeEvent: true,
   })) as unknown as CopilotHistoryCompactSession;
   params.onSession?.(session);
   const request = params.customInstructions?.trim()
