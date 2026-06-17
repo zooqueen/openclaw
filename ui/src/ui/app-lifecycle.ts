@@ -1,3 +1,4 @@
+import type { Tab } from "../routes/route-registry.ts";
 // Control UI module implements app lifecycle behavior.
 import { connectGateway } from "./app-gateway.ts";
 import {
@@ -25,7 +26,6 @@ import { persistChatComposerState, restoreChatComposerState } from "./chat/compo
 import { startControlUiResponsivenessObserver } from "./control-ui-performance.ts";
 import { loadControlUiBootstrapConfig } from "./controllers/control-ui-bootstrap.ts";
 import { stopWorkboardLifecycleRefresh, stopWorkboardPolling } from "./controllers/workboard.ts";
-import type { Tab } from "./navigation.ts";
 import type { ChatQueueItem } from "./ui-types.ts";
 
 const CHAT_COMPOSER_DRAFT_PERSIST_DELAY_MS = 200;

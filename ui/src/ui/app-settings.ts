@@ -1,6 +1,14 @@
 // Control UI module implements app settings behavior.
 import { roleScopesAllow } from "../../../src/shared/operator-scope-compat.js";
 import { t } from "../i18n/index.ts";
+import {
+  inferBasePathFromPathname,
+  normalizeBasePath,
+  normalizePath,
+  pathForTab,
+  tabFromPath,
+  type Tab,
+} from "../routes/route-registry.ts";
 import { refreshChat } from "./app-chat.ts";
 import {
   startLogsPolling,
@@ -67,14 +75,6 @@ import {
 import { isCronJobActiveFailure } from "./cron-status.ts";
 import { syncCustomThemeStyleTag } from "./custom-theme.ts";
 import { isMonitoredAuthProvider } from "./model-auth-helpers.ts";
-import {
-  inferBasePathFromPathname,
-  normalizeBasePath,
-  normalizePath,
-  pathForTab,
-  tabFromPath,
-  type Tab,
-} from "./navigation.ts";
 import { normalizeAgentId, parseAgentSessionKey } from "./session-key.ts";
 import {
   normalizeTextScale,

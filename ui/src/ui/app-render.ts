@@ -5,6 +5,17 @@ import { styleMap } from "lit/directives/style-map.js";
 import { i18n, t } from "../i18n/index.ts";
 import { getSafeLocalStorage } from "../local-storage.ts";
 import {
+  iconForTab,
+  isSettingsTab,
+  normalizeBasePath,
+  pathForTab,
+  SETTINGS_TABS,
+  TAB_GROUPS,
+  subtitleForTab,
+  titleForTab,
+  type Tab,
+} from "../routes/route-registry.ts";
+import {
   createChatSessionsLoadOverrides,
   hasAbortableSessionRun,
   refreshChat,
@@ -160,17 +171,6 @@ import { formatTimeMs } from "./format.ts";
 import { formatRelativeTimestamp } from "./format.ts";
 import { icons } from "./icons.ts";
 import { createLazyView, renderLazyView } from "./lazy-view.ts";
-import {
-  iconForTab,
-  isSettingsTab,
-  normalizeBasePath,
-  pathForTab,
-  SETTINGS_TABS,
-  TAB_GROUPS,
-  subtitleForTab,
-  titleForTab,
-  type Tab,
-} from "./navigation.ts";
 import { isPluginEnabledInConfigSnapshot } from "./plugin-activation.ts";
 import { isCronSessionKey, resolveSessionDisplayName } from "./session-display.ts";
 import {
@@ -572,7 +572,7 @@ function renderSidebarSessions(state: AppViewState) {
             return;
           }
           if (await createChatSession(state, { source: "user" })) {
-            state.setTab("chat" as import("./navigation.ts").Tab);
+            state.setTab("chat" as import("../routes/route-registry.ts").Tab);
           }
         }}
       >
@@ -650,7 +650,7 @@ function renderSidebarRecentSession(state: AppViewState, row: GatewaySessionRow)
         if (row.key !== state.sessionKey) {
           switchChatSession(state, row.key);
         }
-        state.setTab("chat" as import("./navigation.ts").Tab);
+        state.setTab("chat" as import("../routes/route-registry.ts").Tab);
       }}
     >
       <span class="sidebar-recent-session__dot" aria-hidden="true"></span>
@@ -2460,10 +2460,10 @@ export function renderApp(state: AppViewState) {
         state.paletteActiveIndex = i;
       },
       onNavigate: (tab) => {
-        state.setTab(tab as import("./navigation.ts").Tab);
+        state.setTab(tab as import("../routes/route-registry.ts").Tab);
       },
       onSlashCommand: (cmd) => {
-        state.setTab("chat" as import("./navigation.ts").Tab);
+        state.setTab("chat" as import("../routes/route-registry.ts").Tab);
         state.handleChatDraftChange(cmd.endsWith(" ") ? cmd : `${cmd} `);
       },
     })}
@@ -2775,7 +2775,7 @@ export function renderApp(state: AppViewState) {
               },
               onConnect: () => state.connect(),
               onRefresh: () => void state.loadOverview({ refresh: true }),
-              onNavigate: (tab) => state.setTab(tab as import("./navigation.ts").Tab),
+              onNavigate: (tab) => state.setTab(tab as import("../routes/route-registry.ts").Tab),
               onRefreshLogs: () => void state.loadOverview({ refresh: true }),
             })
           : nothing}
@@ -2978,7 +2978,7 @@ export function renderApp(state: AppViewState) {
                 }),
                 onNavigateToChat: (sessionKey) => {
                   switchChatSession(state, sessionKey);
-                  state.setTab("chat" as import("./navigation.ts").Tab);
+                  state.setTab("chat" as import("../routes/route-registry.ts").Tab);
                 },
                 onAddToWorkboard:
                   workboardEnabled && operatorCanWrite
@@ -2989,7 +2989,7 @@ export function renderApp(state: AppViewState) {
                           session,
                           requestUpdate: requestHostUpdate,
                         });
-                        state.setTab("workboard" as import("./navigation.ts").Tab);
+                        state.setTab("workboard" as import("../routes/route-registry.ts").Tab);
                       })
                     : undefined,
                 onToggleCheckpointDetails: (sessionKey) =>
@@ -3002,7 +3002,7 @@ export function renderApp(state: AppViewState) {
                   );
                   if (nextKey) {
                     switchChatSession(state, nextKey);
-                    state.setTab("chat" as import("./navigation.ts").Tab);
+                    state.setTab("chat" as import("../routes/route-registry.ts").Tab);
                   }
                 }),
                 onRestoreCheckpoint: (sessionKey, checkpointId) =>
@@ -3032,7 +3032,7 @@ export function renderApp(state: AppViewState) {
                 sessions: state.sessionsResult?.sessions ?? [],
                 onOpenSession: (sessionKey) => {
                   switchChatSession(state, sessionKey);
-                  state.setTab("chat" as import("./navigation.ts").Tab);
+                  state.setTab("chat" as import("../routes/route-registry.ts").Tab);
                 },
                 onReloadConfig: () => void loadConfig(state, { discardPendingChanges: true }),
                 onRequestUpdate: requestHostUpdate,
@@ -3167,7 +3167,7 @@ export function renderApp(state: AppViewState) {
                 }),
                 onNavigateToChat: (sessionKey) => {
                   switchChatSession(state, sessionKey);
-                  state.setTab("chat" as import("./navigation.ts").Tab);
+                  state.setTab("chat" as import("../routes/route-registry.ts").Tab);
                 },
               }),
             )
@@ -3829,7 +3829,7 @@ export function renderApp(state: AppViewState) {
                   onCompact: () => void state.handleSendChat("/compact", { restoreDraft: true }),
                   onOpenSessionCheckpoints: () => {
                     state.sessionsExpandedCheckpointKey = state.sessionKey;
-                    state.setTab("sessions" as import("./navigation.ts").Tab);
+                    state.setTab("sessions" as import("../routes/route-registry.ts").Tab);
                     void loadSessions(state, {
                       ...createChatSessionsLoadOverrides(state),
                       ...scopedAgentListParamsForSession(state, state.sessionKey),
@@ -3905,7 +3905,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onNavigateToAgent: () => {
                     state.agentsSelectedId = resolvedAgentId;
-                    state.setTab("agents" as import("./navigation.ts").Tab);
+                    state.setTab("agents" as import("../routes/route-registry.ts").Tab);
                   },
                   onSessionSelect: (key: string) => {
                     switchChatSession(state, key);
