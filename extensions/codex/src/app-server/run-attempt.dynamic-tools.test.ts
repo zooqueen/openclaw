@@ -105,6 +105,7 @@ describe("runCodexAppServerAttempt dynamic tools", () => {
     params.sessionId = "session-dynamic-order";
     params.sessionKey = "agent:main:session-dynamic-order";
     params.runId = "run-dynamic-order";
+    params.timeoutMs = 30_000;
     let terminalPresentation: string | undefined;
     let latestOrdinal = -1;
     let nextOrdinal = 0;
