@@ -163,6 +163,11 @@ const sourceTestSuffixes = [
   "test-utils.ts",
 ];
 
+function isIgnoredSourceDirectory(dirPath) {
+  const normalizedPath = dirPath.replace(/\\/g, "/");
+  return /(?:^|\/)extensions\/[^/]+\/assets$/u.test(normalizedPath);
+}
+
 function isAllowedLegacyOwnerPath(relativePath) {
   return (
     allowedFixturePaths.has(relativePath) ||
@@ -246,6 +251,9 @@ async function collectSourceFiles(targetPath) {
     }
     const entryPath = path.join(targetPath, entry.name);
     if (entry.isDirectory()) {
+      if (isIgnoredSourceDirectory(entryPath)) {
+        continue;
+      }
       files.push(...(await collectSourceFiles(entryPath)));
       continue;
     }
