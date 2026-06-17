@@ -87,6 +87,9 @@ describe("runCodexAppServerAttempt dynamic tools", () => {
       format: () => "later dynamic summary",
     });
     const harness = createStartedThreadHarness(async (method) => {
+      if (method === "modelProvider/capabilities/read") {
+        return { webSearch: false };
+      }
       if (method === "thread/start") {
         return threadStartResult(threadId);
       }
