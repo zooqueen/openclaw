@@ -22,7 +22,7 @@ import { i18n, t } from "../i18n/index.ts";
 import {
   inferBasePathFromPathname,
   normalizeBasePath,
-  tabFromPath,
+  routeIdFromPath,
 } from "../routes/route-registry.ts";
 import { truncateText } from "./format.ts";
 import { normalizeLowercaseStringOrEmpty } from "./string-coerce.ts";
@@ -378,7 +378,7 @@ function isHostLocalFileHref(href: string): boolean {
 }
 
 function isControlUiRoutePath(pathname: string): boolean {
-  if (tabFromPath(pathname) !== null) {
+  if (routeIdFromPath(pathname) !== null) {
     return true;
   }
   const basePath = currentControlUiBasePath();
@@ -388,7 +388,7 @@ function isControlUiRoutePath(pathname: string): boolean {
   if (pathname !== basePath && !pathname.startsWith(`${basePath}/`)) {
     return false;
   }
-  return tabFromPath(pathname, basePath) !== null;
+  return routeIdFromPath(pathname, basePath) !== null;
 }
 
 function currentControlUiBasePath(): string {

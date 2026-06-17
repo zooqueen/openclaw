@@ -77,7 +77,7 @@ function createState(overrides: Partial<AppViewState> = {}): AppViewState {
     password: "",
     loginShowGatewayToken: false,
     loginShowGatewayPassword: false,
-    tab: "config",
+    routeId: "config",
     onboarding: false,
     basePath: "",
     connected: true,
@@ -211,7 +211,7 @@ function createState(overrides: Partial<AppViewState> = {}): AppViewState {
     client: null,
     refreshSessionsAfterChat: new Map(),
     connect: vi.fn(),
-    setTab: vi.fn(),
+    setRoute: vi.fn(),
     setTheme: vi.fn(),
     setThemeMode: vi.fn(),
     setCustomThemeImportUrl: vi.fn(),
@@ -330,7 +330,7 @@ describe("renderApp assistant avatar routing", () => {
     const container = document.createElement("div");
 
     render(
-      renderApp(createState({ tab: "chat", chatMessageMaxWidth: "min(1280px, 82%)" })),
+      renderApp(createState({ routeId: "chat", chatMessageMaxWidth: "min(1280px, 82%)" })),
       container,
     );
 
@@ -341,7 +341,7 @@ describe("renderApp assistant avatar routing", () => {
   it("marks the logs route so the page can hand scroll ownership to the log stream", () => {
     const container = document.createElement("div");
 
-    render(renderApp(createState({ tab: "logs" })), container);
+    render(renderApp(createState({ routeId: "logs" })), container);
 
     const content = container.querySelector<HTMLElement>("main.content");
     expect(content?.classList.contains("content--logs")).toBe(true);
@@ -354,7 +354,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "sessions",
+          routeId: "sessions",
           lastError: "transient tool failure",
           chatError: "transient tool failure",
         }),
@@ -371,7 +371,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "nodes",
+          routeId: "nodes",
           lastError: "node list failed",
           chatError: "previous chat failure",
         }),
@@ -393,7 +393,7 @@ describe("renderApp assistant avatar routing", () => {
       valid: true,
     }));
     const state = createState({
-      tab: "workboard",
+      routeId: "workboard",
       client: { request } as unknown as AppViewState["client"],
       configLoading: false,
       configSnapshot: null,
@@ -421,7 +421,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           lastError: "transient tool failure",
           chatError: "transient tool failure",
         }),
@@ -439,7 +439,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           lastError: "gateway disconnected",
           chatError: "previous chat failure",
         }),
@@ -452,7 +452,7 @@ describe("renderApp assistant avatar routing", () => {
 
   it("does not rebuild chat composer controls for draft-only rerenders", () => {
     const container = document.createElement("div");
-    const state = createState({ tab: "chat", chatMessage: "" });
+    const state = createState({ routeId: "chat", chatMessage: "" });
 
     render(renderApp(state), container);
     state.chatMessage = "h";
@@ -470,7 +470,7 @@ describe("renderApp assistant avatar routing", () => {
 
   it("rebuilds chat composer controls after locale changes", async () => {
     const container = document.createElement("div");
-    const state = createState({ tab: "chat", chatMessage: "" });
+    const state = createState({ routeId: "chat", chatMessage: "" });
 
     render(renderApp(state), container);
     await i18n.setLocale("zh-CN");
@@ -561,7 +561,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           sessionKey: "agent:work:main",
           assistantAgentId: "work",
           agentsList: {
@@ -614,7 +614,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           sessionKey: "main",
           assistantAgentId: "work",
           agentsList: {
@@ -667,7 +667,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           sessionKey: "global",
           assistantAgentId: null,
           agentsList: null,
@@ -715,7 +715,7 @@ describe("renderApp assistant avatar routing", () => {
     render(
       renderApp(
         createState({
-          tab: "chat",
+          routeId: "chat",
           sessionKey: "unknown",
           assistantAgentId: "work",
           agentsList: {

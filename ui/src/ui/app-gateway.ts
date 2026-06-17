@@ -5,7 +5,7 @@ import {
   type GatewayUpdateAvailableEventPayload,
 } from "../../../src/gateway/events.js";
 import { loadCron, refreshActiveRoute } from "../app/active-route.ts";
-import type { Tab } from "../routes/route-registry.ts";
+import type { RouteId } from "../routes/route-registry.ts";
 import {
   clearPendingQueueItemsForRun,
   createChatSessionsLoadOverrides,
@@ -111,7 +111,7 @@ type GatewayHost = {
   onboarding?: boolean;
   eventLogBuffer: EventLogEntry[];
   eventLog: EventLogEntry[];
-  tab: Tab;
+  routeId: RouteId;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
   presenceStatus: StatusSummary | null;
@@ -232,7 +232,7 @@ function clearSessionsChangedReloadTimer(host: GatewayHost) {
 }
 
 function shouldRunDeferredSessionsReload(host: GatewayHost): boolean {
-  return host.connected && Boolean(host.client) && host.tab !== "chat";
+  return host.connected && Boolean(host.client) && host.routeId !== "chat";
 }
 
 function scheduleSessionsChangedReload(host: GatewayHost) {
@@ -639,7 +639,7 @@ function fallbackUnconfiguredSessionSelection(host: GatewayHost): boolean {
 }
 
 function canRefreshActiveTabBeforeAgents(host: GatewayHost): boolean {
-  if (host.tab !== "chat") {
+  if (host.routeId !== "chat") {
     return false;
   }
   if (isUiGlobalSessionKey(host.sessionKey)) {
@@ -892,7 +892,7 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
           { applyIdentity: false },
         );
         void loadAssistantIdentity(host as unknown as AssistantIdentityState);
-        if (host.tab !== "chat") {
+        if (host.routeId !== "chat") {
           void refreshChatAvatar(host as unknown as Parameters<typeof refreshChatAvatar>[0]);
         }
         void loadHealthState(host as unknown as HealthState);
@@ -1269,7 +1269,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     { ts: Date.now(), event: evt.event, payload: evt.payload },
     ...host.eventLogBuffer,
   ].slice(0, 250);
-  if (host.tab === "debug" || host.tab === "overview") {
+  if (host.routeId === "debug" || host.routeId === "overview") {
     host.eventLog = host.eventLogBuffer;
   }
 
@@ -1377,7 +1377,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     return;
   }
 
-  if (evt.event === "cron" && host.tab === "cron") {
+  if (evt.event === "cron" && host.routeId === "cron") {
     void loadCron(host as unknown as Parameters<typeof loadCron>[0]);
   }
 
