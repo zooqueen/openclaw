@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,8 +7,6 @@ import { describe, expect, it } from "vitest";
 const changelogScriptPath = path.join(process.cwd(), "scripts", "pr-lib", "changelog.sh");
 const commonScriptPath = path.join(process.cwd(), "scripts", "pr-lib", "common.sh");
 const gatesScriptPath = path.join(process.cwd(), "scripts", "pr-lib", "gates.sh");
-const prScriptPath = path.join(process.cwd(), "scripts", "pr");
-const prepareCoreScriptPath = path.join(process.cwd(), "scripts", "pr-lib", "prepare-core.sh");
 
 function run(cwd: string, command: string, args: string[], env?: NodeJS.ProcessEnv): string {
   return execFileSync(command, args, {
@@ -41,61 +39,7 @@ function createNonDocsDiffRepo(): string {
   return repo;
 }
 
-function runFailure(cwd: string, command: string, args: string[]): string {
-  try {
-    return run(cwd, command, args);
-  } catch (error) {
-    return `${(error as { stdout?: unknown }).stdout ?? ""}${(error as { stderr?: unknown }).stderr ?? ""}`;
-  }
-}
-
 describe("pr gates", () => {
-  it("runs prepare gates and push through the PR worktree script", () => {
-    const prepareCore = readFileSync(prepareCoreScriptPath, "utf8");
-
-    expect(prepareCore).toContain('"$worktree_script" prepare-gates "$pr"');
-    expect(prepareCore).toContain('"$worktree_script" prepare-push "$pr"');
-    expect(prepareCore).toContain('"$PWD/scripts/pr" prepare-gates "$pr"');
-  });
-
-  it("keeps prepare commands on the linked worktree script", () => {
-    const repo = mkdtempSync(path.join(os.tmpdir(), "openclaw-pr-bootstrap-"));
-    const linkedWorktree = path.join(repo, "linked");
-    try {
-      mkdirSync(path.join(repo, "scripts"), { recursive: true });
-      cpSync(prScriptPath, path.join(repo, "scripts", "pr"));
-      cpSync(path.join(process.cwd(), "scripts", "pr-lib"), path.join(repo, "scripts", "pr-lib"), {
-        recursive: true,
-      });
-      run(repo, "git", ["init", "-q", "--initial-branch=main"]);
-      run(repo, "git", ["config", "user.email", "test@example.com"]);
-      run(repo, "git", ["config", "user.name", "Test User"]);
-      run(repo, "git", ["add", "."]);
-      run(repo, "git", ["commit", "-qm", "seed"]);
-      run(repo, "git", ["worktree", "add", "-qb", "linked", linkedWorktree]);
-      writeFileSync(
-        path.join(repo, "scripts", "pr"),
-        "#!/usr/bin/env bash\nprintf 'canonical-wrapper\\n'\n",
-        "utf8",
-      );
-
-      const prepareOutput = runFailure(linkedWorktree, "bash", [
-        path.join(linkedWorktree, "scripts", "pr"),
-        "prepare-gates",
-      ]);
-      const reviewOutput = runFailure(linkedWorktree, "bash", [
-        path.join(linkedWorktree, "scripts", "pr"),
-        "review-init",
-      ]);
-
-      expect(prepareOutput).toContain("Usage:");
-      expect(prepareOutput).not.toContain("canonical-wrapper");
-      expect(reviewOutput).toContain("canonical-wrapper");
-    } finally {
-      rmSync(repo, { recursive: true, force: true });
-    }
-  });
-
   it("uses changed tests for prepare gates and lease-retry gates", () => {
     const repo = createNonDocsDiffRepo();
     const callsPath = path.join(repo, "calls.log");

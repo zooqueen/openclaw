@@ -279,9 +279,8 @@ EOF_PREP
 prepare_run() {
   local pr="$1"
   prepare_init "$pr"
-  local worktree_script="$PWD/scripts/pr"
-  "$worktree_script" prepare-gates "$pr"
-  "$worktree_script" prepare-push "$pr"
+  prepare_gates "$pr"
+  prepare_push "$pr"
   echo "prepare-run complete for PR #$pr"
   echo "pr_url=${PR_URL:-}"
 }
