@@ -701,14 +701,20 @@ export function prepareCompaction(
           forcedMessagesToSummarize.push(msg);
         }
       }
-      if (forcedMessagesToSummarize.length > 0) {
+      // Anchor the kept tail on the last valid cut point, not the raw final entry.
+      // findValidCutPoints excludes tool results, so a forced boundary that is not
+      // collapsed to summary-only later never keeps an orphaned tool result.
+      const forcedCutPoints = findValidCutPoints(pathEntries, boundaryStart, boundaryEnd);
+      const forcedKeepIndex =
+        forcedCutPoints.length > 0 ? forcedCutPoints[forcedCutPoints.length - 1] : -1;
+      if (forcedMessagesToSummarize.length > 0 && forcedKeepIndex >= 0) {
         const forcedFileOps = extractFileOperations(
           forcedMessagesToSummarize,
           pathEntries,
           prevCompactionIndex,
         );
         return ok({
-          firstKeptEntryId: pathEntries[boundaryEnd - 1].id,
+          firstKeptEntryId: pathEntries[forcedKeepIndex].id,
           messagesToSummarize: forcedMessagesToSummarize,
           turnPrefixMessages: [],
           isSplitTurn: false,
