@@ -133,9 +133,9 @@ Included in this category:
 
 - `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
   records observed media kinds and inline button metadata in live artifacts.
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-driver.mjs`
+- `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
   exercises live Bot API send/getUpdates mechanics used by message and media
-  scenarios, though not every media variant.
+  artifact capture, though not every media variant.
 
 ### Unit tests
 

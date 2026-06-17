@@ -116,13 +116,11 @@ Included in this category:
 
 ### Integration tests
 
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-driver.mjs`
-  checks Bot API `getMe`, `sendMessage`, and `getUpdates` against real Telegram
-  credentials.
 - `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-live-runner.ts`
   runs package-installed Telegram live scenarios.
 - `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
-  defines live canary, command, mention, reply, and streaming scenarios.
+  defines live canary, Bot API polling, command, mention, reply, and streaming
+  scenarios.
 
 ### Unit tests
 

@@ -137,9 +137,9 @@ Included in this category:
 - `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
   includes mention-gating, command authorization, and other-bot command-gating
   live scenarios.
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-config.mjs`
-  writes `groupPolicy`, `groupAllowFrom`, group IDs, and mention-gated group
-  config for the live RTT harness.
+- `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
+  writes group policy, allowed sender IDs, group IDs, and mention-gated group
+  config for the live harness.
 
 ### Unit tests
 

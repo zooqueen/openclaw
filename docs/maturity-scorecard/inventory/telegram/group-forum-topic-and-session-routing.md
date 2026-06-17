@@ -146,8 +146,8 @@ Included in this category:
 - `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
   includes `telegram-mentioned-message-reply`, `telegram-mention-gating`, and
   current-session status scenarios.
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-driver.mjs` sends
-  group mentions and verifies SUT replies in the target Telegram group.
+- `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
+  sends group mentions and verifies SUT replies in the target Telegram group.
 
 ### Unit tests
 

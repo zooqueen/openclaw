@@ -144,8 +144,8 @@ Included in this category:
 - `/Users/kevinlin/code/openclaw/test/scripts/npm-telegram-live.test.ts`
   asserts the installed-package Telegram Docker harness, credential aliases,
   bounded commands, and doctor/onboarding steps.
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-config.mjs`
-  builds a live Telegram group config with bot tokens, group allowlists, and
+- `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
+  builds live Telegram group config with bot tokens, group allowlists, and
   mention-gated group settings.
 
 ### Unit tests

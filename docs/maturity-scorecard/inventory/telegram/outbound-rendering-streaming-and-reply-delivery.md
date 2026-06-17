@@ -125,8 +125,8 @@ Included in this category:
 - `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
   includes stream-final, long-final preview reuse, three-chunk final, exact
   marker, and mentioned-message scenarios.
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-driver.mjs`
-  measures Telegram group reply RTT and observed SUT messages.
+- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-live-runner.ts`
+  writes package Telegram QA evidence with group reply RTT timing.
 
 ### Unit tests
 

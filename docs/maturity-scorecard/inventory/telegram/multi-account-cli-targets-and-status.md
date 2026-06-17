@@ -119,8 +119,8 @@ status-summary regressions.
 
 ### Integration tests
 
-- `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-rtt-config.mjs`
-  configures Telegram account/group targets for live RTT proof.
+- `/Users/kevinlin/code/openclaw/extensions/qa-lab/src/live-transports/telegram/telegram-live.runtime.ts`
+  configures Telegram account/group targets for live proof.
 - `/Users/kevinlin/code/openclaw/scripts/e2e/npm-telegram-live-docker.sh`
   exercises installed package channel add, doctor, and status-related hot paths.
 

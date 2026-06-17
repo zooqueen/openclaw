@@ -377,24 +377,24 @@ Output artifacts:
 - `telegram-qa-summary.json` - includes per-reply RTT (driver send → observed SUT reply) starting with the canary.
 - `telegram-qa-observed-messages.json` - bodies redacted unless `OPENCLAW_QA_TELEGRAM_CAPTURE_CONTENT=1`.
 
-Package RTT comparison uses the same Telegram credential contract while keeping
-its RTT sample controls on the RTT harness path:
+Package Telegram RTT uses the package live Docker lane and writes
+`qa-evidence.json` with aggregate timing:
 
 ```bash
-pnpm rtt openclaw@beta \
-  --credential-source convex \
-  --credential-role maintainer \
-  --samples 20 \
-  --sample-timeout-ms 30000
+OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC=openclaw@beta \
+OPENCLAW_NPM_TELEGRAM_PROVIDER_MODE=mock-openai \
+OPENCLAW_NPM_TELEGRAM_SCENARIOS=telegram-mentioned-message-reply \
+OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES=20 \
+OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE=convex \
+OPENCLAW_NPM_TELEGRAM_CREDENTIAL_ROLE=maintainer \
+pnpm test:docker:npm-telegram-live
 ```
 
-When `--credential-source convex` is set, the RTT Docker wrapper leases a
-`kind: "telegram"` credential, exports the leased group/driver/SUT bot env into
-the installed-package run, heartbeats the lease, and releases it on shutdown.
-`--samples` and `--sample-timeout-ms` still feed
-`OPENCLAW_NPM_TELEGRAM_WARM_SAMPLES` and
-`OPENCLAW_NPM_TELEGRAM_SAMPLE_TIMEOUT_MS`, so `result.json` remains comparable
-across env-backed and Convex-backed RTT runs.
+When Convex credentials are selected, the live lane leases a
+`kind: "telegram"` credential, heartbeats it during the installed-package run,
+and releases it on shutdown. `OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES` repeats the
+mention-reply scenario in one gateway session and records aggregate
+`samples`, `p50Ms`, `p95Ms`, `maxMs`, and `failedSamples` timing.
 
 ### Discord QA
 
