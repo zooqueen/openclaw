@@ -217,7 +217,7 @@ prepare_sync_head() {
   if ! git merge-base --is-ancestor origin/main HEAD; then
     git rebase origin/main
     rebased=true
-    prepare_gates "$pr"
+    "$PWD/scripts/pr" prepare-gates "$pr"
     checkout_prep_branch "$pr"
   fi
 
@@ -279,8 +279,9 @@ EOF_PREP
 prepare_run() {
   local pr="$1"
   prepare_init "$pr"
-  prepare_gates "$pr"
-  prepare_push "$pr"
+  local worktree_script="$PWD/scripts/pr"
+  "$worktree_script" prepare-gates "$pr"
+  "$worktree_script" prepare-push "$pr"
   echo "prepare-run complete for PR #$pr"
   echo "pr_url=${PR_URL:-}"
 }

@@ -10,7 +10,15 @@ if common_git_dir=$(git -C "$script_parent_dir" rev-parse --path-format=absolute
   canonical_repo_root="$(dirname "$common_git_dir")"
   canonical_self="$canonical_repo_root/scripts/$(basename "${BASH_SOURCE[0]}")"
   if [ "$script_self" != "$canonical_self" ] && [ -x "$canonical_self" ]; then
-    exec "$canonical_self" "$@"
+    case "${1:-}" in
+      prepare-*)
+        # A prepare gate must exercise the PR's own script changes. Re-execing
+        # the canonical checkout here would make gate repairs untestable.
+        ;;
+      *)
+        exec "$canonical_self" "$@"
+        ;;
+    esac
   fi
 fi
 

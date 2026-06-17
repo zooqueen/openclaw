@@ -8,7 +8,7 @@ run_prepare_push_retry_gates() {
     run_quiet_logged \
       "pnpm test:changed (lease-retry)" \
       ".local/lease-retry-test.log" \
-      pnpm test:changed
+      env OPENCLAW_TEST_CHANGED_BROAD=1 pnpm test:changed
   fi
 }
 
@@ -107,8 +107,11 @@ prepare_gates() {
       echo "Docs-only change detected with high confidence; skipping pnpm test:changed."
     else
       gates_mode="changed"
-      echo "Running pnpm test:changed for diff-specific Vitest coverage."
-      run_quiet_logged "pnpm test:changed" ".local/gates-test.log" pnpm test:changed
+      echo "Running pnpm test:changed with broad fallback for Vitest coverage."
+      run_quiet_logged \
+        "pnpm test:changed" \
+        ".local/gates-test.log" \
+        env OPENCLAW_TEST_CHANGED_BROAD=1 pnpm test:changed
     fi
   fi
 
