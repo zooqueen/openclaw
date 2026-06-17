@@ -139,6 +139,23 @@ describe("package Telegram live Docker E2E", () => {
     );
   });
 
+  it("uses the container temp root for OpenClaw runtime scratch files", () => {
+    const script = readFileSync(DOCKER_SCRIPT_PATH, "utf8");
+    const dockerEnvStart = script.indexOf("docker_env=(");
+    const dockerEnvEnd = script.indexOf(")\n\nforward_env_if_set", dockerEnvStart);
+    const dockerEnv = script.slice(dockerEnvStart, dockerEnvEnd);
+
+    expect(dockerEnvStart).toBeGreaterThanOrEqual(0);
+    expect(dockerEnvEnd).toBeGreaterThan(dockerEnvStart);
+    expect(dockerEnv).toContain("-e TMPDIR=/tmp");
+  });
+
+  it("forwards package Telegram RTT sample count into the live harness", () => {
+    const script = readFileSync(DOCKER_SCRIPT_PATH, "utf8");
+
+    expect(script).toContain("OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES");
+  });
+
   it("keeps private QA harness imports local while using the installed package dist", () => {
     const script = readFileSync(DOCKER_SCRIPT_PATH, "utf8");
     const preparePackage = readFileSync(PREPARE_PACKAGE_PATH, "utf8");
@@ -190,6 +207,133 @@ describe("package Telegram live Docker E2E", () => {
         OPENCLAW_QA_CREDENTIAL_ROLE: "maintainer",
       }),
     ).toBe("ci");
+  });
+
+  it("builds qa evidence with aggregate Telegram RTT timing", () => {
+    const evidence = testing.buildPackageTelegramQaEvidence(
+      {
+        scenarios: [
+          {
+            id: "telegram-canary",
+            title: "Telegram canary",
+            status: "pass",
+            details: "reply matched",
+            rttMs: 900,
+          },
+          {
+            id: "telegram-mentioned-message-reply",
+            title: "Telegram mentioned message gets a reply",
+            status: "pass",
+            details: "20/20 samples passed",
+            timing: {
+              avgMs: 1300,
+              p50Ms: 1200,
+              p95Ms: 1800,
+              maxMs: 2200,
+              samples: 20,
+              failedSamples: 0,
+            },
+          },
+        ],
+      },
+      {
+        OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC: "openclaw@main",
+        OPENCLAW_NPM_TELEGRAM_PROVIDER_MODE: "mock-openai",
+      },
+    );
+
+    expect(evidence).toMatchObject({
+      kind: "openclaw.qa.evidence-summary",
+      schemaVersion: 2,
+      entries: [
+        {
+          test: { id: "telegram-canary" },
+          execution: {
+            packageSource: { kind: "npm-package", spec: "openclaw@main" },
+            provider: { fixture: "mock-openai", live: false },
+          },
+          result: { status: "pass", timing: { rttMs: 900 } },
+        },
+        {
+          test: { id: "telegram-mentioned-message-reply" },
+          result: {
+            status: "pass",
+            timing: {
+              avgMs: 1300,
+              p50Ms: 1200,
+              p95Ms: 1800,
+              maxMs: 2200,
+              samples: 20,
+              failedSamples: 0,
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  it("writes package Telegram qa evidence for the RTT importer", async () => {
+    const outputDir = mkTempRoot();
+    const evidencePath = await testing.writePackageTelegramQaEvidence(
+      outputDir,
+      {
+        scenarios: [
+          {
+            id: "telegram-canary",
+            title: "Telegram canary",
+            status: "pass",
+            details: "reply matched",
+            rttMs: 900,
+          },
+          {
+            id: "telegram-mentioned-message-reply",
+            title: "Telegram mentioned message gets a reply",
+            status: "pass",
+            details: "20/20 samples passed",
+            timing: {
+              p50Ms: 1200,
+              p95Ms: 1800,
+              samples: 20,
+              failedSamples: 0,
+            },
+          },
+        ],
+      },
+      { OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC: "openclaw@main" },
+    );
+    const evidence = JSON.parse(readFileSync(evidencePath, "utf8")) as {
+      entries: Array<{ result?: { timing?: Record<string, number> }; test?: { id?: string } }>;
+    };
+
+    expect(evidencePath).toBe(path.join(outputDir, "qa-evidence.json"));
+    expect(
+      evidence.entries.find((entry) => entry.test?.id === "telegram-mentioned-message-reply")
+        ?.result?.timing,
+    ).toMatchObject({
+      p50Ms: 1200,
+      p95Ms: 1800,
+      samples: 20,
+      failedSamples: 0,
+    });
+  });
+
+  it("requires RTT sampling to target the mention reply scenario", () => {
+    expect(
+      testing.resolveRttScenarioSampleCount({ OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES: "20" }, [
+        "telegram-mentioned-message-reply",
+      ]),
+    ).toBe(20);
+    expect(() =>
+      testing.resolveRttScenarioSampleCount({ OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES: "20" }, []),
+    ).toThrow(
+      "OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES requires OPENCLAW_NPM_TELEGRAM_SCENARIOS=telegram-mentioned-message-reply.",
+    );
+    expect(() =>
+      testing.readPositiveIntegerEnv(
+        { OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES: "0" },
+        "OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES",
+      ),
+    ).toThrow("OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES must be a positive integer.");
   });
 
   it("gates package Telegram status on the summary artifact", async () => {

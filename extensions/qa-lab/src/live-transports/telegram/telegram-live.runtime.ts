@@ -141,6 +141,15 @@ type TelegramQaScenarioResult = {
   title: string;
   status: "pass" | "fail";
   details: string;
+  timing?: {
+    rttMs?: number;
+    avgMs?: number;
+    p50Ms?: number;
+    p95Ms?: number;
+    maxMs?: number;
+    samples?: number;
+    failedSamples?: number;
+  };
   rttMs?: number;
   requestStartedAt?: string;
   responseObservedAt?: string;
@@ -1339,6 +1348,65 @@ function isTelegramObservedMessageTimeoutError(error: unknown, timeoutMs: number
   );
 }
 
+function telegramQaPercentile(sortedSamples: number[], percentile: number) {
+  if (sortedSamples.length === 0) {
+    return undefined;
+  }
+  const index = Math.min(
+    sortedSamples.length - 1,
+    Math.max(0, Math.ceil((percentile / 100) * sortedSamples.length) - 1),
+  );
+  return sortedSamples[index];
+}
+
+function summarizeTelegramQaRttSamples(results: TelegramQaScenarioResult[]) {
+  const sortedSamples = results
+    .flatMap((result) =>
+      result.status === "pass" && typeof result.rttMs === "number" ? [result.rttMs] : [],
+    )
+    .toSorted((a, b) => a - b);
+  const total = results.length;
+  const failedSamples = total - sortedSamples.length;
+  return {
+    rttMs: telegramQaPercentile(sortedSamples, 50),
+    avgMs:
+      sortedSamples.length > 0
+        ? Math.round(
+            sortedSamples.reduce((totalMs, rttMs) => totalMs + rttMs, 0) / sortedSamples.length,
+          )
+        : undefined,
+    p50Ms: telegramQaPercentile(sortedSamples, 50),
+    p95Ms: telegramQaPercentile(sortedSamples, 95),
+    maxMs: sortedSamples.at(-1),
+    samples: total,
+    failedSamples,
+  };
+}
+
+function aggregateTelegramQaScenarioSamples(params: {
+  scenario: TelegramQaScenarioDefinition;
+  results: TelegramQaScenarioResult[];
+}) {
+  const timing = summarizeTelegramQaRttSamples(params.results);
+  const status = params.results.every((result) => result.status === "pass") ? "pass" : "fail";
+  const passedSamples = timing.samples - timing.failedSamples;
+  const details =
+    timing.p50Ms === undefined
+      ? `${passedSamples}/${timing.samples} samples passed`
+      : `${passedSamples}/${timing.samples} samples passed; p50 ${timing.p50Ms}ms; p95 ${timing.p95Ms}ms`;
+  return {
+    id: params.scenario.id,
+    title: params.scenario.title,
+    status,
+    details,
+    timing,
+    rttMs: timing.rttMs,
+    requestStartedAt: params.results.find((result) => result.requestStartedAt)?.requestStartedAt,
+    responseObservedAt: params.results.findLast((result) => result.responseObservedAt)
+      ?.responseObservedAt,
+  } satisfies TelegramQaScenarioResult;
+}
+
 function resolveTelegramQaScenarioSteps(run: TelegramQaScenarioRun): TelegramQaScenarioStep[] {
   if (run.steps.length === 0) {
     throw new Error("Telegram QA scenario must include at least one step");
@@ -1662,6 +1730,7 @@ export async function runTelegramQaLive(params: {
   alternateModel?: string;
   fastMode?: boolean;
   scenarioIds?: string[];
+  scenarioSampleCount?: number;
   sutAccountId?: string;
   credentialSource?: string;
   credentialRole?: string;
@@ -1679,6 +1748,7 @@ export async function runTelegramQaLive(params: {
   const alternateModel = params.alternateModel?.trim() || defaultQaModelForMode(providerMode, true);
   const sutAccountId = params.sutAccountId?.trim() || "sut";
   const scenarios = findScenario(params.scenarioIds, providerMode);
+  const scenarioSampleCount = params.scenarioSampleCount ?? 1;
   const progressEnabled = shouldLogTelegramQaLiveProgress();
   writeTelegramQaProgress(
     progressEnabled,
@@ -1828,147 +1898,166 @@ export async function runTelegramQaLive(params: {
       if (!canaryFailure) {
         let driverOffset = await flushTelegramUpdates(runtimeEnv.driverToken);
         for (const [scenarioIndex, scenario] of scenarios.entries()) {
-          const scenarioIndexLabel = `${scenarioIndex + 1}/${scenarios.length}`;
-          const scenarioIdForLog = sanitizeTelegramQaProgressValue(scenario.id);
-          writeTelegramQaProgress(
-            progressEnabled,
-            `scenario start ${scenarioIndexLabel}: ${scenarioIdForLog}`,
-          );
-          assertLeaseHealthy();
-          const scenarioRun = scenario.buildRun(sutUsername);
-          try {
-            const scenarioSteps = resolveTelegramQaScenarioSteps(scenarioRun);
-            let firstRequestStartedAt: string | undefined;
-            let lastRequestStartedAtMs = 0;
-            let lastMatched: Awaited<ReturnType<typeof waitForObservedMessage>> | undefined;
-            let lastSentMessageId: number | undefined;
-            for (const step of scenarioSteps) {
-              if (step.driverGroupAuthorization) {
-                await setTelegramQaDriverGroupAuthorization({
-                  driverBotId: driverIdentity.id,
-                  gateway: gatewayHarness.gateway,
-                  groupId: runtimeEnv.groupId,
-                  sutAccountId,
-                  authorized: step.driverGroupAuthorization === "allow",
-                });
+          const scenarioSampleResults: TelegramQaScenarioResult[] = [];
+          for (let sampleIndex = 0; sampleIndex < scenarioSampleCount; sampleIndex += 1) {
+            const scenarioIndexLabel =
+              scenarioSampleCount === 1
+                ? `${scenarioIndex + 1}/${scenarios.length}`
+                : `${scenarioIndex + 1}/${scenarios.length} sample ${sampleIndex + 1}/${scenarioSampleCount}`;
+            const scenarioIdForLog = sanitizeTelegramQaProgressValue(scenario.id);
+            writeTelegramQaProgress(
+              progressEnabled,
+              `scenario start ${scenarioIndexLabel}: ${scenarioIdForLog}`,
+            );
+            assertLeaseHealthy();
+            const scenarioRun = scenario.buildRun(sutUsername);
+            try {
+              const scenarioSteps = resolveTelegramQaScenarioSteps(scenarioRun);
+              let firstRequestStartedAt: string | undefined;
+              let lastRequestStartedAtMs = 0;
+              let lastMatched: Awaited<ReturnType<typeof waitForObservedMessage>> | undefined;
+              let lastSentMessageId: number | undefined;
+              for (const step of scenarioSteps) {
+                if (step.driverGroupAuthorization) {
+                  await setTelegramQaDriverGroupAuthorization({
+                    driverBotId: driverIdentity.id,
+                    gateway: gatewayHarness.gateway,
+                    groupId: runtimeEnv.groupId,
+                    sutAccountId,
+                    authorized: step.driverGroupAuthorization === "allow",
+                  });
+                  driverOffset = await flushTelegramUpdates(runtimeEnv.driverToken);
+                }
                 driverOffset = await flushTelegramUpdates(runtimeEnv.driverToken);
+                const stepResult = await runTelegramQaScenarioStep({
+                  driverOffset,
+                  driverToken: runtimeEnv.driverToken,
+                  groupId: runtimeEnv.groupId,
+                  latestSutMessageId,
+                  observedMessages,
+                  scenario,
+                  step,
+                  sutBotId: sutIdentity.id,
+                });
+                firstRequestStartedAt ??= stepResult.requestStartedAt;
+                lastRequestStartedAtMs = stepResult.requestStartedAtMs;
+                lastSentMessageId = stepResult.sentMessageId;
+                const matched = stepResult.matched;
+                if (!matched) {
+                  continue;
+                }
+                driverOffset = matched.nextOffset;
+                if (step.settleMs !== undefined) {
+                  driverOffset = await collectObservedMessages({
+                    token: runtimeEnv.driverToken,
+                    initialOffset: driverOffset,
+                    settleMs: step.settleMs,
+                    observedMessages,
+                    observationScenarioId: scenario.id,
+                    observationScenarioTitle: scenario.title,
+                    predicate: (message) =>
+                      matchesTelegramScenarioReply({
+                        allowAnySutReply: step.allowAnySutReply,
+                        groupId: runtimeEnv.groupId,
+                        matchText: step.matchText,
+                        message,
+                        sentMessageId: stepResult.sentMessageId,
+                        sutBotId: sutIdentity.id,
+                      }),
+                  });
+                }
+                assertTelegramScenarioReply({
+                  expectedTextIncludes: step.expectedTextIncludes,
+                  message: matched.message,
+                });
+                assertTelegramScenarioMessageSet({
+                  expectedJoinedSutTextIncludes: step.expectedJoinedSutTextIncludes,
+                  expectedSutMessageCount: step.expectedSutMessageCount,
+                  expectedSutMessageCountRange: step.expectedSutMessageCountRange,
+                  groupId: runtimeEnv.groupId,
+                  observedMessages,
+                  scenarioId: scenario.id,
+                  sutBotId: sutIdentity.id,
+                });
+                latestSutMessageId = matched.message.messageId;
+                lastMatched = matched;
               }
-              driverOffset = await flushTelegramUpdates(runtimeEnv.driverToken);
-              const stepResult = await runTelegramQaScenarioStep({
-                driverOffset,
-                driverToken: runtimeEnv.driverToken,
-                groupId: runtimeEnv.groupId,
-                latestSutMessageId,
-                observedMessages,
-                scenario,
-                step,
-                sutBotId: sutIdentity.id,
-              });
-              firstRequestStartedAt ??= stepResult.requestStartedAt;
-              lastRequestStartedAtMs = stepResult.requestStartedAtMs;
-              lastSentMessageId = stepResult.sentMessageId;
-              const matched = stepResult.matched;
-              if (!matched) {
+              if (!lastMatched || !firstRequestStartedAt || lastSentMessageId === undefined) {
+                const result = {
+                  id: scenario.id,
+                  title: scenario.title,
+                  status: "pass",
+                  details: "no reply",
+                } satisfies TelegramQaScenarioResult;
+                scenarioSampleResults.push(result);
+                writeTelegramQaProgress(
+                  progressEnabled,
+                  `scenario pass ${scenarioIndexLabel}: ${scenarioIdForLog}`,
+                );
                 continue;
               }
-              driverOffset = matched.nextOffset;
-              if (step.settleMs !== undefined) {
-                driverOffset = await collectObservedMessages({
-                  token: runtimeEnv.driverToken,
-                  initialOffset: driverOffset,
-                  settleMs: step.settleMs,
-                  observedMessages,
-                  observationScenarioId: scenario.id,
-                  observationScenarioTitle: scenario.title,
-                  predicate: (message) =>
-                    matchesTelegramScenarioReply({
-                      allowAnySutReply: step.allowAnySutReply,
-                      groupId: runtimeEnv.groupId,
-                      matchText: step.matchText,
-                      message,
-                      sentMessageId: stepResult.sentMessageId,
-                      sutBotId: sutIdentity.id,
-                    }),
-                });
-              }
-              assertTelegramScenarioReply({
-                expectedTextIncludes: step.expectedTextIncludes,
-                message: matched.message,
-              });
-              assertTelegramScenarioMessageSet({
-                expectedJoinedSutTextIncludes: step.expectedJoinedSutTextIncludes,
-                expectedSutMessageCount: step.expectedSutMessageCount,
-                expectedSutMessageCountRange: step.expectedSutMessageCountRange,
-                groupId: runtimeEnv.groupId,
-                observedMessages,
-                scenarioId: scenario.id,
-                sutBotId: sutIdentity.id,
-              });
-              latestSutMessageId = matched.message.messageId;
-              lastMatched = matched;
-            }
-            if (!lastMatched || !firstRequestStartedAt || lastSentMessageId === undefined) {
+              const lastStep = scenarioSteps.at(-1);
+              const rttMs = lastMatched.observedAtMs - lastRequestStartedAtMs;
+              const suffix =
+                scenarioSteps.length === 1
+                  ? lastStep?.expectedSutMessageCount === undefined
+                    ? lastStep?.expectedSutMessageCountRange === undefined
+                      ? ""
+                      : `; observed ${lastStep.expectedSutMessageCountRange[0]}-${lastStep.expectedSutMessageCountRange[1]} SUT message(s)`
+                    : `; observed ${lastStep.expectedSutMessageCount} SUT message(s)`
+                  : `; ${scenarioSteps.filter((step) => step.expectReply).length} command replies matched`;
               const result = {
                 id: scenario.id,
                 title: scenario.title,
                 status: "pass",
-                details: "no reply",
+                details: redactPublicMetadata
+                  ? `reply matched in ${rttMs}ms${suffix}`
+                  : `reply message ${lastMatched.message.messageId} matched in ${rttMs}ms${suffix}`,
+                timing: {
+                  rttMs,
+                },
+                rttMs,
+                requestStartedAt: firstRequestStartedAt,
+                responseObservedAt: new Date(lastMatched.observedAtMs).toISOString(),
+                rttMeasurement: {
+                  finalMatchedReplyRttMs: rttMs,
+                  requestStartedAt: new Date(lastRequestStartedAtMs).toISOString(),
+                  responseObservedAt: new Date(lastMatched.observedAtMs).toISOString(),
+                  source: "request-to-observed-message",
+                },
+                sentMessageId: redactPublicMetadata ? undefined : lastSentMessageId,
+                responseMessageId: redactPublicMetadata ? undefined : lastMatched.message.messageId,
               } satisfies TelegramQaScenarioResult;
-              scenarioResults.push(result);
+              scenarioSampleResults.push(result);
               writeTelegramQaProgress(
                 progressEnabled,
                 `scenario pass ${scenarioIndexLabel}: ${scenarioIdForLog}`,
               );
-              continue;
+            } catch (error) {
+              const result = {
+                id: scenario.id,
+                title: scenario.title,
+                status: "fail",
+                details: formatErrorMessage(error),
+              } satisfies TelegramQaScenarioResult;
+              scenarioSampleResults.push(result);
+              writeTelegramQaProgress(
+                progressEnabled,
+                `scenario fail ${scenarioIndexLabel}: ${scenarioIdForLog} details=${formatTelegramQaProgressDetails(result.details)}`,
+              );
             }
-            const lastStep = scenarioSteps.at(-1);
-            const rttMs = lastMatched.observedAtMs - lastRequestStartedAtMs;
-            const suffix =
-              scenarioSteps.length === 1
-                ? lastStep?.expectedSutMessageCount === undefined
-                  ? lastStep?.expectedSutMessageCountRange === undefined
-                    ? ""
-                    : `; observed ${lastStep.expectedSutMessageCountRange[0]}-${lastStep.expectedSutMessageCountRange[1]} SUT message(s)`
-                  : `; observed ${lastStep.expectedSutMessageCount} SUT message(s)`
-                : `; ${scenarioSteps.filter((step) => step.expectReply).length} command replies matched`;
-            const result = {
-              id: scenario.id,
-              title: scenario.title,
-              status: "pass",
-              details: redactPublicMetadata
-                ? `reply matched in ${rttMs}ms${suffix}`
-                : `reply message ${lastMatched.message.messageId} matched in ${rttMs}ms${suffix}`,
-              rttMs,
-              requestStartedAt: firstRequestStartedAt,
-              responseObservedAt: new Date(lastMatched.observedAtMs).toISOString(),
-              rttMeasurement: {
-                finalMatchedReplyRttMs: rttMs,
-                requestStartedAt: new Date(lastRequestStartedAtMs).toISOString(),
-                responseObservedAt: new Date(lastMatched.observedAtMs).toISOString(),
-                source: "request-to-observed-message",
-              },
-              sentMessageId: redactPublicMetadata ? undefined : lastSentMessageId,
-              responseMessageId: redactPublicMetadata ? undefined : lastMatched.message.messageId,
-            } satisfies TelegramQaScenarioResult;
-            scenarioResults.push(result);
-            writeTelegramQaProgress(
-              progressEnabled,
-              `scenario pass ${scenarioIndexLabel}: ${scenarioIdForLog}`,
-            );
-          } catch (error) {
-            const result = {
-              id: scenario.id,
-              title: scenario.title,
-              status: "fail",
-              details: formatErrorMessage(error),
-            } satisfies TelegramQaScenarioResult;
-            scenarioResults.push(result);
-            writeTelegramQaProgress(
-              progressEnabled,
-              `scenario fail ${scenarioIndexLabel}: ${scenarioIdForLog} details=${formatTelegramQaProgressDetails(result.details)}`,
+            assertLeaseHealthy();
+          }
+          if (scenarioSampleCount === 1) {
+            scenarioResults.push(...scenarioSampleResults);
+          } else {
+            scenarioResults.push(
+              aggregateTelegramQaScenarioSamples({
+                scenario,
+                results: scenarioSampleResults,
+              }),
             );
           }
-          assertLeaseHealthy();
         }
       }
     } finally {
@@ -2096,6 +2185,7 @@ export async function runTelegramQaLive(params: {
 export const testing = {
   TELEGRAM_QA_SCENARIOS,
   TELEGRAM_QA_STANDARD_SCENARIO_IDS,
+  aggregateTelegramQaScenarioSamples,
   buildTelegramQaConfig,
   buildObservedMessagesArtifact,
   canaryFailureMessage,

@@ -17,6 +17,21 @@ function splitCsv(value: string | undefined) {
     .filter((entry) => entry.length > 0);
 }
 
+function readPositiveIntegerEnv(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const raw = env[name]?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  if (!/^[1-9][0-9]*$/u.test(raw)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
 function resolveCredentialSource(env: NodeJS.ProcessEnv) {
   return env.OPENCLAW_NPM_TELEGRAM_CREDENTIAL_SOURCE ?? env.OPENCLAW_QA_CREDENTIAL_SOURCE;
 }
@@ -35,6 +50,95 @@ async function shouldFailPackageTelegramRun(
   const { readQaSuiteFailedScenarioCountFromFile } =
     await import("../../extensions/qa-lab/src/suite-summary.ts");
   return (await readQaSuiteFailedScenarioCountFromFile(result.summaryPath)) > 0;
+}
+
+function resolveRttScenarioSampleCount(env: NodeJS.ProcessEnv, scenarioIds: string[]) {
+  const sampleCount = readPositiveIntegerEnv(env, "OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES");
+  if (sampleCount === undefined) {
+    return undefined;
+  }
+  if (scenarioIds.length !== 1 || scenarioIds[0] !== "telegram-mentioned-message-reply") {
+    throw new Error(
+      "OPENCLAW_NPM_TELEGRAM_RTT_SAMPLES requires OPENCLAW_NPM_TELEGRAM_SCENARIOS=telegram-mentioned-message-reply.",
+    );
+  }
+  return sampleCount;
+}
+
+function resolvePackageSpec(env: NodeJS.ProcessEnv) {
+  const spec = env.OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC?.trim();
+  if (!spec) {
+    throw new Error("Missing OPENCLAW_NPM_TELEGRAM_PACKAGE_SPEC.");
+  }
+  return spec;
+}
+
+function buildPackageTelegramQaEvidence(
+  result: {
+    scenarios: Array<{
+      id: string;
+      title: string;
+      status: "pass" | "fail";
+      details: string;
+      timing?: Record<string, number | undefined>;
+      rttMs?: number;
+    }>;
+  },
+  env: NodeJS.ProcessEnv,
+) {
+  const packageSpec = resolvePackageSpec(env);
+  const providerMode = env.OPENCLAW_NPM_TELEGRAM_PROVIDER_MODE?.trim() || "mock-openai";
+  return {
+    kind: "openclaw.qa.evidence-summary",
+    schemaVersion: 2,
+    generatedAt: new Date().toISOString(),
+    entries: result.scenarios.map((scenario) => ({
+      test: {
+        kind: "live-transport-check",
+        id: scenario.id,
+        title: scenario.title,
+      },
+      execution: {
+        packageSource: {
+          kind: "npm-package",
+          spec: packageSpec,
+        },
+        provider: {
+          id: "openai",
+          live: providerMode === "live-frontier",
+          fixture: providerMode,
+        },
+      },
+      result: {
+        status: scenario.status,
+        details: scenario.details,
+        timing:
+          scenario.timing ??
+          (typeof scenario.rttMs === "number"
+            ? {
+                rttMs: scenario.rttMs,
+              }
+            : {}),
+      },
+    })),
+  };
+}
+
+async function writePackageTelegramQaEvidence(
+  outputDir: string,
+  result: Parameters<typeof buildPackageTelegramQaEvidence>[0],
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const evidencePath = path.join(outputDir, "qa-evidence.json");
+  await fs.writeFile(
+    evidencePath,
+    `${JSON.stringify(buildPackageTelegramQaEvidence(result, env), null, 2)}\n`,
+    {
+      encoding: "utf8",
+      mode: 0o600,
+    },
+  );
+  return evidencePath;
 }
 
 async function resolveTrustedOpenClawCommand(rawCommand: string) {
@@ -74,6 +178,7 @@ async function main() {
   const outputDir =
     process.env.OPENCLAW_NPM_TELEGRAM_OUTPUT_DIR?.trim() ||
     path.join(repoRoot, ".artifacts", "qa-e2e", `npm-telegram-live-${Date.now().toString(36)}`);
+  const scenarioIds = splitCsv(process.env.OPENCLAW_NPM_TELEGRAM_SCENARIOS);
   const result = await runTelegramQaLive({
     repoRoot,
     outputDir,
@@ -83,15 +188,18 @@ async function main() {
     primaryModel: process.env.OPENCLAW_NPM_TELEGRAM_MODEL,
     alternateModel: process.env.OPENCLAW_NPM_TELEGRAM_ALT_MODEL,
     fastMode: parseBoolean(process.env.OPENCLAW_NPM_TELEGRAM_FAST),
-    scenarioIds: splitCsv(process.env.OPENCLAW_NPM_TELEGRAM_SCENARIOS),
+    scenarioIds,
+    scenarioSampleCount: resolveRttScenarioSampleCount(process.env, scenarioIds),
     sutAccountId: process.env.OPENCLAW_NPM_TELEGRAM_SUT_ACCOUNT,
     credentialSource: resolveCredentialSource(process.env),
     credentialRole: resolveCredentialRole(process.env),
   });
+  const evidencePath = await writePackageTelegramQaEvidence(outputDir, result);
 
   process.stdout.write(`Package Telegram QA report: ${result.reportPath}\n`);
   process.stdout.write(`Package Telegram QA summary: ${result.summaryPath}\n`);
   process.stdout.write(`Package Telegram QA observed messages: ${result.observedMessagesPath}\n`);
+  process.stdout.write(`Package Telegram QA evidence: ${evidencePath}\n`);
   if (await shouldFailPackageTelegramRun(result)) {
     process.exitCode = 1;
   }
@@ -116,8 +224,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export const testing = {
+  buildPackageTelegramQaEvidence,
+  readPositiveIntegerEnv,
   resolveCredentialRole,
   resolveCredentialSource,
+  resolveRttScenarioSampleCount,
   shouldFailPackageTelegramRun,
+  writePackageTelegramQaEvidence,
 };
 export { testing as __testing };

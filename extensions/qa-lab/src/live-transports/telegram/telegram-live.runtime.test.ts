@@ -1203,6 +1203,54 @@ describe("telegram live qa runtime", () => {
     ).toContain("- RTT: 4321ms");
   });
 
+  it("aggregates repeated Telegram scenario RTT samples", () => {
+    const scenario = requireScenario(
+      testing.findScenario(["telegram-mentioned-message-reply"]),
+      "telegram-mentioned-message-reply",
+    );
+
+    expect(
+      testing.aggregateTelegramQaScenarioSamples({
+        scenario,
+        results: [
+          {
+            id: scenario.id,
+            title: scenario.title,
+            status: "pass",
+            details: "reply matched",
+            rttMs: 1200,
+          },
+          {
+            id: scenario.id,
+            title: scenario.title,
+            status: "pass",
+            details: "reply matched",
+            rttMs: 1800,
+          },
+          {
+            id: scenario.id,
+            title: scenario.title,
+            status: "fail",
+            details: "timed out",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      id: "telegram-mentioned-message-reply",
+      status: "fail",
+      details: "2/3 samples passed; p50 1200ms; p95 1800ms",
+      rttMs: 1200,
+      timing: {
+        avgMs: 1500,
+        p50Ms: 1200,
+        p95Ms: 1800,
+        maxMs: 1800,
+        samples: 3,
+        failedSamples: 1,
+      },
+    });
+  });
+
   it("formats phase-specific canary diagnostics with context", () => {
     const error = new Error(
       "SUT bot did not send any group reply after the canary command within 30s.",
