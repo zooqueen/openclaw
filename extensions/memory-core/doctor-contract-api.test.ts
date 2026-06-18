@@ -349,6 +349,34 @@ describe("memory-core doctor dreaming migration", () => {
     ).resolves.toContain("A remembered dream.");
   });
 
+  it("preserves a legacy diary when its destination contains only a substring", async () => {
+    const legacyDiaryPath = path.join(workspaceDir, "DREAMS.md");
+    const agentDiaryPath = path.join(
+      workspaceDir,
+      "memory",
+      ".dreams",
+      "agents",
+      "main",
+      "DREAMS.md",
+    );
+    await fs.writeFile(legacyDiaryPath, "A remembered dream\n", "utf8");
+    await fs.mkdir(path.dirname(agentDiaryPath), { recursive: true });
+    await fs.writeFile(agentDiaryPath, "A remembered dream, continued.\n", "utf8");
+
+    const result = await migrationById(
+      "memory-core-workspace-state-to-agent-scope",
+    ).migrateLegacyState(migrationParams());
+
+    expect(result.warnings).toEqual([]);
+    expect(result.changes).toContain(
+      "Migrated Memory Core dream diary -> agent-scoped path (main)",
+    );
+    await expect(fs.access(`${legacyDiaryPath}.migrated`)).resolves.toBeUndefined();
+    await expect(fs.readFile(agentDiaryPath, "utf8")).resolves.toBe(
+      "A remembered dream\n\n<!-- openclaw:dreaming:legacy-diary-migrated -->\n\nA remembered dream, continued.\n",
+    );
+  });
+
   it("canonicalizes agent ids at the SQLite state boundary", async () => {
     configureMemoryCoreDreamingState(context().openPluginStateKeyedStore);
     expect(memoryCoreWorkspaceStateKey(workspaceDir, "Team Ops")).toBe(

@@ -507,7 +507,12 @@ async function migrateLegacyDreamDiary(params: {
       agentId: params.agentId,
       updater: (existing) => {
         const normalizedLegacy = legacyContent.trim();
-        if (!normalizedLegacy || existing.includes(normalizedLegacy)) {
+        const migratedPrefix = `${legacyContent.trimEnd()}\n\n<!-- openclaw:dreaming:legacy-diary-migrated -->`;
+        if (
+          !normalizedLegacy ||
+          existing.trim() === normalizedLegacy ||
+          existing.includes(migratedPrefix)
+        ) {
           return { content: existing, result: undefined, shouldWrite: false };
         }
         if (!existing.trim()) {
