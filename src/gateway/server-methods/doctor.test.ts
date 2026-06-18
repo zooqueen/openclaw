@@ -112,10 +112,13 @@ const invokeDoctorMemoryDreamDiary = async (
   });
 };
 
-const invokeDoctorMemoryBackfillDreamDiary = async (respond: ReturnType<typeof vi.fn>) => {
+const invokeDoctorMemoryBackfillDreamDiary = async (
+  respond: ReturnType<typeof vi.fn>,
+  params: Record<string, unknown> = {},
+) => {
   await doctorHandlers["doctor.memory.backfillDreamDiary"]({
     req: {} as never,
-    params: {} as never,
+    params: params as never,
     respond: respond as never,
     context: makeRuntimeContext() as never,
     client: null,
@@ -311,6 +314,11 @@ describe("doctor.memory.status", () => {
   });
 
   it("returns gateway embedding probe status for the requested agent", async () => {
+    getRuntimeConfig.mockReturnValue({
+      agents: {
+        list: [{ id: "main", default: true }, { id: "research-analyst" }],
+      },
+    } as OpenClawConfig);
     const close = vi.fn().mockResolvedValue(undefined);
     getMemorySearchManager.mockResolvedValue({
       manager: {
@@ -1220,6 +1228,25 @@ describe("doctor.memory.status", () => {
 });
 
 describe("doctor.memory dream actions", () => {
+  it("rejects unknown agent ids before deriving doctor action paths", async () => {
+    resolveAgentWorkspaceDir.mockClear();
+    previewGroundedRemMarkdown.mockClear();
+    const respond = vi.fn();
+
+    await invokeDoctorMemoryBackfillDreamDiary(respond, { agentId: "typo" });
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      {
+        code: "INVALID_REQUEST",
+        message: 'unknown agent id "typo"',
+      },
+    );
+    expect(resolveAgentWorkspaceDir).not.toHaveBeenCalled();
+    expect(previewGroundedRemMarkdown).not.toHaveBeenCalled();
+  });
+
   it("clears grounded-only staged short-term entries without touching the diary", async () => {
     resolveAgentWorkspaceDir.mockReturnValue("/tmp/openclaw");
     removeGroundedShortTermCandidates.mockResolvedValue({
@@ -1345,6 +1372,11 @@ describe("doctor.memory.dreamDiary", () => {
   });
 
   it("reads DREAMS.md for the requested agent", async () => {
+    getRuntimeConfig.mockReturnValue({
+      agents: {
+        list: [{ id: "main", default: true }, { id: "research-analyst" }],
+      },
+    } as OpenClawConfig);
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "doctor-dream-diary-agent-"));
     const diaryPath = path.join(
       workspaceDir,
@@ -1820,6 +1852,11 @@ describe("doctor.memory.remHarness", () => {
   });
 
   it("scopes REM harness previews to a requested agent", async () => {
+    getRuntimeConfig.mockReturnValue({
+      agents: {
+        list: [{ id: "main", default: true }, { id: "writer" }],
+      },
+    } as OpenClawConfig);
     resolveAgentWorkspaceDir.mockImplementation((_cfg, agentId) =>
       agentId === "writer" ? "/tmp/openclaw-writer" : "/tmp/openclaw",
     );

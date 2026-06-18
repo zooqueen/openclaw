@@ -2,7 +2,9 @@
 import fs from "node:fs/promises";
 import type { Command } from "commander";
 import { callGatewayFromCli } from "openclaw/plugin-sdk/gateway-runtime";
+import { listAgentIds } from "openclaw/plugin-sdk/memory-host-core";
 import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/number-runtime";
+import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import {
   isRecord,
   normalizeStringEntries,
@@ -941,6 +943,24 @@ export async function runWikiChatGptRollback(params: {
   });
 }
 
+function resolveWikiCliAgentId(agentId: unknown, appConfig: OpenClawConfig | undefined): string | undefined {
+  if (typeof agentId !== "string") {
+    return undefined;
+  }
+  const normalizedAgentId = normalizeAgentId(agentId);
+  if (!appConfig) {
+    return normalizedAgentId;
+  }
+  const knownAgentIds = new Set(listAgentIds(appConfig));
+  if (knownAgentIds.has(normalizedAgentId)) {
+    return normalizedAgentId;
+  }
+  const known = [...knownAgentIds].toSorted().join(", ");
+  throw new Error(
+    `Unknown agent id "${agentId}". Known agents: ${known || "none configured"}.`,
+  );
+}
+
 export function registerWikiCli(
   program: Command,
   pluginConfig?:
@@ -967,8 +987,8 @@ export function registerWikiCli(
     .description("Inspect and initialize the memory wiki vault")
     .option("--agent <id>", "Agent id (default: configured default agent)");
   wiki.hook("preAction", () => {
-    const agentId = wiki.opts().agent;
-    config = resolveConfig(typeof agentId === "string" ? agentId : undefined);
+    const agentId = resolveWikiCliAgentId(wiki.opts().agent, resolveAppConfig());
+    config = resolveConfig(agentId);
   });
 
   wiki

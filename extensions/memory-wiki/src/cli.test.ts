@@ -13,6 +13,7 @@ import {
   runWikiOkfImport,
   runWikiStatus,
 } from "./cli.js";
+import type { OpenClawConfig } from "../api.js";
 import type { MemoryWikiPluginConfig } from "./config.js";
 import { resolveMemoryWikiImportRunRecordPath } from "./import-runs-state.js";
 import { parseWikiMarkdown, renderWikiMarkdown } from "./markdown.js";
@@ -198,6 +199,29 @@ describe("memory-wiki cli", () => {
 
     await expect(fs.stat(writerRoot)).resolves.toMatchObject({ isDirectory: expect.any(Function) });
     expect(resolveConfig).toHaveBeenCalledWith("writer");
+  });
+
+  it("rejects unknown agents when the app config provides an agent registry", async () => {
+    const { config } = await createCliVault();
+    const resolveConfig = vi.fn(() => config);
+    const program = new Command();
+    program.name("test");
+    registerWikiCli(
+      program,
+      resolveConfig,
+      {
+        agents: {
+          list: [{ id: "main", default: true }],
+        },
+      } as OpenClawConfig,
+    );
+    resolveConfig.mockClear();
+
+    await expect(
+      program.parseAsync(["wiki", "--agent", "missing", "init"], { from: "user" }),
+    ).rejects.toThrow('Unknown agent id "missing". Known agents: main.');
+
+    expect(resolveConfig).not.toHaveBeenCalled();
   });
 
   it("registers OKF import and searches imported concepts", async () => {

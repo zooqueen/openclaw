@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   resolveMemoryDeepDreamingConfig,
@@ -25,8 +25,9 @@ import {
   repairDreamingArtifacts,
   writeBackfillDiaryEntries,
 } from "./doctor.memory-core-runtime.js";
+import { resolveAgentIdOrRespondError } from "./agent-id-shared.js";
 import { normalizeTrimmedString } from "./record-shared.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 const MANAGED_DEEP_SLEEP_CRON_NAME = "Memory Dreaming Promotion";
 const MANAGED_DEEP_SLEEP_CRON_TAG = "[managed-by=memory-core.short-term-promotion]";
@@ -36,6 +37,23 @@ const REM_HARNESS_DEFAULT_CANDIDATE_LIMIT = 25;
 const REM_HARNESS_MAX_CANDIDATE_LIMIT = 100;
 const REM_HARNESS_MAX_GROUNDED_FILES = 10;
 const REM_HARNESS_MAX_REM_PREVIEW_LIMIT = 50;
+
+function resolveDoctorAgentId(params: {
+  cfg: OpenClawConfig;
+  rawAgentId: unknown;
+  respond: RespondFn;
+}): { agentId: string; requestedAgentId: string | null } | null {
+  const requestedAgentId =
+    typeof params.rawAgentId === "string" ? normalizeAgentId(params.rawAgentId) : null;
+  const resolved = resolveAgentIdOrRespondError({
+    rawAgentId: params.rawAgentId,
+    respond: params.respond,
+    cfg: params.cfg,
+    normalize: (rawAgentId) =>
+      typeof rawAgentId === "string" ? normalizeAgentId(rawAgentId) : undefined,
+  });
+  return resolved ? { agentId: resolved.agentId, requestedAgentId } : null;
+}
 
 type DoctorMemoryDreamingPhasePayload = {
   enabled: boolean;
@@ -715,9 +733,15 @@ const SKIPPED_MEMORY_EMBEDDING_PROBE = {
 export const doctorHandlers: GatewayRequestHandlers = {
   "doctor.memory.status": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId, requestedAgentId } = resolvedAgent;
     const { manager, error } = await getActiveMemorySearchManager({
       cfg,
       agentId,
@@ -832,9 +856,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.dreamDiary": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const dreamDiary = await readDreamDiary(workspaceDir, agentId);
     const payload: DoctorMemoryDreamDiaryPayload = {
@@ -845,9 +875,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.backfillDreamDiary": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const memoryDir = path.join(workspaceDir, "memory");
     const sourceFiles = await listWorkspaceDailyFiles(memoryDir);
@@ -906,9 +942,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.resetDreamDiary": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const removed = await removeBackfillDiaryEntries({ workspaceDir, agentId });
     const dreamDiary = await readDreamDiary(workspaceDir, agentId);
@@ -923,9 +965,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.resetGroundedShortTerm": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const removed = await removeGroundedShortTermCandidates({ workspaceDir, agentId });
     const payload: DoctorMemoryDreamActionPayload = {
@@ -937,9 +985,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.repairDreamingArtifacts": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const repair = await repairDreamingArtifacts({ workspaceDir, agentId });
     const payload: DoctorMemoryDreamActionPayload = {
@@ -956,9 +1010,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   },
   "doctor.memory.dedupeDreamDiary": async ({ respond, context, params }) => {
     const cfg = context.getRuntimeConfig();
-    const requestedAgentId =
-      typeof params?.agentId === "string" ? normalizeAgentId(params.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: params?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const dedupe = await dedupeDreamDiaryEntries({ workspaceDir, agentId });
     const dreamDiary = await readDreamDiary(workspaceDir, agentId);
@@ -976,9 +1036,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
   "doctor.memory.remHarness": async ({ params, respond, context }) => {
     const cfg = context.getRuntimeConfig();
     const req = asOptionalRecord(params);
-    const requestedAgentId =
-      typeof req?.agentId === "string" ? normalizeAgentId(req.agentId) : null;
-    const agentId = requestedAgentId || resolveDefaultAgentId(cfg);
+    const resolvedAgent = resolveDoctorAgentId({
+      cfg,
+      rawAgentId: req?.agentId,
+      respond,
+    });
+    if (!resolvedAgent) {
+      return;
+    }
+    const { agentId } = resolvedAgent;
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const grounded = Boolean(req?.grounded);
     const includePromoted = Boolean(req?.includePromoted);
