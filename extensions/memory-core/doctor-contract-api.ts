@@ -50,6 +50,7 @@ type WorkspaceTarget = {
   stateWorkspaceDir: string;
   stateWorkspaceDirs: string[];
   agentIds: string[];
+  agentWorkspaceDirs: Record<string, string>;
   agentId?: string;
 };
 
@@ -82,6 +83,7 @@ async function resolveConfiguredWorkspaces(
     const existing = targets.get(workspaceRoot);
     if (existing) {
       existing.agentIds.push(configuredAgentId);
+      existing.agentWorkspaceDirs[configuredAgentId] = workspaceDir;
       if (!existing.stateWorkspaceDirs.includes(workspaceDir)) {
         existing.stateWorkspaceDirs.push(workspaceDir);
       }
@@ -91,22 +93,30 @@ async function resolveConfiguredWorkspaces(
         stateWorkspaceDir: workspaceDir,
         stateWorkspaceDirs: [...new Set([workspaceDir, workspaceRoot])],
         agentIds: [configuredAgentId],
+        agentWorkspaceDirs: { [configuredAgentId]: workspaceDir },
       });
     }
   }
   return [...targets.values()].map((target) => {
+    const agentId =
+      target.agentIds.length === 1
+        ? target.agentIds[0]
+        : target.agentIds.includes(defaultAgentId)
+          ? defaultAgentId
+          : undefined;
     const resolved: WorkspaceTarget = {
       workspaceDir: target.workspaceDir,
-      stateWorkspaceDir: target.stateWorkspaceDir,
+      stateWorkspaceDir: agentId
+        ? (target.agentWorkspaceDirs[agentId] ?? target.stateWorkspaceDir)
+        : target.stateWorkspaceDir,
       stateWorkspaceDirs: target.stateWorkspaceDirs,
       agentIds: target.agentIds,
+      agentWorkspaceDirs: target.agentWorkspaceDirs,
     };
-    if (target.agentIds.length === 1) {
-      resolved.agentId = target.agentIds[0];
-    } else if (target.agentIds.includes(defaultAgentId)) {
+    if (agentId) {
       // Legacy workspace-scoped dreaming state was shared. Preserve it under
       // the resolved default agent rather than copying private state to peers.
-      resolved.agentId = defaultAgentId;
+      resolved.agentId = agentId;
     }
     return resolved;
   });

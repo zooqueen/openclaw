@@ -636,8 +636,8 @@ describe("memory-core doctor dreaming migration", () => {
     const config: OpenClawConfig = {
       agents: {
         list: [
-          { id: "main", default: true, workspace: workspaceDir },
           { id: "research", workspace: workspaceAliasDir },
+          { id: "main", default: true, workspace: workspaceDir },
         ],
       },
     };
