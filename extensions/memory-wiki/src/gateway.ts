@@ -1,6 +1,6 @@
 // Memory Wiki plugin module implements gateway behavior.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import { resolveDefaultAgentId } from "openclaw/plugin-sdk/memory-host-core";
+import { listAgentIds, resolveDefaultAgentId } from "openclaw/plugin-sdk/memory-host-core";
 import { readPositiveIntegerParam } from "openclaw/plugin-sdk/param-readers";
 import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import type { OpenClawConfig, OpenClawPluginApi } from "../api.js";
@@ -73,18 +73,37 @@ function readEnumParam<T extends string>(
   throw new Error(`${key} must be one of: ${allowed.join(", ")}.`);
 }
 
+class InvalidGatewayRequestError extends Error {}
+
 function respondError(respond: GatewayRespond, error: unknown) {
   const message = formatErrorMessage(error);
-  respond(false, undefined, { code: "internal_error", message });
+  respond(false, undefined, {
+    code: error instanceof InvalidGatewayRequestError ? "INVALID_REQUEST" : "internal_error",
+    message,
+  });
 }
 
 function resolveGatewayAgentId(
   requestParams: Record<string, unknown>,
   appConfig: OpenClawConfig | undefined,
 ): string | undefined {
-  return (
-    readStringParam(requestParams, "agentId") ??
-    (appConfig ? resolveDefaultAgentId(appConfig) : undefined)
+  const requestedAgentId = readStringParam(requestParams, "agentId");
+  if (!requestedAgentId) {
+    return appConfig ? resolveDefaultAgentId(appConfig) : undefined;
+  }
+  if (!appConfig) {
+    throw new InvalidGatewayRequestError("agentId requires an available agent registry.");
+  }
+
+  const agentId = normalizeAgentId(requestedAgentId);
+  const knownAgentIds = new Set(listAgentIds(appConfig));
+  if (knownAgentIds.has(agentId)) {
+    return agentId;
+  }
+
+  const known = [...knownAgentIds].toSorted().join(", ");
+  throw new InvalidGatewayRequestError(
+    `Unknown agent id "${requestedAgentId}". Known agents: ${known || "none configured"}.`,
   );
 }
 
