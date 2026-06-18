@@ -216,6 +216,59 @@ describe("dreaming artifact repair", () => {
     ).resolves.toEqual([]);
   });
 
+  it("preserves unscoped legacy ingestion state during an agent-scoped repair", async () => {
+    const workspaceDir = await createWorkspace();
+    const agentId = "Team Ops";
+    const sessionCorpusDir = path.join(
+      workspaceDir,
+      "memory",
+      ".dreams",
+      "agents",
+      "team-ops",
+      "session-corpus",
+    );
+    const legacyIngestionPath = path.join(
+      workspaceDir,
+      "memory",
+      ".dreams",
+      "session-ingestion.json",
+    );
+    await fs.mkdir(sessionCorpusDir, { recursive: true });
+    await fs.writeFile(path.join(sessionCorpusDir, "2026-04-11.txt"), "corpus\n", "utf-8");
+    await fs.writeFile(
+      legacyIngestionPath,
+      JSON.stringify({ version: 3, files: {}, seenMessages: {} }, null, 2),
+      "utf-8",
+    );
+    await writeMemoryCoreWorkspaceEntries({
+      namespace: DREAMING_SESSION_INGESTION_FILES_NAMESPACE,
+      workspaceDir,
+      agentId,
+      entries: [
+        {
+          key: "team-ops/session.jsonl",
+          value: { lastSize: 120, lastMtimeMs: 1_000, lastContentHash: "hash", cursorLine: 42 },
+        },
+      ],
+    });
+
+    const repair = await repairDreamingArtifacts({ workspaceDir, agentId });
+
+    expect(repair.archivedSessionCorpus).toBe(true);
+    expect(repair.archivedSessionIngestion).toBe(false);
+    await expect(fs.readFile(legacyIngestionPath, "utf-8")).resolves.toContain('"version": 3');
+    await expect(
+      readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_SESSION_INGESTION_FILES_NAMESPACE,
+        workspaceDir,
+        agentId,
+      }),
+    ).resolves.toEqual([]);
+    await expect(auditDreamingArtifacts({ workspaceDir })).resolves.toMatchObject({
+      sessionIngestionExists: true,
+    });
+  });
+
   it("reports ingestion state present from SQLite when legacy JSON is absent", async () => {
     const workspaceDir = await createWorkspace();
     // Write SQLite ingestion entries but NO legacy session-ingestion.json

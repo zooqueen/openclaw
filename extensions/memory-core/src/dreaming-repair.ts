@@ -332,9 +332,9 @@ export async function repairDreamingArtifacts(params: {
     archivedPaths.push(sessionCorpusDestination);
   }
 
-  const sessionIngestionDestination = await archivePathIfPresent(
-    path.join(workspaceDir, SESSION_INGESTION_RELATIVE_PATH),
-  );
+  const sessionIngestionDestination = agentId
+    ? null
+    : await archivePathIfPresent(path.join(workspaceDir, SESSION_INGESTION_RELATIVE_PATH));
   if (sessionIngestionDestination) {
     archivedSessionIngestion = true;
     archivedPaths.push(sessionIngestionDestination);
