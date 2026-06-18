@@ -260,6 +260,9 @@ export async function syncMemoryWikiBridgeSources(params: {
     cfg: params.appConfig,
     ...(agentId ? { agentId } : {}),
   });
+  const allPublicArtifacts = agentId
+    ? await listActiveMemoryPublicArtifacts({ cfg: params.appConfig })
+    : publicArtifacts;
   const scopedArtifacts = agentId
     ? publicArtifacts.filter((artifact) => artifact.agentIds.includes(agentId))
     : publicArtifacts;
@@ -273,7 +276,7 @@ export async function syncMemoryWikiBridgeSources(params: {
   );
   const activeKeys = new Set(
     collectBridgeArtifacts(
-      publicArtifacts.filter((artifact) =>
+      allPublicArtifacts.filter((artifact) =>
         sharedVaultBridgeConfigs.some((config) =>
           isBridgeArtifactActiveForConfig(artifact, config),
         ),

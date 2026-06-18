@@ -50,8 +50,10 @@ describe("syncMemoryWikiBridgeSources", () => {
   function registerBridgeArtifacts(artifacts: MemoryPluginPublicArtifact[]) {
     registerMemoryCapability("memory-core", {
       publicArtifacts: {
-        async listArtifacts() {
-          return artifacts;
+        async listArtifacts({ agentId }) {
+          return agentId
+            ? artifacts.filter((artifact) => artifact.agentIds.includes(agentId))
+            : artifacts;
         },
       },
     });
