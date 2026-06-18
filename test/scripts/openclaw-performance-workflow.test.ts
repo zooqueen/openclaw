@@ -45,7 +45,7 @@ describe("OpenClaw performance workflow", () => {
 
   it("pins the Kova evaluator that reads agent payloads", () => {
     const workflow = readFileSync(WORKFLOW, "utf8");
-    const kovaRef = "00dafda60d4bce8cdc166047b796eb39df0923d8";
+    const kovaRef = "4f146016583018bad9e24f8e64a6af5f963bb7ee";
 
     expect(workflow).toContain(`default: ${kovaRef}`);
     expect(workflow).toContain(`inputs.kova_ref || '${kovaRef}'`);
