@@ -447,7 +447,129 @@ describe("memory-core doctor dreaming migration", () => {
     });
   });
 
-  it("does not guess an owner for legacy state in a shared workspace", async () => {
+  it("imports shared legacy JSON into the configured default agent", async () => {
+    const dailyPath = path.join(workspaceDir, "memory", ".dreams", "daily-ingestion.json");
+    await fs.writeFile(
+      dailyPath,
+      JSON.stringify({
+        version: 1,
+        files: {
+          "memory/2026-04-07.md": {
+            size: 22,
+            mtimeMs: 3,
+            contentHash: "shared-daily-hash",
+            ingestedAt: "2026-04-07T10:00:00.000Z",
+          },
+        },
+      }),
+      "utf8",
+    );
+    const config: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "main", default: true, workspace: workspaceDir },
+          { id: "research", workspace: workspaceDir },
+        ],
+      },
+    };
+
+    const result = await migrationById("memory-core-dreams-json-to-sqlite").migrateLegacyState(
+      migrationParams(config),
+    );
+
+    expect(result.warnings).toEqual([]);
+    expect(result.changes).toContain(
+      "Migrated Memory Core daily ingestion -> SQLite plugin state (1 row(s))",
+    );
+    await expect(fs.access(`${dailyPath}.migrated`)).resolves.toBeUndefined();
+    await expect(
+      readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+        workspaceDir,
+        agentId: "main",
+      }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+        workspaceDir,
+        agentId: "research",
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("moves shared legacy state and diaries to the configured default agent", async () => {
+    configureMemoryCoreDreamingState(context().openPluginStateKeyedStore);
+    await writeMemoryCoreWorkspaceEntries({
+      namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+      workspaceDir,
+      entries: [
+        {
+          key: "memory/2026-04-07.md",
+          value: {
+            size: 22,
+            mtimeMs: 3,
+            contentHash: "shared-daily-hash",
+            ingestedAt: "2026-04-07T10:00:00.000Z",
+          },
+        },
+      ],
+    });
+    const legacyDiaryPath = path.join(workspaceDir, "DREAMS.md");
+    await fs.writeFile(legacyDiaryPath, "# Shared dream diary\n", "utf8");
+    const config: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "main", default: true, workspace: workspaceDir },
+          { id: "research", workspace: workspaceDir },
+        ],
+      },
+    };
+    const migration = migrationById("memory-core-workspace-state-to-agent-scope");
+
+    const preview = await migration.detectLegacyState(migrationParams(config));
+    expect(preview?.preview.join("\n")).toContain("-> agent main");
+
+    const result = await migration.migrateLegacyState(migrationParams(config));
+    expect(result.warnings).toEqual([]);
+    expect(result.changes).toContain(
+      "Migrated Memory Core daily ingestion -> agent-scoped SQLite state (1 row(s), 0 existing agent row(s) retained)",
+    );
+    expect(result.changes).toContain(
+      "Migrated Memory Core dream diary -> agent-scoped path (main)",
+    );
+    expect(
+      await readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+        workspaceDir,
+      }),
+    ).toEqual([]);
+    expect(
+      await readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+        workspaceDir,
+        agentId: "main",
+      }),
+    ).toHaveLength(1);
+    expect(
+      await readMemoryCoreWorkspaceEntries({
+        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
+        workspaceDir,
+        agentId: "research",
+      }),
+    ).toEqual([]);
+    await expect(fs.access(`${legacyDiaryPath}.migrated`)).resolves.toBeUndefined();
+    await expect(
+      fs.readFile(
+        path.join(workspaceDir, "memory", ".dreams", "agents", "main", "DREAMS.md"),
+        "utf8",
+      ),
+    ).resolves.toContain("Shared dream diary");
+  });
+
+  it("leaves shared legacy state in place when the default agent has another workspace", async () => {
+    const defaultWorkspaceDir = path.join(rootDir, "default-workspace");
+    await fs.mkdir(defaultWorkspaceDir);
     configureMemoryCoreDreamingState(context().openPluginStateKeyedStore);
     await writeMemoryCoreWorkspaceEntries({
       namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
@@ -467,43 +589,32 @@ describe("memory-core doctor dreaming migration", () => {
     const config: OpenClawConfig = {
       agents: {
         list: [
-          { id: "main", default: true, workspace: workspaceDir },
+          { id: "main", default: true, workspace: defaultWorkspaceDir },
           { id: "research", workspace: workspaceDir },
+          { id: "writer", workspace: workspaceDir },
         ],
       },
     };
-    const migration = migrationById("memory-core-workspace-state-to-agent-scope");
 
+    const migration = migrationById("memory-core-workspace-state-to-agent-scope");
     const preview = await migration.detectLegacyState(migrationParams(config));
-    expect(preview?.preview.join("\n")).toContain("shared workspace");
-    expect(preview?.preview.join("\n")).toContain("main, research");
+    expect(preview?.preview.join("\n")).toContain("resolved default agent does not share");
 
     const result = await migration.migrateLegacyState(migrationParams(config));
+
     expect(result.changes).toEqual([]);
-    expect(result.warnings).toEqual([expect.stringContaining("shared workspace")]);
-    expect(
-      await readMemoryCoreWorkspaceEntries({
+    expect(result.warnings).toEqual([
+      expect.stringContaining("resolved default agent does not share"),
+    ]);
+    await expect(
+      readMemoryCoreWorkspaceEntries({
         namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
         workspaceDir,
       }),
-    ).toHaveLength(1);
-    expect(
-      await readMemoryCoreWorkspaceEntries({
-        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
-        workspaceDir,
-        agentId: "main",
-      }),
-    ).toEqual([]);
-    expect(
-      await readMemoryCoreWorkspaceEntries({
-        namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
-        workspaceDir,
-        agentId: "research",
-      }),
-    ).toEqual([]);
+    ).resolves.toHaveLength(1);
   });
 
-  it("treats symlinked workspace aliases as shared during legacy state migration", async () => {
+  it("moves symlinked shared workspace aliases to the configured default agent", async () => {
     const workspaceAliasDir = path.join(rootDir, "workspace-alias");
     await fs.symlink(workspaceDir, workspaceAliasDir);
     configureMemoryCoreDreamingState(context().openPluginStateKeyedStore);
@@ -533,12 +644,13 @@ describe("memory-core doctor dreaming migration", () => {
     const migration = migrationById("memory-core-workspace-state-to-agent-scope");
 
     const preview = await migration.detectLegacyState(migrationParams(config));
-    expect(preview?.preview.join("\n")).toContain("shared workspace");
-    expect(preview?.preview.join("\n")).toContain("main, research");
+    expect(preview?.preview.join("\n")).toContain("-> agent main");
 
     const result = await migration.migrateLegacyState(migrationParams(config));
-    expect(result.changes).toEqual([]);
-    expect(result.warnings).toEqual([expect.stringContaining("shared workspace")]);
+    expect(result.warnings).toEqual([]);
+    expect(result.changes).toEqual([
+      "Migrated Memory Core daily ingestion -> agent-scoped SQLite state (1 row(s), 0 existing agent row(s) retained)",
+    ]);
     expect(
       await readMemoryCoreWorkspaceEntries({
         namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
@@ -550,14 +662,14 @@ describe("memory-core doctor dreaming migration", () => {
         namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
         workspaceDir: workspaceAliasDir,
       }),
-    ).toHaveLength(1);
+    ).toEqual([]);
     expect(
       await readMemoryCoreWorkspaceEntries({
         namespace: DREAMING_DAILY_INGESTION_NAMESPACE,
-        workspaceDir: workspaceAliasDir,
+        workspaceDir,
         agentId: "main",
       }),
-    ).toEqual([]);
+    ).toHaveLength(1);
   });
 
   it("moves legacy alias state into the configured workspace scope", async () => {

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   listAgentIds,
+  resolveDefaultAgentId,
   resolveAgentWorkspaceDir,
 } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import type { PluginDoctorStateMigration } from "openclaw/plugin-sdk/runtime-doctor";
@@ -73,6 +74,7 @@ async function resolveConfiguredWorkspaces(
   env: NodeJS.ProcessEnv,
 ): Promise<WorkspaceTarget[]> {
   const cfg = config as Parameters<typeof listAgentIds>[0];
+  const defaultAgentId = resolveDefaultAgentId(cfg);
   const targets = new Map<string, WorkspaceTarget>();
   for (const configuredAgentId of listAgentIds(cfg)) {
     const workspaceDir = resolveAgentWorkspaceDir(cfg, configuredAgentId, env);
@@ -101,6 +103,10 @@ async function resolveConfiguredWorkspaces(
     };
     if (target.agentIds.length === 1) {
       resolved.agentId = target.agentIds[0];
+    } else if (target.agentIds.includes(defaultAgentId)) {
+      // Legacy workspace-scoped dreaming state was shared. Preserve it under
+      // the resolved default agent rather than copying private state to peers.
+      resolved.agentId = defaultAgentId;
     }
     return resolved;
   });
@@ -120,7 +126,7 @@ async function resolveAgentScopedWorkspaces(
 }
 
 function formatSharedWorkspaceMigrationWarning(target: WorkspaceTarget): string {
-  return `Skipped automatic Memory Core dreaming migration for shared workspace ${target.workspaceDir}; legacy state has no safe owner among agents ${target.agentIds.join(", ")}`;
+  return `Skipped automatic Memory Core dreaming migration for shared workspace ${target.workspaceDir}; its resolved default agent does not share the workspace with ${target.agentIds.join(", ")}`;
 }
 
 async function collectSharedJsonMigrationWarnings(
