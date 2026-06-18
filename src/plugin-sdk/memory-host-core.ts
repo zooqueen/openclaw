@@ -5,7 +5,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import type { MemoryPluginPublicArtifact } from "../plugins/memory-state.js";
-import { resolveMemoryDreamingWorkspaces } from "./memory-core-host-status.js";
+import { normalizeAgentId } from "../routing/session-key.js";
+import { listAgentIds, resolveAgentWorkspaceDir } from "./memory-core-host-runtime-core.js";
 import { resolveMemoryHostEventLogPath } from "./memory-host-events.js";
 
 export * from "./memory-core-host-runtime-core.js";
@@ -35,6 +36,45 @@ async function listMarkdownFilesRecursive(rootDir: string): Promise<string[]> {
   return files.toSorted((left, right) => left.localeCompare(right));
 }
 
+function resolveArtifactAgentIds(
+  relativePath: string,
+  workspaceAgentIds: string[],
+): string[] | null {
+  const match = /^memory\/\.dreams\/agents\/([^/]+)\//.exec(relativePath);
+  if (!match?.[1]) {
+    return workspaceAgentIds;
+  }
+  return workspaceAgentIds.includes(match[1]) ? [match[1]] : null;
+}
+
+function resolveMemoryArtifactKind(
+  relativePath: string,
+): Extract<MemoryPluginPublicArtifact["kind"], "daily-note" | "dream-report"> {
+  return relativePath.startsWith("memory/dreaming/") ||
+    relativePath.startsWith("memory/.dreams/agents/")
+    ? "dream-report"
+    : "daily-note";
+}
+
+function resolveMemoryArtifactWorkspaces(cfg: OpenClawConfig): Array<{
+  workspaceDir: string;
+  agentIds: string[];
+}> {
+  const byWorkspace = new Map<string, { workspaceDir: string; agentIds: string[] }>();
+  for (const rawAgentId of listAgentIds(cfg)) {
+    const agentId = normalizeAgentId(rawAgentId);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const key = path.resolve(workspaceDir);
+    const existing = byWorkspace.get(key);
+    if (existing) {
+      existing.agentIds.push(agentId);
+      continue;
+    }
+    byWorkspace.set(key, { workspaceDir, agentIds: [agentId] });
+  }
+  return [...byWorkspace.values()];
+}
+
 /** Lists public memory artifacts for one workspace, including notes and event logs. */
 export async function listMemoryWorkspacePublicArtifacts(params: {
   workspaceDir: string;
@@ -62,26 +102,48 @@ export async function listMemoryWorkspacePublicArtifacts(params: {
   const memoryDir = path.join(params.workspaceDir, "memory");
   for (const absolutePath of await listMarkdownFilesRecursive(memoryDir)) {
     const relativePath = path.relative(params.workspaceDir, absolutePath).replace(/\\/g, "/");
+    const agentIds = resolveArtifactAgentIds(relativePath, params.agentIds);
+    if (!agentIds) {
+      continue;
+    }
     artifacts.push({
-      kind: relativePath.startsWith("memory/dreaming/") ? "dream-report" : "daily-note",
+      kind: resolveMemoryArtifactKind(relativePath),
       workspaceDir: params.workspaceDir,
       relativePath,
       absolutePath,
-      agentIds: [...params.agentIds],
+      agentIds,
       contentType: "markdown",
     });
   }
 
-  const eventLogPath = resolveMemoryHostEventLogPath(params.workspaceDir);
-  if (await pathExists(eventLogPath)) {
+  for (const agentId of params.agentIds) {
+    const eventLogPath = resolveMemoryHostEventLogPath(params.workspaceDir, agentId);
+    if (!(await pathExists(eventLogPath))) {
+      continue;
+    }
     artifacts.push({
       kind: "event-log",
       workspaceDir: params.workspaceDir,
       relativePath: path.relative(params.workspaceDir, eventLogPath).replace(/\\/g, "/"),
       absolutePath: eventLogPath,
-      agentIds: [...params.agentIds],
+      agentIds: [agentId],
       contentType: "json",
     });
+  }
+  // The legacy journal has no owner. Do not expose it from a shared workspace:
+  // it may contain recall queries from every agent that used that workspace.
+  if (params.agentIds.length === 1) {
+    const eventLogPath = resolveMemoryHostEventLogPath(params.workspaceDir);
+    if (await pathExists(eventLogPath)) {
+      artifacts.push({
+        kind: "event-log",
+        workspaceDir: params.workspaceDir,
+        relativePath: path.relative(params.workspaceDir, eventLogPath).replace(/\\/g, "/"),
+        absolutePath: eventLogPath,
+        agentIds: [...params.agentIds],
+        contentType: "json",
+      });
+    }
   }
 
   const deduped = new Map<string, MemoryPluginPublicArtifact>();
@@ -94,8 +156,10 @@ export async function listMemoryWorkspacePublicArtifacts(params: {
 /** Lists public memory artifacts across all configured memory workspaces. */
 export async function listMemoryHostPublicArtifacts(params: {
   cfg: OpenClawConfig;
+  agentId?: string;
 }): Promise<MemoryPluginPublicArtifact[]> {
-  const workspaces = resolveMemoryDreamingWorkspaces(params.cfg);
+  const requestedAgentId = params.agentId ? normalizeAgentId(params.agentId) : undefined;
+  const workspaces = resolveMemoryArtifactWorkspaces(params.cfg);
   const artifacts: MemoryPluginPublicArtifact[] = [];
   for (const workspace of workspaces) {
     artifacts.push(
@@ -105,5 +169,7 @@ export async function listMemoryHostPublicArtifacts(params: {
       })),
     );
   }
-  return artifacts;
+  return requestedAgentId
+    ? artifacts.filter((artifact) => artifact.agentIds.includes(requestedAgentId))
+    : artifacts;
 }

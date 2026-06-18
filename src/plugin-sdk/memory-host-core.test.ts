@@ -96,7 +96,20 @@ describe("memory-host-core helpers", () => {
         listMemoryHostPublicArtifacts({
           cfg: {
             agents: {
-              list: [{ id: "main", default: true, workspace: workspaceDir }],
+              list: [
+                {
+                  id: "main",
+                  default: true,
+                  workspace: workspaceDir,
+                  memory: {
+                    extensions: {
+                      "memory-core": {
+                        dreaming: { enabled: false },
+                      },
+                    },
+                  },
+                },
+              ],
             },
           },
         }),
@@ -134,6 +147,132 @@ describe("memory-host-core helpers", () => {
           contentType: "json",
         },
       ]);
+    } finally {
+      await fs.rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("lists only the requested agent's workspace artifacts", async () => {
+    const fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "memory-host-agent-artifacts-"));
+    try {
+      const researchWorkspace = path.join(fixtureRoot, "research");
+      const writerWorkspace = path.join(fixtureRoot, "writer");
+      await fs.mkdir(researchWorkspace, { recursive: true });
+      await fs.mkdir(writerWorkspace, { recursive: true });
+      await fs.writeFile(path.join(researchWorkspace, "MEMORY.md"), "# Research\n", "utf8");
+      await fs.writeFile(path.join(writerWorkspace, "MEMORY.md"), "# Writer\n", "utf8");
+
+      const artifacts = await listMemoryHostPublicArtifacts({
+        cfg: {
+          agents: {
+            list: [
+              { id: "research", workspace: researchWorkspace },
+              { id: "writer", workspace: writerWorkspace },
+            ],
+          },
+        },
+        agentId: "research",
+      });
+
+      expect(artifacts).toEqual([
+        {
+          kind: "memory-root",
+          workspaceDir: researchWorkspace,
+          relativePath: "MEMORY.md",
+          absolutePath: path.join(researchWorkspace, "MEMORY.md"),
+          agentIds: ["research"],
+          contentType: "markdown",
+        },
+      ]);
+    } finally {
+      await fs.rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps agent-scoped dream artifacts private in shared workspaces", async () => {
+    const fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "memory-host-agent-dreams-"));
+    try {
+      const workspaceDir = path.join(fixtureRoot, "workspace");
+      await fs.mkdir(path.join(workspaceDir, "memory", ".dreams", "agents", "research"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(workspaceDir, "memory", ".dreams", "agents", "writer"), {
+        recursive: true,
+      });
+      await fs.writeFile(path.join(workspaceDir, "MEMORY.md"), "# Shared\n", "utf8");
+      await fs.writeFile(path.join(workspaceDir, "memory", "2026-05-18.md"), "# Daily\n", "utf8");
+      await fs.writeFile(
+        path.join(workspaceDir, "memory", ".dreams", "agents", "research", "DREAMS.md"),
+        "# Research Dream Diary\n",
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(workspaceDir, "memory", ".dreams", "agents", "writer", "DREAMS.md"),
+        "# Writer Dream Diary\n",
+        "utf8",
+      );
+      await appendMemoryHostEvent(
+        workspaceDir,
+        {
+          type: "memory.recall.recorded",
+          timestamp: "2026-05-18T12:00:00.000Z",
+          query: "research-only",
+          resultCount: 0,
+          results: [],
+        },
+        "research",
+      );
+      await appendMemoryHostEvent(
+        workspaceDir,
+        {
+          type: "memory.recall.recorded",
+          timestamp: "2026-05-18T12:01:00.000Z",
+          query: "writer-only",
+          resultCount: 0,
+          results: [],
+        },
+        "writer",
+      );
+      await appendMemoryHostEvent(workspaceDir, {
+        type: "memory.recall.recorded",
+        timestamp: "2026-05-18T12:02:00.000Z",
+        query: "legacy-shared",
+        resultCount: 0,
+        results: [],
+      });
+
+      const cfg = {
+        agents: {
+          list: [
+            { id: "research", default: true, workspace: workspaceDir },
+            { id: "writer", workspace: workspaceDir },
+          ],
+        },
+      };
+      const researchArtifacts = await listMemoryHostPublicArtifacts({
+        cfg,
+        agentId: "Research",
+      });
+      expect(researchArtifacts.map((artifact) => artifact.relativePath)).toEqual([
+        "MEMORY.md",
+        "memory/.dreams/agents/research/DREAMS.md",
+        "memory/2026-05-18.md",
+        "memory/.dreams/agents/research/events.jsonl",
+      ]);
+      expect(
+        researchArtifacts.find((artifact) => artifact.kind === "dream-report")?.agentIds,
+      ).toEqual(["research"]);
+
+      const allArtifacts = await listMemoryHostPublicArtifacts({ cfg });
+      expect(
+        allArtifacts.find((artifact) => artifact.relativePath.includes("/research/"))?.agentIds,
+      ).toEqual(["research"]);
+      expect(
+        allArtifacts.find((artifact) => artifact.relativePath.includes("/writer/"))?.agentIds,
+      ).toEqual(["writer"]);
+      expect(
+        allArtifacts.some((artifact) => artifact.relativePath === "memory/.dreams/events.jsonl"),
+      ).toBe(false);
     } finally {
       await fs.rm(fixtureRoot, { recursive: true, force: true });
     }

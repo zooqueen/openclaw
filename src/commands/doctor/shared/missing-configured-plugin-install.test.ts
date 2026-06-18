@@ -660,8 +660,10 @@ describe("repairMissingConfiguredPluginInstalls", () => {
       cfg: {
         agents: {
           defaults: {
-            memorySearch: {
-              provider: "local",
+            memory: {
+              search: {
+                provider: "local",
+              },
             },
           },
         },

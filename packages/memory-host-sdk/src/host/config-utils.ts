@@ -101,7 +101,19 @@ export type MemoryQmdConfig = {
   scope?: SessionSendPolicyConfig;
 };
 
-/** Top-level memory config shared by host and runtime callers. */
+/** Opaque config owned by one agent-scoped memory extension. */
+export type MemoryExtensionConfig = Record<string, unknown>;
+
+/** All memory settings resolved for one agent. */
+export type AgentMemoryConfig = {
+  search?: MemorySearchConfig;
+  backend?: MemoryBackend;
+  citations?: MemoryCitationsMode;
+  qmd?: MemoryQmdConfig;
+  extensions?: Record<string, MemoryExtensionConfig>;
+};
+
+/** @deprecated Legacy top-level config retained for doctor migration typing only. */
 export type MemoryConfig = {
   backend?: MemoryBackend;
   citations?: MemoryCitationsMode;
@@ -137,7 +149,7 @@ type AgentConfig = {
   id?: string;
   default?: boolean;
   workspace?: string;
-  memorySearch?: MemorySearchConfig;
+  memory?: AgentMemoryConfig;
   contextLimits?: AgentContextLimitsConfig;
 };
 
@@ -146,11 +158,12 @@ export type OpenClawConfig = {
   agents?: {
     defaults?: {
       workspace?: string;
-      memorySearch?: MemorySearchConfig;
+      memory?: AgentMemoryConfig;
       contextLimits?: AgentContextLimitsConfig;
     };
     list?: AgentConfig[];
   };
+  /** @deprecated Legacy top-level memory config retained for migration typing only. */
   memory?: MemoryConfig;
   models?: {
     providers?: Record<
@@ -319,6 +332,37 @@ function resolveAgentConfig(cfg: OpenClawConfig, agentId: string): AgentConfig |
   return listAgentEntries(cfg).find((entry) => normalizeAgentId(entry.id) === id);
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Resolves canonical memory settings for one agent. */
+export function resolveAgentMemoryConfig(
+  cfg: OpenClawConfig,
+  agentId: string,
+): AgentMemoryConfig | undefined {
+  const defaults = cfg.agents?.defaults?.memory;
+  const overrides = resolveAgentConfig(cfg, agentId)?.memory;
+  if (!defaults) {
+    return overrides;
+  }
+  if (!overrides) {
+    return defaults;
+  }
+
+  const merge = (base: unknown, override: unknown): unknown => {
+    if (!isPlainRecord(base) || !isPlainRecord(override)) {
+      return override ?? base;
+    }
+    const result: Record<string, unknown> = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      result[key] = key in result ? merge(result[key], value) : value;
+    }
+    return result;
+  };
+  return merge(defaults, overrides) as AgentMemoryConfig;
+}
+
 /** Remove null bytes before paths are handed to filesystem APIs. */
 function stripNullBytes(value: string): string {
   return value.replaceAll("\0", "");
@@ -364,8 +408,8 @@ export function resolveMemorySearchConfig(
   cfg: OpenClawConfig,
   agentId: string,
 ): { enabled: boolean; extraPaths: string[] } | null {
-  const defaults = cfg.agents?.defaults?.memorySearch;
-  const overrides = resolveAgentConfig(cfg, agentId)?.memorySearch;
+  const defaults = cfg.agents?.defaults?.memory?.search;
+  const overrides = resolveAgentConfig(cfg, agentId)?.memory?.search;
   const enabled = overrides?.enabled ?? defaults?.enabled ?? true;
   if (!enabled) {
     return null;

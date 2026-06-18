@@ -43,8 +43,28 @@ type LegacyAgentRuntimeIntent = {
 const MEMORY_SEARCH_RULE: LegacyConfigRule = {
   path: ["memorySearch"],
   message:
-    'top-level memorySearch was moved; use agents.defaults.memorySearch instead. Run "openclaw doctor --fix".',
+    'top-level memorySearch was moved; use agents.defaults.memory.search instead. Run "openclaw doctor --fix".',
 };
+
+const AGENT_MEMORY_SCOPE_RULES: LegacyConfigRule[] = [
+  MEMORY_SEARCH_RULE,
+  {
+    path: ["memory"],
+    message:
+      'top-level memory is legacy; use agents.defaults.memory instead. Run "openclaw doctor --fix".',
+  },
+  {
+    path: ["agents", "defaults", "memorySearch"],
+    message:
+      'agents.defaults.memorySearch is legacy; use agents.defaults.memory.search instead. Run "openclaw doctor --fix".',
+  },
+  {
+    path: ["agents", "list"],
+    message:
+      'agents.list[].memorySearch and agents.list[].dreaming are legacy; use agents.list[].memory instead. Run "openclaw doctor --fix".',
+    match: hasLegacyAgentMemoryScope,
+  },
+];
 
 const LEGACY_MEMORY_SEARCH_AUTO_PROVIDER_RULES: LegacyConfigRule[] = [
   {
@@ -54,15 +74,15 @@ const LEGACY_MEMORY_SEARCH_AUTO_PROVIDER_RULES: LegacyConfigRule[] = [
     match: isLegacyMemorySearchAutoProvider,
   },
   {
-    path: ["agents", "defaults", "memorySearch", "provider"],
+    path: ["agents", "defaults", "memory", "search", "provider"],
     message:
-      'agents.defaults.memorySearch.provider = "auto" is legacy; use "openai" explicitly. Run "openclaw doctor --fix".',
+      'agents.defaults.memory.search.provider = "auto" is legacy; use "openai" explicitly. Run "openclaw doctor --fix".',
     match: isLegacyMemorySearchAutoProvider,
   },
   {
     path: ["agents", "list"],
     message:
-      'agents.list[].memorySearch.provider = "auto" is legacy; use "openai" explicitly. Run "openclaw doctor --fix".',
+      'agents.list[].memory.search.provider = "auto" is legacy; use "openai" explicitly. Run "openclaw doctor --fix".',
     match: hasAgentListLegacyMemorySearchAutoProvider,
   },
 ];
@@ -315,6 +335,35 @@ function mergeLegacyIntoDefaults(params: {
   params.raw[params.rootKey] = root;
 }
 
+function mergeLegacyIntoAgentMemory(params: {
+  agent: Record<string, unknown>;
+  section: "search" | "extensions";
+  key?: string;
+  legacyValue: Record<string, unknown>;
+}): boolean {
+  const memory = ensureRecord(params.agent, "memory");
+  if (params.section === "search") {
+    const existing = getRecord(memory.search);
+    if (!existing) {
+      memory.search = params.legacyValue;
+      return false;
+    }
+    mergeMissing(existing, params.legacyValue);
+    memory.search = existing;
+    return true;
+  }
+
+  const extensions = ensureRecord(memory, "extensions");
+  const existing = getRecord(extensions[params.key ?? ""]);
+  if (!existing) {
+    extensions[params.key ?? ""] = params.legacyValue;
+    return false;
+  }
+  mergeMissing(existing, params.legacyValue);
+  extensions[params.key ?? ""] = existing;
+  return true;
+}
+
 function hasLegacySandboxPerSession(value: unknown): boolean {
   const sandbox = getRecord(value);
   return Boolean(sandbox && Object.hasOwn(sandbox, "perSession"));
@@ -325,6 +374,16 @@ function hasLegacyAgentListSandboxPerSession(value: unknown): boolean {
     return false;
   }
   return value.some((agent) => hasLegacySandboxPerSession(getRecord(agent)?.sandbox));
+}
+
+function hasLegacyAgentMemoryScope(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some((entry) => {
+      const agent = getRecord(entry);
+      return Boolean(agent && (getRecord(agent.memorySearch) || getRecord(agent.dreaming)));
+    })
+  );
 }
 
 function hasLegacyAgentListEmbeddedHarness(value: unknown): boolean {
@@ -406,7 +465,9 @@ function hasAgentListLegacyMemorySearchAutoProvider(value: unknown): boolean {
     return false;
   }
   return value.some((agent) =>
-    isLegacyMemorySearchAutoProvider(getRecord(getRecord(agent)?.memorySearch)?.provider),
+    isLegacyMemorySearchAutoProvider(
+      getRecord(getRecord(getRecord(agent)?.memory)?.search)?.provider,
+    ),
   );
 }
 
@@ -1359,26 +1420,92 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_AGENTS: LegacyConfigMigrationSpec[
     },
   }),
   defineLegacyConfigMigration({
-    id: "memorySearch->agents.defaults.memorySearch",
-    describe: "Move top-level memorySearch to agents.defaults.memorySearch",
-    legacyRules: [MEMORY_SEARCH_RULE],
+    id: "memory->agents.memory",
+    describe: "Move legacy memory configuration to agent-scoped memory",
+    legacyRules: AGENT_MEMORY_SCOPE_RULES,
     apply: (raw, changes) => {
       const legacyMemorySearch = getRecord(raw.memorySearch);
-      if (!legacyMemorySearch) {
-        return;
+      const legacyMemory = getRecord(raw.memory);
+      const agents = ensureRecord(raw, "agents");
+      const defaults = ensureRecord(agents, "defaults");
+
+      if (legacyMemorySearch) {
+        const merged = mergeLegacyIntoAgentMemory({
+          agent: defaults,
+          section: "search",
+          legacyValue: legacyMemorySearch,
+        });
+        changes.push(
+          merged
+            ? "Merged memorySearch → agents.defaults.memory.search (filled missing fields from legacy; kept explicit agents.defaults values)."
+            : "Moved memorySearch → agents.defaults.memory.search.",
+        );
+        delete raw.memorySearch;
       }
 
-      mergeLegacyIntoDefaults({
-        raw,
-        rootKey: "agents",
-        fieldKey: "memorySearch",
-        legacyValue: legacyMemorySearch,
-        changes,
-        movedMessage: "Moved memorySearch → agents.defaults.memorySearch.",
-        mergedMessage:
-          "Merged memorySearch → agents.defaults.memorySearch (filled missing fields from legacy; kept explicit agents.defaults values).",
-      });
-      delete raw.memorySearch;
+      if (legacyMemory) {
+        const memory = ensureRecord(defaults, "memory");
+        mergeMissing(memory, legacyMemory);
+        defaults.memory = memory;
+        changes.push(
+          "Moved memory → agents.defaults.memory (kept explicit agent memory settings).",
+        );
+        delete raw.memory;
+      }
+
+      const legacyDefaultSearch = getRecord(defaults.memorySearch);
+      if (legacyDefaultSearch) {
+        const merged = mergeLegacyIntoAgentMemory({
+          agent: defaults,
+          section: "search",
+          legacyValue: legacyDefaultSearch,
+        });
+        changes.push(
+          merged
+            ? "Merged agents.defaults.memorySearch → agents.defaults.memory.search (kept explicit memory.search settings)."
+            : "Moved agents.defaults.memorySearch → agents.defaults.memory.search.",
+        );
+        delete defaults.memorySearch;
+      }
+
+      if (!Array.isArray(agents.list)) {
+        return;
+      }
+      for (const [index, rawAgent] of agents.list.entries()) {
+        const agent = getRecord(rawAgent);
+        if (!agent) {
+          continue;
+        }
+        const legacySearch = getRecord(agent.memorySearch);
+        if (legacySearch) {
+          const merged = mergeLegacyIntoAgentMemory({
+            agent,
+            section: "search",
+            legacyValue: legacySearch,
+          });
+          changes.push(
+            merged
+              ? `Merged agents.list.${index}.memorySearch → agents.list.${index}.memory.search (kept explicit memory.search settings).`
+              : `Moved agents.list.${index}.memorySearch → agents.list.${index}.memory.search.`,
+          );
+          delete agent.memorySearch;
+        }
+        const legacyDreaming = getRecord(agent.dreaming);
+        if (legacyDreaming) {
+          const merged = mergeLegacyIntoAgentMemory({
+            agent,
+            section: "extensions",
+            key: "memory-core",
+            legacyValue: { dreaming: legacyDreaming },
+          });
+          changes.push(
+            merged
+              ? `Merged agents.list.${index}.dreaming → agents.list.${index}.memory.extensions.memory-core.dreaming.`
+              : `Moved agents.list.${index}.dreaming → agents.list.${index}.memory.extensions.memory-core.dreaming.`,
+          );
+          delete agent.dreaming;
+        }
+      }
     },
   }),
   defineLegacyConfigMigration({
@@ -1388,8 +1515,8 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_AGENTS: LegacyConfigMigrationSpec[
     apply: (raw, changes) => {
       const agents = getRecord(raw.agents);
       rewriteLegacyMemorySearchAutoProvider(
-        getRecord(getRecord(agents?.defaults)?.memorySearch),
-        "agents.defaults.memorySearch",
+        getRecord(getRecord(getRecord(agents?.defaults)?.memory)?.search),
+        "agents.defaults.memory.search",
         changes,
       );
 
@@ -1398,8 +1525,8 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_AGENTS: LegacyConfigMigrationSpec[
       }
       for (const [index, agent] of agents.list.entries()) {
         rewriteLegacyMemorySearchAutoProvider(
-          getRecord(getRecord(agent)?.memorySearch),
-          `agents.list.${index}.memorySearch`,
+          getRecord(getRecord(getRecord(agent)?.memory)?.search),
+          `agents.list.${index}.memory.search`,
           changes,
         );
       }

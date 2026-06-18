@@ -7,6 +7,7 @@ import {
 } from "@openclaw/model-catalog-core/provider-id";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
+import { listAgentIds } from "../agents/agent-scope.js";
 import { collectConfiguredAgentHarnessRuntimes } from "../agents/harness-runtimes.js";
 import { splitTrailingAuthProfile } from "../agents/model-ref-profile.js";
 import {
@@ -17,7 +18,6 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   DEFAULT_MEMORY_DREAMING_PLUGIN_ID,
   resolveMemoryDreamingConfig,
-  resolveMemoryDreamingPluginConfig,
   resolveMemoryDreamingPluginId,
 } from "../memory-host-sdk/dreaming.js";
 import { planManifestModelCatalogRows } from "../model-catalog/manifest-planner.js";
@@ -114,11 +114,11 @@ function isGatewayStartupMemoryPlugin(plugin: InstalledPluginIndexRecord): boole
 }
 
 function resolveGatewayStartupDreamingEngineId(config: OpenClawConfig): string | undefined {
-  const dreamingConfig = resolveMemoryDreamingConfig({
-    pluginConfig: resolveMemoryDreamingPluginConfig(config),
-    cfg: config,
-  });
-  if (!dreamingConfig.enabled) {
+  if (
+    !listAgentIds(config).some(
+      (agentId) => resolveMemoryDreamingConfig({ cfg: config, agentId }).enabled,
+    )
+  ) {
     return undefined;
   }
   if (!resolveGatewayStartupDreamingSelectedPluginId(config)) {
@@ -677,7 +677,7 @@ export function collectConfiguredMemoryEmbeddingStartupProviderOwners(
     return [];
   }
   const byConfiguredIdAndSource = new Map<string, ConfiguredMemoryEmbeddingStartupProviderOwner>();
-  const defaultsBlock = config.agents?.defaults?.memorySearch;
+  const defaultsBlock = config.agents?.defaults?.memory?.search;
   const defaults = isRecord(defaultsBlock) ? defaultsBlock : undefined;
   const addEffectiveProviders = (override: Record<string, unknown> | undefined) => {
     for (const { configuredId, source } of resolveEffectiveMemoryEmbeddingProviderEntries(
@@ -702,7 +702,7 @@ export function collectConfiguredMemoryEmbeddingStartupProviderOwners(
     return [...byConfiguredIdAndSource.values()];
   }
   for (const agent of agentEntries) {
-    addEffectiveProviders(isRecord(agent.memorySearch) ? agent.memorySearch : undefined);
+    addEffectiveProviders(isRecord(agent.memory?.search) ? agent.memory.search : undefined);
   }
   return [...byConfiguredIdAndSource.values()];
 }

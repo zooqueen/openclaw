@@ -997,7 +997,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai" },
+            memory: { search: { provider: "openai" } },
           },
         },
       } as OpenClawConfig,
@@ -1009,7 +1009,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "ollama", fallback: "openai" },
+            memory: { search: { provider: "ollama", fallback: "openai" } },
           },
         },
       } as OpenClawConfig,
@@ -1020,7 +1020,7 @@ describe("resolveGatewayStartupPluginIds", () => {
       {
         channels: {},
         agents: {
-          list: [{ id: "researcher", memorySearch: { provider: "openai" } }],
+          list: [{ id: "researcher", memory: { search: { provider: "openai" } } }],
         },
       } as OpenClawConfig,
       ["browser", "openai", "memory-core"],
@@ -1033,7 +1033,7 @@ describe("resolveGatewayStartupPluginIds", () => {
           defaults: {
             // Custom id resolves to its `api` owner ("ollama") for the embedding
             // adapter, so the owning plugin must load at startup.
-            memorySearch: { provider: "ollama-5080" },
+            memory: { search: { provider: "ollama-5080" } },
           },
         },
         models: {
@@ -1054,7 +1054,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai", fallback: "ollama-5080" },
+            memory: { search: { provider: "openai", fallback: "ollama-5080" } },
           },
         },
         models: {
@@ -1075,7 +1075,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "generic-embed" },
+            memory: { search: { provider: "generic-embed" } },
           },
         },
       } as OpenClawConfig,
@@ -1087,7 +1087,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai-compatible" },
+            memory: { search: { provider: "openai-compatible" } },
           },
         },
       } as OpenClawConfig,
@@ -1099,7 +1099,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "tenant-embeddings" },
+            memory: { search: { provider: "tenant-embeddings" } },
           },
         },
         models: {
@@ -1120,7 +1120,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai", fallback: "ollama" },
+            memory: { search: { provider: "openai", fallback: "ollama" } },
           },
         },
         plugins: {
@@ -1135,7 +1135,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "none", fallback: "openai" },
+            memory: { search: { provider: "none", fallback: "openai" } },
           },
         },
       } as OpenClawConfig,
@@ -1147,7 +1147,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "local", fallback: "auto" },
+            memory: { search: { provider: "local", fallback: "auto" } },
           },
         },
       } as OpenClawConfig,
@@ -1159,7 +1159,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { enabled: false, provider: "openai", fallback: "ollama" },
+            memory: { search: { enabled: false, provider: "openai", fallback: "ollama" } },
           },
         },
       } as OpenClawConfig,
@@ -1171,7 +1171,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai" },
+            memory: { search: { provider: "openai" } },
           },
         },
         plugins: { entries: { openai: { enabled: false } } },
@@ -1184,7 +1184,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai" },
+            memory: { search: { provider: "openai" } },
           },
         },
         plugins: { deny: ["openai"] },
@@ -1197,9 +1197,11 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { enabled: false },
+            memory: { search: { enabled: false } },
           },
-          list: [{ id: "researcher", memorySearch: { provider: "openai", fallback: "ollama" } }],
+          list: [
+            { id: "researcher", memory: { search: { provider: "openai", fallback: "ollama" } } },
+          ],
         },
       } as OpenClawConfig,
       ["browser", "memory-core"],
@@ -1210,9 +1212,9 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { enabled: false, provider: "openai", fallback: "ollama" },
+            memory: { search: { enabled: false, provider: "openai", fallback: "ollama" } },
           },
-          list: [{ id: "researcher", memorySearch: { enabled: true } }],
+          list: [{ id: "researcher", memory: { search: { enabled: true } } }],
         },
       } as OpenClawConfig,
       ["browser", "openai", "ollama", "memory-core"],
@@ -1223,11 +1225,11 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai" },
+            memory: { search: { provider: "openai" } },
           },
           list: [
-            { id: "muted", memorySearch: { enabled: false } },
-            { id: "researcher", memorySearch: { provider: "ollama" } },
+            { id: "muted", memory: { search: { enabled: false } } },
+            { id: "researcher", memory: { search: { provider: "ollama" } } },
           ],
         },
       } as OpenClawConfig,
@@ -1239,7 +1241,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         channels: {},
         agents: {
           defaults: {
-            memorySearch: { provider: "openai" },
+            memory: { search: { provider: "openai" } },
           },
           list: [{ id: "researcher" }],
         },
@@ -1934,7 +1936,7 @@ describe("resolveGatewayStartupPluginIds", () => {
         config: {
           agents: {
             defaults: {
-              memorySearch: { provider: "openai", fallback: "ollama" },
+              memory: { search: { provider: "openai", fallback: "ollama" } },
             },
           },
           channels: {},
@@ -2465,11 +2467,22 @@ describe("resolveGatewayStartupPluginIds", () => {
     expectStartupPluginIdsCase({
       config: {
         channels: {},
+        agents: {
+          defaults: {
+            memory: {
+              extensions: {
+                "memory-core": {
+                  dreaming: { enabled: true },
+                },
+              },
+            },
+          },
+        },
         plugins: {
           allow: ["browser", "memory-lancedb"],
           slots: { memory: "memory-lancedb" },
           entries: {
-            "memory-lancedb": { enabled: true, config: { dreaming: { enabled: true } } },
+            "memory-lancedb": { enabled: true },
           },
         },
       } as OpenClawConfig,
@@ -2485,11 +2498,22 @@ describe("resolveGatewayStartupPluginIds", () => {
       resolveGatewayStartupMetadataPluginIds({
         config: {
           channels: {},
+          agents: {
+            defaults: {
+              memory: {
+                extensions: {
+                  "memory-core": {
+                    dreaming: { enabled: true },
+                  },
+                },
+              },
+            },
+          },
           plugins: {
             allow: ["browser", "memory-lancedb"],
             slots: { memory: "memory-lancedb" },
             entries: {
-              "memory-lancedb": { enabled: true, config: { dreaming: { enabled: true } } },
+              "memory-lancedb": { enabled: true },
             },
           },
         } as OpenClawConfig,
@@ -2503,12 +2527,23 @@ describe("resolveGatewayStartupPluginIds", () => {
     expectStartupPluginIdsCase({
       config: {
         channels: {},
+        agents: {
+          defaults: {
+            memory: {
+              extensions: {
+                "memory-core": {
+                  dreaming: { enabled: true },
+                },
+              },
+            },
+          },
+        },
         plugins: {
           allow: ["browser", "memory-lancedb"],
           deny: ["memory-core"],
           slots: { memory: "memory-lancedb" },
           entries: {
-            "memory-lancedb": { enabled: true, config: { dreaming: { enabled: true } } },
+            "memory-lancedb": { enabled: true },
           },
         },
       } as OpenClawConfig,
@@ -2520,12 +2555,23 @@ describe("resolveGatewayStartupPluginIds", () => {
     expectStartupPluginIdsCase({
       config: {
         channels: {},
+        agents: {
+          defaults: {
+            memory: {
+              extensions: {
+                "memory-core": {
+                  dreaming: { enabled: true },
+                },
+              },
+            },
+          },
+        },
         plugins: {
           allow: ["browser", "memory-lancedb"],
           slots: { memory: "memory-lancedb" },
           entries: {
             "memory-core": { enabled: false },
-            "memory-lancedb": { enabled: true, config: { dreaming: { enabled: true } } },
+            "memory-lancedb": { enabled: true },
           },
         },
       } as OpenClawConfig,

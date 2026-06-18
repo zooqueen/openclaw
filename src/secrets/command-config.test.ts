@@ -55,9 +55,11 @@ describe("collectCommandSecretAssignmentsFromSnapshot", () => {
     const sourceConfig = {
       agents: {
         defaults: {
-          memorySearch: {
-            remote: {
-              apiKey: { source: "env", provider: "default", id: "DEFAULT_MEMORY_KEY" },
+          memory: {
+            search: {
+              remote: {
+                apiKey: { source: "env", provider: "default", id: "DEFAULT_MEMORY_KEY" },
+              },
             },
           },
         },
@@ -66,9 +68,11 @@ describe("collectCommandSecretAssignmentsFromSnapshot", () => {
     const resolvedConfig = {
       agents: {
         defaults: {
-          memorySearch: {
-            remote: {
-              apiKey: { source: "env", provider: "default", id: "DEFAULT_MEMORY_KEY" },
+          memory: {
+            search: {
+              remote: {
+                apiKey: { source: "env", provider: "default", id: "DEFAULT_MEMORY_KEY" },
+              },
             },
           },
         },
@@ -79,13 +83,13 @@ describe("collectCommandSecretAssignmentsFromSnapshot", () => {
       sourceConfig,
       resolvedConfig,
       commandName: "memory search",
-      targetIds: new Set(["agents.defaults.memorySearch.remote.apiKey"]),
-      inactiveRefPaths: new Set(["agents.defaults.memorySearch.remote.apiKey"]),
+      targetIds: new Set(["agents.defaults.memory.search.remote.apiKey"]),
+      inactiveRefPaths: new Set(["agents.defaults.memory.search.remote.apiKey"]),
     });
 
     expect(result.assignments).toStrictEqual([]);
     expect(result.diagnostics).toEqual([
-      "agents.defaults.memorySearch.remote.apiKey: secret ref is configured on an inactive surface; skipping command-time assignment.",
+      "agents.defaults.memory.search.remote.apiKey: secret ref is configured on an inactive surface; skipping command-time assignment.",
     ]);
   });
 });

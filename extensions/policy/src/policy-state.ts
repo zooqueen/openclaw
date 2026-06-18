@@ -1,5 +1,9 @@
 // Policy plugin module implements policy state behavior.
 import { createHash } from "node:crypto";
+import {
+  resolveAgentMemoryConfig,
+  type OpenClawConfig,
+} from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { normalizeProviderId } from "openclaw/plugin-sdk/provider-model-shared";
 import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import { coerceSecretRef } from "openclaw/plugin-sdk/secret-input";
@@ -1199,29 +1203,29 @@ function pushMemorySessionTranscriptIndexing(
   entries: PolicyDataHandlingEvidence[],
   cfg: Record<string, unknown>,
 ): void {
-  const memory = isRecord(cfg.memory) ? cfg.memory : {};
+  const agents = isRecord(cfg.agents) ? cfg.agents : {};
+  const defaults = isRecord(agents.defaults) ? agents.defaults : {};
+  const memory = isRecord(defaults.memory) ? defaults.memory : {};
   const qmd = isRecord(memory.qmd) ? memory.qmd : {};
   const qmdSessions = isRecord(qmd.sessions) ? qmd.sessions : {};
   if (qmdSessions.enabled !== undefined) {
     entries.push({
       id: "memory-qmd-session-transcripts",
       kind: "memorySessionTranscriptIndexing",
-      source: "oc://openclaw.config/memory/qmd/sessions/enabled",
+      source: "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
       scope: "global",
       value: memory.backend === "qmd" && readBoolean(qmdSessions.enabled) === true,
       explicit: true,
     });
   }
 
-  const agents = isRecord(cfg.agents) ? cfg.agents : {};
-  const defaults = isRecord(agents.defaults) ? agents.defaults : {};
-  const defaultsMemorySearch = isRecord(defaults.memorySearch) ? defaults.memorySearch : {};
+  const defaultsMemorySearch = isRecord(memory.search) ? memory.search : {};
   const defaultSessionMemory = memorySearchSessionTranscriptIndexing(defaultsMemorySearch);
   if (defaultSessionMemory !== undefined) {
     entries.push({
       id: "agents-defaults-memory-session-transcripts",
       kind: "memorySessionTranscriptIndexing",
-      source: "oc://openclaw.config/agents/defaults/memorySearch/experimental/sessionMemory",
+      source: "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
       scope: "global",
       value: defaultSessionMemory,
       explicit: true,
@@ -1240,25 +1244,48 @@ function pushMemorySessionTranscriptIndexing(
       readString(rawAgent.name) ??
       readString(rawAgent.slug) ??
       `agent-${index}`;
-    const memorySearch = isRecord(rawAgent.memorySearch) ? rawAgent.memorySearch : undefined;
+    const agentMemory = isRecord(rawAgent.memory) ? rawAgent.memory : undefined;
+    const memorySearch = isRecord(agentMemory?.search) ? agentMemory.search : undefined;
     const agentSessionMemory =
       memorySearch === undefined
         ? defaultSessionMemory
         : memorySearchSessionTranscriptIndexing(memorySearch, defaultsMemorySearch);
-    if (agentSessionMemory === undefined) {
+    const explicit = memorySearchSessionTranscriptIndexingHasLocalConfig(memorySearch);
+    if (agentSessionMemory !== undefined) {
+      entries.push({
+        id: `${agentId}-memory-session-transcripts`,
+        kind: "memorySessionTranscriptIndexing",
+        source: explicit
+          ? `oc://openclaw.config/agents/list/#${index}/memory/search/experimental/sessionMemory`
+          : "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
+        scope: "agent",
+        agentId: normalizeAgentId(agentId),
+        value: agentSessionMemory,
+        explicit,
+      });
+    }
+
+    const normalizedAgentId = normalizeAgentId(agentId);
+    const effectiveMemory = resolveAgentMemoryConfig(cfg as OpenClawConfig, normalizedAgentId);
+    const effectiveQmd = isRecord(effectiveMemory?.qmd) ? effectiveMemory.qmd : {};
+    const effectiveQmdSessions = isRecord(effectiveQmd.sessions) ? effectiveQmd.sessions : {};
+    if (effectiveQmdSessions.enabled === undefined) {
       return;
     }
-    const explicit = memorySearchSessionTranscriptIndexingHasLocalConfig(memorySearch);
+    const agentQmd = isRecord(agentMemory?.qmd) ? agentMemory.qmd : {};
+    const agentQmdSessions = isRecord(agentQmd.sessions) ? agentQmd.sessions : {};
+    const qmdExplicit = agentQmdSessions.enabled !== undefined;
     entries.push({
-      id: `${agentId}-memory-session-transcripts`,
+      id: `${agentId}-memory-qmd-session-transcripts`,
       kind: "memorySessionTranscriptIndexing",
-      source: explicit
-        ? `oc://openclaw.config/agents/list/#${index}/memorySearch/experimental/sessionMemory`
-        : "oc://openclaw.config/agents/defaults/memorySearch/experimental/sessionMemory",
+      source: qmdExplicit
+        ? `oc://openclaw.config/agents/list/#${index}/memory/qmd/sessions/enabled`
+        : "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
       scope: "agent",
-      agentId: normalizeAgentId(agentId),
-      value: agentSessionMemory,
-      explicit,
+      agentId: normalizedAgentId,
+      value:
+        effectiveMemory?.backend === "qmd" && readBoolean(effectiveQmdSessions.enabled) === true,
+      explicit: qmdExplicit,
     });
   });
 }
@@ -1407,7 +1434,7 @@ function isSecretInputPath(path: readonly string[]): boolean {
     matchesConfigPath(path, ["models", "providers", "*", "headers", "*"]) ||
     isConfiguredProviderRequestSecretPath(path, ["models", "providers", "*"]) ||
     isMediaConfiguredProviderRequestSecretPath(path) ||
-    matchesConfigPath(path, ["agents", "defaults", "memorySearch", "remote", "headers", "*"]) ||
+    matchesConfigPath(path, ["agents", "defaults", "memory", "search", "remote", "headers", "*"]) ||
     matchesConfigPath(path, ["diagnostics", "otel", "headers", "*"])
   );
 }

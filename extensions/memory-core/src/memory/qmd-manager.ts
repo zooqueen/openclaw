@@ -97,6 +97,7 @@ const MCPORTER_STATE_KEY = Symbol.for("openclaw.mcporterState");
 const QMD_EMBED_QUEUE_KEY = Symbol.for("openclaw.qmdEmbedQueueTail");
 const QMD_UPDATE_QUEUE_KEY = Symbol.for("openclaw.qmdUpdateQueueState");
 const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
+  ".dreams",
   ".git",
   ".cache",
   "node_modules",
@@ -495,6 +496,7 @@ export class QmdMemoryManager implements MemorySearchManager {
     // default models directory into our custom cache so the index stays
     // isolated while models are shared.
     await this.symlinkSharedModels();
+    await this.refreshManagedCollectionIndexConfig();
 
     await this.ensureCollections();
     if (mode === "cli") {
@@ -1162,6 +1164,12 @@ export class QmdMemoryManager implements MemorySearchManager {
         `    path: ${this.quoteYamlString(collection.path)}`,
         `    pattern: ${this.quoteYamlString(collection.pattern)}`,
       );
+      if (collection.ignore?.length) {
+        lines.push("    ignore:");
+        for (const pattern of collection.ignore) {
+          lines.push(`      - ${this.quoteYamlString(pattern)}`);
+        }
+      }
     }
     return `${lines.join("\n")}\n`;
   }
@@ -1763,7 +1771,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       count,
       "paths",
       "Large QMD collections can make OpenClaw run out of file watchers or open files.",
-      "Remove large collections, or set memorySearch.sync.watch to false and refresh memory manually or with sync.intervalMinutes.",
+      "Remove large collections, or set memory.search.sync.watch to false and refresh memory manually or with sync.intervalMinutes.",
       (message) => log.warn(message),
     );
   }
@@ -2252,7 +2260,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       if (!state.coldStartWarned) {
         state.coldStartWarned = true;
         log.warn(
-          "mcporter qmd bridge enabled but startDaemon=false; each query may cold-start QMD MCP. Consider setting memory.qmd.mcporter.startDaemon=true to keep it warm.",
+          "mcporter qmd bridge enabled but startDaemon=false; each query may cold-start QMD MCP. Consider setting agents.defaults.memory.qmd.mcporter.startDaemon=true to keep it warm.",
         );
       }
       return;

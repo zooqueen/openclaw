@@ -168,12 +168,15 @@ export function buildQaGatewayConfig(params: {
             }
           : {}),
         ...(params.thinkingDefault ? { thinkingDefault: params.thinkingDefault } : {}),
-        memorySearch: {
-          sync: {
-            watch: true,
-            watchDebounceMs: 25,
-            onSessionStart: true,
-            onSearch: true,
+        memory: {
+          backend: "builtin",
+          search: {
+            sync: {
+              watch: true,
+              watchDebounceMs: 25,
+              onSessionStart: true,
+              onSearch: true,
+            },
           },
         },
         models: {
@@ -208,9 +211,6 @@ export function buildQaGatewayConfig(params: {
           },
         },
       ],
-    },
-    memory: {
-      backend: "builtin",
     },
     tools: {
       // The parity scenarios are code-agent contracts: they must always expose

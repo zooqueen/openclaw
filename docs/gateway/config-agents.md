@@ -189,7 +189,7 @@ knob.
   the compact skills list injected into the system prompt.
 - `agents.defaults.contextLimits.*`:
   bounded runtime excerpts and injected runtime-owned blocks.
-- `memory.qmd.limits.*`:
+- `agents.defaults.memory.qmd.limits.*`:
   indexed memory-search snippet and injection sizing.
 
 Use the matching per-agent override only when one agent needs a different

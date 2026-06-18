@@ -44,6 +44,7 @@ import {
   resolveDiagnosticModelContentCapturePolicy,
 } from "openclaw/plugin-sdk/diagnostic-runtime";
 import { loadExecApprovals } from "openclaw/plugin-sdk/exec-approvals-runtime";
+import { resolveAgentMemoryConfig } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { pathExists } from "openclaw/plugin-sdk/security-runtime";
 import {
   resolveCodexAppServerForModelProvider,
@@ -929,7 +930,9 @@ export async function runCodexAppServerAttempt(
           .map((tool) => tool.name)
           .filter(isNonEmptyString),
       ),
-      citationsMode: params.config?.memory?.citations,
+      citationsMode: params.config
+        ? resolveAgentMemoryConfig(params.config, sessionAgentId)?.citations
+        : undefined,
       modelId: params.modelId,
       contextEngineHostSupport: CODEX_APP_SERVER_CONTEXT_ENGINE_HOST,
       providerId: params.provider,

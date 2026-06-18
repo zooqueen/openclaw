@@ -19,6 +19,7 @@ import {
 import { compileMemoryWikiVault } from "./compile.js";
 import {
   resolveMemoryWikiConfig,
+  resolveMemoryWikiConfigForAgent,
   WIKI_SEARCH_BACKENDS,
   WIKI_SEARCH_CORPORA,
   type MemoryWikiPluginConfig,
@@ -328,15 +329,27 @@ function validateWikiGatewayResult(
   throw new Error(`Invalid Gateway response for ${method}.`);
 }
 
-async function callWikiGateway(method: "wiki.status"): Promise<MemoryWikiStatus>;
-async function callWikiGateway(method: "wiki.doctor"): Promise<MemoryWikiDoctorReport>;
+async function callWikiGateway(method: "wiki.status", agentId?: string): Promise<MemoryWikiStatus>;
+async function callWikiGateway(
+  method: "wiki.doctor",
+  agentId?: string,
+): Promise<MemoryWikiDoctorReport>;
 async function callWikiGateway(
   method: "wiki.bridge.import",
+  agentId?: string,
 ): Promise<MemoryWikiImportedSourceSyncResult>;
-async function callWikiGateway(method: "wiki.status" | "wiki.doctor" | "wiki.bridge.import") {
-  const result = await callGatewayFromCli(method, { timeout: WIKI_GATEWAY_TIMEOUT_MS }, undefined, {
-    progress: false,
-  });
+async function callWikiGateway(
+  method: "wiki.status" | "wiki.doctor" | "wiki.bridge.import",
+  agentId?: string,
+) {
+  const result = await callGatewayFromCli(
+    method,
+    { timeout: WIKI_GATEWAY_TIMEOUT_MS },
+    agentId ? { agentId } : undefined,
+    {
+      progress: false,
+    },
+  );
   return validateWikiGatewayResult(method, result);
 }
 
@@ -481,7 +494,7 @@ export async function runWikiStatus(params: {
 }) {
   const routeThroughGateway = shouldRouteBridgeRuntimeThroughGateway(params.config);
   const status = routeThroughGateway
-    ? await callWikiGateway("wiki.status")
+    ? await callWikiGateway("wiki.status", params.config.agentId)
     : await (async () => {
         await syncMemoryWikiImportedSources({ config: params.config, appConfig: params.appConfig });
         return await resolveMemoryWikiStatus(params.config, {
@@ -505,7 +518,7 @@ export async function runWikiDoctor(params: {
 }) {
   const routeThroughGateway = shouldRouteBridgeRuntimeThroughGateway(params.config);
   const report = routeThroughGateway
-    ? await callWikiGateway("wiki.doctor")
+    ? await callWikiGateway("wiki.doctor", params.config.agentId)
     : await (async () => {
         await syncMemoryWikiImportedSources({ config: params.config, appConfig: params.appConfig });
         return buildMemoryWikiDoctorReport(
@@ -769,7 +782,7 @@ export async function runWikiBridgeImport(params: {
   const render = (value: MemoryWikiImportedSourceSyncResult) =>
     `Bridge import synced ${value.artifactCount} artifacts across ${value.workspaces} workspaces (${value.importedCount} new, ${value.updatedCount} updated, ${value.skippedCount} unchanged, ${value.removedCount} removed). Indexes ${value.indexesRefreshed ? `refreshed (${value.indexUpdatedFiles.length} files)` : `not refreshed (${value.indexRefreshReason})`}.`;
   if (shouldRouteBridgeRuntimeThroughGateway(params.config)) {
-    const result = await callWikiGateway("wiki.bridge.import");
+    const result = await callWikiGateway("wiki.bridge.import", params.config.agentId);
     writeOutput(formatGatewayJsonOrText(result, params.json, render), params.stdout);
     return result;
   }
@@ -930,13 +943,29 @@ export async function runWikiChatGptRollback(params: {
 
 export function registerWikiCli(
   program: Command,
-  pluginConfig?: MemoryWikiPluginConfig | ResolvedMemoryWikiConfig,
+  pluginConfig?:
+    | MemoryWikiPluginConfig
+    | ResolvedMemoryWikiConfig
+    | ((agentId?: string) => ResolvedMemoryWikiConfig),
   appConfig?: OpenClawConfig,
 ) {
-  const config = isResolvedMemoryWikiConfig(pluginConfig)
-    ? pluginConfig
-    : resolveMemoryWikiConfig(pluginConfig);
-  const wiki = program.command("wiki").description("Inspect and initialize the memory wiki vault");
+  const resolveConfig =
+    typeof pluginConfig === "function"
+      ? pluginConfig
+      : isResolvedMemoryWikiConfig(pluginConfig)
+        ? () => pluginConfig
+        : appConfig
+          ? (agentId?: string) => resolveMemoryWikiConfigForAgent(appConfig, agentId)
+          : () => resolveMemoryWikiConfig(pluginConfig);
+  let config = resolveConfig();
+  const wiki = program
+    .command("wiki")
+    .description("Inspect and initialize the memory wiki vault")
+    .option("--agent <id>", "Agent id (default: configured default agent)");
+  wiki.hook("preAction", () => {
+    const agentId = wiki.opts().agent;
+    config = resolveConfig(typeof agentId === "string" ? agentId : undefined);
+  });
 
   wiki
     .command("status")

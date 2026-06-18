@@ -150,6 +150,62 @@ describe("syncMemoryWikiBridgeSources", () => {
     expect(logLines).toHaveLength(2);
   });
 
+  it("scopes bridge imports to the active wiki agent", async () => {
+    const researchWorkspace = await createBridgeWorkspace("research-workspace");
+    const writerWorkspace = await createBridgeWorkspace("writer-workspace");
+    const { rootDir: vaultDir, config } = await createVault({
+      rootDir: nextCaseRoot("agent-scoped-vault"),
+      config: {
+        vaultMode: "bridge",
+        bridge: {
+          enabled: true,
+          readMemoryArtifacts: true,
+          indexMemoryRoot: true,
+        },
+      },
+    });
+    const researchMemoryPath = path.join(researchWorkspace, "MEMORY.md");
+    const writerMemoryPath = path.join(writerWorkspace, "MEMORY.md");
+    await fs.writeFile(researchMemoryPath, "# Research Memory\n", "utf8");
+    await fs.writeFile(writerMemoryPath, "# Writer Memory\n", "utf8");
+    registerBridgeArtifacts([
+      {
+        kind: "memory-root",
+        workspaceDir: researchWorkspace,
+        relativePath: "MEMORY.md",
+        absolutePath: researchMemoryPath,
+        agentIds: ["research"],
+        contentType: "markdown",
+      },
+      {
+        kind: "memory-root",
+        workspaceDir: writerWorkspace,
+        relativePath: "MEMORY.md",
+        absolutePath: writerMemoryPath,
+        agentIds: ["writer"],
+        contentType: "markdown",
+      },
+    ]);
+
+    const result = await syncMemoryWikiBridgeSources({
+      config: { ...config, agentId: "research" },
+      appConfig: {
+        agents: {
+          list: [
+            { id: "research", workspace: researchWorkspace },
+            { id: "writer", workspace: writerWorkspace },
+          ],
+        },
+      },
+    });
+
+    expect(result.artifactCount).toBe(1);
+    expect(result.workspaces).toBe(1);
+    const page = await fs.readFile(path.join(vaultDir, result.pagePaths[0] ?? ""), "utf8");
+    expect(page).toContain("# Research Memory");
+    expect(page).not.toContain("# Writer Memory");
+  });
+
   it("imports bridge artifacts from legacy providers without agent ids", async () => {
     const workspaceDir = await createBridgeWorkspace("legacy-agentids-workspace");
     const { rootDir: vaultDir, config } = await createVault({
@@ -289,6 +345,80 @@ describe("syncMemoryWikiBridgeSources", () => {
     const page = await fs.readFile(path.join(vaultDir, result.pagePaths[0] ?? ""), "utf8");
     expect(page).toContain("sourceType: memory-bridge-events");
     expect(page).toContain('"type":"memory.recall.recorded"');
+  });
+
+  it("imports only the active agent's event journal from a shared workspace", async () => {
+    const workspaceDir = await createBridgeWorkspace("shared-events-workspace");
+    const { rootDir: vaultDir, config } = await createVault({
+      rootDir: nextCaseRoot("shared-events-vault"),
+      config: {
+        vaultMode: "bridge",
+        bridge: {
+          enabled: true,
+          followMemoryEvents: true,
+        },
+      },
+    });
+
+    await appendMemoryHostEvent(
+      workspaceDir,
+      {
+        type: "memory.recall.recorded",
+        timestamp: "2026-04-05T12:00:00.000Z",
+        query: "research-only",
+        resultCount: 0,
+        results: [],
+      },
+      "research",
+    );
+    await appendMemoryHostEvent(
+      workspaceDir,
+      {
+        type: "memory.recall.recorded",
+        timestamp: "2026-04-05T12:01:00.000Z",
+        query: "writer-only",
+        resultCount: 0,
+        results: [],
+      },
+      "writer",
+    );
+    registerBridgeArtifacts([
+      {
+        kind: "event-log",
+        workspaceDir,
+        relativePath: "memory/.dreams/agents/research/events.jsonl",
+        absolutePath: resolveMemoryHostEventLogPath(workspaceDir, "research"),
+        agentIds: ["research"],
+        contentType: "json",
+      },
+      {
+        kind: "event-log",
+        workspaceDir,
+        relativePath: "memory/.dreams/agents/writer/events.jsonl",
+        absolutePath: resolveMemoryHostEventLogPath(workspaceDir, "writer"),
+        agentIds: ["writer"],
+        contentType: "json",
+      },
+    ]);
+
+    const result = await syncMemoryWikiBridgeSources({
+      config: { ...config, agentId: "research" },
+      appConfig: {
+        agents: {
+          list: [
+            { id: "research", default: true, workspace: workspaceDir },
+            { id: "writer", workspace: workspaceDir },
+          ],
+        },
+      },
+    });
+
+    expect(result.artifactCount).toBe(1);
+    const page = await fs.readFile(path.join(vaultDir, result.pagePaths[0] ?? ""), "utf8");
+    expect(page).toContain("bridgeAgentIds:");
+    expect(page).toContain("- research");
+    expect(page).toContain("research-only");
+    expect(page).not.toContain("writer-only");
   });
 
   it("prunes stale bridge pages when the source artifact disappears", async () => {

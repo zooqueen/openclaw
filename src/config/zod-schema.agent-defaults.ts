@@ -8,7 +8,7 @@ import {
   AgentModelRuntimeEntrySchema,
   AgentModelSchema,
   AgentToolModelSchema,
-  MemorySearchSchema,
+  AgentMemorySchema,
   AgentRunRetriesConfigSchema,
 } from "./zod-schema.agent-runtime.js";
 import {
@@ -121,7 +121,7 @@ export const AgentDefaultsSchema = z
     envelopeElapsed: z.union([z.literal("on"), z.literal("off")]).optional(),
     contextTokens: z.number().int().positive().optional(),
     cliBackends: z.record(z.string(), CliBackendSchema).optional(),
-    memorySearch: MemorySearchSchema,
+    memory: AgentMemorySchema,
     contextPruning: z
       .object({
         mode: z.union([z.literal("off"), z.literal("cache-ttl")]).optional(),

@@ -12,6 +12,7 @@ import type {
   HumanDelayConfig,
   TypingMode,
 } from "./types.base.js";
+import type { AgentMemoryConfig } from "./types.memory.js";
 import type { MemorySearchConfig } from "./types.tools.js";
 
 /** Workspace bootstrap-file injection policy for agent system prompts. */
@@ -347,7 +348,12 @@ export type AgentDefaultsConfig = {
      */
     executionContract?: EmbeddedAgentExecutionContract;
   };
-  /** Vector memory search configuration (per-agent overrides supported). */
+  /** Per-agent memory defaults, including search, backends, and extensions. */
+  memory?: AgentMemoryConfig;
+  /**
+   * @deprecated Legacy raw config accepted only by doctor/migration repair.
+   * Normal schema parsing rejects this key; use `memory.search`.
+   */
   memorySearch?: MemorySearchConfig;
   /** Default thinking level when no /think directive is present. */
   thinkingDefault?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive" | "max";

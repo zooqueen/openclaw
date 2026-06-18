@@ -199,7 +199,6 @@ describe("memory watcher config", () => {
     }
     await closeAllMemorySearchManagers();
     clearRegistry();
-    vi.unstubAllEnvs();
     if (workspaceDir) {
       await fs.rm(workspaceDir, { recursive: true, force: true });
       workspaceDir = "";
@@ -209,7 +208,6 @@ describe("memory watcher config", () => {
 
   async function setupWatcherWorkspace(seedFile: { name: string; contents: string }) {
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-memory-watch-"));
-    vi.stubEnv("OPENCLAW_STATE_DIR", path.join(workspaceDir, "state"));
     extraDir = path.join(workspaceDir, "extra");
     await fs.mkdir(path.join(workspaceDir, "memory"), { recursive: true });
     await fs.mkdir(extraDir, { recursive: true });
@@ -219,20 +217,27 @@ describe("memory watcher config", () => {
   function createWatcherConfig(overrides?: Partial<MemorySearchConfig>): OpenClawConfig {
     const defaults: NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]> = {
       workspace: workspaceDir,
-      memorySearch: {
-        provider: "openai",
-        model: "mock-embed",
-        store: { vector: { enabled: false } },
-        sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-        query: { minScore: 0, hybrid: { enabled: false } },
-        extraPaths: [extraDir],
-        ...overrides,
+      memory: {
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+          query: { minScore: 0, hybrid: { enabled: false } },
+          extraPaths: [extraDir],
+          ...overrides,
+        },
       },
     };
     return {
-      memory: { backend: "builtin" },
       agents: {
-        defaults,
+        defaults: {
+          ...defaults,
+          memory: {
+            ...defaults.memory,
+            backend: "builtin",
+          },
+        },
         list: [{ id: "main", default: true }],
       },
     } as OpenClawConfig;
@@ -290,6 +295,9 @@ describe("memory watcher config", () => {
     expect(ignored?.(path.join(workspaceDir, "memory", "node_modules", "pkg", "index.md"))).toBe(
       true,
     );
+    expect(
+      ignored?.(path.join(workspaceDir, "memory", ".dreams", "agents", "writer", "DREAMS.md")),
+    ).toBe(true);
     expect(ignored?.(path.join(workspaceDir, "memory", ".venv", "lib", "python.md"))).toBe(true);
     expect(ignored?.(path.join(workspaceDir, "memory", "project", "notes.tmp"), {})).toBe(true);
     expect(ignored?.(path.join(workspaceDir, "memory", "project", "notes.json"), {})).toBe(true);

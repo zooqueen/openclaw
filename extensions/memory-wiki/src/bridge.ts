@@ -32,6 +32,7 @@ type BridgeArtifact = {
   workspaceDir: string;
   relativePath: string;
   absolutePath: string;
+  agentIds: string[];
 };
 
 export type BridgeMemoryWikiResult = {
@@ -78,6 +79,7 @@ async function collectBridgeArtifacts(
       workspaceDir: artifact.workspaceDir,
       relativePath: artifact.relativePath,
       absolutePath: artifact.absolutePath,
+      agentIds: artifact.agentIds ?? [],
     });
   }
   const deduped = new Map<string, BridgeArtifact>();
@@ -130,7 +132,6 @@ function resolveBridgePagePath(params: { workspaceDir: string; relativePath: str
 async function writeBridgeSourcePage(params: {
   config: ResolvedMemoryWikiConfig;
   artifact: BridgeArtifact;
-  agentIds: string[];
   sourceUpdatedAtMs: number;
   sourceSize: number;
   state: Awaited<ReturnType<typeof readMemoryWikiSourceSyncState>>;
@@ -139,14 +140,14 @@ async function writeBridgeSourcePage(params: {
     workspaceDir: params.artifact.workspaceDir,
     relativePath: params.artifact.relativePath,
   });
-  const title = resolveBridgeTitle(params.artifact, params.agentIds);
+  const title = resolveBridgeTitle(params.artifact, params.artifact.agentIds);
   const renderFingerprint = createHash("sha1")
     .update(
       JSON.stringify({
         artifactType: params.artifact.artifactType,
         workspaceDir: params.artifact.workspaceDir,
         relativePath: params.artifact.relativePath,
-        agentIds: params.agentIds,
+        agentIds: params.artifact.agentIds,
       }),
     )
     .digest("hex");
@@ -175,7 +176,7 @@ async function writeBridgeSourcePage(params: {
           sourcePath: params.artifact.absolutePath,
           bridgeRelativePath: params.artifact.relativePath,
           bridgeWorkspaceDir: params.artifact.workspaceDir,
-          bridgeAgentIds: params.agentIds,
+          bridgeAgentIds: params.artifact.agentIds,
           status: "active",
           updatedAt,
         },
@@ -186,7 +187,7 @@ async function writeBridgeSourcePage(params: {
           `- Workspace: \`${params.artifact.workspaceDir}\``,
           `- Relative path: \`${params.artifact.relativePath}\``,
           `- Kind: \`${params.artifact.artifactType}\``,
-          `- Agents: ${params.agentIds.length > 0 ? params.agentIds.join(", ") : "unknown"}`,
+          `- Agents: ${params.artifact.agentIds.length > 0 ? params.artifact.agentIds.join(", ") : "unknown"}`,
           `- Updated: ${updatedAt}`,
           "",
           "## Content",
@@ -224,20 +225,23 @@ export async function syncMemoryWikiBridgeSources(params: {
     };
   }
 
-  const publicArtifacts = await listActiveMemoryPublicArtifacts({ cfg: params.appConfig });
+  const agentId = params.config.agentId;
+  const publicArtifacts = await listActiveMemoryPublicArtifacts({
+    cfg: params.appConfig,
+    ...(agentId ? { agentId } : {}),
+  });
+  const scopedArtifacts = agentId
+    ? publicArtifacts.filter((artifact) => artifact.agentIds.includes(agentId))
+    : publicArtifacts;
   const results: Array<{ pagePath: string; changed: boolean; created: boolean }> = [];
   const activeKeys = new Set<string>();
-  const artifacts = await collectBridgeArtifacts(params.config.bridge, publicArtifacts);
+  const artifacts = await collectBridgeArtifacts(params.config.bridge, scopedArtifacts);
   const state = await readMemoryWikiSourceSyncState(params.config.vault.path);
   assertMemoryWikiSourceSyncStateCapacity({
     state,
     group: "bridge",
     incomingCount: artifacts.length,
   });
-  const agentIdsByWorkspace = new Map<string, string[]>();
-  for (const artifact of publicArtifacts) {
-    agentIdsByWorkspace.set(artifact.workspaceDir, artifact.agentIds);
-  }
   const artifactCount = artifacts.length;
   for (const artifact of artifacts) {
     const stats = await fs.stat(artifact.absolutePath);
@@ -246,14 +250,13 @@ export async function syncMemoryWikiBridgeSources(params: {
       await writeBridgeSourcePage({
         config: params.config,
         artifact,
-        agentIds: agentIdsByWorkspace.get(artifact.workspaceDir) ?? [],
         sourceUpdatedAtMs: stats.mtimeMs,
         sourceSize: stats.size,
         state,
       }),
     );
   }
-  const workspaceCount = new Set(publicArtifacts.map((artifact) => artifact.workspaceDir)).size;
+  const workspaceCount = new Set(scopedArtifacts.map((artifact) => artifact.workspaceDir)).size;
 
   // Skip pruning when memory-core is not loaded (e.g. CLI context) to avoid
   // removing all bridge-imported entries. See #68373.

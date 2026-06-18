@@ -120,6 +120,9 @@ describe("memory host SDK package internals", () => {
     const tmpDir = getTmpDir();
     fsSync.writeFileSync(path.join(tmpDir, "MEMORY.md"), "# Default memory");
     fsSync.writeFileSync(path.join(tmpDir, "memory.md"), "# Legacy memory");
+    const privateDreamDir = path.join(tmpDir, "memory", ".dreams", "agents", "writer");
+    fsSync.mkdirSync(privateDreamDir, { recursive: true });
+    fsSync.writeFileSync(path.join(privateDreamDir, "DREAMS.md"), "# Private dream");
     const extraDir = path.join(tmpDir, "extra");
     fsSync.mkdirSync(extraDir, { recursive: true });
     fsSync.writeFileSync(path.join(extraDir, "note.md"), "# Note");

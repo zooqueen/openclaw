@@ -7,6 +7,7 @@ import type {
   AgentDefaultsConfig,
 } from "../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../config/types.js";
+import type { AgentMemoryConfig, MemoryExtensionConfig } from "../config/types.memory.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
 import { registerResolvedAgentDir } from "./agent-dir-registry.js";
@@ -30,7 +31,7 @@ export type ResolvedAgentConfig = {
   bootstrapTotalMaxChars?: AgentEntry["bootstrapTotalMaxChars"];
   experimental?: AgentDefaultsConfig["experimental"];
   skills?: AgentEntry["skills"];
-  memorySearch?: AgentEntry["memorySearch"];
+  memory?: AgentEntry["memory"];
   humanDelay?: AgentEntry["humanDelay"];
   tts?: AgentEntry["tts"];
   contextLimits?: AgentContextLimitsConfig;
@@ -141,7 +142,7 @@ export function resolveAgentConfig(
         ? { ...agentDefaults?.experimental, ...entry.experimental }
         : agentDefaults?.experimental,
     skills: Array.isArray(entry.skills) ? entry.skills : undefined,
-    memorySearch: entry.memorySearch,
+    memory: entry.memory,
     humanDelay: entry.humanDelay,
     tts: entry.tts,
     contextLimits:
@@ -163,6 +164,52 @@ export function resolveAgentConfig(
     sandbox: entry.sandbox,
     tools: entry.tools,
   };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeMemoryConfig(
+  defaults: AgentMemoryConfig | undefined,
+  overrides: AgentMemoryConfig | undefined,
+): AgentMemoryConfig | undefined {
+  if (!defaults) {
+    return overrides;
+  }
+  if (!overrides) {
+    return defaults;
+  }
+
+  const merge = (base: unknown, override: unknown): unknown => {
+    if (!isPlainRecord(base) || !isPlainRecord(override)) {
+      return override ?? base;
+    }
+    const result: Record<string, unknown> = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      result[key] = key in result ? merge(result[key], value) : value;
+    }
+    return result;
+  };
+
+  return merge(defaults, overrides) as AgentMemoryConfig;
+}
+
+/** Resolves the canonical memory configuration for one agent. */
+export function resolveAgentMemoryConfig(
+  cfg: OpenClawConfig,
+  agentId: string,
+): AgentMemoryConfig | undefined {
+  return mergeMemoryConfig(cfg.agents?.defaults?.memory, resolveAgentEntry(cfg, agentId)?.memory);
+}
+
+/** Resolves one memory extension's merged agent-scoped config. */
+export function resolveAgentMemoryExtensionConfig(
+  cfg: OpenClawConfig,
+  agentId: string,
+  extensionId: string,
+): MemoryExtensionConfig | undefined {
+  return resolveAgentMemoryConfig(cfg, agentId)?.extensions?.[extensionId];
 }
 
 export function resolveAgentContextLimits(

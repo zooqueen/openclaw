@@ -16,9 +16,21 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function resolveStoredDreaming(config: OpenClawConfig): Record<string, unknown> {
-  const entry = asRecord(config.plugins?.entries?.["memory-core"]);
-  const pluginConfig = asRecord(entry?.config);
-  return asRecord(pluginConfig?.dreaming) ?? {};
+  const memory = asRecord(config.agents?.defaults?.memory);
+  const extensions = asRecord(memory?.extensions);
+  const memoryCore = asRecord(extensions?.["memory-core"]);
+  return asRecord(memoryCore?.dreaming) ?? {};
+}
+
+function resolveAgentStoredDreaming(
+  config: OpenClawConfig,
+  agentId: string,
+): Record<string, unknown> {
+  const agent = config.agents?.list?.find((entry) => entry.id === agentId);
+  const memory = asRecord(agent?.memory);
+  const extensions = asRecord(memory?.extensions);
+  const memoryCore = asRecord(extensions?.["memory-core"]);
+  return asRecord(memoryCore?.dreaming) ?? {};
 }
 
 function createHarness(initialConfig: OpenClawConfig = {}) {
@@ -75,7 +87,7 @@ function createHarness(initialConfig: OpenClawConfig = {}) {
 
 function createCommandContext(
   args?: string,
-  overrides?: Partial<Pick<PluginCommandContext, "gatewayClientScopes">>,
+  overrides?: Partial<Pick<PluginCommandContext, "agentId" | "gatewayClientScopes" | "sessionKey">>,
 ): PluginCommandContext {
   return {
     channel: "webchat",
@@ -83,7 +95,9 @@ function createCommandContext(
     commandBody: args ? `/dreaming ${args}` : "/dreaming",
     args,
     config: {},
+    agentId: overrides?.agentId,
     gatewayClientScopes: overrides?.gatewayClientScopes,
+    sessionKey: overrides?.sessionKey,
     requestConversationBinding: async () => ({ status: "error", message: "unsupported" }),
     detachConversationBinding: async () => ({ removed: false }),
     getCurrentConversationBinding: async () => null,
@@ -110,19 +124,21 @@ describe("memory-core /dreaming command", () => {
     );
   });
 
-  it("persists global enablement under plugins.entries.memory-core.config.dreaming.enabled", async () => {
+  it("persists default-agent enablement under agents.defaults.memory.extensions.memory-core", async () => {
     const { command, runtime, getRuntimeConfig } = createHarness({
-      plugins: {
-        entries: {
-          "memory-core": {
-            config: {
-              dreaming: {
-                phases: {
-                  deep: {
-                    minScore: 0.9,
+      agents: {
+        defaults: {
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: {
+                  phases: {
+                    deep: {
+                      minScore: 0.9,
+                    },
                   },
+                  frequency: "0 */6 * * *",
                 },
-                frequency: "0 */6 * * *",
               },
             },
           },
@@ -137,6 +153,60 @@ describe("memory-core /dreaming command", () => {
     expect(storedDreaming.enabled).toBe(false);
     expect(storedDreaming.frequency).toBe("0 */6 * * *");
     expect(result.text).toContain("Dreaming disabled.");
+  });
+
+  it("uses the host-routed agent when the session key does not encode one", async () => {
+    const { command, getRuntimeConfig } = createHarness({
+      agents: {
+        defaults: {
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: { enabled: true },
+              },
+            },
+          },
+        },
+        list: [{ id: "research" }],
+      },
+    });
+
+    await command.handler(
+      createCommandContext("off", {
+        agentId: "research",
+        sessionKey: "plugin-owned:command-session",
+      }),
+    );
+
+    expect(resolveStoredDreaming(getRuntimeConfig()).enabled).toBe(true);
+    expect(resolveAgentStoredDreaming(getRuntimeConfig(), "research").enabled).toBe(false);
+  });
+
+  it("matches host-routed canonical agent ids to raw configured ids", async () => {
+    const { command, getRuntimeConfig } = createHarness({
+      agents: {
+        defaults: {
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: { enabled: true },
+              },
+            },
+          },
+        },
+        list: [{ id: "Team Ops" }],
+      },
+    });
+
+    await command.handler(
+      createCommandContext("off", {
+        agentId: "team-ops",
+        sessionKey: "plugin-owned:command-session",
+      }),
+    );
+
+    expect(resolveStoredDreaming(getRuntimeConfig()).enabled).toBe(true);
+    expect(resolveAgentStoredDreaming(getRuntimeConfig(), "Team Ops").enabled).toBe(false);
   });
 
   it("blocks unscoped gateway callers from persisting dreaming config", async () => {
@@ -181,20 +251,18 @@ describe("memory-core /dreaming command", () => {
 
   it("returns status without mutating config", async () => {
     const { command, runtime } = createHarness({
-      plugins: {
-        entries: {
-          "memory-core": {
-            config: {
-              dreaming: {
-                frequency: "15 */8 * * *",
-              },
-            },
-          },
-        },
-      },
       agents: {
         defaults: {
           userTimezone: "America/Los_Angeles",
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: {
+                  frequency: "15 */8 * * *",
+                },
+              },
+            },
+          },
         },
       },
     });

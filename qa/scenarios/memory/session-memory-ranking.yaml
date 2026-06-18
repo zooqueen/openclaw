@@ -48,7 +48,7 @@ flow:
             - ref: env
         - set: originalMemorySearch
           value:
-            expr: "original.config.agents && typeof original.config.agents === 'object' && typeof original.config.agents.defaults === 'object' ? original.config.agents.defaults.memorySearch : undefined"
+            expr: "original.config.agents && typeof original.config.agents === 'object' && typeof original.config.agents.defaults === 'object' && original.config.agents.defaults.memory && typeof original.config.agents.defaults.memory === 'object' ? original.config.agents.defaults.memory.search : undefined"
         - set: originalToolsSessions
           value:
             expr: "original.config.tools && typeof original.config.tools === 'object' && typeof original.config.tools.sessions === 'object' ? structuredClone(original.config.tools.sessions) : undefined"
@@ -62,19 +62,20 @@ flow:
                     visibility: all
                 agents:
                   defaults:
-                    memorySearch:
-                      sources:
-                        - memory
-                        - sessions
-                      experimental:
-                        sessionMemory: true
-                      query:
-                        minScore: 0
-                        hybrid:
-                          enabled: true
-                          temporalDecay:
+                    memory:
+                      search:
+                        sources:
+                          - memory
+                          - sessions
+                        experimental:
+                          sessionMemory: true
+                        query:
+                          minScore: 0
+                          hybrid:
                             enabled: true
-                            halfLifeDays: 1
+                            temporalDecay:
+                              enabled: true
+                              halfLifeDays: 1
         - call: waitForGatewayHealthy
           args:
             - ref: env
@@ -200,8 +201,9 @@ flow:
                           expr: "originalToolsSessions === undefined ? null : structuredClone(originalToolsSessions)"
                       agents:
                         defaults:
-                          memorySearch:
-                            expr: "originalMemorySearch === undefined ? null : structuredClone(originalMemorySearch)"
+                          memory:
+                            search:
+                              expr: "originalMemorySearch === undefined ? null : structuredClone(originalMemorySearch)"
               - call: waitForGatewayHealthy
                 args:
                   - ref: env

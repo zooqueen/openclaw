@@ -155,6 +155,7 @@ const SOURCE_WIDE_SESSION_INDEX_FLUSH_FILES = 128;
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
 const MEMORY_WATCH_PRESSURE_STARTUP_CHECK_DELAY_MS = 10_000;
 const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
+  ".dreams",
   ".git",
   "node_modules",
   ".pnpm-store",
@@ -932,7 +933,7 @@ export abstract class MemoryManagerSyncOps {
       count,
       unit,
       "Large memory folders or extraPaths can make OpenClaw run out of file watchers or open files.",
-      "Remove large extraPaths, or set memorySearch.sync.watch to false and refresh memory manually or with sync.intervalMinutes.",
+      "Remove large extraPaths, or set memory.search.sync.watch to false and refresh memory manually or with sync.intervalMinutes.",
       (message) => log.warn(message),
     );
   }

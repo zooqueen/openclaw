@@ -309,17 +309,19 @@ export function writeConfig({ homeDir, workspaceDir, port, token }) {
     agents: {
       defaults: {
         workspace: workspaceDir,
-        memorySearch: {
-          provider: "none",
-          model: "",
-          store: {
-            path: indexPath,
-            vector: { enabled: false },
-          },
-          sync: {
-            watch: true,
-            onSessionStart: false,
-            onSearch: false,
+        memory: {
+          search: {
+            provider: "none",
+            model: "",
+            store: {
+              path: indexPath,
+              vector: { enabled: false },
+            },
+            sync: {
+              watch: true,
+              onSessionStart: false,
+              onSearch: false,
+            },
           },
         },
       },

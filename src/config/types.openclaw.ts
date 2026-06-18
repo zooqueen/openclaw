@@ -228,7 +228,10 @@ export type OpenClawConfig = {
   talk?: TalkConfig;
   /** Gateway server, auth, UI, node-pairing, and dispatch settings. */
   gateway?: GatewayConfig;
-  /** Memory indexing/search configuration. */
+  /**
+   * @deprecated Legacy top-level memory config accepted only by doctor migration.
+   * Runtime config lives at `agents.defaults.memory` and `agents.list[].memory`.
+   */
   memory?: MemoryConfig;
   /** MCP client/server and Codex MCP approval configuration. */
   mcp?: McpConfig;

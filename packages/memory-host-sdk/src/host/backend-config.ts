@@ -12,6 +12,7 @@ import {
   type MemoryQmdStartupMode,
   type OpenClawConfig,
   parseDurationMs,
+  resolveAgentMemoryConfig,
   resolveAgentWorkspaceDir,
   normalizeAgentId,
   resolveUserPath,
@@ -39,6 +40,7 @@ export type ResolvedQmdCollection = {
   name: string;
   path: string;
   pattern: string;
+  ignore?: string[];
   kind: "memory" | "custom" | "sessions";
 };
 
@@ -327,6 +329,9 @@ function resolveCustomPaths(
     } catch {
       // not a file or can't stat, use as-is
     }
+    if (isPathInsideRoot(collectionPath, path.join(workspaceDir, "memory", ".dreams"))) {
+      return;
+    }
     const dedupeKey = `${collectionPath}\u0000${pattern}`;
     if (seenRoots.has(dedupeKey)) {
       return;
@@ -378,14 +383,20 @@ function resolveDefaultCollections(
   if (!include) {
     return [];
   }
-  const entries: Array<{ path: string; pattern: string; base: string }> = [
+  const entries: Array<{ path: string; pattern: string; base: string; ignore?: string[] }> = [
     { path: workspaceDir, pattern: CANONICAL_ROOT_MEMORY_FILENAME, base: "memory-root" },
-    { path: path.join(workspaceDir, "memory"), pattern: "**/*.md", base: "memory-dir" },
+    {
+      path: path.join(workspaceDir, "memory"),
+      pattern: "**/*.md",
+      base: "memory-dir",
+      ignore: [".dreams/**"],
+    },
   ];
   return entries.map((entry) => ({
     name: ensureUniqueName(scopeCollectionBase(entry.base, agentId), existing),
     path: entry.path,
     pattern: entry.pattern,
+    ...(entry.ignore ? { ignore: entry.ignore } : {}),
     kind: "memory",
   }));
 }
@@ -395,14 +406,15 @@ export function resolveMemoryBackendConfig(params: {
   agentId: string;
 }): ResolvedMemoryBackendConfig {
   const normalizedAgentId = normalizeAgentId(params.agentId);
-  const backend = params.cfg.memory?.backend ?? DEFAULT_BACKEND;
-  const citations = params.cfg.memory?.citations ?? DEFAULT_CITATIONS;
+  const memory = resolveAgentMemoryConfig(params.cfg, normalizedAgentId);
+  const backend = memory?.backend ?? DEFAULT_BACKEND;
+  const citations = memory?.citations ?? DEFAULT_CITATIONS;
   if (backend !== "qmd") {
     return { backend: "builtin", citations };
   }
 
   const workspaceDir = resolveAgentWorkspaceDir(params.cfg, normalizedAgentId);
-  const qmdCfg = params.cfg.memory?.qmd;
+  const qmdCfg = memory?.qmd;
   const includeDefaultMemory = qmdCfg?.includeDefaultMemory !== false;
   const nameSet = new Set<string>();
   const agentEntry = params.cfg.agents?.list?.find(
@@ -410,8 +422,8 @@ export function resolveMemoryBackendConfig(params: {
   );
   const mergedExtraPaths = normalizeStringEntries(
     [
-      ...(params.cfg.agents?.defaults?.memorySearch?.extraPaths ?? []),
-      ...(agentEntry?.memorySearch?.extraPaths ?? []),
+      ...(params.cfg.agents?.defaults?.memory?.search?.extraPaths ?? []),
+      ...(agentEntry?.memory?.search?.extraPaths ?? []),
     ].filter((value): value is string => typeof value === "string"),
   );
   const dedupedExtraPaths = uniqueStrings(mergedExtraPaths);
@@ -419,8 +431,8 @@ export function resolveMemoryBackendConfig(params: {
     (pathValue): { path: string; pattern?: string; name?: string } => ({ path: pathValue }),
   );
   const mergedExtraCollections = [
-    ...(params.cfg.agents?.defaults?.memorySearch?.qmd?.extraCollections ?? []),
-    ...(agentEntry?.memorySearch?.qmd?.extraCollections ?? []),
+    ...(params.cfg.agents?.defaults?.memory?.search?.qmd?.extraCollections ?? []),
+    ...(agentEntry?.memory?.search?.qmd?.extraCollections ?? []),
   ].filter(
     (value): value is MemoryQmdIndexPath =>
       value !== null && typeof value === "object" && typeof value.path === "string",

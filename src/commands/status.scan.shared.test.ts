@@ -483,7 +483,7 @@ describe("resolveSharedMemoryStatusSnapshot", () => {
         },
         agents: {
           defaults: {
-            memorySearch: { enabled: false },
+            memory: { search: { enabled: false } },
           },
         },
       },

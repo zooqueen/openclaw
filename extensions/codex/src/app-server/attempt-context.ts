@@ -16,6 +16,7 @@ import {
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { resolveAgentWorkspaceDir } from "openclaw/plugin-sdk/agent-runtime";
 import { buildMemorySystemPromptAddition } from "openclaw/plugin-sdk/core";
+import { resolveAgentMemoryConfig } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { MESSAGE_TOOL_DELIVERY_HINTS } from "openclaw/plugin-sdk/message-tool-delivery-hints";
 import type { CodexDynamicToolFunctionSpec, CodexDynamicToolSpec, JsonValue } from "./protocol.js";
 import { flattenCodexDynamicToolFunctions } from "./protocol.js";
@@ -256,7 +257,12 @@ export async function buildCodexWorkspaceBootstrapContext(params: {
             files: memoryReferenceFiles,
             toolNames: params.memoryToolNames,
             memoryToolRouted: memoryToolsAvailable,
-            citationsMode: params.params.config?.memory?.citations,
+            citationsMode: params.params.config
+              ? resolveAgentMemoryConfig(
+                  params.params.config,
+                  params.params.agentId ?? params.sessionAgentId,
+                )?.citations
+              : undefined,
           })
         : undefined,
       heartbeatCollaborationInstructions:

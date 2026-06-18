@@ -4,13 +4,20 @@ import type { ResolvedMemoryWikiConfig } from "./config.js";
 import { getMemoryWikiPage, searchMemoryWiki } from "./query.js";
 
 export function createWikiCorpusSupplement(params: {
-  config: ResolvedMemoryWikiConfig;
+  config?: ResolvedMemoryWikiConfig;
+  resolveConfig?: (agentId?: string) => ResolvedMemoryWikiConfig;
   appConfig?: OpenClawConfig;
 }) {
+  const resolveConfig = params.resolveConfig ?? (() => params.config as ResolvedMemoryWikiConfig);
   return {
-    search: async (input: { query: string; maxResults?: number; agentSessionKey?: string }) =>
+    search: async (input: {
+      query: string;
+      maxResults?: number;
+      agentId?: string;
+      agentSessionKey?: string;
+    }) =>
       await searchMemoryWiki({
-        config: params.config,
+        config: resolveConfig(input.agentId),
         appConfig: params.appConfig,
         agentSessionKey: input.agentSessionKey,
         query: input.query,
@@ -22,10 +29,11 @@ export function createWikiCorpusSupplement(params: {
       lookup: string;
       fromLine?: number;
       lineCount?: number;
+      agentId?: string;
       agentSessionKey?: string;
     }) =>
       await getMemoryWikiPage({
-        config: params.config,
+        config: resolveConfig(input.agentId),
         appConfig: params.appConfig,
         agentSessionKey: input.agentSessionKey,
         lookup: input.lookup,

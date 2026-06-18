@@ -123,14 +123,17 @@ async function writeConfig(params: {
       ...cfg.agents,
       defaults: {
         ...cfg.agents?.defaults,
-        memorySearch: {
-          ...cfg.agents?.defaults?.memorySearch,
-          enabled: false,
-          sync: {
-            ...cfg.agents?.defaults?.memorySearch?.sync,
-            onSearch: false,
-            onSessionStart: false,
-            watch: false,
+        memory: {
+          ...cfg.agents?.defaults?.memory,
+          search: {
+            ...cfg.agents?.defaults?.memory?.search,
+            enabled: false,
+            sync: {
+              ...cfg.agents?.defaults?.memory?.search?.sync,
+              onSearch: false,
+              onSessionStart: false,
+              watch: false,
+            },
           },
         },
       },

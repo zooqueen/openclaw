@@ -373,10 +373,12 @@ export function createStatusMemorySearchConfig(): OpenClawConfig {
   return createStatusScanConfig({
     agents: {
       defaults: {
-        memorySearch: {
-          provider: "local",
-          local: { modelPath: "/tmp/model.gguf" },
-          fallback: "none",
+        memory: {
+          search: {
+            provider: "local",
+            local: { modelPath: "/tmp/model.gguf" },
+            fallback: "none",
+          },
         },
       },
     },

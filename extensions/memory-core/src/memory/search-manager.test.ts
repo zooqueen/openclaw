@@ -152,8 +152,10 @@ function createQmdCfg(
   qmd: Record<string, unknown> = {},
 ): OpenClawConfig {
   return {
-    memory: { backend: "qmd", qmd },
-    agents: { list: [{ id: agentId, default: true, workspace }] },
+    agents: {
+      defaults: { memory: { backend: "qmd", qmd } },
+      list: [{ id: agentId, default: true, workspace }],
+    },
   };
 }
 
@@ -162,17 +164,19 @@ function createBuiltinCfg(agentId: string): OpenClawConfig {
     agents: {
       defaults: {
         workspace: "/tmp/workspace",
-        memorySearch: {
-          provider: "openai",
-          model: "text-embedding-3-small",
-          store: {
-            path: "/tmp/index.sqlite",
-            vector: { enabled: false },
+        memory: {
+          search: {
+            provider: "openai",
+            model: "text-embedding-3-small",
+            store: {
+              path: "/tmp/index.sqlite",
+              vector: { enabled: false },
+            },
+            sync: { watch: false, onSessionStart: false, onSearch: false },
+            query: { minScore: 0, hybrid: { enabled: false } },
+            sources: ["memory"],
+            experimental: { sessionMemory: false },
           },
-          sync: { watch: false, onSessionStart: false, onSearch: false },
-          query: { minScore: 0, hybrid: { enabled: false } },
-          sources: ["memory"],
-          experimental: { sessionMemory: false },
         },
       },
       list: [{ id: agentId, default: true, workspace: "/tmp/workspace" }],
@@ -497,8 +501,10 @@ describe("getMemorySearchManager caching", () => {
     const workspace = path.join(tempRoot, "missing", "workspace");
     const agentId = "missing-workspace";
     const cfg = {
-      memory: { backend: "qmd", qmd: {} },
-      agents: { list: [{ id: agentId, default: true, workspace }] },
+      agents: {
+        defaults: { memory: { backend: "qmd", qmd: {} } },
+        list: [{ id: agentId, default: true, workspace }],
+      },
     } as OpenClawConfig;
 
     try {

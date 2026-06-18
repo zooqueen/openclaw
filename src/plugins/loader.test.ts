@@ -126,6 +126,24 @@ function countMatching<T>(items: readonly T[], predicate: (item: T) => boolean):
   return count;
 }
 
+function enabledDreamingAgentConfig() {
+  return {
+    agents: {
+      defaults: {
+        memory: {
+          extensions: {
+            "memory-core": {
+              dreaming: {
+                enabled: true,
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function expectGlobalHookRunner(runner: ReturnType<typeof getGlobalHookRunner>): GlobalHookRunner {
   if (runner === null) {
     throw new Error("Expected global hook runner");
@@ -7938,11 +7956,12 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: [selectedId],
                 slots: { memory: selectedId },
                 entries: {
-                  [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+                  [selectedId]: { enabled: true },
                 },
               },
             },
@@ -7969,11 +7988,12 @@ module.exports = {
             activate: false,
             loadModules: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: [selectedId],
                 slots: { memory: selectedId },
                 entries: {
-                  [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+                  [selectedId]: { enabled: true },
                 },
               },
             },
@@ -7997,12 +8017,13 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: [selectedId],
                 deny: ["memory-core"],
                 slots: { memory: selectedId },
                 entries: {
-                  [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+                  [selectedId]: { enabled: true },
                 },
               },
             },
@@ -8026,12 +8047,13 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: [selectedId],
                 slots: { memory: selectedId },
                 entries: {
                   "memory-core": { enabled: false },
-                  [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+                  [selectedId]: { enabled: true },
                 },
               },
             },
@@ -8056,11 +8078,12 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: [selectedId],
                 slots: { memory: selectedId },
                 entries: {
-                  [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+                  [selectedId]: { enabled: true },
                 },
               },
             },
@@ -8119,12 +8142,13 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: ["memory-core", "memory-lancedb"],
                 slots: { memory: "memory-lancedb" },
                 entries: {
                   "memory-core": { enabled: true },
-                  "memory-lancedb": { enabled: true, config: { dreaming: { enabled: true } } },
+                  "memory-lancedb": { enabled: true },
                 },
               },
             },
@@ -8226,11 +8250,12 @@ module.exports = {
           return loadOpenClawPlugins({
             cache: false,
             config: {
+              ...enabledDreamingAgentConfig(),
               plugins: {
                 allow: ["memory-core"],
                 slots: { memory: "none" },
                 entries: {
-                  "memory-core": { enabled: true, config: { dreaming: { enabled: true } } },
+                  "memory-core": { enabled: true },
                 },
               },
             },
@@ -8282,11 +8307,12 @@ module.exports = {
     const registry = await loadOpenClawPluginCliRegistry({
       cache: false,
       config: {
+        ...enabledDreamingAgentConfig(),
         plugins: {
           allow: [selectedId],
           slots: { memory: selectedId },
           entries: {
-            [selectedId]: { enabled: true, config: { dreaming: { enabled: true } } },
+            [selectedId]: { enabled: true },
           },
         },
       },

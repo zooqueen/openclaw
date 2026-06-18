@@ -192,7 +192,7 @@ async function resolveRemoteApiKey(
   return await resolveSecretString({
     config,
     value,
-    path: "agents.*.memorySearch.remote.apiKey",
+    path: "agents.*.memory.search.remote.apiKey",
   });
 }
 

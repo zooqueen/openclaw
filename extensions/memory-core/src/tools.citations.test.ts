@@ -90,8 +90,10 @@ describe("memory search citations", () => {
   it("appends source information when citations are enabled", async () => {
     setMemoryBackend("builtin");
     const cfg = asOpenClawConfig({
-      memory: { citations: "on" },
-      agents: { list: [{ id: "main", default: true }] },
+      agents: {
+        defaults: { memory: { citations: "on" } },
+        list: [{ id: "main", default: true }],
+      },
     });
     const tool = createMemorySearchToolOrThrow({ config: cfg });
     const result = await tool.execute("call_citations_on", { query: "notes" });
@@ -104,8 +106,10 @@ describe("memory search citations", () => {
   it("leaves snippet untouched when citations are off", async () => {
     setMemoryBackend("builtin");
     const cfg = asOpenClawConfig({
-      memory: { citations: "off" },
-      agents: { list: [{ id: "main", default: true }] },
+      agents: {
+        defaults: { memory: { citations: "off" } },
+        list: [{ id: "main", default: true }],
+      },
     });
     const tool = createMemorySearchToolOrThrow({ config: cfg });
     const result = await tool.execute("call_citations_off", { query: "notes" });
@@ -118,8 +122,12 @@ describe("memory search citations", () => {
   it("clamps decorated snippets to qmd injected budget", async () => {
     setMemoryBackend("qmd");
     const cfg = asOpenClawConfig({
-      memory: { citations: "on", backend: "qmd", qmd: { limits: { maxInjectedChars: 20 } } },
-      agents: { list: [{ id: "main", default: true }] },
+      agents: {
+        defaults: {
+          memory: { citations: "on", backend: "qmd", qmd: { limits: { maxInjectedChars: 20 } } },
+        },
+        list: [{ id: "main", default: true }],
+      },
     });
     const tool = createMemorySearchToolOrThrow({ config: cfg });
     const result = await tool.execute("call_citations_qmd", { query: "notes" });
@@ -168,8 +176,10 @@ describe("memory tools", () => {
     setMemoryBackend("qmd");
     const tool = createMemorySearchToolOrThrow({
       config: asOpenClawConfig({
-        memory: { backend: "qmd", qmd: { command: "qmd" } },
-        agents: { list: [{ id: "main", default: true }] },
+        agents: {
+          defaults: { memory: { backend: "qmd", qmd: { command: "qmd" } } },
+          list: [{ id: "main", default: true }],
+        },
       }),
     });
 
@@ -188,8 +198,10 @@ describe("memory tools", () => {
     setMemoryBackend("qmd");
     const tool = createMemorySearchToolOrThrow({
       config: asOpenClawConfig({
-        memory: { backend: "qmd", qmd: { command: "qmd" } },
-        agents: { list: [{ id: "main", default: true }] },
+        agents: {
+          defaults: { memory: { backend: "qmd", qmd: { command: "qmd" } } },
+          list: [{ id: "main", default: true }],
+        },
       }),
       oneShotCliRun: true,
     });
@@ -310,17 +322,19 @@ describe("memory tools", () => {
 
       const tool = createMemorySearchToolOrThrow({
         config: asOpenClawConfig({
-          agents: { list: [{ id: "main", default: true }] },
-          plugins: {
-            entries: {
-              "memory-core": {
-                config: {
-                  dreaming: {
-                    enabled: true,
+          agents: {
+            defaults: {
+              memory: {
+                extensions: {
+                  "memory-core": {
+                    dreaming: {
+                      enabled: true,
+                    },
                   },
                 },
               },
             },
+            list: [{ id: "main", default: true }],
           },
         }),
       });
@@ -330,6 +344,7 @@ describe("memory tools", () => {
         const store = await shortTermPromotionTesting.readRecallStore(
           workspaceDir,
           new Date().toISOString(),
+          "main",
         );
         const values = Object.values(store.entries);
         expect(values).toHaveLength(1);
@@ -339,7 +354,7 @@ describe("memory tools", () => {
       expect(entry?.path).toBe("memory/2026-04-03.md");
       expect(entry?.recallCount).toBe(1);
       const events = await waitFor(async () => {
-        const memoryEvents = await readMemoryHostEvents({ workspaceDir });
+        const memoryEvents = await readMemoryHostEvents({ workspaceDir, agentId: "main" });
         expect(memoryEvents).toHaveLength(1);
         return memoryEvents;
       });

@@ -209,6 +209,51 @@ describe("memory-wiki gateway methods", () => {
     });
   });
 
+  it("resolves the requested agent's wiki config for gateway methods", async () => {
+    const { config } = await createVault({ prefix: "memory-wiki-gateway-" });
+    const writerConfig = {
+      ...config,
+      vault: {
+        ...config.vault,
+        path: `${config.vault.path}-writer`,
+      },
+    };
+    const resolveConfig = vi.fn((agentId?: string) =>
+      agentId === "writer" ? writerConfig : config,
+    );
+    const { api, registerGatewayMethod } = createPluginApi();
+
+    registerMemoryWikiGatewayMethods({
+      api,
+      config,
+      resolveConfig,
+      appConfig: {
+        agents: {
+          list: [{ id: "writer" }],
+        },
+      } as never,
+    });
+    const handler = findGatewayHandler(registerGatewayMethod, "wiki.status");
+    if (!handler) {
+      throw new Error("wiki.status handler missing");
+    }
+    const respond = vi.fn();
+
+    await handler({
+      params: { agentId: "writer" },
+      respond,
+    });
+
+    expect(resolveConfig).toHaveBeenCalledWith("writer");
+    expect(syncMemoryWikiImportedSources).toHaveBeenCalledWith({
+      config: writerConfig,
+      appConfig: expect.any(Object),
+    });
+    expect(resolveMemoryWikiStatus).toHaveBeenCalledWith(writerConfig, {
+      appConfig: expect.any(Object),
+    });
+  });
+
   it("returns recent import runs over the gateway", async () => {
     const { config } = await createVault({ prefix: "memory-wiki-gateway-" });
     const { api, registerGatewayMethod } = createPluginApi();

@@ -1400,15 +1400,15 @@ describe("active-memory plugin", () => {
     api.config = {
       agents: {
         defaults: {
+          memory: {
+            backend: "qmd",
+            qmd: {
+              searchMode: "query",
+            },
+          },
           model: {
             primary: "github-copilot/gpt-5.4-mini",
           },
-        },
-      },
-      memory: {
-        backend: "qmd",
-        qmd: {
-          searchMode: "query",
         },
       },
     };
@@ -1434,7 +1434,7 @@ describe("active-memory plugin", () => {
     );
 
     const config = embeddedRunConfig();
-    expect(config.memory).toEqual({
+    expect(requireRecord(requireRecord(config.agents).defaults).memory).toEqual({
       backend: "qmd",
       qmd: {
         searchMode: "query",

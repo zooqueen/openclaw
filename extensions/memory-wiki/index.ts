@@ -1,7 +1,7 @@
 // Memory Wiki plugin entrypoint registers its OpenClaw integration.
 import { definePluginEntry } from "./api.js";
 import { registerWikiCli } from "./src/cli.js";
-import { memoryWikiConfigSchema, resolveMemoryWikiConfig } from "./src/config.js";
+import { memoryWikiConfigSchema, resolveMemoryWikiConfigForAgent } from "./src/config.js";
 import { createWikiCorpusSupplement } from "./src/corpus-supplement.js";
 import { registerMemoryWikiGatewayMethods } from "./src/gateway.js";
 import {
@@ -27,7 +27,14 @@ export default definePluginEntry({
   description: "Persistent wiki compiler and Obsidian-friendly knowledge vault for OpenClaw.",
   configSchema: memoryWikiConfigSchema,
   register(api) {
-    const config = resolveMemoryWikiConfig(api.pluginConfig);
+    const resolveConfig = (agentId?: string) =>
+      resolveMemoryWikiConfigForAgent(
+        (api.runtime.config.current?.() ?? api.config) as Parameters<
+          typeof resolveMemoryWikiConfigForAgent
+        >[0],
+        agentId,
+      );
+    const config = resolveConfig();
     configureMemoryWikiSourceSyncStateStore(
       createMemoryWikiSourceSyncStateStore(api.runtime.state.openKeyedStore),
     );
@@ -35,17 +42,23 @@ export default definePluginEntry({
       createMemoryWikiImportRunStateStore(api.runtime.state.openKeyedStore),
     );
 
-    api.registerMemoryPromptSupplement(createWikiPromptSectionBuilder(config));
+    api.registerMemoryPromptSupplement(createWikiPromptSectionBuilder(resolveConfig));
     api.registerMemoryCorpusSupplement(
-      createWikiCorpusSupplement({ config, appConfig: api.config }),
+      createWikiCorpusSupplement({ resolveConfig, appConfig: api.config }),
     );
-    registerMemoryWikiGatewayMethods({ api, config, appConfig: api.config });
-    api.registerTool(createWikiStatusTool(config, api.config), { name: "wiki_status" });
-    api.registerTool(createWikiLintTool(config, api.config), { name: "wiki_lint" });
-    api.registerTool(createWikiApplyTool(config, api.config), { name: "wiki_apply" });
+    registerMemoryWikiGatewayMethods({ api, config, resolveConfig, appConfig: api.config });
+    api.registerTool((ctx) => createWikiStatusTool(resolveConfig(ctx.agentId), api.config), {
+      name: "wiki_status",
+    });
+    api.registerTool((ctx) => createWikiLintTool(resolveConfig(ctx.agentId), api.config), {
+      name: "wiki_lint",
+    });
+    api.registerTool((ctx) => createWikiApplyTool(resolveConfig(ctx.agentId), api.config), {
+      name: "wiki_apply",
+    });
     api.registerTool(
       (ctx) =>
-        createWikiSearchTool(config, api.config, {
+        createWikiSearchTool(resolveConfig(ctx.agentId), api.config, {
           agentId: ctx.agentId,
           agentSessionKey: ctx.sessionKey,
           sandboxed: ctx.sandboxed,
@@ -54,7 +67,7 @@ export default definePluginEntry({
     );
     api.registerTool(
       (ctx) =>
-        createWikiGetTool(config, api.config, {
+        createWikiGetTool(resolveConfig(ctx.agentId), api.config, {
           agentId: ctx.agentId,
           agentSessionKey: ctx.sessionKey,
           sandboxed: ctx.sandboxed,
@@ -63,7 +76,7 @@ export default definePluginEntry({
     );
     api.registerCli(
       ({ program }) => {
-        registerWikiCli(program, config, api.config);
+        registerWikiCli(program, resolveConfig, api.config);
       },
       {
         descriptors: [

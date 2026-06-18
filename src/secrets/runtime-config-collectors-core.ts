@@ -118,9 +118,8 @@ function collectAgentMemorySearchAssignments(params: {
     return;
   }
   const defaultsConfig = isRecord(agents.defaults) ? agents.defaults : undefined;
-  const defaultsMemorySearch = isRecord(defaultsConfig?.memorySearch)
-    ? defaultsConfig.memorySearch
-    : undefined;
+  const defaultsMemory = isRecord(defaultsConfig?.memory) ? defaultsConfig.memory : undefined;
+  const defaultsMemorySearch = isRecord(defaultsMemory?.search) ? defaultsMemory.search : undefined;
   const defaultsEnabled = defaultsMemorySearch?.enabled !== false;
 
   const list = Array.isArray(agents.list) ? agents.list : [];
@@ -132,7 +131,8 @@ function collectAgentMemorySearchAssignments(params: {
     if (rawAgent.enabled === false) {
       continue;
     }
-    const memorySearch = isRecord(rawAgent.memorySearch) ? rawAgent.memorySearch : undefined;
+    const agentMemory = isRecord(rawAgent.memory) ? rawAgent.memory : undefined;
+    const memorySearch = isRecord(agentMemory?.search) ? agentMemory.search : undefined;
     if (memorySearch?.enabled === false) {
       continue;
     }
@@ -151,14 +151,14 @@ function collectAgentMemorySearchAssignments(params: {
     const remote = defaultsMemorySearch.remote;
     collectSecretInputAssignment({
       value: remote.apiKey,
-      path: "agents.defaults.memorySearch.remote.apiKey",
+      path: "agents.defaults.memory.search.remote.apiKey",
       expected: "string",
       defaults: params.defaults,
       context: params.context,
       active: defaultsEnabled && (hasEnabledAgentWithoutOverride || list.length === 0),
       inactiveReason: hasEnabledAgentWithoutOverride
         ? undefined
-        : "all enabled agents override memorySearch.remote.apiKey.",
+        : "all enabled agents override memory.search.remote.apiKey.",
       apply: (value) => {
         remote.apiKey = value;
       },
@@ -169,7 +169,8 @@ function collectAgentMemorySearchAssignments(params: {
     if (!isRecord(rawAgent)) {
       return;
     }
-    const memorySearch = isRecord(rawAgent.memorySearch) ? rawAgent.memorySearch : undefined;
+    const agentMemory = isRecord(rawAgent.memory) ? rawAgent.memory : undefined;
+    const memorySearch = isRecord(agentMemory?.search) ? agentMemory.search : undefined;
     if (!memorySearch) {
       return;
     }
@@ -180,12 +181,12 @@ function collectAgentMemorySearchAssignments(params: {
     const enabled = rawAgent.enabled !== false && memorySearch.enabled !== false;
     collectSecretInputAssignment({
       value: remote.apiKey,
-      path: `agents.list.${index}.memorySearch.remote.apiKey`,
+      path: `agents.list.${index}.memory.search.remote.apiKey`,
       expected: "string",
       defaults: params.defaults,
       context: params.context,
       active: enabled,
-      inactiveReason: "agent or memorySearch override is disabled.",
+      inactiveReason: "agent or memory search override is disabled.",
       apply: (value) => {
         remote.apiKey = value;
       },

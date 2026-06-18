@@ -145,7 +145,9 @@ function resolveConfiguredMemoryEmbeddingProvider(params: {
   const agentEntry = params.cfg.agents?.list?.find(
     (entry) => entry && normalizeAgentId(entry.id) === normalizedAgentId,
   );
-  return agentEntry?.memorySearch?.provider ?? params.cfg.agents?.defaults?.memorySearch?.provider;
+  return (
+    agentEntry?.memory?.search?.provider ?? params.cfg.agents?.defaults?.memory?.search?.provider
+  );
 }
 
 function resolveMemoryEmbeddingProviderRequirement(params: {

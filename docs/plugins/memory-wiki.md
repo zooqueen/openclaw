@@ -397,50 +397,58 @@ engines or legacy prompt assembly that explicitly consume memory supplements.
 
 ## Configuration
 
-Put config under `plugins.entries.memory-wiki.config`:
+Put config under `agents.defaults.memory.extensions.memory-wiki`. Agent entries
+can override the same object at `agents.list[].memory.extensions.memory-wiki`.
+Enable the plugin once under `plugins.entries`; its settings remain agent-scoped.
 
 ```json5
 {
   plugins: {
     entries: {
-      "memory-wiki": {
-        enabled: true,
-        config: {
-          vaultMode: "isolated",
-          vault: {
-            path: "~/.openclaw/wiki/main",
-            renderMode: "obsidian",
-          },
-          obsidian: {
-            enabled: true,
-            useOfficialCli: true,
-            vaultName: "OpenClaw Wiki",
-            openAfterWrites: false,
-          },
-          bridge: {
-            enabled: false,
-            readMemoryArtifacts: true,
-            indexDreamReports: true,
-            indexDailyNotes: true,
-            indexMemoryRoot: true,
-            followMemoryEvents: true,
-          },
-          ingest: {
-            autoCompile: true,
-            maxConcurrentJobs: 1,
-            allowUrlIngest: true,
-          },
-          search: {
-            backend: "shared",
-            corpus: "wiki",
-          },
-          context: {
-            includeCompiledDigestPrompt: false,
-          },
-          render: {
-            preserveHumanBlocks: true,
-            createBacklinks: true,
-            createDashboards: true,
+      "memory-wiki": { enabled: true },
+    },
+  },
+  agents: {
+    defaults: {
+      memory: {
+        extensions: {
+          "memory-wiki": {
+            vaultMode: "isolated",
+            vault: {
+              path: "~/.openclaw/wiki/main",
+              renderMode: "obsidian",
+            },
+            obsidian: {
+              enabled: true,
+              useOfficialCli: true,
+              vaultName: "OpenClaw Wiki",
+              openAfterWrites: false,
+            },
+            bridge: {
+              enabled: false,
+              readMemoryArtifacts: true,
+              indexDreamReports: true,
+              indexDailyNotes: true,
+              indexMemoryRoot: true,
+              followMemoryEvents: true,
+            },
+            ingest: {
+              autoCompile: true,
+              maxConcurrentJobs: 1,
+              allowUrlIngest: true,
+            },
+            search: {
+              backend: "shared",
+              corpus: "wiki",
+            },
+            context: {
+              includeCompiledDigestPrompt: false,
+            },
+            render: {
+              preserveHumanBlocks: true,
+              createBacklinks: true,
+              createDashboards: true,
+            },
           },
         },
       },
@@ -468,29 +476,33 @@ knowledge layer:
 
 ```json5
 {
-  memory: {
-    backend: "qmd",
-  },
   plugins: {
     entries: {
-      "memory-wiki": {
-        enabled: true,
-        config: {
-          vaultMode: "bridge",
-          bridge: {
-            enabled: true,
-            readMemoryArtifacts: true,
-            indexDreamReports: true,
-            indexDailyNotes: true,
-            indexMemoryRoot: true,
-            followMemoryEvents: true,
-          },
-          search: {
-            backend: "shared",
-            corpus: "all",
-          },
-          context: {
-            includeCompiledDigestPrompt: false,
+      "memory-wiki": { enabled: true },
+    },
+  },
+  agents: {
+    defaults: {
+      memory: {
+        backend: "qmd",
+        extensions: {
+          "memory-wiki": {
+            vaultMode: "bridge",
+            bridge: {
+              enabled: true,
+              readMemoryArtifacts: true,
+              indexDreamReports: true,
+              indexDailyNotes: true,
+              indexMemoryRoot: true,
+              followMemoryEvents: true,
+            },
+            search: {
+              backend: "shared",
+              corpus: "all",
+            },
+            context: {
+              includeCompiledDigestPrompt: false,
+            },
           },
         },
       },

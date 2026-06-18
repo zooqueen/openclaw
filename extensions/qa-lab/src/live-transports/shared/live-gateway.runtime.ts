@@ -66,14 +66,17 @@ function prepareLiveTransportGatewayConfig(cfg: OpenClawConfig): OpenClawConfig 
       ...cfg.agents,
       defaults: {
         ...defaults,
-        memorySearch: {
-          ...defaults.memorySearch,
-          enabled: false,
-          sync: {
-            ...defaults.memorySearch?.sync,
-            onSearch: false,
-            onSessionStart: false,
-            watch: false,
+        memory: {
+          ...defaults.memory,
+          search: {
+            ...defaults.memory?.search,
+            enabled: false,
+            sync: {
+              ...defaults.memory?.search?.sync,
+              onSearch: false,
+              onSessionStart: false,
+              watch: false,
+            },
           },
         },
       },

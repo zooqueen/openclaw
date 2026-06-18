@@ -1,6 +1,7 @@
 // Codex tests cover thread lifecycle.binding plugin behavior.
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { fingerprintCodexAppServerNetworkProxyConfigPatch } from "./config.js";
 import type { CodexDynamicToolFunctionSpec } from "./protocol.js";
 import {
   createParams as createRunAttemptParams,
@@ -12,7 +13,6 @@ import {
   readCodexAppServerBinding,
   writeCodexAppServerBinding as writeRawCodexAppServerBinding,
 } from "./session-binding.js";
-import { fingerprintCodexAppServerNetworkProxyConfigPatch } from "./config.js";
 import {
   shouldRotateCodexAppServerBindingForRuntime,
   startOrResumeThread,
@@ -1296,7 +1296,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
       assemble: vi.fn(),
       compact: vi.fn(),
     } as never;
-    params.config = { memory: { citations: "inline" } } as never;
+    params.config = { agents: { defaults: { memory: { citations: "on" } } } } as never;
     params.contextTokenBudget = 400_000;
     const appServer = createThreadLifecycleAppServerOptions();
     const request = vi.fn(async (method: string) => {
@@ -1325,7 +1325,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(savedBinding?.contextEngine?.policyFingerprint).toContain(
       '"turnMaintenanceMode":"foreground"',
     );
-    expect(savedBinding?.contextEngine?.policyFingerprint).toContain('"citationsMode":"inline"');
+    expect(savedBinding?.contextEngine?.policyFingerprint).toContain('"citationsMode":"on"');
   });
 
   it("keeps the previous dynamic tool fingerprint for transient no-tool maintenance turns", async () => {
