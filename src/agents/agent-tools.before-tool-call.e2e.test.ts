@@ -1410,6 +1410,7 @@ describe("before_tool_call requireApproval handling", () => {
         title: "Sensitive",
         description: "Sensitive op",
         pluginId: "sage",
+        allowAlwaysKey: "sage:bash:rm",
       },
     });
 
@@ -1429,7 +1430,10 @@ describe("before_tool_call requireApproval handling", () => {
     const requestCall = requireGatewayCall(0);
     expect(requestCall[0]).toBe("plugin.approval.request");
     requireRecord(requestCall[1], "approval request gateway client");
-    expect(requireRecord(requestCall[2], "approval request params").twoPhase).toBe(true);
+    expectRecordFields(requireRecord(requestCall[2], "approval request params"), {
+      allowAlwaysKey: "sage:bash:rm",
+      twoPhase: true,
+    });
     expect(requestCall[3]).toEqual({ expectFinal: false });
     const waitCall = requireGatewayCall(1);
     expect(waitCall[0]).toBe("plugin.approval.waitDecision");
