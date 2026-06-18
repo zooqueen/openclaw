@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## Unreleased
+
+### Changes
+
+- Alpha package validation for the next `2026.6.9` release train from current `main`.
+
 ## 2026.6.8
 
 ### Highlights
