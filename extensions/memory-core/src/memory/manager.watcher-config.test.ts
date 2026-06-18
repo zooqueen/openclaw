@@ -221,7 +221,7 @@ describe("memory watcher config", () => {
         search: {
           provider: "openai",
           model: "mock-embed",
-          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          store: { vector: { enabled: false } },
           sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
           query: { minScore: 0, hybrid: { enabled: false } },
           extraPaths: [extraDir],
