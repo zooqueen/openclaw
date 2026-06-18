@@ -1434,7 +1434,8 @@ describe("active-memory plugin", () => {
     );
 
     const config = embeddedRunConfig();
-    expect(requireRecord(requireRecord(config.agents).defaults).memory).toEqual({
+    const agents = requireRecord(config.agents, "expected agents config");
+    expect(requireRecord(agents.defaults, "expected agent defaults").memory).toEqual({
       backend: "qmd",
       qmd: {
         searchMode: "query",

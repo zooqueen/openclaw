@@ -51,9 +51,7 @@ function resolveArtifactAgentIds(
   return workspaceAgentIds.includes(match[1]) ? [match[1]] : null;
 }
 
-function resolveMemoryArtifactKind(
-  relativePath: string,
-): Extract<MemoryPluginPublicArtifact["kind"], "daily-note" | "dream-report"> {
+function resolveMemoryArtifactKind(relativePath: string): "daily-note" | "dream-report" {
   return relativePath.startsWith("memory/dreaming/") ||
     relativePath.startsWith("memory/.dreams/agents/")
     ? "dream-report"

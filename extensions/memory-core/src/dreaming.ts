@@ -220,7 +220,8 @@ function isManagedDreamingJob(job: ManagedCronJobLike): boolean {
   const name = normalizeTrimmedString(job.name);
   const payloadToken = resolveManagedDreamingPayloadToken(job.payload);
   return (
-    (name === MANAGED_DREAMING_CRON_NAME || name?.startsWith(`${MANAGED_DREAMING_CRON_NAME} (`)) &&
+    (name === MANAGED_DREAMING_CRON_NAME ||
+      name?.startsWith(`${MANAGED_DREAMING_CRON_NAME} (`) === true) &&
     payloadToken === DREAMING_SYSTEM_EVENT_TEXT
   );
 }

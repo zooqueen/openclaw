@@ -104,7 +104,6 @@ export const SESSION_INGESTION_STATE_RELATIVE_PATH = path.join(
   ".dreams",
   "session-ingestion.json",
 );
-const SESSION_CORPUS_RELATIVE_DIR = path.join("memory", ".dreams", "session-corpus");
 const SESSION_INGESTION_SCORE = 0.58;
 const SESSION_INGESTION_MAX_SNIPPET_CHARS = 280;
 const SESSION_INGESTION_MIN_SNIPPET_CHARS = 12;
