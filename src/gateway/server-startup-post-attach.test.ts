@@ -764,17 +764,23 @@ describe("startGatewayPostAttachRuntime", () => {
       ...createPostAttachParams(),
       gatewayPluginConfigAtStart: {
         hooks: { internal: { enabled: false } },
-        memory: { backend: "qmd" },
+        agents: { defaults: { memory: { backend: "qmd" } } },
       } as never,
     });
 
     expect(hoisted.startGatewayMemoryBackend).not.toHaveBeenCalled();
     expect(
-      testing.resolveGatewayMemoryStartupPolicy({ memory: { backend: "qmd" } } as never),
+      testing.resolveGatewayMemoryStartupPolicy({
+        agents: { defaults: { memory: { backend: "qmd" } } },
+      } as never),
     ).toEqual({ mode: "off" });
     expect(
       testing.resolveGatewayMemoryStartupPolicy({
-        memory: { backend: "qmd", qmd: { update: { startup: "immediate", onBoot: false } } },
+        agents: {
+          defaults: {
+            memory: { backend: "qmd", qmd: { update: { startup: "immediate", onBoot: false } } },
+          },
+        },
       } as never),
     ).toEqual({ mode: "immediate" });
   });
@@ -784,7 +790,11 @@ describe("startGatewayPostAttachRuntime", () => {
       ...createPostAttachParams(),
       gatewayPluginConfigAtStart: {
         hooks: { internal: { enabled: false } },
-        memory: { backend: "qmd", qmd: { update: { startup: "immediate", onBoot: false } } },
+        agents: {
+          defaults: {
+            memory: { backend: "qmd", qmd: { update: { startup: "immediate", onBoot: false } } },
+          },
+        },
       } as never,
     });
 
@@ -798,7 +808,9 @@ describe("startGatewayPostAttachRuntime", () => {
       ...createPostAttachParams(),
       gatewayPluginConfigAtStart: {
         hooks: { internal: { enabled: false } },
-        memory: { backend: "qmd", qmd: { update: { startup: "immediate" } } },
+        agents: {
+          defaults: { memory: { backend: "qmd", qmd: { update: { startup: "immediate" } } } },
+        },
       } as never,
     });
 
@@ -813,7 +825,14 @@ describe("startGatewayPostAttachRuntime", () => {
       await startGatewaySidecars({
         cfg: {
           hooks: { internal: { enabled: false } },
-          memory: { backend: "qmd", qmd: { update: { startup: "idle", startupDelayMs: 25 } } },
+          agents: {
+            defaults: {
+              memory: {
+                backend: "qmd",
+                qmd: { update: { startup: "idle", startupDelayMs: 25 } },
+              },
+            },
+          },
         } as never,
         pluginRegistry: createPostAttachParams().pluginRegistry,
         defaultWorkspaceDir: "/tmp/openclaw-workspace",
