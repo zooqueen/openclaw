@@ -1408,6 +1408,29 @@ describe("doctor.memory.dreamDiary", () => {
     }
   });
 
+  it("does not follow a symlinked agent dream directory", async () => {
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "doctor-dream-diary-symlink-"));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), "doctor-dream-diary-outside-"));
+    const agentDir = path.join(workspaceDir, "memory", ".dreams", "agents", "main");
+    await fs.mkdir(path.dirname(agentDir), { recursive: true });
+    await fs.writeFile(path.join(outsideDir, "DREAMS.md"), "outside workspace diary\n", "utf-8");
+    await fs.symlink(outsideDir, agentDir);
+    resolveAgentWorkspaceDir.mockReturnValue(workspaceDir);
+    const respond = vi.fn();
+
+    try {
+      await invokeDoctorMemoryDreamDiary(respond);
+      expectRecordFields(respondPayload(respond), {
+        agentId: "main",
+        found: false,
+        path: "memory/.dreams/agents/main/DREAMS.md",
+      });
+    } finally {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not read a legacy root diary for an agent-scoped request", async () => {
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "doctor-dream-diary-legacy-"));
     await fs.writeFile(path.join(workspaceDir, "dreams.md"), "legacy root diary\n", "utf-8");

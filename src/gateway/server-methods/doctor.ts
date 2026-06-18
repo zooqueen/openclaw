@@ -14,6 +14,7 @@ import {
 } from "../../memory-host-sdk/dreaming.js";
 import { getActiveMemorySearchManager } from "../../plugins/memory-runtime.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { assertNoSymlinkParents } from "../../infra/fs-safe-advanced.js";
 import { formatError } from "../server-utils.js";
 import {
   dedupeDreamDiaryEntries,
@@ -677,6 +678,17 @@ async function readDreamDiary(
     DREAM_DIARY_FILE_NAME,
   );
   const relativePath = path.relative(workspaceDir, filePath).split(path.sep).join("/");
+  try {
+    await assertNoSymlinkParents({
+      rootDir: workspaceDir,
+      targetPath: filePath,
+    });
+  } catch {
+    return {
+      found: false,
+      path: relativePath,
+    };
+  }
   let stat;
   try {
     stat = await fs.lstat(filePath);
