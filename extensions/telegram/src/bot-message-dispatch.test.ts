@@ -549,6 +549,15 @@ describe("dispatchTelegramMessage draft streaming", () => {
     });
   }
 
+  function createReasoningOnContext(): TelegramMessageContext {
+    loadSessionStore.mockReturnValue({
+      s1: { reasoningLevel: "on" },
+    });
+    return createContext({
+      ctxPayload: { SessionKey: "s1" } as unknown as TelegramMessageContext["ctxPayload"],
+    });
+  }
+
   function createReasoningDefaultContext(): TelegramMessageContext {
     loadSessionStore.mockReturnValue({
       s1: {},
@@ -3369,6 +3378,48 @@ describe("dispatchTelegramMessage draft streaming", () => {
 
     expect(reasoningDraftStream.update).toHaveBeenCalledWith("Thinking\n\n_Thinking_");
     expect(answerDraftStream.update).toHaveBeenCalledWith("Answer");
+    expect(deliverReplies).not.toHaveBeenCalled();
+  });
+
+  it("persists durable reasoning payloads on the reasoning lane", async () => {
+    deliverInboundReplyWithMessageSendContext.mockResolvedValue({
+      status: "handled_visible",
+      delivery: {
+        messageIds: ["1002"],
+        visibleReplySent: true,
+      },
+    });
+    dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ dispatcherOptions }) => {
+      await dispatcherOptions.deliver(
+        { text: "checking source", isReasoning: true },
+        { kind: "final" },
+      );
+      await dispatcherOptions.deliver({ text: "Answer" }, { kind: "final" });
+      return { queuedFinal: true };
+    });
+
+    await dispatchWithContext({ context: createReasoningOnContext() });
+
+    expect(deliverInboundReplyWithMessageSendContext).toHaveBeenCalledTimes(2);
+    const reasoningOutbound = expectRecordFields(
+      mockCallArg(deliverInboundReplyWithMessageSendContext),
+      {
+        channel: "telegram",
+        info: { kind: "final" },
+      },
+    );
+    expectRecordFields(reasoningOutbound.payload, {
+      text: "Thinking\n\n_checking source_",
+    });
+    expect(reasoningOutbound.payload).not.toHaveProperty("isReasoning");
+    const answerOutbound = expectRecordFields(
+      mockCallArg(deliverInboundReplyWithMessageSendContext, 1),
+      {
+        channel: "telegram",
+        info: { kind: "final" },
+      },
+    );
+    expectRecordFields(answerOutbound.payload, { text: "Answer" });
     expect(deliverReplies).not.toHaveBeenCalled();
   });
 

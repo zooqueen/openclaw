@@ -1637,6 +1637,19 @@ export const dispatchTelegramMessage = async ({
         }),
       )[0];
     };
+    const prepareReasoningLanePayload = (
+      payload: ReplyPayload,
+    ): { payload: ReplyPayload; text: string } | undefined => {
+      if (payload.isReasoning !== true || typeof payload.text !== "string") {
+        return undefined;
+      }
+      const reasoningText = splitTelegramReasoningText(payload.text, true).reasoningText;
+      if (!reasoningText?.trim()) {
+        return undefined;
+      }
+      const { isReasoning: _isReasoning, ...deliverablePayload } = payload;
+      return { payload: deliverablePayload, text: reasoningText };
+    };
     const usesNativeTelegramQuote = (payload: ReplyPayload): boolean => {
       if (replyQuoteText != null) {
         return true;
@@ -1975,6 +1988,27 @@ export const dispatchTelegramMessage = async ({
                   },
                   deliver: async (payload, info) => {
                     if (isDispatchSuperseded()) {
+                      return;
+                    }
+
+                    const reasoningPayload = prepareReasoningLanePayload(payload);
+                    if (reasoningPayload) {
+                      reasoningStepState.noteReasoningHint();
+                      const result = await deliverLaneText({
+                        laneName: "reasoning",
+                        text: reasoningPayload.text,
+                        payload: reasoningPayload.payload,
+                        infoKind: info.kind,
+                      });
+                      if (result.kind !== "skipped") {
+                        reasoningStepState.noteReasoningDelivered();
+                      }
+                      if (info.kind === "final") {
+                        reasoningStepState.resetForNextStep();
+                      }
+                      return;
+                    }
+                    if (payload.isReasoning === true) {
                       return;
                     }
 

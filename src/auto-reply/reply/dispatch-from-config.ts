@@ -2867,6 +2867,9 @@ export async function dispatchReplyFromConfig(
       params.configOverride ? (applyMergePatch(cfg, params.configOverride) as OpenClawConfig) : cfg,
     );
     recordAgentDispatchStarted();
+    const shouldSuppressReasoningPayloadForDelivery = (payload: ReplyPayload) =>
+      payload.isReasoning === true && deliveryChannel !== "telegram";
+
     const replyResult = await runWithDispatchAbortSignal(getDispatchAbortSignal(), () =>
       traceReplyPhase("reply.run_reply_resolver", () =>
         replyResolver(
@@ -3101,10 +3104,9 @@ export async function dispatchReplyFromConfig(
                 if (suppressDelivery) {
                   return;
                 }
-                // Suppress reasoning payloads — channels using this generic dispatch
-                // path (WhatsApp, web, etc.) do not have a dedicated reasoning lane.
-                // Telegram has its own dispatch path that handles reasoning splitting.
-                if (payload.isReasoning === true) {
+                // Telegram owns a durable reasoning lane and strips the marker
+                // before outbound normalization; generic channels keep suppression.
+                if (shouldSuppressReasoningPayloadForDelivery(payload)) {
                   return;
                 }
                 // Accumulate block text for TTS generation after streaming.
@@ -3274,9 +3276,9 @@ export async function dispatchReplyFromConfig(
       (ctx.InboundEventKind !== "room_event" || explicitCommandTurnCtx);
     for (const [replyIndex, reply] of replies.entries()) {
       throwIfDispatchOperationAborted();
-      // Suppress reasoning payloads from channel delivery — channels using this
-      // generic dispatch path do not have a dedicated reasoning lane.
-      if (reply.isReasoning === true) {
+      // Telegram owns a durable reasoning lane and strips the marker before
+      // outbound normalization; generic channels keep suppression.
+      if (shouldSuppressReasoningPayloadForDelivery(reply)) {
         continue;
       }
       if (suppressDelivery && !shouldDeliverDespiteSourceReplySuppression(reply)) {
