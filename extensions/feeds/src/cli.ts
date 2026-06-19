@@ -8,6 +8,7 @@ import {
   feedEntryMatchesQuery,
   loadFeedDocument,
   parseFeedDocument,
+  readFeedBytes,
   type FeedDocument,
   type FeedDocumentRuntime,
   type FeedEntry,
@@ -385,7 +386,7 @@ export async function feedsBuildCommand(
     const document = {
       schemaVersion: 1 as const,
       id: options.id?.trim() || inventory.id,
-      generatedAt: options.generatedAt ?? new Date().toISOString(),
+      ...(options.generatedAt === undefined ? {} : { generatedAt: options.generatedAt }),
       entries: applyBuildRules(inventory.entries, rules).toSorted(compareFeedEntries),
     };
     const serialized = JSON.stringify(document, null, 2) + "\n";
@@ -847,9 +848,22 @@ function diffFeedDocuments(previous: FeedDocument, current: FeedDocument): FeedD
 }
 
 async function readFeedFile(path: string, runtime: FeedsCommandRuntime): Promise<Buffer> {
+  const feedUrl = parseFeedDocumentUrl(path);
+  if (feedUrl !== undefined) {
+    return readFeedBytes(feedUrl, runtime);
+  }
   const read = runtime.readFile ?? readFile;
   const value = await read(path);
   return Buffer.isBuffer(value) ? value : Buffer.from(value);
+}
+
+function parseFeedDocumentUrl(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "file:" || parsed.protocol === "https:" ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function feedIntegrity(raw: Buffer): string {
@@ -1190,7 +1204,7 @@ function stableJson(value: unknown): string {
   if (isRecord(value)) {
     return `{${Object.keys(value)
       .filter((key) => value[key] !== undefined)
-      .sort()
+      .toSorted()
       .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
       .join(",")}}`;
   }

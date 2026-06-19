@@ -491,6 +491,29 @@ describe("Feeds CLI", () => {
     });
   });
 
+  it("validates a file URL feed document", async () => {
+    const feed = JSON.stringify({ schemaVersion: 1, id: "company-approved", entries: [] });
+    const integrity = "sha256:" + createHash("sha256").update(feed).digest("hex");
+    const runtime = createRuntime({
+      sources: [],
+      files: { "/feeds/company.json": feed },
+    });
+
+    const exitCode = await feedsValidateCommand(
+      "file:///feeds/company.json",
+      { json: true },
+      runtime,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(runtime.stdout)).toEqual({
+      ok: true,
+      id: "company-approved",
+      entries: 0,
+      integrity,
+    });
+  });
+
   it("prints a local feed document integrity hash", async () => {
     const feed = JSON.stringify({ schemaVersion: 1, id: "company-approved", entries: [] });
     const integrity = `sha256:${createHash("sha256").update(feed).digest("hex")}`;
@@ -503,6 +526,23 @@ describe("Feeds CLI", () => {
 
     expect(exitCode).toBe(0);
     expect(runtime.stdout).toBe(`${integrity}\n`);
+  });
+
+  it("prints an HTTPS feed document integrity hash", async () => {
+    const feed = JSON.stringify({ schemaVersion: 1, id: "company-approved", entries: [] });
+    const integrity = "sha256:" + createHash("sha256").update(feed).digest("hex");
+    const runtime = createRuntime({
+      sources: [],
+      fetch: async (url) => {
+        expect(url).toBe("https://feeds.example.com/company.json");
+        return { ok: true, text: feed };
+      },
+    });
+
+    const exitCode = await feedsHashCommand("https://feeds.example.com/company.json", {}, runtime);
+
+    expect(exitCode).toBe(0);
+    expect(runtime.stdout).toBe(integrity + "\n");
   });
 
   it("rejects invalid local feed documents during validation", async () => {
@@ -582,6 +622,36 @@ describe("Feeds CLI", () => {
         }),
       ],
     });
+  });
+
+  it("omits generatedAt by default for deterministic feed builds", async () => {
+    const inventory = JSON.stringify({
+      schemaVersion: 1,
+      id: "upstream",
+      entries: [
+        { type: "skill", id: "b" },
+        { type: "skill", id: "a" },
+      ],
+    });
+    const runtime = createRuntime({
+      sources: [],
+      files: { "/feeds/inventory.json": inventory },
+    });
+
+    const firstExitCode = await feedsBuildCommand(
+      { inventory: "/feeds/inventory.json", out: "/feeds/first.json", id: "curated", json: true },
+      runtime,
+    );
+    const firstArtifact = runtime.writes["/feeds/first.json"];
+    const secondExitCode = await feedsBuildCommand(
+      { inventory: "/feeds/inventory.json", out: "/feeds/second.json", id: "curated", json: true },
+      runtime,
+    );
+
+    expect(firstExitCode).toBe(0);
+    expect(secondExitCode).toBe(0);
+    expect(JSON.parse(firstArtifact)).not.toHaveProperty("generatedAt");
+    expect(firstArtifact).toBe(runtime.writes["/feeds/second.json"]);
   });
 
   it("reports feed artifact deltas", async () => {
@@ -856,6 +926,7 @@ describe("Feeds CLI", () => {
 function createRuntime(params: {
   readonly sources?: readonly Record<string, unknown>[];
   readonly files?: Readonly<Record<string, string>>;
+  readonly fetch?: FeedsCommandRuntime["fetch"];
   readonly installPolicy?: Record<string, unknown>;
 }): FeedsCommandRuntime & {
   stdout: string;
@@ -888,6 +959,7 @@ function createRuntime(params: {
     async writeFile(path, value) {
       runtime.writes[path] = value;
     },
+    fetch: params.fetch,
     async readConfigSnapshot(): Promise<any> {
       return {
         valid: true,
