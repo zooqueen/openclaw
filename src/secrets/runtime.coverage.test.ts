@@ -497,7 +497,7 @@ function applyConfigForOpenClawTarget(
       setPathCreateStrict(config, ["plugins", "entries", pluginId, "enabled"], true);
     }
   }
-  if (entry.id === "agents.defaults.memory.search.remote.apiKey") {
+  if (entry.id === "memory.search.remote.apiKey") {
     setPathCreateStrict(config, ["agents", "list", "0", "id"], "sample-agent");
   }
   if (entry.id === "gateway.auth.password") {

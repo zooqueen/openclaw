@@ -461,23 +461,16 @@ export function resolveMemoryBackendConfig(params: {
   const qmdCfg = memory?.qmd;
   const includeDefaultMemory = qmdCfg?.includeDefaultMemory !== false;
   const nameSet = new Set<string>();
-  const agentEntry = params.cfg.agents?.list?.find(
-    (entry) => normalizeAgentId(entry?.id) === normalizedAgentId,
-  );
   const mergedExtraPaths = normalizeStringEntries(
-    [
-      ...(params.cfg.agents?.defaults?.memory?.search?.extraPaths ?? []),
-      ...(agentEntry?.memory?.search?.extraPaths ?? []),
-    ].filter((value): value is string => typeof value === "string"),
+    (memory?.search?.extraPaths ?? []).filter(
+      (value): value is string => typeof value === "string",
+    ),
   );
   const dedupedExtraPaths = uniqueStrings(mergedExtraPaths);
   const searchExtraPaths = dedupedExtraPaths.map(
     (pathValue): { path: string; pattern?: string; name?: string } => ({ path: pathValue }),
   );
-  const mergedExtraCollections = [
-    ...(params.cfg.agents?.defaults?.memory?.search?.qmd?.extraCollections ?? []),
-    ...(agentEntry?.memory?.search?.qmd?.extraCollections ?? []),
-  ].filter(
+  const mergedExtraCollections = (memory?.search?.qmd?.extraCollections ?? []).filter(
     (value): value is MemoryQmdIndexPath =>
       value !== null && typeof value === "object" && typeof value.path === "string",
   );

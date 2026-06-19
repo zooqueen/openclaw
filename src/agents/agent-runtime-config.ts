@@ -71,7 +71,7 @@ function hasAgentRuntimeSecretRefs(params: {
   if (hasNestedSecretRef(config.models?.providers)) {
     return true;
   }
-  if (hasNestedSecretRef(config.agents?.defaults?.memory?.search?.remote?.apiKey)) {
+  if (hasNestedSecretRef(config.memory?.search?.remote?.apiKey)) {
     return true;
   }
   if (

@@ -117,7 +117,7 @@ afterAll(async () => {
 });
 
 describe("memory cli", () => {
-  const inactiveMemorySecretDiagnostic = "agents.defaults.memory.search.remote.apiKey inactive"; // pragma: allowlist secret
+  const inactiveMemorySecretDiagnostic = "memory.search.remote.apiKey inactive"; // pragma: allowlist secret
 
   function firstMockCallArg(mock: { mock: { calls: unknown[][] } }, label: string): unknown {
     const call = mock.mock.calls[0];
@@ -428,16 +428,17 @@ describe("memory cli", () => {
 
   it("reports dreaming status for each agent", async () => {
     getRuntimeConfig.mockReturnValue({
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true, frequency: "0 9 * * *" },
+          },
+        },
+      },
       agents: {
         defaults: {
           workspace: "/tmp/main",
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true, frequency: "0 9 * * *" },
-              },
-            },
-          },
+
         },
         list: [
           { id: "main", default: true, workspace: "/tmp/main" },
@@ -533,14 +534,10 @@ describe("memory cli", () => {
 
   it("resolves configured memory SecretRefs through gateway snapshot", async () => {
     const config = {
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              remote: {
-                apiKey: { source: "env", provider: "default", id: "MEMORY_REMOTE_API_KEY" },
-              },
-            },
+      memory: {
+        search: {
+          remote: {
+            apiKey: { source: "env", provider: "default", id: "MEMORY_REMOTE_API_KEY" },
           },
         },
       },
@@ -563,7 +560,7 @@ describe("memory cli", () => {
     expect(secretRefsCall.commandName).toBe("memory status");
     expect(secretRefsCall.targetIds).toStrictEqual(
       new Set([
-        "agents.defaults.memory.search.remote.apiKey",
+        "memory.search.remote.apiKey",
         "agents.list[].memory.search.remote.apiKey",
       ]),
     );
@@ -2174,15 +2171,11 @@ describe("memory cli", () => {
         },
       ]);
       getRuntimeConfig.mockReturnValue({
-        agents: {
-          defaults: {
-            memory: {
-              extensions: {
-                "memory-core": {
-                  dreaming: {
-                    enabled: true,
-                  },
-                },
+        memory: {
+          extensions: {
+            "memory-core": {
+              dreaming: {
+                enabled: true,
               },
             },
           },

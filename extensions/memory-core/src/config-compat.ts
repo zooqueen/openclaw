@@ -21,14 +21,24 @@ function mergeMissing(target: Record<string, unknown>, source: Record<string, un
   }
 }
 
-function ensureMemoryCoreExtension(target: Record<string, unknown>): Record<string, unknown> {
-  const memory = asRecord(target.memory) ?? {};
-  target.memory = memory;
+function ensureMemoryCoreExtension(memory: Record<string, unknown>): Record<string, unknown> {
   const extensions = asRecord(memory.extensions) ?? {};
   memory.extensions = extensions;
   const core = asRecord(extensions["memory-core"]) ?? {};
   extensions["memory-core"] = core;
   return core;
+}
+
+function ensureRootMemory(config: OpenClawConfig): Record<string, unknown> {
+  const memory = asRecord(config.memory) ?? {};
+  config.memory = memory;
+  return memory;
+}
+
+function ensureAgentMemory(agent: Record<string, unknown>): Record<string, unknown> {
+  const memory = asRecord(agent.memory) ?? {};
+  agent.memory = memory;
+  return memory;
 }
 
 function normalizePluginId(value: string): string {
@@ -85,20 +95,16 @@ export function migrateMemoryCoreLegacyConfig(config: OpenClawConfig): {
     const entry = asRecord(entries["memory-core"]) ?? {};
     entries["memory-core"] = entry;
     const pluginConfig = asRecord(entry.config) ?? {};
-    const agents = asRecord(next.agents) ?? {};
-    next.agents = agents;
-    const defaults = asRecord(agents.defaults) ?? {};
-    agents.defaults = defaults;
-    const core = ensureMemoryCoreExtension(defaults);
+    const core = ensureMemoryCoreExtension(ensureRootMemory(next));
     if (Object.keys(core).length > 0) {
       mergeMissing(core, pluginConfig);
       changes.push(
-        "Merged plugins.entries.memory-core.config → agents.defaults.memory.extensions.memory-core (kept explicit agent memory settings).",
+        "Merged plugins.entries.memory-core.config → memory.extensions.memory-core (kept explicit memory settings).",
       );
     } else {
       Object.assign(core, pluginConfig);
       changes.push(
-        "Moved plugins.entries.memory-core.config → agents.defaults.memory.extensions.memory-core.",
+        "Moved plugins.entries.memory-core.config → memory.extensions.memory-core.",
       );
     }
     delete entry.config;
@@ -111,21 +117,17 @@ export function migrateMemoryCoreLegacyConfig(config: OpenClawConfig): {
         `Cannot migrate dreaming config: missing selected memory plugin "${selectedMemoryPlugin.pluginId}".`,
       );
     }
-    const agents = asRecord(next.agents) ?? {};
-    next.agents = agents;
-    const defaults = asRecord(agents.defaults) ?? {};
-    agents.defaults = defaults;
-    const core = ensureMemoryCoreExtension(defaults);
+    const core = ensureMemoryCoreExtension(ensureRootMemory(next));
     const existingDreaming = asRecord(core.dreaming);
     if (existingDreaming) {
       mergeMissing(existingDreaming, selectedPluginDreaming);
       changes.push(
-        `Merged plugins.entries.${selectedMemoryPlugin.pluginId}.config.dreaming → agents.defaults.memory.extensions.memory-core.dreaming (kept explicit core dreaming settings).`,
+        `Merged plugins.entries.${selectedMemoryPlugin.pluginId}.config.dreaming → memory.extensions.memory-core.dreaming (kept explicit core dreaming settings).`,
       );
     } else {
       core.dreaming = selectedPluginDreaming;
       changes.push(
-        `Moved plugins.entries.${selectedMemoryPlugin.pluginId}.config.dreaming → agents.defaults.memory.extensions.memory-core.dreaming.`,
+        `Moved plugins.entries.${selectedMemoryPlugin.pluginId}.config.dreaming → memory.extensions.memory-core.dreaming.`,
       );
     }
     delete selectedPluginConfig.dreaming;
@@ -139,7 +141,7 @@ export function migrateMemoryCoreLegacyConfig(config: OpenClawConfig): {
       if (!agent || !dreaming) {
         continue;
       }
-      const core = ensureMemoryCoreExtension(agent);
+      const core = ensureMemoryCoreExtension(ensureAgentMemory(agent));
       const existingDreaming = asRecord(core.dreaming);
       if (existingDreaming) {
         mergeMissing(existingDreaming, dreaming);

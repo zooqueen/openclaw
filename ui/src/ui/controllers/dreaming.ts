@@ -351,7 +351,7 @@ function resolveSelectedAgentId(state: DreamingState): string | null {
 function resolveConfiguredAgentId(
   configValue: Record<string, unknown> | null,
   selectedAgentId: string,
-): string {
+): string | null {
   const agents = asRecord(configValue?.agents);
   const entries = Array.isArray(agents?.list) ? agents.list : [];
   for (const entry of entries) {
@@ -360,7 +360,7 @@ function resolveConfiguredAgentId(
       return configuredId;
     }
   }
-  return selectedAgentId;
+  return null;
 }
 
 function buildSelectedAgentPayloadForAgentId(
@@ -420,9 +420,7 @@ export function resolveConfiguredDreaming(configValue: Record<string, unknown> |
   pluginId: string;
   enabled: boolean;
 } {
-  const agents = asRecord(configValue?.agents);
-  const defaults = asRecord(agents?.defaults);
-  const memory = asRecord(defaults?.memory);
+  const memory = asRecord(configValue?.memory);
   const extensions = asRecord(memory?.extensions);
   const memoryCore = asRecord(extensions?.[DEFAULT_DREAMING_PLUGIN_ID]);
   const dreaming = asRecord(memoryCore?.dreaming);
@@ -1218,11 +1216,7 @@ export async function updateDreamingEnabled(
           },
         }
       : {
-          agents: {
-            defaults: {
-              memory: dreamingPatch,
-            },
-          },
+          memory: dreamingPatch,
         },
   );
   if (ok && state.dreamingStatus) {

@@ -133,10 +133,10 @@ const CORE_SECRET_TARGET_REGISTRY: SecretTargetRegistryEntry[] = [
     authProfileType: "token",
   },
   {
-    id: "agents.defaults.memory.search.remote.apiKey",
-    targetType: "agents.defaults.memory.search.remote.apiKey",
+    id: "memory.search.remote.apiKey",
+    targetType: "memory.search.remote.apiKey",
     configFile: "openclaw.json",
-    pathPattern: "agents.defaults.memory.search.remote.apiKey",
+    pathPattern: "memory.search.remote.apiKey",
     secretShape: SECRET_INPUT_SHAPE,
     expectedResolvedValue: "string",
     includeInPlan: true,

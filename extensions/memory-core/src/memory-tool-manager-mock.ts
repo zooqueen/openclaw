@@ -74,8 +74,8 @@ vi.mock("./tools.runtime.js", () => ({
     agentId,
   }: {
     cfg?: {
+      memory?: { qmd?: unknown };
       agents?: {
-        defaults?: { memory?: { qmd?: unknown } };
         list?: Array<{ id?: string; memory?: { qmd?: unknown } }>;
       };
     };
@@ -84,7 +84,7 @@ vi.mock("./tools.runtime.js", () => ({
     backend,
     qmd:
       cfg?.agents?.list?.find((agent) => agent.id === agentId)?.memory?.qmd ??
-      cfg?.agents?.defaults?.memory?.qmd,
+      cfg?.memory?.qmd,
   }),
   getMemorySearchManager: getMemorySearchManagerMock,
   readAgentMemoryFile: readAgentMemoryFileMock,

@@ -28,15 +28,11 @@ Set the memory search provider to `local`:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "local",
-          local: {
-            modelPath: "hf:ggml-org/embeddinggemma-300m-qat-q8_0-GGUF/embeddinggemma-300m-qat-Q8_0.gguf",
-          },
-        },
+  memory: {
+    search: {
+      provider: "local",
+      local: {
+        modelPath: "hf:ggml-org/embeddinggemma-300m-qat-q8_0-GGUF/embeddinggemma-300m-qat-Q8_0.gguf",
       },
     },
   },

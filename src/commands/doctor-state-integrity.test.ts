@@ -133,14 +133,10 @@ async function runStateIntegrityText(cfg: OpenClawConfig): Promise<string> {
 
 async function runOrphanTranscriptCheckWithQmdSessions(enabled: boolean, homeDir: string) {
   const cfg: OpenClawConfig = {
-    agents: {
-      defaults: {
-        memory: {
-          backend: "qmd",
-          qmd: {
-            sessions: { enabled },
-          },
-        },
+    memory: {
+      backend: "qmd",
+      qmd: {
+        sessions: { enabled },
       },
     },
   };

@@ -670,14 +670,15 @@ describe("doctor.memory.status", () => {
     );
 
     getRuntimeConfig.mockReturnValue({
+      memory: {
+        search: {
+          enabled: true,
+        },
+      },
       agents: {
         defaults: {
           userTimezone: "America/Los_Angeles",
-          memory: {
-            search: {
-              enabled: true,
-            },
-          },
+
         },
         list: [
           { id: "main", workspace: mainWorkspaceDir },
@@ -1172,14 +1173,12 @@ describe("doctor.memory.status", () => {
     await fs.mkdir(path.join(mainWorkspaceDir, "memory", ".dreams"), { recursive: true });
 
     getRuntimeConfig.mockReturnValue({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              enabled: true,
-            },
-          },
+      memory: {
+        search: {
+          enabled: true,
         },
+      },
+      agents: {
         list: [
           { id: "main", workspace: mainWorkspaceDir },
           { id: "alpha", workspace: alphaWorkspaceDir },

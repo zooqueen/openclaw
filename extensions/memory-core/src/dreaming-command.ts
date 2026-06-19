@@ -22,7 +22,7 @@ function updateDreamingEnabledInConfig(
     return null;
   }
   const existingAgentMemory =
-    agentIndex >= 0 ? (agentList[agentIndex]?.memory ?? {}) : (cfg.agents?.defaults?.memory ?? {});
+    agentIndex >= 0 ? (agentList[agentIndex]?.memory ?? {}) : (cfg.memory ?? {});
   const extensions = { ...existingAgentMemory.extensions };
   const memoryCore = asRecord(extensions["memory-core"]) ?? {};
   const dreaming = asRecord(memoryCore.dreaming) ?? {};
@@ -47,13 +47,7 @@ function updateDreamingEnabledInConfig(
   }
   return {
     ...cfg,
-    agents: {
-      ...cfg.agents,
-      defaults: {
-        ...cfg.agents?.defaults,
-        memory,
-      },
-    },
+    memory,
   };
 }
 

@@ -114,7 +114,7 @@ type LoadedMemoryCommandConfig = {
 
 function getMemoryCommandSecretTargetIds(): Set<string> {
   return new Set([
-    "agents.defaults.memory.search.remote.apiKey",
+    "memory.search.remote.apiKey",
     "agents.list[].memory.search.remote.apiKey",
   ]);
 }

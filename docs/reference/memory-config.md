@@ -29,8 +29,42 @@ This page lists every configuration knob for OpenClaw memory search. For concept
   </Card>
 </CardGroup>
 
-Memory settings live under `agents.defaults.memory` in `openclaw.json`. Agent
-entries can override the same shape at `agents.list[].memory`.
+Memory settings live under `memory` in `openclaw.json`. It is the global
+baseline. Agent entries can override the same shape at `agents.list[].memory`.
+
+When OpenClaw resolves memory for an agent, it deep-merges the global baseline
+with that agent's override. Scalar values and ordinary arrays in the agent
+override replace the global value. `memory.qmd.paths`,
+`memory.search.extraPaths`, and `memory.search.qmd.extraCollections` append and
+deduplicate so an agent can add sources without repeating the global list.
+
+Global configuration is not shared memory state. Each agent still owns its own
+SQLite database, workspace roots, QMD home, dreaming artifacts, and wiki state
+unless you explicitly configure a shared path.
+
+```json5
+{
+  memory: {
+    backend: "qmd",
+    search: {
+      provider: "openai",
+      extraPaths: ["~/team-notes"],
+    },
+  },
+  agents: {
+    list: [
+      {
+        id: "research",
+        memory: {
+          search: {
+            extraPaths: ["~/research-notes"],
+          },
+        },
+      },
+    ],
+  },
+}
+```
 
 <Note>
 If you are looking for the **active memory** feature toggle and sub-agent config, that lives under `plugins.entries.active-memory` instead of `memory.search`.
@@ -73,7 +107,7 @@ When `provider` is unset, legacy `provider: "auto"` is present, or
 use lexical FTS ranking when embeddings are unavailable.
 
 Explicit non-local providers fail closed. If you set
-`agents.defaults.memory.search.provider` to
+`memory.search.provider` to
 a concrete remote-backed provider such as OpenAI, Gemini, Voyage, Mistral,
 Bedrock, GitHub Copilot, DeepInfra, Ollama, LM Studio, or an OpenAI-compatible
 custom provider, and that provider is unavailable at runtime, `memory_search`
@@ -83,7 +117,7 @@ provider/auth configuration, switch to a reachable provider, or set
 
 ### Custom provider ids
 
-`agents.defaults.memory.search.provider` can point at a custom
+`memory.search.provider` can point at a custom
 `models.providers.<id>` entry for memory-specific provider adapters such as
 `ollama`, or for OpenAI-compatible model APIs such as `openai-responses` /
 `openai-completions`. OpenClaw resolves that provider's `api` owner for the
@@ -103,14 +137,10 @@ memory embeddings to a specific local endpoint:
       },
     },
   },
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "ollama-5080",
-          model: "qwen3-embedding:0.6b",
-        },
-      },
+  memory: {
+    search: {
+      provider: "ollama-5080",
+      model: "qwen3-embedding:0.6b",
     },
   },
 }
@@ -154,17 +184,13 @@ Use `provider: "openai-compatible"` for a generic OpenAI-compatible
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "openai-compatible",
-          model: "text-embedding-3-small",
-          remote: {
-            baseUrl: "https://api.example.com/v1/",
-            apiKey: "YOUR_KEY",
-          },
-        },
+  memory: {
+    search: {
+      provider: "openai-compatible",
+      model: "text-embedding-3-small",
+      remote: {
+        baseUrl: "https://api.example.com/v1/",
+        apiKey: "YOUR_KEY",
       },
     },
   },
@@ -199,20 +225,16 @@ Use `provider: "openai-compatible"` for a generic OpenAI-compatible
 
     ```json5
     {
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              provider: "openai-compatible",
-              remote: {
-                baseUrl: "https://embeddings.example/v1",
-                apiKey: "${EMBEDDINGS_API_KEY}",
-              },
-              model: "asymmetric-embedder",
-              queryInputType: "query",
-              documentInputType: "passage",
-            },
+      memory: {
+        search: {
+          provider: "openai-compatible",
+          remote: {
+            baseUrl: "https://embeddings.example/v1",
+            apiKey: "${EMBEDDINGS_API_KEY}",
           },
+          model: "asymmetric-embedder",
+          queryInputType: "query",
+          documentInputType: "passage",
         },
       },
     }
@@ -228,14 +250,10 @@ Use `provider: "openai-compatible"` for a generic OpenAI-compatible
 
     ```json5
     {
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              provider: "bedrock",
-              model: "amazon.titan-embed-text-v2:0",
-            },
-          },
+      memory: {
+        search: {
+          provider: "bedrock",
+          model: "amazon.titan-embed-text-v2:0",
         },
       },
     }
@@ -324,7 +342,7 @@ Unset uses the provider default: 600 seconds for local/self-hosted providers suc
 
 ## Hybrid search config
 
-All under `agents.defaults.memory.search.query.hybrid`:
+All under `memory.search.query.hybrid`:
 
 | Key                   | Type      | Default | Description                        |
 | --------------------- | --------- | ------- | ---------------------------------- |
@@ -355,18 +373,14 @@ All under `agents.defaults.memory.search.query.hybrid`:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          query: {
-            hybrid: {
-              vectorWeight: 0.7,
-              textWeight: 0.3,
-              mmr: { enabled: true, lambda: 0.7 },
-              temporalDecay: { enabled: true, halfLifeDays: 30 },
-            },
-          },
+  memory: {
+    search: {
+      query: {
+        hybrid: {
+          vectorWeight: 0.7,
+          textWeight: 0.3,
+          mmr: { enabled: true, lambda: 0.7 },
+          temporalDecay: { enabled: true, halfLifeDays: 30 },
         },
       },
     },
@@ -384,13 +398,9 @@ All under `agents.defaults.memory.search.query.hybrid`:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          extraPaths: ["../team-docs", "/srv/shared-notes"],
-        },
-      },
+  memory: {
+    search: {
+      extraPaths: ["../team-docs", "/srv/shared-notes"],
     },
   },
 }
@@ -400,11 +410,11 @@ Paths can be absolute or workspace-relative. Directories are scanned recursively
 
 For agent-scoped cross-agent transcript search, use
 `agents.list[].memory.search.qmd.extraCollections` instead of
-`agents.defaults.memory.qmd.paths`. Those extra collections follow the same
+`memory.qmd.paths`. Those extra collections follow the same
 `{ path, name, pattern? }` shape, but they are merged per agent and can preserve
 explicit shared names when the path points outside the current workspace. If the
-same resolved path appears in both `agents.defaults.memory.qmd.paths` and
-`agents.defaults.memory.search.qmd.extraCollections`, QMD keeps the first entry
+same resolved path appears in both `memory.qmd.paths` and
+`memory.search.qmd.extraCollections`, QMD keeps the first entry
 and skips the duplicate.
 
 ---
@@ -498,7 +508,7 @@ Built-in memory indexes live in each agent's OpenClaw SQLite database at
 
 ## QMD backend config
 
-Set `agents.defaults.memory.backend = "qmd"` to enable. All QMD settings live under `agents.defaults.memory.qmd`:
+Set `memory.backend = "qmd"` to enable. All QMD settings live under `memory.qmd`:
 
 | Key                      | Type      | Default  | Description                                                                           |
 | ------------------------ | --------- | -------- | ------------------------------------------------------------------------------------- |
@@ -549,15 +559,11 @@ QMD model overrides stay on the QMD side, not OpenClaw config. If you need to ov
 
     ```json5
     {
-      agents: {
-        defaults: {
-          memory: {
-            qmd: {
-              scope: {
-                default: "deny",
-                rules: [{ action: "allow", match: { chatType: "direct" } }],
-              },
-            },
+      memory: {
+        qmd: {
+          scope: {
+            default: "deny",
+            rules: [{ action: "allow", match: { chatType: "direct" } }],
           },
         },
       },
@@ -570,7 +576,7 @@ QMD model overrides stay on the QMD side, not OpenClaw config. If you need to ov
 
   </Accordion>
   <Accordion title="Citations">
-    `agents.defaults.memory.citations` applies to all backends:
+    `memory.citations` applies to all backends:
 
     | Value            | Behavior                                            |
     | ---------------- | --------------------------------------------------- |
@@ -587,22 +593,18 @@ When gateway-start QMD initialization is enabled, OpenClaw starts QMD only for e
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        backend: "qmd",
-        citations: "auto",
-        qmd: {
-          includeDefaultMemory: true,
-          update: { interval: "5m", debounceMs: 15000 },
-          limits: { maxResults: 6, timeoutMs: 4000 },
-          scope: {
-            default: "deny",
-            rules: [{ action: "allow", match: { chatType: "direct" } }],
-          },
-          paths: [{ name: "docs", path: "~/notes", pattern: "**/*.md" }],
-        },
+  memory: {
+    backend: "qmd",
+    citations: "auto",
+    qmd: {
+      includeDefaultMemory: true,
+      update: { interval: "5m", debounceMs: 15000 },
+      limits: { maxResults: 6, timeoutMs: 4000 },
+      scope: {
+        default: "deny",
+        rules: [{ action: "allow", match: { chatType: "direct" } }],
       },
+      paths: [{ name: "docs", path: "~/notes", pattern: "**/*.md" }],
     },
   },
 }
@@ -612,7 +614,7 @@ When gateway-start QMD initialization is enabled, OpenClaw starts QMD only for e
 
 ## Dreaming
 
-Dreaming is configured under `agents.defaults.memory.extensions.memory-core.dreaming`, not under `agents.defaults.memory.search`.
+Dreaming is configured under `memory.extensions.memory-core.dreaming`, not under `memory.search`.
 
 Each enabled agent gets its own scheduled dreaming sweep. The sweep uses
 internal light/deep/REM phases as an implementation detail.
@@ -635,45 +637,39 @@ Dreaming is resolved per agent. An agent can opt out with
 
 ```json5
 {
+  memory: {
+    extensions: {
+      "memory-core": {
+        dreaming: {
+          enabled: true,
+        },
+      },
+    },
+  },
   agents: {
     list: [
       { id: "main", memory: { extensions: { "memory-core": { dreaming: { enabled: false } } } } },
       { id: "oracle", memory: { extensions: { "memory-core": { dreaming: { enabled: false } } } } },
       { id: "librarian" },
     ],
-    defaults: {
-      memory: {
-        extensions: {
-          "memory-core": {
-            dreaming: {
-              enabled: true,
-            },
-          },
-        },
-      },
-    },
   },
 }
 ```
 
 In this example, `main` and `oracle` will not get cron jobs, while `librarian`
-inherits the enabled default.
+inherits the global enabled setting.
 
 ### Example
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        extensions: {
-          "memory-core": {
-            dreaming: {
-              enabled: true,
-              frequency: "0 3 * * *",
-              model: "anthropic/claude-sonnet-4-6",
-            },
-          },
+  memory: {
+    extensions: {
+      "memory-core": {
+        dreaming: {
+          enabled: true,
+          frequency: "0 3 * * *",
+          model: "anthropic/claude-sonnet-4-6",
         },
       },
     },

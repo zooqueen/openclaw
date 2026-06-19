@@ -33,12 +33,8 @@ binary, and can index content beyond your workspace memory files.
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        backend: "qmd",
-      },
-    },
+  memory: {
+    backend: "qmd",
   },
 }
 ```
@@ -55,7 +51,7 @@ present.
 ## How the sidecar works
 
 - OpenClaw creates collections from your workspace memory files and any
-  configured `agents.defaults.memory.qmd.paths`, then runs `qmd update` when the QMD manager is
+  configured `memory.qmd.paths`, then runs `qmd update` when the QMD manager is
   opened and periodically afterward (default every 5 minutes). These refreshes
   run through QMD subprocesses, not an in-process filesystem crawl. Semantic
   modes also run `qmd embed`.
@@ -67,8 +63,8 @@ present.
   avoids importing the memory runtime or creating the long-lived watcher before
   memory is first used.
 - If you want QMD initialized at gateway start anyway, set
-  `agents.defaults.memory.qmd.update.startup` to `idle` or `immediate`. With
-  `agents.defaults.memory.qmd.update.onBoot: true`, startup runs the initial refresh. With
+  `memory.qmd.update.startup` to `idle` or `immediate`. With
+  `memory.qmd.update.onBoot: true`, startup runs the initial refresh. With
   `onBoot: false`, startup skips that immediate refresh but still opens the
   long-lived manager when update or embed intervals are configured, so QMD can
   own its regular watcher and timers.
@@ -76,7 +72,7 @@ present.
   `vsearch` and `query`). `search` is BM25-only, so OpenClaw skips semantic
   vector readiness probes and embedding maintenance in that mode. If a mode
   fails, OpenClaw retries with `qmd query`.
-- When `searchMode` is `query`, set `agents.defaults.memory.qmd.rerank` to `false` to use QMD's
+- When `searchMode` is `query`, set `memory.qmd.rerank` to `false` to use QMD's
   hybrid query path without the reranker. OpenClaw passes `--no-rerank` to the
   direct QMD CLI path and `rerank: false` to QMD's MCP query tool. This option
   requires QMD 2.1 or newer.
@@ -144,14 +140,10 @@ Point QMD at additional directories to make them searchable:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        backend: "qmd",
-        qmd: {
-          paths: [{ name: "docs", path: "~/notes", pattern: "**/*.md" }],
-        },
-      },
+  memory: {
+    backend: "qmd",
+    qmd: {
+      paths: [{ name: "docs", path: "~/notes", pattern: "**/*.md" }],
     },
   },
 }
@@ -167,14 +159,10 @@ Enable session indexing to recall earlier conversations:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        backend: "qmd",
-        qmd: {
-          sessions: { enabled: true },
-        },
-      },
+  memory: {
+    backend: "qmd",
+    qmd: {
+      sessions: { enabled: true },
     },
   },
 }
@@ -186,19 +174,15 @@ collection under `~/.openclaw/agents/<id>/qmd/sessions/`.
 ## Search scope
 
 By default, QMD search results are surfaced in direct and channel sessions
-(not groups). Configure `agents.defaults.memory.qmd.scope` to change this:
+(not groups). Configure `memory.qmd.scope` to change this:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        qmd: {
-          scope: {
-            default: "deny",
-            rules: [{ action: "allow", match: { chatType: "direct" } }],
-          },
-        },
+  memory: {
+    qmd: {
+      scope: {
+        default: "deny",
+        rules: [{ action: "allow", match: { chatType: "direct" } }],
       },
     },
   },
@@ -210,8 +194,8 @@ chat type so empty results are easier to debug.
 
 ## Citations
 
-When `agents.defaults.memory.citations` is `auto` or `on`, search snippets include a
-`Source: <path#line>` footer. Set `agents.defaults.memory.citations = "off"` to omit the footer
+When `memory.citations` is `auto` or `on`, search snippets include a
+`Source: <path#line>` footer. Set `memory.citations = "off"` to omit the footer
 while still passing the path to the agent internally.
 
 ## When to use
@@ -238,14 +222,10 @@ interactive shell. Pin the binary explicitly:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        backend: "qmd",
-        qmd: {
-          command: "/absolute/path/to/qmd",
-        },
-      },
+  memory: {
+    backend: "qmd",
+    qmd: {
+      command: "/absolute/path/to/qmd",
     },
   },
 }
@@ -263,14 +243,14 @@ QMD advertises support for multiple `-c` filters; otherwise it keeps the older
 per-collection fallback for correctness.
 
 **BM25-only QMD still trying to build llama.cpp?** Set
-`agents.defaults.memory.qmd.searchMode = "search"`. OpenClaw treats that mode as lexical-only,
+`memory.qmd.searchMode = "search"`. OpenClaw treats that mode as lexical-only,
 does not run QMD vector status probes or embedding maintenance, and leaves
 semantic readiness checks to `vsearch` or `query` setups.
 
-**Search times out?** Increase `agents.defaults.memory.qmd.limits.timeoutMs` (default: 4000ms).
+**Search times out?** Increase `memory.qmd.limits.timeoutMs` (default: 4000ms).
 Set to `120000` for slower hardware.
 
-**Empty results in group chats?** Check `agents.defaults.memory.qmd.scope` -- the default only
+**Empty results in group chats?** Check `memory.qmd.scope` -- the default only
 allows direct and channel sessions.
 
 **Root memory search suddenly got too broad?** Restart the gateway or wait for
@@ -286,7 +266,7 @@ cycle-safe traversal or explicit exclusion controls.
 
 ## Configuration
 
-For the full config surface (`agents.defaults.memory.qmd.*`), search modes, update intervals,
+For the full config surface (`memory.qmd.*`), search modes, update intervals,
 scope rules, and all other knobs, see the
 [Memory configuration reference](/reference/memory-config).
 

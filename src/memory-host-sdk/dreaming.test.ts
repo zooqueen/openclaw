@@ -151,16 +151,14 @@ describe("memory dreaming host helpers", () => {
 
   it("dedupes shared workspaces across all configured agents", () => {
     const cfg = {
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [
           { id: "alpha", workspace: "/workspace/shared" },
           { id: "beta", workspace: "/workspace/beta" },
@@ -185,16 +183,14 @@ describe("memory dreaming host helpers", () => {
 
   it("filters out agents with memory-core dreaming disabled", () => {
     const cfg = {
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [
           { id: "alpha", workspace: "/workspace/alpha" },
           {
@@ -245,16 +241,14 @@ describe("memory dreaming host helpers", () => {
 
   it("includes the runtime primary workspace alongside configured subagent workspaces", () => {
     const cfg = {
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [
           { id: "main", workspace: "/workspace/main-agent" },
           { id: "agi-cdo", workspace: "/workspace/agi-cdo" },
@@ -319,16 +313,17 @@ describe("memory dreaming host helpers", () => {
 
   it("uses default agent fallback and timezone-aware day helpers", () => {
     const cfg = {
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
+          },
+        },
+      },
       agents: {
         defaults: {
           workspace: "/workspace",
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
-          },
+
         },
       },
     } as OpenClawConfig;
@@ -369,18 +364,16 @@ describe("memory dreaming host helpers", () => {
     expect(
       resolveMemoryDreamingPluginConfig(
         {
-          agents: {
-            defaults: {
-              memory: {
-                extensions: {
-                  "memory-core": {
-                    dreaming: {
-                      enabled: true,
-                    },
-                  },
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: {
+                  enabled: true,
                 },
               },
             },
+          },
+          agents: {
             list: [
               {
                 id: "research",

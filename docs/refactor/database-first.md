@@ -1390,7 +1390,7 @@ create` validates the written archive by default; `--no-verify` is the
   `ensureOpenClawModelCatalog`; there is no `models.json` compatibility API in
   runtime code. The implementation writes SQLite and the embedded PI registry is
   hydrated from that stored payload without creating a `models.json` file.
-- QMD session transcript markdown export and `agents.defaults.memory.qmd.sessions` config were
+- QMD session transcript markdown export and `memory.qmd.sessions` config were
   removed. There is no QMD transcript collection, no `qmd/sessions*` runtime
   path, and no file-backed session memory bridge.
 - Memory-core runtime imports SQLite transcript indexing helpers from

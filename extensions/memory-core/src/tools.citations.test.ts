@@ -90,8 +90,8 @@ describe("memory search citations", () => {
   it("appends source information when citations are enabled", async () => {
     setMemoryBackend("builtin");
     const cfg = asOpenClawConfig({
+      memory: { citations: "on" },
       agents: {
-        defaults: { memory: { citations: "on" } },
         list: [{ id: "main", default: true }],
       },
     });
@@ -106,8 +106,8 @@ describe("memory search citations", () => {
   it("leaves snippet untouched when citations are off", async () => {
     setMemoryBackend("builtin");
     const cfg = asOpenClawConfig({
+      memory: { citations: "off" },
       agents: {
-        defaults: { memory: { citations: "off" } },
         list: [{ id: "main", default: true }],
       },
     });
@@ -122,10 +122,8 @@ describe("memory search citations", () => {
   it("clamps decorated snippets to qmd injected budget", async () => {
     setMemoryBackend("qmd");
     const cfg = asOpenClawConfig({
+      memory: { citations: "on", backend: "qmd", qmd: { limits: { maxInjectedChars: 20 } } },
       agents: {
-        defaults: {
-          memory: { citations: "on", backend: "qmd", qmd: { limits: { maxInjectedChars: 20 } } },
-        },
         list: [{ id: "main", default: true }],
       },
     });
@@ -176,8 +174,8 @@ describe("memory tools", () => {
     setMemoryBackend("qmd");
     const tool = createMemorySearchToolOrThrow({
       config: asOpenClawConfig({
+        memory: { backend: "qmd", qmd: { command: "qmd" } },
         agents: {
-          defaults: { memory: { backend: "qmd", qmd: { command: "qmd" } } },
           list: [{ id: "main", default: true }],
         },
       }),
@@ -198,8 +196,8 @@ describe("memory tools", () => {
     setMemoryBackend("qmd");
     const tool = createMemorySearchToolOrThrow({
       config: asOpenClawConfig({
+        memory: { backend: "qmd", qmd: { command: "qmd" } },
         agents: {
-          defaults: { memory: { backend: "qmd", qmd: { command: "qmd" } } },
           list: [{ id: "main", default: true }],
         },
       }),
@@ -322,18 +320,16 @@ describe("memory tools", () => {
 
       const tool = createMemorySearchToolOrThrow({
         config: asOpenClawConfig({
-          agents: {
-            defaults: {
-              memory: {
-                extensions: {
-                  "memory-core": {
-                    dreaming: {
-                      enabled: true,
-                    },
-                  },
+          memory: {
+            extensions: {
+              "memory-core": {
+                dreaming: {
+                  enabled: true,
                 },
               },
             },
+          },
+          agents: {
             list: [{ id: "main", default: true }],
           },
         }),

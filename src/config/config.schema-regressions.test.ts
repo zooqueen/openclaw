@@ -17,13 +17,9 @@ describe("config schema regressions", () => {
 
   it('accepts memory search fallback "voyage"', () => {
     const res = validateConfigObject({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              fallback: "voyage",
-            },
-          },
+      memory: {
+        search: {
+          fallback: "voyage",
         },
       },
     });
@@ -33,13 +29,9 @@ describe("config schema regressions", () => {
 
   it('accepts memory search provider "mistral"', () => {
     const res = validateConfigObject({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              provider: "mistral",
-            },
-          },
+      memory: {
+        search: {
+          provider: "mistral",
         },
       },
     });
@@ -49,13 +41,9 @@ describe("config schema regressions", () => {
 
   it('accepts memory search provider "bedrock"', () => {
     const res = validateConfigObject({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              provider: "bedrock",
-            },
-          },
+      memory: {
+        search: {
+          provider: "bedrock",
         },
       },
     });
@@ -63,17 +51,29 @@ describe("config schema regressions", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("rejects local memory search GPU policy", () => {
+  it("rejects agents.defaults.memory in favor of the root memory baseline", () => {
     const res = validateConfigObject({
       agents: {
         defaults: {
           memory: {
             search: {
-              provider: "local",
-              local: {
-                gpu: "cpu",
-              },
+              provider: "openai",
             },
+          },
+        },
+      },
+    });
+
+    expect(res.ok).toBe(false);
+  });
+
+  it("rejects local memory search GPU policy", () => {
+    const res = validateConfigObject({
+      memory: {
+        search: {
+          provider: "local",
+          local: {
+            gpu: "cpu",
           },
         },
       },
@@ -84,16 +84,12 @@ describe("config schema regressions", () => {
 
   it("accepts memory.search.qmd.extraCollections", () => {
     const res = validateConfigObject({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              qmd: {
-                extraCollections: [
-                  { path: "/shared/team-notes", name: "team-notes", pattern: "**/*.md" },
-                ],
-              },
-            },
+      memory: {
+        search: {
+          qmd: {
+            extraCollections: [
+              { path: "/shared/team-notes", name: "team-notes", pattern: "**/*.md" },
+            ],
           },
         },
       },

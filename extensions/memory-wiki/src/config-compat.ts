@@ -26,7 +26,7 @@ export const legacyConfigRules: LegacyConfigRule[] = [
   {
     path: ["plugins", "entries", "memory-wiki", "config"],
     message:
-      'plugins.entries.memory-wiki.config is legacy; use agents.defaults.memory.extensions.memory-wiki. Run "openclaw doctor --fix".',
+      'plugins.entries.memory-wiki.config is legacy; use memory.extensions.memory-wiki. Run "openclaw doctor --fix".',
     match: hasLegacyPluginConfig,
   },
 ];
@@ -57,8 +57,8 @@ function resolveMemoryWikiExtensionConfig(
           return typeof candidate?.id === "string" && normalizeAgentId(candidate.id) === agentId;
         })
       : undefined
-    : asRecord(agents?.defaults);
-  const memory = asRecord(asRecord(source)?.memory);
+    : config;
+  const memory = agentId ? asRecord(asRecord(source)?.memory) : asRecord(config.memory);
   const extensions = asRecord(memory?.extensions);
   return asRecord(extensions?.["memory-wiki"]);
 }
@@ -72,7 +72,6 @@ function ensureMemoryWikiExtensionConfig(
   agentId?: string,
 ): Record<string, unknown> {
   const agents = asRecord(config.agents) ?? {};
-  config.agents = agents;
   const target = agentId
     ? Array.isArray(agents.list)
       ? agents.list.find((entry) => {
@@ -80,17 +79,18 @@ function ensureMemoryWikiExtensionConfig(
           return typeof candidate?.id === "string" && normalizeAgentId(candidate.id) === agentId;
         })
       : undefined
-    : (() => {
-        const defaults = asRecord(agents.defaults) ?? {};
-        agents.defaults = defaults;
-        return defaults;
-      })();
-  const agent = asRecord(target);
-  if (!agent) {
+    : undefined;
+  if (agentId && !target) {
     throw new Error(`Cannot migrate Memory Wiki config: missing agent "${agentId}".`);
   }
-  const memory = asRecord(agent.memory) ?? {};
-  agent.memory = memory;
+  if (agentId) {
+    config.agents = agents;
+  }
+  const container = agentId ? asRecord(target) : config;
+  const memory = asRecord(container?.memory) ?? {};
+  if (container) {
+    container.memory = memory;
+  }
   const extensions = asRecord(memory.extensions) ?? {};
   memory.extensions = extensions;
   const wikiConfig = asRecord(extensions["memory-wiki"]) ?? {};
@@ -170,12 +170,12 @@ export function migrateMemoryWikiLegacyConfig(
     if (hasCanonicalConfig) {
       mergeMissing(wikiConfig, nextPluginConfig);
       changes.push(
-        "Merged plugins.entries.memory-wiki.config → agents.defaults.memory.extensions.memory-wiki (kept explicit agent memory settings).",
+        "Merged plugins.entries.memory-wiki.config → memory.extensions.memory-wiki (kept explicit memory settings).",
       );
     } else {
       Object.assign(wikiConfig, nextPluginConfig);
       changes.push(
-        "Moved plugins.entries.memory-wiki.config → agents.defaults.memory.extensions.memory-wiki.",
+        "Moved plugins.entries.memory-wiki.config → memory.extensions.memory-wiki.",
       );
     }
     delete nextEntry.config;

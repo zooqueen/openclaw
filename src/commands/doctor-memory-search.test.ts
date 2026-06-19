@@ -746,7 +746,7 @@ describe("noteMemorySearchHealth", () => {
 
     const message = firstNoteMessage();
     expect(message).toContain('provider is set to "openai-compatible"');
-    expect(message).toContain("agents.defaults.memory.search.model");
+    expect(message).toContain("memory.search.model");
     expect(message).toContain("openclaw config set");
     expect(resolveApiKeyForProvider).not.toHaveBeenCalled();
   });

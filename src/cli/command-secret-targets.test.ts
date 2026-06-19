@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const REGISTRY_IDS = [
-  "agents.defaults.memory.search.remote.apiKey",
+  "memory.search.remote.apiKey",
   "agents.list[].memory.search.remote.apiKey",
   "channels.discord.token",
   "channels.discord.accounts.ops.token",
@@ -268,7 +268,7 @@ describe("command secret target ids", () => {
 
   it("includes memorySearch remote targets for agent runtime commands", () => {
     const ids = getAgentRuntimeCommandSecretTargetIds();
-    expect(ids.has("agents.defaults.memory.search.remote.apiKey")).toBe(true);
+    expect(ids.has("memory.search.remote.apiKey")).toBe(true);
     expect(ids.has("agents.list[].memory.search.remote.apiKey")).toBe(true);
     expect(ids.has("plugins.entries.firecrawl.config.webFetch.apiKey")).toBe(true);
     expect(ids.has("plugins.entries.exa.config.webSearch.apiKey")).toBe(true);
@@ -284,7 +284,7 @@ describe("command secret target ids", () => {
     expect(ids.has("gateway.auth.password")).toBe(true);
     expect(ids.has("gateway.remote.token")).toBe(true);
     expect(ids.has("gateway.remote.password")).toBe(true);
-    expect(ids.has("agents.defaults.memory.search.remote.apiKey")).toBe(true);
+    expect(ids.has("memory.search.remote.apiKey")).toBe(true);
     expect(ids.has("agents.list[].memory.search.remote.apiKey")).toBe(true);
     expect(ids.has("channels.discord.token")).toBe(false);
   });
@@ -297,7 +297,7 @@ describe("command secret target ids", () => {
     expect(ids.has("plugins.entries.firecrawl.config.webFetch.apiKey")).toBe(false);
     expect(ids.has("plugins.entries.voice-call.config.twilio.authToken")).toBe(false);
     expect(ids.has("models.providers.openai.apiKey")).toBe(false);
-    expect(ids.has("agents.defaults.memory.search.remote.apiKey")).toBe(false);
+    expect(ids.has("memory.search.remote.apiKey")).toBe(false);
     expect(ids.has("messages.tts.providers.openai.apiKey")).toBe(false);
     expect(ids.has("skills.entries.demo.apiKey")).toBe(false);
     expect(ids.has("channels.discord.token")).toBe(false);
@@ -311,7 +311,7 @@ describe("command secret target ids", () => {
     expect(ids.has("plugins.entries.firecrawl.config.webFetch.apiKey")).toBe(true);
     expect(ids.has("plugins.entries.voice-call.config.twilio.authToken")).toBe(false);
     expect(ids.has("models.providers.openai.apiKey")).toBe(false);
-    expect(ids.has("agents.defaults.memory.search.remote.apiKey")).toBe(false);
+    expect(ids.has("memory.search.remote.apiKey")).toBe(false);
     expect(ids.has("messages.tts.providers.openai.apiKey")).toBe(false);
     expect(ids.has("skills.entries.demo.apiKey")).toBe(false);
     expect(ids.has("channels.discord.token")).toBe(false);

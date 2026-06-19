@@ -460,7 +460,7 @@ export function resolveMemorySearchConfig(
   cfg: OpenClawConfig,
   agentId: string,
 ): ResolvedMemorySearchConfig | null {
-  const defaults = cfg.agents?.defaults?.memory?.search;
+  const defaults = cfg.memory?.search;
   const overrides = resolveAgentConfig(cfg, agentId)?.memory?.search;
   const resolved = mergeConfig(cfg, defaults, overrides, agentId);
   if (!resolved.enabled) {
@@ -492,7 +492,7 @@ export function resolveMemorySearchSyncConfig(
   cfg: OpenClawConfig,
   agentId: string,
 ): ResolvedMemorySearchSyncConfig | null {
-  const defaults = cfg.agents?.defaults?.memory?.search;
+  const defaults = cfg.memory?.search;
   const overrides = resolveAgentConfig(cfg, agentId)?.memory?.search;
   const enabled = overrides?.enabled ?? defaults?.enabled ?? true;
   if (!enabled) {

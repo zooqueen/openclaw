@@ -38,11 +38,11 @@ describe("memory-wiki config compatibility", () => {
 
     expect(migration?.changes).toEqual([
       "Moved plugins.entries.memory-wiki.config.bridge.readMemoryCore → bridge.readMemoryArtifacts.",
-      "Moved plugins.entries.memory-wiki.config → agents.defaults.memory.extensions.memory-wiki.",
+      "Moved plugins.entries.memory-wiki.config → memory.extensions.memory-wiki.",
     ]);
     expect(
       (
-        migration!.config.agents!.defaults!.memory!.extensions!["memory-wiki"] as {
+        migration!.config.memory!.extensions!["memory-wiki"] as {
           bridge?: Record<string, unknown>;
         }
       ).bridge,
@@ -72,11 +72,11 @@ describe("memory-wiki config compatibility", () => {
 
     expect(migration.changes).toEqual([
       "Removed legacy plugins.entries.memory-wiki.config.bridge.readMemoryCore; kept explicit bridge.readMemoryArtifacts.",
-      "Moved plugins.entries.memory-wiki.config → agents.defaults.memory.extensions.memory-wiki.",
+      "Moved plugins.entries.memory-wiki.config → memory.extensions.memory-wiki.",
     ]);
     expect(
       (
-        migration.config.agents!.defaults!.memory!.extensions!["memory-wiki"] as {
+        migration.config.memory!.extensions!["memory-wiki"] as {
           bridge?: Record<string, unknown>;
         }
       ).bridge,
@@ -106,6 +106,6 @@ describe("memory-wiki config compatibility", () => {
       resolveMemoryWikiConfigForAgent(migration?.config ?? config, "research", { homedir }).vault
         .path,
     ).toBe(path.join(homedir, ".openclaw", "wiki", "main"));
-    expect(migration?.config.agents?.defaults?.memory?.extensions?.["memory-wiki"]).toBeUndefined();
+    expect(migration?.config.memory?.extensions?.["memory-wiki"]).toBeUndefined();
   });
 });

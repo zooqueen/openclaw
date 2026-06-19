@@ -170,29 +170,64 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const ADDITIVE_MEMORY_ARRAY_PATHS = new Set([
+  "qmd.paths",
+  "search.extraPaths",
+  "search.qmd.extraCollections",
+]);
+
+function memoryArrayEntryKey(value: unknown): string {
+  if (typeof value === "string") {
+    return `string:${value}`;
+  }
+  if (isPlainRecord(value) && typeof value.path === "string") {
+    return `path:${value.path}\0${String(value.name ?? "")}\0${String(value.pattern ?? "")}`;
+  }
+  return `json:${JSON.stringify(value)}`;
+}
+
+function mergeAdditiveMemoryArrays(base: unknown[], override: unknown[]): unknown[] {
+  const seen = new Set<string>();
+  const result: unknown[] = [];
+  for (const value of [...base, ...override]) {
+    const key = memoryArrayEntryKey(value);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
 function mergeMemoryConfig(
-  defaults: AgentMemoryConfig | undefined,
+  global: AgentMemoryConfig | undefined,
   overrides: AgentMemoryConfig | undefined,
 ): AgentMemoryConfig | undefined {
-  if (!defaults) {
+  if (!global) {
     return overrides;
   }
   if (!overrides) {
-    return defaults;
+    return global;
   }
 
-  const merge = (base: unknown, override: unknown): unknown => {
+  const merge = (base: unknown, override: unknown, path: string[]): unknown => {
+    if (Array.isArray(base) && Array.isArray(override)) {
+      return ADDITIVE_MEMORY_ARRAY_PATHS.has(path.join("."))
+        ? mergeAdditiveMemoryArrays(base, override)
+        : override;
+    }
     if (!isPlainRecord(base) || !isPlainRecord(override)) {
       return override ?? base;
     }
     const result: Record<string, unknown> = { ...base };
     for (const [key, value] of Object.entries(override)) {
-      result[key] = key in result ? merge(result[key], value) : value;
+      result[key] = key in result ? merge(result[key], value, [...path, key]) : value;
     }
     return result;
   };
 
-  return merge(defaults, overrides) as AgentMemoryConfig;
+  return merge(global, overrides, []) as AgentMemoryConfig;
 }
 
 /** Resolves the canonical memory configuration for one agent. */
@@ -200,7 +235,7 @@ export function resolveAgentMemoryConfig(
   cfg: OpenClawConfig,
   agentId: string,
 ): AgentMemoryConfig | undefined {
-  return mergeMemoryConfig(cfg.agents?.defaults?.memory, resolveAgentEntry(cfg, agentId)?.memory);
+  return mergeMemoryConfig(cfg.memory, resolveAgentEntry(cfg, agentId)?.memory);
 }
 
 /** Resolves one memory extension's merged agent-scoped config. */

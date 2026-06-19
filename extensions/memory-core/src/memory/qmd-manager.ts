@@ -2272,7 +2272,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       if (!state.coldStartWarned) {
         state.coldStartWarned = true;
         log.warn(
-          "mcporter qmd bridge enabled but startDaemon=false; each query may cold-start QMD MCP. Consider setting agents.defaults.memory.qmd.mcporter.startDaemon=true to keep it warm.",
+          "mcporter qmd bridge enabled but startDaemon=false; each query may cold-start QMD MCP. Consider setting memory.qmd.mcporter.startDaemon=true to keep it warm.",
         );
       }
       return;

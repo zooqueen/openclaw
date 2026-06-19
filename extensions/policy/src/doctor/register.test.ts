@@ -4090,6 +4090,39 @@ describe("registerPolicyDoctorChecks", () => {
           },
         },
       },
+      memory: {
+        search: {
+          remote: {
+            headers: {
+              Authorization: {
+                source: "exec",
+                provider: "rogue",
+                id: "memory/root-authorization",
+              },
+            },
+          },
+        },
+      },
+      agents: {
+        list: [
+          {
+            id: "writer",
+            memory: {
+              search: {
+                remote: {
+                  headers: {
+                    Authorization: {
+                      source: "exec",
+                      provider: "rogue",
+                      id: "memory/writer-authorization",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
       tools: {
         media: {
           models: [
@@ -4183,6 +4216,20 @@ describe("registerPolicyDoctorChecks", () => {
           refSource: "exec",
           refProvider: "rogue",
           source: 'oc://openclaw.config/models/providers/"z.ai"/headers/Authorization',
+        }),
+        expect.objectContaining({
+          kind: "input",
+          provenance: "secretRef",
+          refSource: "exec",
+          refProvider: "rogue",
+          source: "oc://openclaw.config/memory/search/remote/headers/Authorization",
+        }),
+        expect.objectContaining({
+          kind: "input",
+          provenance: "secretRef",
+          refSource: "exec",
+          refProvider: "rogue",
+          source: "oc://openclaw.config/agents/list/#0/memory/search/remote/headers/Authorization",
         }),
         expect.objectContaining({
           kind: "input",
@@ -7467,11 +7514,7 @@ describe("registerPolicyDoctorChecks", () => {
       logging: { redactSensitive: "off" },
       diagnostics: { otel: { enabled: true, captureContent: { enabled: true, toolInputs: true } } },
       session: { maintenance: { mode: "warn" } },
-      agents: {
-        defaults: {
-          memory: { backend: "qmd", qmd: { sessions: { enabled: true } } },
-        },
-      },
+      memory: { backend: "qmd", qmd: { sessions: { enabled: true } } },
     } as unknown as OpenClawConfig;
     await fs.writeFile(configPath, "{}", "utf-8");
     await fs.writeFile(
@@ -7510,7 +7553,7 @@ describe("registerPolicyDoctorChecks", () => {
         }),
         expect.objectContaining({
           kind: "memorySessionTranscriptIndexing",
-          source: "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
+          source: "oc://openclaw.config/memory/qmd/sessions/enabled",
           value: true,
         }),
       ]),
@@ -7534,7 +7577,7 @@ describe("registerPolicyDoctorChecks", () => {
         }),
         expect.objectContaining({
           checkId: "policy/data-handling-session-transcript-memory-enabled",
-          ocPath: "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
+          ocPath: "oc://openclaw.config/memory/qmd/sessions/enabled",
           requirement: "oc://policy.jsonc/dataHandling/memory/denySessionTranscriptIndexing",
         }),
       ]),
@@ -7672,12 +7715,10 @@ describe("registerPolicyDoctorChecks", () => {
     const configPath = join(workspaceDir, "openclaw.jsonc");
     const cfg = {
       ...cfgWithPolicy(),
+      memory: {
+        search: { experimental: { sessionMemory: true }, sources: ["memory", "sessions"] },
+      },
       agents: {
-        defaults: {
-          memory: {
-            search: { experimental: { sessionMemory: true }, sources: ["memory", "sessions"] },
-          },
-        },
         list: [
           { id: "sebby" },
           { id: "buddy", memory: { search: { experimental: { sessionMemory: false } } } },
@@ -7704,7 +7745,7 @@ describe("registerPolicyDoctorChecks", () => {
     expect(result.findings).toEqual([
       expect.objectContaining({
         checkId: "policy/data-handling-session-transcript-memory-enabled",
-        ocPath: "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
+        ocPath: "oc://openclaw.config/memory/search/experimental/sessionMemory",
         requirement:
           "oc://policy.jsonc/scopes/restricted/dataHandling/memory/denySessionTranscriptIndexing",
       }),
@@ -7715,11 +7756,7 @@ describe("registerPolicyDoctorChecks", () => {
     const configPath = join(workspaceDir, "openclaw.jsonc");
     const cfg = {
       ...cfgWithPolicy(),
-      agents: {
-        defaults: {
-          memory: { search: { experimental: { sessionMemory: true }, sources: ["sessions"] } },
-        },
-      },
+      memory: { search: { experimental: { sessionMemory: true }, sources: ["sessions"] } },
     } as unknown as OpenClawConfig;
     await fs.writeFile(configPath, "{}", "utf-8");
     await fs.writeFile(
@@ -7741,7 +7778,7 @@ describe("registerPolicyDoctorChecks", () => {
     expect(result.findings).toEqual([
       expect.objectContaining({
         checkId: "policy/data-handling-session-transcript-memory-enabled",
-        ocPath: "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
+        ocPath: "oc://openclaw.config/memory/search/experimental/sessionMemory",
         requirement:
           "oc://policy.jsonc/scopes/restricted/dataHandling/memory/denySessionTranscriptIndexing",
       }),
@@ -7752,10 +7789,8 @@ describe("registerPolicyDoctorChecks", () => {
     const configPath = join(workspaceDir, "openclaw.jsonc");
     const cfg = {
       ...cfgWithPolicy(),
+      memory: { backend: "builtin" },
       agents: {
-        defaults: {
-          memory: { backend: "builtin" },
-        },
         list: [
           {
             id: "research",
@@ -7798,16 +7833,12 @@ describe("registerPolicyDoctorChecks", () => {
     const configPath = join(workspaceDir, "openclaw.jsonc");
     const cfg = {
       ...cfgWithPolicy(),
-      agents: {
-        defaults: {
-          memory: {
-            qmd: { sessions: { enabled: true } },
-            search: {
-              enabled: false,
-              experimental: { sessionMemory: true },
-              sources: ["sessions"],
-            },
-          },
+      memory: {
+        qmd: { sessions: { enabled: true } },
+        search: {
+          enabled: false,
+          experimental: { sessionMemory: true },
+          sources: ["sessions"],
         },
       },
     } as unknown as OpenClawConfig;

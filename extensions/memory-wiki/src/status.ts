@@ -276,7 +276,7 @@ export function buildMemoryWikiDoctorReport(status: MemoryWikiStatus): MemoryWik
         : warning.code === "obsidian-cli-missing"
           ? "Install the official Obsidian CLI or disable `obsidian.useOfficialCli`."
           : warning.code === "bridge-disabled"
-            ? "Enable `agents.defaults.memory.extensions.memory-wiki.bridge.enabled` or switch vaultMode away from `bridge`."
+            ? "Enable `memory.extensions.memory-wiki.bridge.enabled` or switch vaultMode away from `bridge`."
             : warning.code === "bridge-artifacts-missing"
               ? "Use a memory plugin that exports public artifacts, create/import memory artifacts first, or switch the wiki back to isolated mode."
               : warning.code === "unsafe-local-disabled"

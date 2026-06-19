@@ -13,7 +13,7 @@ import {
 } from "./control-ui-css.js";
 import type { GatewayRemoteConfig } from "./types.gateway.js";
 import { SilentReplyPolicyConfigSchema } from "./zod-schema.agent-defaults.js";
-import { ToolsSchema } from "./zod-schema.agent-runtime.js";
+import { AgentMemorySchema, ToolsSchema } from "./zod-schema.agent-runtime.js";
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
 import { ApprovalsSchema } from "./zod-schema.approvals.js";
 import { ChannelsSchema } from "./zod-schema.channels-config.js";
@@ -1149,6 +1149,7 @@ export const OpenClawSchema = z
         }
       })
       .optional(),
+    memory: AgentMemorySchema,
     mcp: McpConfigSchema,
     skills: z
       .object({

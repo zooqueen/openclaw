@@ -16,56 +16,52 @@ Default mode is `isolated`.
 
 ## Config
 
-Put config under `agents.defaults.memory.extensions.memory-wiki`. Agent entries
+Put config under `memory.extensions.memory-wiki`. Agent entries
 can override it at `agents.list[].memory.extensions.memory-wiki`.
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        extensions: {
-          "memory-wiki": {
-            vaultMode: "isolated",
-            vault: {
-              renderMode: "obsidian", // or "native"
-            },
-            obsidian: {
-              enabled: true,
-              useOfficialCli: true,
-              vaultName: "OpenClaw Wiki",
-              openAfterWrites: false,
-            },
-            bridge: {
-              enabled: false,
-              readMemoryArtifacts: true,
-              indexDreamReports: true,
-              indexDailyNotes: true,
-              indexMemoryRoot: true,
-              followMemoryEvents: true,
-            },
-            unsafeLocal: {
-              allowPrivateMemoryCoreAccess: false,
-              paths: [],
-            },
-            ingest: {
-              autoCompile: true,
-              maxConcurrentJobs: 1,
-              allowUrlIngest: true,
-            },
-            search: {
-              backend: "shared", // or "local"
-              corpus: "wiki", // or "memory" | "all"
-            },
-            context: {
-              includeCompiledDigestPrompt: false, // opt in to append a compact compiled digest snapshot to memory prompt sections
-            },
-            render: {
-              preserveHumanBlocks: true,
-              createBacklinks: true, // writes managed ## Related blocks with sources, backlinks, and related pages
-              createDashboards: true,
-            },
-          },
+  memory: {
+    extensions: {
+      "memory-wiki": {
+        vaultMode: "isolated",
+        vault: {
+          renderMode: "obsidian", // or "native"
+        },
+        obsidian: {
+          enabled: true,
+          useOfficialCli: true,
+          vaultName: "OpenClaw Wiki",
+          openAfterWrites: false,
+        },
+        bridge: {
+          enabled: false,
+          readMemoryArtifacts: true,
+          indexDreamReports: true,
+          indexDailyNotes: true,
+          indexMemoryRoot: true,
+          followMemoryEvents: true,
+        },
+        unsafeLocal: {
+          allowPrivateMemoryCoreAccess: false,
+          paths: [],
+        },
+        ingest: {
+          autoCompile: true,
+          maxConcurrentJobs: 1,
+          allowUrlIngest: true,
+        },
+        search: {
+          backend: "shared", // or "local"
+          corpus: "wiki", // or "memory" | "all"
+        },
+        context: {
+          includeCompiledDigestPrompt: false, // opt in to append a compact compiled digest snapshot to memory prompt sections
+        },
+        render: {
+          preserveHumanBlocks: true,
+          createBacklinks: true, // writes managed ## Related blocks with sources, backlinks, and related pages
+          createDashboards: true,
         },
       },
     },

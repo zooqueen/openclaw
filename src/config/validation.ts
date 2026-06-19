@@ -1654,10 +1654,10 @@ function validateConfigObjectWithPluginsBase(
   };
 
   const validateResolvedAgentMemoryExtensions = () => {
-    const defaultExtensions = config.agents?.defaults?.memory?.extensions;
+    const globalExtensions = config.memory?.extensions;
     const configuredAgents = config.agents?.list ?? [];
     const hasConfiguredExtensions =
-      Object.keys(defaultExtensions ?? {}).length > 0 ||
+      Object.keys(globalExtensions ?? {}).length > 0 ||
       configuredAgents.some((agent) => Object.keys(agent.memory?.extensions ?? {}).length > 0);
     if (!hasConfiguredExtensions) {
       return;
@@ -1681,7 +1681,7 @@ function validateConfigObjectWithPluginsBase(
             {
               agentId: resolveDefaultAgentId(config),
               extensions: undefined,
-              path: "agents.defaults.memory.extensions",
+              path: "memory.extensions",
             },
           ];
     const reportedIssues = new Set<string>();
@@ -1702,7 +1702,7 @@ function validateConfigObjectWithPluginsBase(
 
     for (const target of targets) {
       const extensionIds = new Set([
-        ...Object.keys(defaultExtensions ?? {}),
+        ...Object.keys(globalExtensions ?? {}),
         ...Object.keys(target.extensions ?? {}),
       ]);
       for (const extensionId of extensionIds) {
@@ -1716,12 +1716,12 @@ function validateConfigObjectWithPluginsBase(
           continue;
         }
         const configuredValue = target.extensions?.[extensionId];
-        const defaultValue = defaultExtensions?.[extensionId];
+        const globalValue = globalExtensions?.[extensionId];
         const issueBase =
           configuredValue !== undefined
             ? target.path
-            : defaultValue !== undefined
-              ? "agents.defaults.memory.extensions"
+            : globalValue !== undefined
+              ? "memory.extensions"
               : target.path;
 
         if (!record) {
@@ -1754,9 +1754,9 @@ function validateConfigObjectWithPluginsBase(
           const errorBelongsToAgent =
             configuredValue !== undefined && hasConfiguredPath(configuredValue, error.path);
           const extensionIssueBase =
-            errorBelongsToAgent || defaultValue === undefined
+            errorBelongsToAgent || globalValue === undefined
               ? `${target.path}.${extensionId}`
-              : `agents.defaults.memory.extensions.${extensionId}`;
+              : `memory.extensions.${extensionId}`;
           const issuePath =
             error.path === "<root>" ? extensionIssueBase : `${extensionIssueBase}.${error.path}`;
           const issueKey = `${record.id}\0${issuePath}\0${error.message}`;

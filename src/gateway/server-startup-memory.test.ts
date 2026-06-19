@@ -18,22 +18,18 @@ import { startGatewayMemoryBackend } from "./server-startup-memory.js";
 function createQmdConfig(
   agents: OpenClawConfig["agents"],
   update: MemoryQmdUpdateConfig = { startup: "immediate" },
+  memory?: OpenClawConfig["memory"],
 ): OpenClawConfig {
   return {
-    agents: {
-      ...agents,
-      defaults: {
-        ...agents?.defaults,
-        memory: {
-          ...agents?.defaults?.memory,
-          backend: "qmd",
-          qmd: {
-            ...agents?.defaults?.memory?.qmd,
-            update,
-          },
-        },
+    memory: {
+      ...memory,
+      backend: "qmd",
+      qmd: {
+        ...memory?.qmd,
+        update,
       },
     },
+    agents,
   } as OpenClawConfig;
 }
 
@@ -103,8 +99,8 @@ describe("startGatewayMemoryBackend", () => {
 
   it("skips initialization when memory backend is not qmd", async () => {
     const cfg = {
+      memory: { backend: "builtin" },
       agents: {
-        defaults: { memory: { backend: "builtin" } },
         list: [{ id: "main", default: true }],
       },
     } as OpenClawConfig;
@@ -116,8 +112,8 @@ describe("startGatewayMemoryBackend", () => {
 
   it("keeps qmd managers lazy when startup refresh is not opted in", async () => {
     const cfg = {
+      memory: { backend: "qmd", qmd: {} },
       agents: {
-        defaults: { memory: { backend: "qmd", qmd: {} } },
         list: [{ id: "main", default: true }],
       },
     } as OpenClawConfig;
@@ -174,13 +170,13 @@ describe("startGatewayMemoryBackend", () => {
     );
   });
 
-  it("initializes all qmd agents when memory search is explicitly enabled in defaults", async () => {
+  it("initializes all qmd agents when memory search is explicitly enabled globally", async () => {
     const cfg = createQmdConfig(
       {
-        defaults: { memory: { search: { enabled: true } } },
         list: [{ id: "ops", default: true }, { id: "main" }],
       },
       { startup: "immediate", interval: "0s", embedInterval: "0s" },
+      { search: { enabled: true } },
     );
 
     const log = await startQmdBackendWithManager(cfg);
@@ -218,13 +214,13 @@ describe("startGatewayMemoryBackend", () => {
   it("skips agents with memory search disabled", async () => {
     const cfg = createQmdConfig(
       {
-        defaults: { memory: { search: { enabled: true } } },
         list: [
           { id: "main", default: true },
           { id: "ops", memory: { search: { enabled: false } } },
         ],
       },
       { startup: "immediate", interval: "0s", embedInterval: "0s" },
+      { search: { enabled: true } },
     );
 
     const log = await startQmdBackendWithManager(cfg);
@@ -236,15 +232,13 @@ describe("startGatewayMemoryBackend", () => {
 
   it("does not initialize qmd managers when background work is disabled", async () => {
     const cfg = {
-      agents: {
-        defaults: {
-          memory: {
-            backend: "qmd",
-            qmd: {
-              update: { startup: "immediate", onBoot: false, interval: "0s", embedInterval: "0s" },
-            },
-          },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          update: { startup: "immediate", onBoot: false, interval: "0s", embedInterval: "0s" },
         },
+      },
+      agents: {
         list: [{ id: "main", default: true }],
       },
     } as OpenClawConfig;

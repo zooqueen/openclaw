@@ -222,15 +222,11 @@ the Copilot API and picks the best one automatically.
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "github-copilot",
-          // Optional: override the auto-discovered model
-          model: "text-embedding-3-small",
-        },
-      },
+  memory: {
+    search: {
+      provider: "github-copilot",
+      // Optional: override the auto-discovered model
+      model: "text-embedding-3-small",
     },
   },
 }

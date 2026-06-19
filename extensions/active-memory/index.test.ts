@@ -1398,14 +1398,14 @@ describe("active-memory plugin", () => {
 
   it("lets active memory inherit the main QMD search mode when configured", async () => {
     api.config = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          searchMode: "query",
+        },
+      },
       agents: {
         defaults: {
-          memory: {
-            backend: "qmd",
-            qmd: {
-              searchMode: "query",
-            },
-          },
           model: {
             primary: "github-copilot/gpt-5.4-mini",
           },

@@ -123,14 +123,10 @@ OpenClaw can use OpenAI, or an OpenAI-compatible embedding endpoint, for
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "openai",
-          model: "text-embedding-3-small",
-        },
-      },
+  memory: {
+    search: {
+      provider: "openai",
+      model: "text-embedding-3-small",
     },
   },
 }

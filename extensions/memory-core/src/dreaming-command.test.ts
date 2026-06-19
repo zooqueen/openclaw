@@ -16,7 +16,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function resolveStoredDreaming(config: OpenClawConfig): Record<string, unknown> {
-  const memory = asRecord(config.agents?.defaults?.memory);
+  const memory = asRecord(config.memory);
   const extensions = asRecord(memory?.extensions);
   const memoryCore = asRecord(extensions?.["memory-core"]);
   return asRecord(memoryCore?.dreaming) ?? {};
@@ -124,22 +124,18 @@ describe("memory-core /dreaming command", () => {
     );
   });
 
-  it("persists default-agent enablement under agents.defaults.memory.extensions.memory-core", async () => {
+  it("persists default-agent enablement under memory.extensions.memory-core", async () => {
     const { command, runtime, getRuntimeConfig } = createHarness({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
-                  phases: {
-                    deep: {
-                      minScore: 0.9,
-                    },
-                  },
-                  frequency: "0 */6 * * *",
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              phases: {
+                deep: {
+                  minScore: 0.9,
                 },
               },
+              frequency: "0 */6 * * *",
             },
           },
         },
@@ -157,16 +153,14 @@ describe("memory-core /dreaming command", () => {
 
   it("uses the host-routed agent when the session key does not encode one", async () => {
     const { command, getRuntimeConfig } = createHarness({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [{ id: "research" }],
       },
     });
@@ -184,16 +178,14 @@ describe("memory-core /dreaming command", () => {
 
   it("matches host-routed canonical agent ids to raw configured ids", async () => {
     const { command, getRuntimeConfig } = createHarness({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [{ id: "Team Ops" }],
       },
     });
@@ -211,16 +203,14 @@ describe("memory-core /dreaming command", () => {
 
   it("rejects unknown routed agents without changing inherited defaults", async () => {
     const { command, runtime, getRuntimeConfig } = createHarness({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: { enabled: true },
-              },
-            },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: { enabled: true },
           },
         },
+      },
+      agents: {
         list: [{ id: "research" }],
       },
     });
@@ -279,18 +269,19 @@ describe("memory-core /dreaming command", () => {
 
   it("returns status without mutating config", async () => {
     const { command, runtime } = createHarness({
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              frequency: "15 */8 * * *",
+            },
+          },
+        },
+      },
       agents: {
         defaults: {
           userTimezone: "America/Los_Angeles",
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
-                  frequency: "15 */8 * * *",
-                },
-              },
-            },
-          },
+
         },
       },
     });

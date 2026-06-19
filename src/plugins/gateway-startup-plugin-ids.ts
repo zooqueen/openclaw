@@ -586,6 +586,8 @@ function isMemorySlotExplicitlyDisabled(config: OpenClawConfig): boolean {
 
 export type MemoryEmbeddingStartupProviderSource = "provider" | "fallback";
 
+export type MemoryEmbeddingStartupProviderScope = "agent" | "global";
+
 export type ConfiguredMemoryEmbeddingStartupProviderOwner = {
   /** Raw memory-search provider id as configured (normalized). */
   configuredId: string;
@@ -594,6 +596,7 @@ export type ConfiguredMemoryEmbeddingStartupProviderOwner = {
    * `models.providers.<id>.api` owner when a custom provider maps to one.
    */
   ownerIds: ReadonlySet<string>;
+  scope: MemoryEmbeddingStartupProviderScope;
   source: MemoryEmbeddingStartupProviderSource;
 };
 
@@ -677,9 +680,12 @@ export function collectConfiguredMemoryEmbeddingStartupProviderOwners(
     return [];
   }
   const byConfiguredIdAndSource = new Map<string, ConfiguredMemoryEmbeddingStartupProviderOwner>();
-  const defaultsBlock = config.agents?.defaults?.memory?.search;
+  const defaultsBlock = config.memory?.search;
   const defaults = isRecord(defaultsBlock) ? defaultsBlock : undefined;
-  const addEffectiveProviders = (override: Record<string, unknown> | undefined) => {
+  const addEffectiveProviders = (
+    override: Record<string, unknown> | undefined,
+    scope: MemoryEmbeddingStartupProviderScope,
+  ) => {
     for (const { configuredId, source } of resolveEffectiveMemoryEmbeddingProviderEntries(
       defaults,
       override,
@@ -691,18 +697,22 @@ export function collectConfiguredMemoryEmbeddingStartupProviderOwners(
       byConfiguredIdAndSource.set(key, {
         configuredId,
         ownerIds: new Set(resolveMemoryEmbeddingProviderOwnerIds(configuredId, config)),
+        scope,
         source,
       });
     }
   };
-  addEffectiveProviders(undefined);
+  addEffectiveProviders(undefined, "global");
   const agents = config.agents?.list;
   const agentEntries = Array.isArray(agents) ? agents.filter(isRecord) : [];
   if (agentEntries.length === 0) {
     return [...byConfiguredIdAndSource.values()];
   }
   for (const agent of agentEntries) {
-    addEffectiveProviders(isRecord(agent.memory?.search) ? agent.memory.search : undefined);
+    addEffectiveProviders(
+      isRecord(agent.memory?.search) ? agent.memory.search : undefined,
+      "agent",
+    );
   }
   return [...byConfiguredIdAndSource.values()];
 }
@@ -734,7 +744,11 @@ export function collectConfiguredMemoryEmbeddingProviderIds(
 export function collectUnregisteredConfiguredMemoryEmbeddingProviders(params: {
   config: OpenClawConfig;
   registeredProviderIds: ReadonlySet<string>;
-}): Array<{ configuredId: string; source: MemoryEmbeddingStartupProviderSource }> {
+}): Array<{
+  configuredId: string;
+  scope: MemoryEmbeddingStartupProviderScope;
+  source: MemoryEmbeddingStartupProviderSource;
+}> {
   const configured = collectConfiguredMemoryEmbeddingStartupProviderOwners(params.config);
   if (configured.length === 0) {
     return [];
@@ -746,7 +760,11 @@ export function collectUnregisteredConfiguredMemoryEmbeddingProviders(params: {
   );
   return configured
     .filter((provider) => ![...provider.ownerIds].some((ownerId) => registered.has(ownerId)))
-    .map((provider) => ({ configuredId: provider.configuredId, source: provider.source }))
+    .map((provider) => ({
+      configuredId: provider.configuredId,
+      scope: provider.scope,
+      source: provider.source,
+    }))
     .toSorted(
       (left, right) =>
         left.configuredId.localeCompare(right.configuredId) ||

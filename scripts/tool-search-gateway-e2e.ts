@@ -315,7 +315,6 @@ async function writeConfig(params: {
     controlUiEnabled: false,
     providerMode: "mock-openai",
   });
-  const defaults = cfg.agents?.defaults ?? {};
   cfg = {
     ...cfg,
     plugins: {
@@ -330,22 +329,16 @@ async function writeConfig(params: {
         },
       },
     },
-    agents: {
-      ...cfg.agents,
-      defaults: {
-        ...defaults,
-        memory: {
-          ...defaults.memory,
-          search: {
-            ...defaults.memory?.search,
-            enabled: false,
-            sync: {
-              ...defaults.memory?.search?.sync,
-              onSearch: false,
-              onSessionStart: false,
-              watch: false,
-            },
-          },
+    memory: {
+      ...cfg.memory,
+      search: {
+        ...cfg.memory?.search,
+        enabled: false,
+        sync: {
+          ...cfg.memory?.search?.sync,
+          onSearch: false,
+          onSessionStart: false,
+          watch: false,
         },
       },
     },

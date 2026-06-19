@@ -43,7 +43,7 @@ function shouldEagerlyStartAgentMemory(params: {
   if (params.agentId === resolveDefaultAgentId(params.cfg)) {
     return true;
   }
-  if (params.cfg.agents?.defaults?.memory?.search?.enabled === true) {
+  if (params.cfg.memory?.search?.enabled === true) {
     return true;
   }
   return hasExplicitAgentMemoryConfig(params.cfg, params.agentId);

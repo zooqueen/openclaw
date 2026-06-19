@@ -18,11 +18,11 @@ export type MemoryQmdStartupMode = "off" | "idle" | "immediate";
  * Config owned by one memory extension.
  *
  * Core deliberately treats this as opaque at runtime. Config validation applies
- * the owning plugin's manifest schema after agent defaults and overrides merge.
+ * the owning plugin's manifest schema after global and agent overrides merge.
  */
 export type MemoryExtensionConfig = Record<string, unknown>;
 
-/** All memory settings resolved for one agent. */
+/** All memory settings that can be configured globally or overridden per agent. */
 export type AgentMemoryConfig = {
   search?: MemorySearchConfig;
   backend?: MemoryBackend;
@@ -31,15 +31,8 @@ export type AgentMemoryConfig = {
   extensions?: Record<string, MemoryExtensionConfig>;
 };
 
-/**
- * @deprecated Legacy top-level memory config accepted only by doctor migration.
- * Runtime config lives at `agents.defaults.memory` and `agents.list[].memory`.
- */
-export type MemoryConfig = {
-  backend?: MemoryBackend;
-  citations?: MemoryCitationsMode;
-  qmd?: MemoryQmdConfig;
-};
+/** Global memory settings applied to every agent before agent-specific overrides. */
+export type MemoryConfig = AgentMemoryConfig;
 
 /** QMD-specific memory backend config. */
 export type MemoryQmdConfig = {

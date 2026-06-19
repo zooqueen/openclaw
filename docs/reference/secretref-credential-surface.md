@@ -34,7 +34,7 @@ Scope intent:
 - `models.providers.*.request.tls.key`
 - `models.providers.*.request.tls.passphrase`
 - `skills.entries.*.apiKey`
-- `agents.defaults.memory.search.remote.apiKey`
+- `memory.search.remote.apiKey`
 - `agents.list[].tts.providers.*.apiKey`
 - `agents.list[].memory.search.remote.apiKey`
 - `talk.providers.*.apiKey`

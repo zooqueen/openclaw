@@ -268,7 +268,7 @@ function collectExtensionHintKeys(
     }
     for (const prefix of [
       `plugins.entries.${id}.config`,
-      `agents.defaults.memory.extensions.${id}`,
+      `memory.extensions.${id}`,
       `agents.list.*.memory.extensions.${id}`,
     ]) {
       collectPrefixedHintKeys(prefix);
@@ -317,7 +317,7 @@ function applyPluginHints(hints: ConfigUiHints, plugins: PluginUiMetadata[]): Co
     };
 
     const memoryBasePaths = [
-      `agents.defaults.memory.extensions.${id}`,
+      `memory.extensions.${id}`,
       `agents.list.*.memory.extensions.${id}`,
     ];
     for (const memoryBasePath of memoryBasePaths) {
@@ -431,22 +431,21 @@ function applyPluginSchemas(schema: ConfigSchema, plugins: PluginUiMetadata[]): 
   const root = asJsonSchemaObject(next);
   const pluginsNode = asJsonSchemaObject(root?.properties?.plugins);
   const entriesNode = asJsonSchemaObject(pluginsNode?.properties?.entries);
+  const memoryNode = asJsonSchemaObject(root?.properties?.memory);
+  const globalExtensionsNode = asJsonSchemaObject(memoryNode?.properties?.extensions);
   const agentsNode = asJsonSchemaObject(root?.properties?.agents);
-  const defaultsNode = asJsonSchemaObject(agentsNode?.properties?.defaults);
-  const defaultMemoryNode = asJsonSchemaObject(defaultsNode?.properties?.memory);
-  const defaultExtensionsNode = asJsonSchemaObject(defaultMemoryNode?.properties?.extensions);
   const listNode = asJsonSchemaObject(agentsNode?.properties?.list);
   const listItemsNode = asJsonSchemaObject(listNode?.items);
   const listMemoryNode = asJsonSchemaObject(listItemsNode?.properties?.memory);
   const listExtensionsNode = asJsonSchemaObject(listMemoryNode?.properties?.extensions);
-  if (!entriesNode || !defaultExtensionsNode || !listExtensionsNode) {
+  if (!entriesNode || !globalExtensionsNode || !listExtensionsNode) {
     return next;
   }
 
   const entryBase = asJsonSchemaObject(entriesNode.additionalProperties);
   const entryProperties = entriesNode.properties ?? {};
   entriesNode.properties = entryProperties;
-  const memoryExtensionProperties = [defaultExtensionsNode, listExtensionsNode].map((node) => {
+  const memoryExtensionProperties = [globalExtensionsNode, listExtensionsNode].map((node) => {
     const properties = node.properties ?? {};
     node.properties = properties;
     return properties;

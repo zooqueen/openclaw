@@ -159,6 +159,33 @@ describe("memory host SDK package internals", () => {
     expect(files).toEqual([path.join(peerWorkspaceDir, "note.md")]);
   });
 
+  it.runIf(process.platform !== "win32")(
+    "excludes private dreams when an extra path resolves through a parent symlink",
+    async () => {
+      const tmpDir = getTmpDir();
+      const workspaceDir = path.join(tmpDir, "workspace");
+      const peerWorkspaceDir = path.join(tmpDir, "peer-workspace");
+      const peerDreamDir = path.join(peerWorkspaceDir, "memory", ".dreams", "agents", "peer");
+      const aliasRoot = path.join(tmpDir, "workspace-alias");
+      fsSync.mkdirSync(workspaceDir, { recursive: true });
+      fsSync.mkdirSync(peerDreamDir, { recursive: true });
+      fsSync.writeFileSync(path.join(peerWorkspaceDir, "note.md"), "# Shared note");
+      fsSync.writeFileSync(path.join(peerDreamDir, "DREAMS.md"), "# Private dream");
+      fsSync.symlinkSync(tmpDir, aliasRoot);
+
+      const files = await listMemoryFiles(
+        workspaceDir,
+        [path.join(aliasRoot, "peer-workspace")],
+        undefined,
+        {
+          excludedRoots: [path.join(peerWorkspaceDir, "memory", ".dreams")],
+        },
+      );
+
+      expect(files).toEqual([path.join(aliasRoot, "peer-workspace", "note.md")]);
+    },
+  );
+
   it("allows top-level dreams path casing variants", () => {
     expect(isMemoryPath("dreams.md")).toBe(true);
     expect(isMemoryPath("DREAMS.md")).toBe(true);

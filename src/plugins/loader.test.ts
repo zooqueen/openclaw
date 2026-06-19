@@ -128,15 +128,11 @@ function countMatching<T>(items: readonly T[], predicate: (item: T) => boolean):
 
 function enabledDreamingAgentConfig() {
   return {
-    agents: {
-      defaults: {
-        memory: {
-          extensions: {
-            "memory-core": {
-              dreaming: {
-                enabled: true,
-              },
-            },
+    memory: {
+      extensions: {
+        "memory-core": {
+          dreaming: {
+            enabled: true,
           },
         },
       },

@@ -42,8 +42,8 @@ export function createMemoryGetToolOrThrow(
 export function createAutoCitationsMemorySearchTool(agentSessionKey: string) {
   return createMemorySearchToolOrThrow({
     config: asOpenClawConfig({
+      memory: { citations: "auto" },
       agents: {
-        defaults: { memory: { citations: "auto" } },
         list: [{ id: "main", default: true }],
       },
     }),

@@ -145,7 +145,7 @@ an API key for any supported provider.
 
 <Info>
 OpenClaw uses OpenAI embeddings by default. Set
-`agents.defaults.memory.search.provider` explicitly to use Gemini, Voyage,
+`memory.search.provider` explicitly to use Gemini, Voyage,
 Mistral, local, Ollama, Bedrock, GitHub Copilot, or OpenAI-compatible
 embeddings.
 </Info>

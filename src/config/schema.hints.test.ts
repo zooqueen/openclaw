@@ -166,7 +166,7 @@ describe("mapSensitivePaths", () => {
     schema.title = "OpenClawConfig";
     const hints = mapSensitivePaths(OpenClawSchema, "", {});
 
-    expect(hints["agents.defaults.memory.search.remote.apiKey"]?.sensitive).toBe(true);
+    expect(hints["memory.search.remote.apiKey"]?.sensitive).toBe(true);
     expect(hints["agents.list[].memory.search.remote.apiKey"]?.sensitive).toBe(true);
     expect(hints["gateway.auth.token"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.headers.*"]?.sensitive).toBe(true);

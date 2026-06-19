@@ -371,15 +371,11 @@ function createStatusGatewayProbeFailure() {
 
 export function createStatusMemorySearchConfig(): OpenClawConfig {
   return createStatusScanConfig({
-    agents: {
-      defaults: {
-        memory: {
-          search: {
-            provider: "local",
-            local: { modelPath: "/tmp/model.gguf" },
-            fallback: "none",
-          },
-        },
+    memory: {
+      search: {
+        provider: "local",
+        local: { modelPath: "/tmp/model.gguf" },
+        fallback: "none",
       },
     },
   });

@@ -809,15 +809,11 @@ describe("dreaming controller", () => {
     state.configSnapshot = {
       hash: "hash-1",
       config: {
-        agents: {
-          defaults: {
-            memory: {
-              extensions: {
-                "memory-core": {
-                  dreaming: {
-                    enabled: true,
-                  },
-                },
+        memory: {
+          extensions: {
+            "memory-core": {
+              dreaming: {
+                enabled: true,
               },
             },
           },
@@ -833,15 +829,11 @@ describe("dreaming controller", () => {
     expect(patchPayload.baseHash).toBe("hash-1");
     expect(patchPayload.sessionKey).toBe("main");
     expect(getConfigPatchRawPayload(request)).toEqual({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
-                  enabled: false,
-                },
-              },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              enabled: false,
             },
           },
         },
@@ -950,15 +942,11 @@ describe("dreaming controller", () => {
     expect(ok).toBe(true);
     expect(hasRequestMethodCall(request, "config.schema.lookup")).toBe(false);
     expect(getConfigPatchRawPayload(request)).toEqual({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
-                  enabled: true,
-                },
-              },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              enabled: true,
             },
           },
         },
@@ -969,15 +957,11 @@ describe("dreaming controller", () => {
   it("reads dreaming enabled state from the default memory-core extension", () => {
     expect(
       resolveConfiguredDreaming({
-        agents: {
-          defaults: {
-            memory: {
-              extensions: {
-                "memory-core": {
-                  dreaming: {
-                    enabled: true,
-                  },
-                },
+        memory: {
+          extensions: {
+            "memory-core": {
+              dreaming: {
+                enabled: true,
               },
             },
           },
@@ -992,7 +976,7 @@ describe("dreaming controller", () => {
   it("defaults dreaming to disabled when memory-core config is absent", () => {
     expect(
       resolveConfiguredDreaming({
-        agents: { defaults: { memory: {} } },
+        memory: {},
       }),
     ).toEqual({
       pluginId: "memory-core",

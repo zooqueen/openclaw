@@ -310,19 +310,20 @@ describe("QmdMemoryManager", () => {
 
   function withAgentMemoryConfig(
     current: OpenClawConfig,
-    memory: NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]>["memory"],
+    memory: NonNullable<OpenClawConfig["memory"]>,
   ): OpenClawConfig {
     const defaults = current.agents?.defaults ?? {};
     return {
       ...current,
+      memory: {
+        ...current.memory,
+        ...memory,
+      },
       agents: {
         ...current.agents,
         defaults: {
           ...defaults,
-          memory: {
-            ...defaults.memory,
-            ...memory,
-          },
+
         },
       },
     };
@@ -363,23 +364,24 @@ describe("QmdMemoryManager", () => {
     // match the logical package command. Tests that verify wrapper resolution
     // install explicit shim fixtures inline.
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 60_000, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: false, onSessionStart: false, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 60_000, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: false, onSessionStart: false, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -448,23 +450,24 @@ describe("QmdMemoryManager", () => {
 
   it("runs a qmd sync once for the first search in a fresh session", async () => {
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: false, onSessionStart: true, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: false, onSessionStart: true, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -492,23 +495,24 @@ describe("QmdMemoryManager", () => {
   it("does not block first search on session-start sync completion", async () => {
     vi.useFakeTimers();
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: false, onSessionStart: true, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: false, onSessionStart: true, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -547,23 +551,24 @@ describe("QmdMemoryManager", () => {
   it("runs qmd sync when watched collection files change", async () => {
     vi.useFakeTimers();
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -668,27 +673,28 @@ describe("QmdMemoryManager", () => {
     const rootNames = ["build", "dist", "vendor", ".cache"];
     const roots = rootNames.map((name) => path.join(workspaceDir, name));
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: roots.map((root) => ({
+            path: root,
+            pattern: "**/*.md",
+            name: path.basename(root),
+          })),
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: roots.map((root) => ({
-                path: root,
-                pattern: "**/*.md",
-                name: path.basename(root),
-              })),
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -715,26 +721,27 @@ describe("QmdMemoryManager", () => {
   it("prefers a nested explicit qmd collection root over a broader watched root", async () => {
     const nestedRoot = path.join(workspaceDir, "build");
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [
+            { path: workspaceDir, pattern: "**/*.md", name: "workspace" },
+            { path: nestedRoot, pattern: "**/*.md", name: "build" },
+          ],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [
-                { path: workspaceDir, pattern: "**/*.md", name: "workspace" },
-                { path: nestedRoot, pattern: "**/*.md", name: "build" },
-              ],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -753,23 +760,24 @@ describe("QmdMemoryManager", () => {
   it("delays qmd watch sync until changed file stats settle", async () => {
     vi.useFakeTimers();
     cfg = {
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          provider: "openai",
+          model: "mock-embed",
+          store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
+          sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
+        },
+      },
       agents: {
         defaults: {
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              provider: "openai",
-              model: "mock-embed",
-              store: { path: path.join(workspaceDir, "index.sqlite"), vector: { enabled: false } },
-              sync: { watch: true, watchDebounceMs: 25, onSessionStart: false, onSearch: false },
-            },
-          },
+
         },
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
@@ -918,24 +926,25 @@ describe("QmdMemoryManager", () => {
   it("keeps one-shot CLI searches from scheduling session-start updates", async () => {
     cfg = {
       ...cfg,
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          searchMode: "search",
+          update: { interval: "0s", debounceMs: 60_000, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+        search: {
+          ...cfg.memory?.search,
+          sync: { watch: false, onSessionStart: true, onSearch: true },
+        },
+      },
       agents: {
         ...cfg.agents,
         defaults: {
           ...cfg.agents?.defaults,
           workspace: workspaceDir,
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              searchMode: "search",
-              update: { interval: "0s", debounceMs: 60_000, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-            search: {
-              ...cfg.agents?.defaults?.memory?.search,
-              sync: { watch: false, onSessionStart: true, onSearch: true },
-            },
-          },
+
         },
       },
     } as OpenClawConfig;
@@ -1051,18 +1060,16 @@ describe("QmdMemoryManager", () => {
     await fs.mkdir(devWorkspaceDir);
     cfg = {
       ...cfg,
-      agents: {
-        defaults: {
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              update: { interval: "0s", debounceMs: 60_000, onBoot: false },
-              paths: [{ path: devWorkspaceDir, pattern: "**/*.md", name: "workspace" }],
-              sessions: { enabled: true },
-            },
-          },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: { interval: "0s", debounceMs: 60_000, onBoot: false },
+          paths: [{ path: devWorkspaceDir, pattern: "**/*.md", name: "workspace" }],
+          sessions: { enabled: true },
         },
+      },
+      agents: {
         list: [
           { id: agentId, default: true, workspace: workspaceDir },
           { id: devAgentId, workspace: devWorkspaceDir },
@@ -4583,20 +4590,21 @@ describe("QmdMemoryManager", () => {
   it("does not hold the per-store write lock while waiting for embed capacity", async () => {
     cfg = {
       ...cfg,
+      memory: {
+        ...cfg.memory,
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          searchMode: "query",
+          update: { interval: "0s", debounceMs: 0, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+      },
       agents: {
         ...cfg.agents,
         defaults: {
           ...cfg.agents?.defaults,
-          memory: {
-            ...cfg.agents?.defaults?.memory,
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              searchMode: "query",
-              update: { interval: "0s", debounceMs: 0, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-          },
+
         },
         list: [
           { id: agentId, default: true, workspace: workspaceDir },
@@ -5083,7 +5091,7 @@ describe("QmdMemoryManager", () => {
       "utf-8",
     );
 
-    const currentMemory = cfg.agents?.defaults?.memory;
+    const currentMemory = cfg.memory;
     cfg = withAgentMemoryConfig(cfg, {
       ...currentMemory,
       qmd: {
@@ -5369,18 +5377,16 @@ describe("QmdMemoryManager", () => {
     workspaceDir = path.join(stateDir, "agents", agentId);
     await fs.mkdir(workspaceDir, { recursive: true });
     cfg = {
-      agents: {
-        defaults: {
-          memory: {
-            backend: "qmd",
-            qmd: {
-              includeDefaultMemory: false,
-              sessions: { enabled: true },
-              update: { interval: "0s", debounceMs: 60_000, onBoot: false },
-              paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
-            },
-          },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          sessions: { enabled: true },
+          update: { interval: "0s", debounceMs: 60_000, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
         },
+      },
+      agents: {
         list: [{ id: agentId, default: true, workspace: workspaceDir }],
       },
     } as OpenClawConfig;
@@ -5789,8 +5795,8 @@ describe("QmdMemoryManager", () => {
 
     const { manager } = await createManager({
       cfg: withAgentMemoryConfig(cfg, {
-        ...cfg.agents?.defaults?.memory,
-        qmd: { ...cfg.agents?.defaults?.memory?.qmd, searchMode: "query" },
+        ...cfg.memory,
+        qmd: { ...cfg.memory?.qmd, searchMode: "query" },
       }),
     });
 
@@ -5820,8 +5826,8 @@ describe("QmdMemoryManager", () => {
 
     const { manager } = await createManager({
       cfg: withAgentMemoryConfig(cfg, {
-        ...cfg.agents?.defaults?.memory,
-        qmd: { ...cfg.agents?.defaults?.memory?.qmd, searchMode: "query" },
+        ...cfg.memory,
+        qmd: { ...cfg.memory?.qmd, searchMode: "query" },
       }),
     });
 
@@ -5856,8 +5862,8 @@ describe("QmdMemoryManager", () => {
 
     const { manager } = await createManager({
       cfg: withAgentMemoryConfig(cfg, {
-        ...cfg.agents?.defaults?.memory,
-        qmd: { ...cfg.agents?.defaults?.memory?.qmd, searchMode: "query" },
+        ...cfg.memory,
+        qmd: { ...cfg.memory?.qmd, searchMode: "query" },
       }),
     });
 
@@ -5877,8 +5883,8 @@ describe("QmdMemoryManager", () => {
 
     const { manager } = await createManager({
       cfg: withAgentMemoryConfig(cfg, {
-        ...cfg.agents?.defaults?.memory,
-        qmd: { ...cfg.agents?.defaults?.memory?.qmd, searchMode: "query" },
+        ...cfg.memory,
+        qmd: { ...cfg.memory?.qmd, searchMode: "query" },
       }),
     });
 
@@ -5895,8 +5901,8 @@ describe("QmdMemoryManager", () => {
   it("skips qmd status vector probes for lexical search mode", async () => {
     const { manager } = await createManager({
       cfg: withAgentMemoryConfig(cfg, {
-        ...cfg.agents?.defaults?.memory,
-        qmd: { ...cfg.agents?.defaults?.memory?.qmd, searchMode: "search" },
+        ...cfg.memory,
+        qmd: { ...cfg.memory?.qmd, searchMode: "search" },
       }),
     });
     const baselineCalls = spawnMock.mock.calls.length;

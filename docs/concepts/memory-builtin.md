@@ -27,13 +27,9 @@ To set a provider explicitly:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "openai",
-        },
-      },
+  memory: {
+    search: {
+      provider: "openai",
     },
   },
 }
@@ -50,16 +46,12 @@ openclaw plugins install @openclaw/llama-cpp-provider
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "local",
-          fallback: "none",
-          local: {
-            modelPath: "~/.node-llama-cpp/models/embeddinggemma-300m-qat-Q8_0.gguf",
-          },
-        },
+  memory: {
+    search: {
+      provider: "local",
+      fallback: "none",
+      local: {
+        modelPath: "~/.node-llama-cpp/models/embeddinggemma-300m-qat-Q8_0.gguf",
       },
     },
   },

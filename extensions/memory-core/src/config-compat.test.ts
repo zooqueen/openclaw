@@ -28,9 +28,9 @@ describe("memory-core config compatibility", () => {
     } as OpenClawConfig);
 
     expect(migration?.changes).toEqual([
-      "Moved plugins.entries.memory-lancedb.config.dreaming → agents.defaults.memory.extensions.memory-core.dreaming.",
+      "Moved plugins.entries.memory-lancedb.config.dreaming → memory.extensions.memory-core.dreaming.",
     ]);
-    expect(migration?.config.agents?.defaults?.memory?.extensions?.["memory-core"]).toEqual({
+    expect(migration?.config.memory?.extensions?.["memory-core"]).toEqual({
       dreaming: {
         enabled: true,
         frequency: "0 */6 * * *",
@@ -45,15 +45,11 @@ describe("memory-core config compatibility", () => {
 
   it("preserves explicit canonical dreaming settings", () => {
     const migration = migrateMemoryCoreLegacyConfig({
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
-                  enabled: false,
-                },
-              },
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              enabled: false,
             },
           },
         },
@@ -75,7 +71,7 @@ describe("memory-core config compatibility", () => {
       },
     } as OpenClawConfig);
 
-    expect(migration?.config.agents?.defaults?.memory?.extensions?.["memory-core"]).toEqual({
+    expect(migration?.config.memory?.extensions?.["memory-core"]).toEqual({
       dreaming: {
         enabled: false,
         frequency: "0 */6 * * *",

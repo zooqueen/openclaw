@@ -8,16 +8,14 @@ import { buildConfigSchema } from "./schema.js";
 describe("realredactConfigSnapshot_real", () => {
   it("main schema redact works (samples)", () => {
     const snapshot = makeSnapshot({
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              remote: {
-                apiKey: "1234",
-              },
-            },
+      memory: {
+        search: {
+          remote: {
+            apiKey: "1234",
           },
         },
+      },
+      agents: {
         list: [
           {
             memory: {
@@ -34,10 +32,10 @@ describe("realredactConfigSnapshot_real", () => {
 
     const result = redactConfigSnapshot(snapshot, mainSchemaHints);
     const config = result.config as typeof snapshot.config;
-    expect(config.agents.defaults.memory.search.remote.apiKey).toBe(REDACTED_SENTINEL);
+    expect(config.memory.search.remote.apiKey).toBe(REDACTED_SENTINEL);
     expect(config.agents.list[0].memory.search.remote.apiKey).toBe(REDACTED_SENTINEL);
     const restored = restoreRedactedValues(result.config, snapshot.config, mainSchemaHints);
-    expect(restored.agents.defaults.memory.search.remote.apiKey).toBe("1234");
+    expect(restored.memory.search.remote.apiKey).toBe("1234");
     expect(restored.agents.list[0].memory.search.remote.apiKey).toBe("6789");
   });
 

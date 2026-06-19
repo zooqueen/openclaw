@@ -367,7 +367,7 @@ describe("runCodexAppServerAttempt context-engine lifecycle", () => {
     params.fallbackReason = "provider_unavailable";
     params.degradedReason = "context_overflow";
     params.config = {
-      agents: { defaults: { memory: { citations: "on" } } },
+      memory: { citations: "on" },
     } as EmbeddedRunAttemptParams["config"];
 
     const run = runCodexAppServerAttempt(params);

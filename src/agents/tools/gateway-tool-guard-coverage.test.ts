@@ -394,10 +394,12 @@ describe("gateway config mutation guard coverage", () => {
     );
   });
 
-  it("blocks agents.defaults.memory.qmd.command rewrites via config.patch", () => {
+  it("blocks memory.qmd.command rewrites via config.patch", () => {
     expectBlocked(
-      { agents: { defaults: { memory: { qmd: { command: "/usr/local/bin/qmd" } } } } },
-      { agents: { defaults: { memory: { qmd: { command: "/tmp/attacker.sh" } } } } },
+      { memory: { qmd: { command: "/usr/local/bin/qmd" } },
+ },
+      { memory: { qmd: { command: "/tmp/attacker.sh" } },
+ },
     );
   });
 

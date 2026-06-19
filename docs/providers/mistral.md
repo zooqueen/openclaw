@@ -208,12 +208,8 @@ matching `sampleRate` only if your upstream stream is already raw PCM.
 
     ```json5
     {
-      agents: {
-        defaults: {
-          memory: {
-            search: { provider: "mistral" },
-          },
-        },
+      memory: {
+        search: { provider: "mistral" },
       },
     }
     ```

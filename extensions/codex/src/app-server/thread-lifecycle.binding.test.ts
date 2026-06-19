@@ -1296,7 +1296,8 @@ describe("Codex app-server thread lifecycle bindings", () => {
       assemble: vi.fn(),
       compact: vi.fn(),
     } as never;
-    params.config = { agents: { defaults: { memory: { citations: "on" } } } } as never;
+    params.config = { memory: { citations: "on" },
+ } as never;
     params.contextTokenBudget = 400_000;
     const appServer = createThreadLifecycleAppServerOptions();
     const request = vi.fn(async (method: string) => {
@@ -1340,8 +1341,8 @@ describe("Codex app-server thread lifecycle bindings", () => {
       compact: vi.fn(),
     } as never;
     params.config = {
+      memory: { citations: "on" },
       agents: {
-        defaults: { memory: { citations: "on" } },
         list: [{ id: "writer", memory: { citations: "off" } }],
       },
     } as never;

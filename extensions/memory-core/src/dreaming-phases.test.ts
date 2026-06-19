@@ -129,17 +129,17 @@ function normalizeDreamingTestConfig(config: OpenClawConfig): OpenClawConfig {
   }
   return {
     ...config,
+    memory: {
+      ...config.memory,
+      extensions: {
+        ...config.memory?.extensions,
+        "memory-core": legacy,
+      },
+    },
     agents: {
       ...config.agents,
       defaults: {
         ...config.agents?.defaults,
-        memory: {
-          ...config.agents?.defaults?.memory,
-          extensions: {
-            ...config.agents?.defaults?.memory?.extensions,
-            "memory-core": legacy,
-          },
-        },
       },
     },
   };
@@ -1123,31 +1123,31 @@ describe("memory-core dreaming phases", () => {
       "utf-8",
     );
     const config: OpenClawConfig = {
-      agents: {
-        defaults: {
-          workspace: workspaceDir,
-          userTimezone: "UTC",
-          memory: {
-            extensions: {
-              "memory-core": {
-                dreaming: {
+      memory: {
+        extensions: {
+          "memory-core": {
+            dreaming: {
+              enabled: true,
+              timezone: "UTC",
+              phases: {
+                light: {
                   enabled: true,
-                  timezone: "UTC",
-                  phases: {
-                    light: {
-                      enabled: true,
-                      limit: 20,
-                      lookbackDays: 7,
-                    },
-                    rem: {
-                      enabled: false,
-                      limit: 0,
-                    },
-                  },
+                  limit: 20,
+                  lookbackDays: 7,
+                },
+                rem: {
+                  enabled: false,
+                  limit: 0,
                 },
               },
             },
           },
+        },
+      },
+      agents: {
+        defaults: {
+          workspace: workspaceDir,
+          userTimezone: "UTC",
         },
         list: [
           { id: "research", workspace: workspaceDir },
@@ -2472,14 +2472,14 @@ describe("memory-core dreaming phases", () => {
 
     const { beforeAgentReply } = createHarness(
       {
+        memory: {
+          search: {
+            enabled: false,
+          },
+        },
         agents: {
           defaults: {
             workspace: workspaceDir,
-            memory: {
-              search: {
-                enabled: false,
-              },
-            },
           },
         },
         plugins: {

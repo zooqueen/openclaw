@@ -213,7 +213,7 @@ describe("loadSqliteVecExtension", () => {
     expect(result).toEqual({
       ok: false,
       error:
-        "sqlite-vec platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set agents.defaults.memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Original error: dlopen failed: file not found",
+        "sqlite-vec platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Original error: dlopen failed: file not found",
     });
   });
 
@@ -231,7 +231,7 @@ describe("loadSqliteVecExtension", () => {
     expect(result).toEqual({
       ok: false,
       error:
-        "sqlite-vec platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set agents.defaults.memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Original error: sqlite-vec health check failed after loading /install/node_modules/sqlite-vec-linux-x64/vec0.so | no such function: vec_version",
+        "sqlite-vec platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Original error: sqlite-vec health check failed after loading /install/node_modules/sqlite-vec-linux-x64/vec0.so | no such function: vec_version",
     });
   });
 
@@ -252,7 +252,7 @@ describe("loadSqliteVecExtension", () => {
     expect(result).toEqual({
       ok: false,
       error:
-        "sqlite-vec package failed to load, and platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set agents.defaults.memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Package error: bundled sqlite-vec load failed. Variant error: platform variant failed",
+        "sqlite-vec package failed to load, and platform variant sqlite-vec-linux-x64 failed to load from /install/node_modules/sqlite-vec-linux-x64/vec0.so. Set memory.search.store.vector.extensionPath, or an agent-specific memory.search.store.vector.extensionPath, to a sqlite-vec loadable extension path. Package error: bundled sqlite-vec load failed. Variant error: platform variant failed",
     });
   });
 });

@@ -215,9 +215,9 @@ describe("memory watcher config", () => {
   }
 
   function createWatcherConfig(overrides?: Partial<MemorySearchConfig>): OpenClawConfig {
-    const defaults: NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]> = {
-      workspace: workspaceDir,
+    return {
       memory: {
+        backend: "builtin",
         search: {
           provider: "openai",
           model: "mock-embed",
@@ -228,15 +228,9 @@ describe("memory watcher config", () => {
           ...overrides,
         },
       },
-    };
-    return {
       agents: {
         defaults: {
-          ...defaults,
-          memory: {
-            ...defaults.memory,
-            backend: "builtin",
-          },
+          workspace: workspaceDir,
         },
         list: [{ id: "main", default: true }],
       },

@@ -1204,15 +1204,14 @@ function pushMemorySessionTranscriptIndexing(
   cfg: Record<string, unknown>,
 ): void {
   const agents = isRecord(cfg.agents) ? cfg.agents : {};
-  const defaults = isRecord(agents.defaults) ? agents.defaults : {};
-  const memory = isRecord(defaults.memory) ? defaults.memory : {};
+  const memory = isRecord(cfg.memory) ? cfg.memory : {};
   const qmd = isRecord(memory.qmd) ? memory.qmd : {};
   const qmdSessions = isRecord(qmd.sessions) ? qmd.sessions : {};
   if (qmdSessions.enabled !== undefined) {
     entries.push({
       id: "memory-qmd-session-transcripts",
       kind: "memorySessionTranscriptIndexing",
-      source: "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
+      source: "oc://openclaw.config/memory/qmd/sessions/enabled",
       scope: "global",
       value: memory.backend === "qmd" && readBoolean(qmdSessions.enabled) === true,
       explicit: true,
@@ -1223,9 +1222,9 @@ function pushMemorySessionTranscriptIndexing(
   const defaultSessionMemory = memorySearchSessionTranscriptIndexing(defaultsMemorySearch);
   if (defaultSessionMemory !== undefined) {
     entries.push({
-      id: "agents-defaults-memory-session-transcripts",
+      id: "memory-session-transcripts",
       kind: "memorySessionTranscriptIndexing",
-      source: "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
+      source: "oc://openclaw.config/memory/search/experimental/sessionMemory",
       scope: "global",
       value: defaultSessionMemory,
       explicit: true,
@@ -1246,10 +1245,10 @@ function pushMemorySessionTranscriptIndexing(
       `agent-${index}`;
     const agentMemory = isRecord(rawAgent.memory) ? rawAgent.memory : undefined;
     const memorySearch = isRecord(agentMemory?.search) ? agentMemory.search : undefined;
-    const agentSessionMemory =
-      memorySearch === undefined
-        ? defaultSessionMemory
-        : memorySearchSessionTranscriptIndexing(memorySearch, defaultsMemorySearch);
+    const normalizedAgentId = normalizeAgentId(agentId);
+    const effectiveMemory = resolveAgentMemoryConfig(cfg as OpenClawConfig, normalizedAgentId);
+    const effectiveMemorySearch = isRecord(effectiveMemory?.search) ? effectiveMemory.search : undefined;
+    const agentSessionMemory = memorySearchSessionTranscriptIndexing(effectiveMemorySearch);
     const explicit = memorySearchSessionTranscriptIndexingHasLocalConfig(memorySearch);
     if (agentSessionMemory !== undefined) {
       entries.push({
@@ -1257,7 +1256,7 @@ function pushMemorySessionTranscriptIndexing(
         kind: "memorySessionTranscriptIndexing",
         source: explicit
           ? `oc://openclaw.config/agents/list/#${index}/memory/search/experimental/sessionMemory`
-          : "oc://openclaw.config/agents/defaults/memory/search/experimental/sessionMemory",
+          : "oc://openclaw.config/memory/search/experimental/sessionMemory",
         scope: "agent",
         agentId: normalizeAgentId(agentId),
         value: agentSessionMemory,
@@ -1265,8 +1264,6 @@ function pushMemorySessionTranscriptIndexing(
       });
     }
 
-    const normalizedAgentId = normalizeAgentId(agentId);
-    const effectiveMemory = resolveAgentMemoryConfig(cfg as OpenClawConfig, normalizedAgentId);
     const effectiveQmd = isRecord(effectiveMemory?.qmd) ? effectiveMemory.qmd : {};
     const effectiveQmdSessions = isRecord(effectiveQmd.sessions) ? effectiveQmd.sessions : {};
     if (effectiveQmdSessions.enabled === undefined) {
@@ -1280,7 +1277,7 @@ function pushMemorySessionTranscriptIndexing(
       kind: "memorySessionTranscriptIndexing",
       source: qmdExplicit
         ? `oc://openclaw.config/agents/list/#${index}/memory/qmd/sessions/enabled`
-        : "oc://openclaw.config/agents/defaults/memory/qmd/sessions/enabled",
+        : "oc://openclaw.config/memory/qmd/sessions/enabled",
       scope: "agent",
       agentId: normalizedAgentId,
       value:
@@ -1290,23 +1287,14 @@ function pushMemorySessionTranscriptIndexing(
   });
 }
 
-function memorySearchSessionTranscriptIndexing(
-  memorySearch: unknown,
-  inheritedMemorySearch?: unknown,
-): boolean | undefined {
+function memorySearchSessionTranscriptIndexing(memorySearch: unknown): boolean | undefined {
   if (!isRecord(memorySearch)) {
     return undefined;
   }
   const experimental = isRecord(memorySearch.experimental) ? memorySearch.experimental : {};
-  const inherited = isRecord(inheritedMemorySearch) ? inheritedMemorySearch : {};
-  const inheritedExperimental = isRecord(inherited.experimental) ? inherited.experimental : {};
-  const enabled = readBoolean(memorySearch.enabled) ?? readBoolean(inherited.enabled) ?? true;
-  const sessionMemory =
-    readBoolean(experimental.sessionMemory) ?? readBoolean(inheritedExperimental.sessionMemory);
-  const sourcesIncludeSessions =
-    memorySearchSourcesIncludeSessions(memorySearch) ??
-    memorySearchSourcesIncludeSessions(inherited) ??
-    false;
+  const enabled = readBoolean(memorySearch.enabled) ?? true;
+  const sessionMemory = readBoolean(experimental.sessionMemory);
+  const sourcesIncludeSessions = memorySearchSourcesIncludeSessions(memorySearch) ?? false;
   if (
     sessionMemory === undefined &&
     memorySearchSourcesIncludeSessions(memorySearch) === undefined &&
@@ -1434,7 +1422,8 @@ function isSecretInputPath(path: readonly string[]): boolean {
     matchesConfigPath(path, ["models", "providers", "*", "headers", "*"]) ||
     isConfiguredProviderRequestSecretPath(path, ["models", "providers", "*"]) ||
     isMediaConfiguredProviderRequestSecretPath(path) ||
-    matchesConfigPath(path, ["agents", "defaults", "memory", "search", "remote", "headers", "*"]) ||
+    matchesConfigPath(path, ["memory", "search", "remote", "headers", "*"]) ||
+    matchesConfigPath(path, ["agents", "list", "#", "memory", "search", "remote", "headers", "*"]) ||
     matchesConfigPath(path, ["diagnostics", "otel", "headers", "*"])
   );
 }

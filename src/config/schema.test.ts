@@ -133,15 +133,11 @@ describe("config schema", () => {
 
   it("accepts qmd query rerank override", () => {
     const result = OpenClawSchema.safeParse({
-      agents: {
-        defaults: {
-          memory: {
-            backend: "qmd",
-            qmd: {
-              searchMode: "query",
-              rerank: false,
-            },
-          },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          searchMode: "query",
+          rerank: false,
         },
       },
     });
@@ -337,7 +333,7 @@ describe("config schema", () => {
     expect(progressPropsFor("slack")).toHaveProperty("commentary");
     expect(progressPropsFor("telegram")).toHaveProperty("commentary");
     expect(res.uiHints["channels.matrix"]?.label).toBe("Matrix");
-    expect(res.uiHints["agents.defaults.memory.extensions.voice-call"]?.label).toBe(
+    expect(res.uiHints["memory.extensions.voice-call"]?.label).toBe(
       "Voice Call Memory Config",
     );
     expect(res.uiHints["agents.list.*.memory.extensions.voice-call"]?.label).toBe(

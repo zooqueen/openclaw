@@ -97,7 +97,7 @@ describe("legacy memory search config migrate", () => {
     });
 
     expect((res.config as Record<string, unknown> | undefined)?.memorySearch).toBeUndefined();
-    expect(res.config?.agents?.defaults?.memory?.search?.store).toEqual({
+    expect(res.config?.memory?.search?.store).toEqual({
       fts: { tokenizer: "trigram" },
       vector: { enabled: false },
     });
@@ -105,7 +105,7 @@ describe("legacy memory search config migrate", () => {
       vector: { enabled: true },
     });
     expect(res.changes).toContain(
-      "Removed agents.defaults.memory.search.store.path; memory indexes now use each agent database.",
+      "Removed memory.search.store.path; memory indexes now use each agent database.",
     );
     expect(res.changes).toContain(
       "Removed agents.list[0].memory.search.store.path; memory indexes now use each agent database.",
@@ -590,7 +590,7 @@ describe("legacy memory search config migrate", () => {
     );
   });
 
-  it("rewrites top-level legacy auto provider after moving memorySearch into agent defaults", () => {
+  it("rewrites top-level legacy auto provider after moving memorySearch into root memory", () => {
     const raw = {
       memorySearch: {
         provider: "auto",
@@ -605,14 +605,14 @@ describe("legacy memory search config migrate", () => {
 
     const res = migrateLegacyConfigForTest(raw);
 
-    expect(res.config?.agents?.defaults?.memory?.search).toEqual({
+    expect(res.config?.memory?.search).toEqual({
       provider: "openai",
       model: "text-embedding-3-small",
     });
     expect(res.config).not.toHaveProperty("memorySearch");
     expect(res.changes).toEqual([
-      "Moved memorySearch → agents.defaults.memory.search.",
-      'Moved agents.defaults.memory.search.provider from legacy "auto" to "openai".',
+      "Moved memorySearch → memory.search.",
+      'Moved memory.search.provider from legacy "auto" to "openai".',
     ]);
   });
 
@@ -648,19 +648,65 @@ describe("legacy memory search config migrate", () => {
 
     const res = migrateLegacyConfigForTest(raw);
 
-    expect(res.config?.agents?.defaults?.memory?.search?.provider).toBe("openai");
+    expect(res.config?.memory?.search?.provider).toBe("openai");
     expect(res.config?.agents?.list?.[0]?.memory?.search?.provider).toBe("openai");
     expect(res.config?.agents?.list?.[1]?.memory?.search?.provider).toBe("openai-compatible");
     expect(res.changes).toEqual([
-      "Moved agents.defaults.memorySearch → agents.defaults.memory.search.",
+      "Moved agents.defaults.memorySearch → memory.search.",
       "Moved agents.list.0.memorySearch → agents.list.0.memory.search.",
       "Moved agents.list.1.memorySearch → agents.list.1.memory.search.",
-      'Moved agents.defaults.memory.search.provider from legacy "auto" to "openai".',
+      'Moved memory.search.provider from legacy "auto" to "openai".',
       'Moved agents.list.0.memory.search.provider from legacy "auto" to "openai".',
     ]);
   });
 
-  it("moves global memory and direct agent dreaming into agent memory config", () => {
+  it("moves the former agent-default memory baseline to root memory", () => {
+    const raw = {
+      memory: {
+        citations: "off",
+        search: {
+          provider: "openai",
+          remote: { baseUrl: "https://api.example/v1" },
+        },
+      },
+      agents: {
+        defaults: {
+          memory: {
+            backend: "qmd",
+            citations: "auto",
+            qmd: { searchMode: "query" },
+            search: {
+              provider: "ollama",
+              model: "nomic-embed-text",
+            },
+          },
+        },
+      },
+    };
+
+    expect(findLegacyConfigIssues(raw).map((issue) => issue.path)).toEqual([
+      "agents.defaults.memory",
+    ]);
+
+    const res = migrateLegacyConfigForTest(raw);
+
+    expect(res.config?.memory).toEqual({
+      backend: "qmd",
+      citations: "off",
+      qmd: { searchMode: "query" },
+      search: {
+        provider: "openai",
+        model: "nomic-embed-text",
+        remote: { baseUrl: "https://api.example/v1" },
+      },
+    });
+    expect(res.config?.agents?.defaults).not.toHaveProperty("memory");
+    expect(res.changes).toEqual([
+      "Merged agents.defaults.memory → memory (filled missing fields from legacy; kept explicit root memory settings).",
+    ]);
+  });
+
+  it("preserves root memory and moves direct agent dreaming into agent memory config", () => {
     const raw = {
       memory: {
         backend: "qmd",
@@ -684,7 +730,7 @@ describe("legacy memory search config migrate", () => {
 
     const res = migrateLegacyConfigForTest(raw);
 
-    expect(res.config?.agents?.defaults?.memory).toEqual({
+    expect(res.config?.memory).toEqual({
       backend: "qmd",
       citations: "off",
       qmd: {
@@ -697,10 +743,8 @@ describe("legacy memory search config migrate", () => {
         frequency: "2h",
       },
     });
-    expect(res.config).not.toHaveProperty("memory");
     expect(res.config?.agents?.list?.[0]).not.toHaveProperty("dreaming");
     expect(res.changes).toEqual([
-      "Moved memory → agents.defaults.memory (kept explicit agent memory settings).",
       "Moved agents.list.0.dreaming → agents.list.0.memory.extensions.memory-core.dreaming.",
     ]);
   });

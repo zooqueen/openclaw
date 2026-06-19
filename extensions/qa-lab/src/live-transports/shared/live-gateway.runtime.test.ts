@@ -132,17 +132,13 @@ describe("startQaLiveLaneGateway", () => {
           contextEngine: "qmd",
         },
       },
-      agents: {
-        defaults: {
-          memory: {
-            search: {
-              enabled: true,
-              sync: {
-                onSearch: true,
-                onSessionStart: true,
-                watch: true,
-              },
-            },
+      memory: {
+        search: {
+          enabled: true,
+          sync: {
+            onSearch: true,
+            onSessionStart: true,
+            watch: true,
           },
         },
       },
@@ -152,10 +148,10 @@ describe("startQaLiveLaneGateway", () => {
     expect(cfg?.plugins?.entries).not.toHaveProperty("memory-core");
     expect(cfg?.plugins?.slots?.memory).toBe("none");
     expect(cfg?.plugins?.slots?.contextEngine).toBe("qmd");
-    expect(cfg?.agents?.defaults?.memory?.search?.enabled).toBe(false);
-    expect(cfg?.agents?.defaults?.memory?.search?.sync?.onSearch).toBe(false);
-    expect(cfg?.agents?.defaults?.memory?.search?.sync?.onSessionStart).toBe(false);
-    expect(cfg?.agents?.defaults?.memory?.search?.sync?.watch).toBe(false);
+    expect(cfg?.memory?.search?.enabled).toBe(false);
+    expect(cfg?.memory?.search?.sync?.onSearch).toBe(false);
+    expect(cfg?.memory?.search?.sync?.onSessionStart).toBe(false);
+    expect(cfg?.memory?.search?.sync?.watch).toBe(false);
   });
 
   it("forwards gateway stop options to the child harness", async () => {

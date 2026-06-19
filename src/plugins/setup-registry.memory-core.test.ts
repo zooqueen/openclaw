@@ -30,9 +30,9 @@ describe("Memory Core setup config migration", () => {
     });
 
     expect(result.changes).toEqual([
-      "Moved plugins.entries.memory-lancedb.config.dreaming → agents.defaults.memory.extensions.memory-core.dreaming.",
+      "Moved plugins.entries.memory-lancedb.config.dreaming → memory.extensions.memory-core.dreaming.",
     ]);
-    expect(result.config.agents?.defaults?.memory?.extensions?.["memory-core"]).toEqual({
+    expect(result.config.memory?.extensions?.["memory-core"]).toEqual({
       dreaming: {
         enabled: true,
       },

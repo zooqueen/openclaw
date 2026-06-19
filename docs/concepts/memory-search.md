@@ -18,13 +18,9 @@ backend, set a provider explicitly:
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          provider: "openai", // or "gemini", "local", "ollama", "openai-compatible", etc.
-        },
-      },
+  memory: {
+    search: {
+      provider: "openai", // or "gemini", "local", "ollama", "openai-compatible", etc.
     },
   },
 }
@@ -119,16 +115,12 @@ different daily notes.
 
 ```json5
 {
-  agents: {
-    defaults: {
-      memory: {
-        search: {
-          query: {
-            hybrid: {
-              mmr: { enabled: true },
-              temporalDecay: { enabled: true },
-            },
-          },
+  memory: {
+    search: {
+      query: {
+        hybrid: {
+          mmr: { enabled: true },
+          temporalDecay: { enabled: true },
         },
       },
     },
@@ -160,7 +152,7 @@ earlier conversations. This is opt-in via
 
 **Local embeddings time out?** `ollama`, `lmstudio`, and `local` use a longer
 inline batch timeout by default. If the host is simply slow, set
-`agents.defaults.memory.search.sync.embeddingBatchTimeoutSeconds` and rerun
+`memory.search.sync.embeddingBatchTimeoutSeconds` and rerun
 `openclaw memory index --force`.
 
 **CJK text not found?** Rebuild the FTS index with

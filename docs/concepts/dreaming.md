@@ -247,7 +247,7 @@ Default cadence behavior:
 
 ## Key defaults
 
-All settings live under `agents.defaults.memory.extensions.memory-core.dreaming`.
+All settings live under `memory.extensions.memory-core.dreaming`.
 
 <ParamField path="enabled" type="boolean" default="false">
   Enable or disable the dreaming sweep.

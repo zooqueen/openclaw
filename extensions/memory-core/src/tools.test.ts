@@ -239,8 +239,8 @@ describe("memory_search unavailable payloads", () => {
 
     const tool = createMemorySearchToolOrThrow({
       config: {
+        memory: { citations: "off" },
         agents: {
-          defaults: { memory: { citations: "off" } },
           list: [{ id: "main", default: true }],
         },
       },
@@ -288,8 +288,8 @@ describe("memory_search unavailable payloads", () => {
 
     const tool = createMemorySearchToolOrThrow({
       config: {
+        memory: { citations: "off" },
         agents: {
-          defaults: { memory: { citations: "off" } },
           list: [{ id: "main", default: true }],
         },
       },
@@ -338,8 +338,8 @@ describe("memory_search unavailable payloads", () => {
 
     const tool = createMemorySearchToolOrThrow({
       config: {
+        memory: { citations: "off" },
         agents: {
-          defaults: { memory: { citations: "off" } },
           list: [{ id: "main", default: true }],
         },
       },
@@ -368,8 +368,8 @@ describe("memory_search unavailable payloads", () => {
 
     const tool = createMemorySearchToolOrThrow({
       config: {
+        memory: { citations: "off" },
         agents: {
-          defaults: { memory: { citations: "off" } },
           list: [{ id: "main", default: true }],
         },
       },
@@ -481,30 +481,26 @@ describe("memory_search corpus labels", () => {
 
   it("re-resolves config when executing a previously created tool", async () => {
     const startupConfig = asOpenClawConfig({
-      agents: {
-        defaults: {
-          memory: {
-            backend: "builtin",
-            search: {
-              provider: "ollama",
-              model: "nomic-embed-text",
-            },
-          },
+      memory: {
+        backend: "builtin",
+        search: {
+          provider: "ollama",
+          model: "nomic-embed-text",
         },
+      },
+      agents: {
         list: [{ id: "main", default: true }],
       },
     });
     const patchedConfig = asOpenClawConfig({
-      agents: {
-        defaults: {
-          memory: {
-            backend: "builtin",
-            search: {
-              provider: "openai",
-              model: "text-embedding-3-small",
-            },
-          },
+      memory: {
+        backend: "builtin",
+        search: {
+          provider: "openai",
+          model: "text-embedding-3-small",
         },
+      },
+      agents: {
         list: [{ id: "main", default: true }],
       },
     });
@@ -545,8 +541,8 @@ describe("memory_search corpus labels", () => {
 
     const tool = createMemorySearchToolOrThrow({
       config: {
+        memory: { citations: "off" },
         agents: {
-          defaults: { memory: { citations: "off" } },
           list: [{ id: "main", default: true }],
         },
         tools: { sessions: { visibility: "all" } },

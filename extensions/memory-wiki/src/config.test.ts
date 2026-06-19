@@ -73,18 +73,16 @@ describe("resolveMemoryWikiConfig", () => {
 
   it("resolves each agent into an isolated default vault while inheriting extension defaults", () => {
     const appConfig: OpenClawConfig = {
-      agents: {
-        defaults: {
-          memory: {
-            extensions: {
-              "memory-wiki": {
-                search: {
-                  corpus: "memory",
-                },
-              },
+      memory: {
+        extensions: {
+          "memory-wiki": {
+            search: {
+              corpus: "memory",
             },
           },
         },
+      },
+      agents: {
         list: [
           { id: "research" },
           {
@@ -119,13 +117,9 @@ describe("resolveMemoryWikiConfig", () => {
   it("normalizes agent ids before deriving the default vault path", () => {
     const config = resolveMemoryWikiConfigForAgent(
       {
-        agents: {
-          defaults: {
-            memory: {
-              extensions: {
-                "memory-wiki": {},
-              },
-            },
+        memory: {
+          extensions: {
+            "memory-wiki": {},
           },
         },
       },
@@ -140,16 +134,12 @@ describe("resolveMemoryWikiConfig", () => {
     expect(() =>
       resolveMemoryWikiConfigForAgent(
         {
-          agents: {
-            defaults: {
-              memory: {
-                extensions: {
-                  "memory-wiki": {
-                    vault: {
-                      path: "~/vaults/wiki",
-                      unexpected: true,
-                    },
-                  },
+          memory: {
+            extensions: {
+              "memory-wiki": {
+                vault: {
+                  path: "~/vaults/wiki",
+                  unexpected: true,
                 },
               },
             },

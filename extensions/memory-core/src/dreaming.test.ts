@@ -2840,21 +2840,19 @@ describe("short-term dreaming trigger", () => {
       trigger: "heartbeat",
       workspaceDir: mainWorkspace,
       cfg: {
-        agents: {
-          defaults: {
-            memory: {
-              search: {
+        memory: {
+          search: {
+            enabled: true,
+          },
+          extensions: {
+            "memory-core": {
+              dreaming: {
                 enabled: true,
-              },
-              extensions: {
-                "memory-core": {
-                  dreaming: {
-                    enabled: true,
-                  },
-                },
               },
             },
           },
+        },
+        agents: {
           list: [
             {
               id: "alpha",

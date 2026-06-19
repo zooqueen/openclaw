@@ -248,7 +248,7 @@ async function applyLocalStatusRpcFallback(params: {
 }
 
 function hasExplicitMemorySearchConfig(cfg: OpenClawConfig, agentId: string): boolean {
-  if (cfg.agents?.defaults?.memory && Object.hasOwn(cfg.agents.defaults.memory, "search")) {
+  if (cfg.memory && Object.hasOwn(cfg.memory, "search")) {
     return true;
   }
   const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];

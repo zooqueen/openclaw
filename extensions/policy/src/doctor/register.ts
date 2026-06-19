@@ -5808,14 +5808,12 @@ function scopedDataHandlingAgentMatches(
   policyAgentId: string,
   entries: readonly PolicyDataHandlingEvidence[],
 ): boolean {
-  if (entry.id === "memory-qmd-session-transcripts") {
-    return true;
-  }
   if (scopedAgentIdMatches(entry.agentId, policyAgentId)) {
     return true;
   }
   return (
-    entry.id === "agents-defaults-memory-session-transcripts" &&
+    (entry.id === "memory-qmd-session-transcripts" ||
+      entry.id === "memory-session-transcripts") &&
     !entries.some(
       (candidate) =>
         candidate.scope === "agent" &&

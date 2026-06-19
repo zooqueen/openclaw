@@ -270,13 +270,13 @@ These require the official `obsidian` CLI on `PATH` when
 `openclaw wiki` resolves config for the selected `--agent` (or the configured
 default agent) from:
 
-- `agents.defaults.memory.extensions.memory-wiki.vaultMode`
-- `agents.defaults.memory.extensions.memory-wiki.search.backend`
-- `agents.defaults.memory.extensions.memory-wiki.search.corpus`
-- `agents.defaults.memory.extensions.memory-wiki.bridge.*`
-- `agents.defaults.memory.extensions.memory-wiki.obsidian.*`
-- `agents.defaults.memory.extensions.memory-wiki.render.*`
-- `agents.defaults.memory.extensions.memory-wiki.context.includeCompiledDigestPrompt`
+- `memory.extensions.memory-wiki.vaultMode`
+- `memory.extensions.memory-wiki.search.backend`
+- `memory.extensions.memory-wiki.search.corpus`
+- `memory.extensions.memory-wiki.bridge.*`
+- `memory.extensions.memory-wiki.obsidian.*`
+- `memory.extensions.memory-wiki.render.*`
+- `memory.extensions.memory-wiki.context.includeCompiledDigestPrompt`
 
 See [Memory Wiki plugin](/plugins/memory-wiki) for the full config model.
 

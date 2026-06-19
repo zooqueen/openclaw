@@ -460,8 +460,8 @@ export async function noteMemorySearchHealth(
             : "- Install the supported QMD package: npm install -g @tobilu/qmd (or bun install -g @tobilu/qmd)",
           workspaceProbeFailed
             ? "- Verify the resolved workspace path for the affected agent before retrying."
-            : `- Set an explicit binary path: ${formatCliCommand("openclaw config set agents.defaults.memory.qmd.command /absolute/path/to/qmd")}`,
-          `- Or switch back to builtin memory: ${formatCliCommand("openclaw config set agents.defaults.memory.backend builtin")}`,
+            : `- Set an explicit binary path: ${formatCliCommand("openclaw config set memory.qmd.command /absolute/path/to/qmd")}`,
+          `- Or switch back to builtin memory: ${formatCliCommand("openclaw config set memory.backend builtin")}`,
           "",
           `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
         ]
@@ -491,7 +491,7 @@ export async function noteMemorySearchHealth(
         `- Install the llama.cpp provider plugin: ${formatCliCommand("openclaw plugins install @openclaw/llama-cpp-provider")}`,
         `- Set a local GGUF model path in config`,
         suggestedRemoteProvider
-          ? `- Switch to a remote provider: ${formatCliCommand(`openclaw config set agents.defaults.memory.search.provider ${suggestedRemoteProvider}`)}`
+          ? `- Switch to a remote provider: ${formatCliCommand(`openclaw config set memory.search.provider ${suggestedRemoteProvider}`)}`
           : `- Switch to a remote embedding provider in config`,
         "",
         `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
@@ -510,10 +510,10 @@ export async function noteMemorySearchHealth(
     note(
       [
         `Memory search provider is set to "${provider}" but no OpenAI-compatible embeddings endpoint was configured.`,
-        "Set agents.defaults.memory.search.remote.baseUrl to the /v1 endpoint for your embeddings server.",
+        "Set memory.search.remote.baseUrl to the /v1 endpoint for your embeddings server.",
         "",
         "Fix:",
-        `- ${formatCliCommand("openclaw config set agents.defaults.memory.search.remote.baseUrl http://127.0.0.1:1234/v1")}`,
+        `- ${formatCliCommand("openclaw config set memory.search.remote.baseUrl http://127.0.0.1:1234/v1")}`,
         "",
         `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
       ].join("\n"),
@@ -526,10 +526,10 @@ export async function noteMemorySearchHealth(
     note(
       [
         `Memory search provider is set to "${provider}" but no OpenAI-compatible embedding model was configured.`,
-        "Set agents.defaults.memory.search.model to the embedding model id your server expects.",
+        "Set memory.search.model to the embedding model id your server expects.",
         "",
         "Fix:",
-        `- ${formatCliCommand("openclaw config set agents.defaults.memory.search.model text-embedding-bge-m3")}`,
+        `- ${formatCliCommand("openclaw config set memory.search.model text-embedding-bge-m3")}`,
         "",
         `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
       ].join("\n"),
@@ -596,7 +596,7 @@ export async function noteMemorySearchHealth(
       "Fix (pick one):",
       `- Set ${envVar} in your environment`,
       `- Configure credentials: ${formatCliCommand("openclaw configure --section model")}`,
-      `- To disable: ${formatCliCommand("openclaw config set agents.defaults.memory.search.enabled false")}`,
+      `- To disable: ${formatCliCommand("openclaw config set memory.search.enabled false")}`,
       "",
       `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
     ].join("\n"),
