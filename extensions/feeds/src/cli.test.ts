@@ -12,6 +12,7 @@ import {
   feedsSourcesCommand,
   type FeedsCommandRuntime,
 } from "./cli.js";
+import { MAX_FEED_DOCUMENT_BYTES } from "./feed-document.js";
 
 describe("Feeds CLI", () => {
   beforeEach(() => {
@@ -123,6 +124,27 @@ describe("Feeds CLI", () => {
 
     expect(exitCode).toBe(2);
     expect(runtime.stderr).toContain("SSRF blocked private network target");
+  });
+
+  it("reports oversized HTTPS feed documents and releases the guarded dispatcher", async () => {
+    const release = vi.fn();
+    fetchWithSsrFGuardMock.mockResolvedValue({
+      response: new Response("x".repeat(MAX_FEED_DOCUMENT_BYTES + 1)),
+      release,
+    });
+    const runtime = createRuntime({
+      sources: [{ id: "large", url: "https://feeds.example.com/large.json" }],
+    });
+
+    const exitCode = await feedsListCommand({ json: true }, runtime);
+
+    expect(exitCode).toBe(2);
+    expect(runtime.stderr).toContain(
+      "Feed URL https://feeds.example.com/large.json response exceeds " +
+        MAX_FEED_DOCUMENT_BYTES +
+        " bytes.",
+    );
+    expect(release).toHaveBeenCalledTimes(1);
   });
 
   it("checks pinned feed integrity while loading entries", async () => {

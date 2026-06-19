@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+
+export const MAX_FEED_DOCUMENT_BYTES = 1024 * 1024;
 
 export type FeedSourceConfig = {
   readonly id: string;
@@ -130,7 +133,11 @@ async function defaultFetch(url: string): Promise<{ readonly ok: boolean; readon
     auditContext: "feeds.feed-document",
   });
   try {
-    return { ok: response.ok, text: await response.text() };
+    const body = await readResponseWithLimit(response, MAX_FEED_DOCUMENT_BYTES, {
+      onOverflow: ({ maxBytes }) =>
+        new Error("Feed URL " + url + " response exceeds " + maxBytes + " bytes."),
+    });
+    return { ok: response.ok, text: body.toString("utf8") };
   } finally {
     await release();
   }
