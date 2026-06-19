@@ -12,10 +12,15 @@ import {
   feedsSourcesCommand,
   type FeedsCommandRuntime,
 } from "./cli.js";
-import { MAX_FEED_DOCUMENT_BYTES } from "./feed-document.js";
+import {
+  FEED_FETCH_TIMEOUT_MS,
+  FEED_READ_IDLE_TIMEOUT_MS,
+  MAX_FEED_DOCUMENT_BYTES,
+} from "./feed-document.js";
 
 describe("Feeds CLI", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     fetchWithSsrFGuardMock.mockReset();
   });
 
@@ -110,6 +115,7 @@ describe("Feeds CLI", () => {
     expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
       url: "https://feeds.example.com/feed.json",
       auditContext: "feeds.feed-document",
+      timeoutMs: FEED_FETCH_TIMEOUT_MS,
     });
     expect(release).toHaveBeenCalledTimes(1);
   });
@@ -133,7 +139,12 @@ describe("Feeds CLI", () => {
       release,
     });
     const runtime = createRuntime({
-      sources: [{ id: "large", url: "https://feeds.example.com/large.json" }],
+      sources: [
+        {
+          id: "large",
+          url: "https://user:secret@feeds.example.com/large.json?token=hidden#frag",
+        },
+      ],
     });
 
     const exitCode = await feedsListCommand({ json: true }, runtime);
@@ -144,7 +155,48 @@ describe("Feeds CLI", () => {
         MAX_FEED_DOCUMENT_BYTES +
         " bytes.",
     );
+    expect(runtime.stderr).not.toContain("secret");
+    expect(runtime.stderr).not.toContain("token=hidden");
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports stalled HTTPS feed bodies with redacted URLs", async () => {
+    vi.useFakeTimers();
+    const release = vi.fn();
+    fetchWithSsrFGuardMock.mockResolvedValue({
+      response: new Response(
+        new ReadableStream({
+          start() {
+            // Keep the stream open without chunks so readResponseWithLimit hits its idle timer.
+          },
+        }),
+      ),
+      release,
+    });
+    const runtime = createRuntime({
+      sources: [
+        {
+          id: "slow",
+          url: "https://user:secret@feeds.example.com/slow.json?token=hidden#frag",
+        },
+      ],
+    });
+
+    const run = feedsListCommand({ json: true }, runtime);
+    await vi.advanceTimersByTimeAsync(FEED_READ_IDLE_TIMEOUT_MS);
+    const exitCode = await run;
+
+    expect(exitCode).toBe(2);
+    expect(runtime.stderr).toContain(
+      `Feed URL https://feeds.example.com/slow.json response stalled for ${FEED_READ_IDLE_TIMEOUT_MS}ms.`,
+    );
+    expect(runtime.stderr).not.toContain("secret");
+    expect(runtime.stderr).not.toContain("token=hidden");
+    expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: FEED_FETCH_TIMEOUT_MS }),
+    );
+    expect(release).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it("checks pinned feed integrity while loading entries", async () => {

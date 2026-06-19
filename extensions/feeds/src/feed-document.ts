@@ -6,6 +6,8 @@ import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 export const MAX_FEED_DOCUMENT_BYTES = 1024 * 1024;
+export const FEED_FETCH_TIMEOUT_MS = 15_000;
+export const FEED_READ_IDLE_TIMEOUT_MS = 15_000;
 
 export type FeedSourceConfig = {
   readonly id: string;
@@ -120,22 +122,53 @@ async function readFeedBytes(url: string, runtime: FeedDocumentRuntime): Promise
     const fetcher = runtime.fetch ?? defaultFetch;
     const response = await fetcher(url);
     if (!response.ok) {
-      throw new Error(`Feed URL ${url} did not return a successful response.`);
+      throw new Error(
+        `Feed URL ${formatFeedUrlForDiagnostics(url)} did not return a successful response.`,
+      );
     }
     return Buffer.from(response.text, "utf8");
   }
-  throw new Error(`Unsupported feed URL protocol for ${url}.`);
+  throw new Error(`Unsupported feed URL protocol for ${formatFeedUrlForDiagnostics(url)}.`);
+}
+
+function formatFeedUrlForDiagnostics(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return value.split(/[?#]/u, 1)[0] ?? value;
+  }
 }
 
 async function defaultFetch(url: string): Promise<{ readonly ok: boolean; readonly text: string }> {
   const { response, release } = await fetchWithSsrFGuard({
     url,
     auditContext: "feeds.feed-document",
+    timeoutMs: FEED_FETCH_TIMEOUT_MS,
   });
   try {
     const body = await readResponseWithLimit(response, MAX_FEED_DOCUMENT_BYTES, {
+      chunkTimeoutMs: FEED_READ_IDLE_TIMEOUT_MS,
+      onIdleTimeout: ({ chunkTimeoutMs }) =>
+        new Error(
+          "Feed URL " +
+            formatFeedUrlForDiagnostics(url) +
+            " response stalled for " +
+            chunkTimeoutMs +
+            "ms.",
+        ),
       onOverflow: ({ maxBytes }) =>
-        new Error("Feed URL " + url + " response exceeds " + maxBytes + " bytes."),
+        new Error(
+          "Feed URL " +
+            formatFeedUrlForDiagnostics(url) +
+            " response exceeds " +
+            maxBytes +
+            " bytes.",
+        ),
     });
     return { ok: response.ok, text: body.toString("utf8") };
   } finally {
