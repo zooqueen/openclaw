@@ -100,6 +100,12 @@ openclaw [--dev] [--profile <name>] <command>
   backup
     create
     verify
+    sqlite
+      snapshot
+        create
+        verify
+        restore
+        list
   migrate
     list
     plan <provider>
