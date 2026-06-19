@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter } from "./frontmatter.js";
+import { parseFrontmatter, resolveOpenClawMetadata } from "./frontmatter.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -23,5 +23,15 @@ describe("bundled taskflow skill frontmatter", () => {
       expect(frontmatter.description, relativePath).toBeTypeOf("string");
       expect(frontmatter.description?.trim(), relativePath).not.toBe("");
     }
+  });
+});
+
+describe("bundled Trello skill frontmatter", () => {
+  it("declares curl because the shipped examples require it", async () => {
+    const raw = await fs.readFile(path.join(repoRoot, "skills/trello/SKILL.md"), "utf8");
+    const metadata = resolveOpenClawMetadata(parseFrontmatter(raw));
+
+    expect(raw).toContain("curl -s ");
+    expect(metadata?.requires?.bins).toEqual(expect.arrayContaining(["curl", "jq"]));
   });
 });
