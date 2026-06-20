@@ -154,11 +154,9 @@ export function handleConnected(host: LifecycleHost) {
           if (routeId) {
             host.routeId = routeId;
           }
-          host.requestUpdate?.();
         },
         () => {
           host.routeId = previousRouteId;
-          host.requestUpdate?.();
         },
       );
   };
