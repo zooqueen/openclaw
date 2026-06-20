@@ -1006,7 +1006,7 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expect(remoteCommand).toContain("bun_version=1.3.14");
     expect(remoteCommand).toContain('bun_root="$tool_root/bun-v${bun_version}"');
     expect(remoteCommand).toContain(
-      'npm install --global --prefix "$bun_root" "bun@${bun_version}"',
+      'npm install --global --prefix "$bun_root" --fetch-timeout=120000 --fetch-retries=2 --fetch-retry-mintimeout=2000 --fetch-retry-maxtimeout=15000 "bun@${bun_version}"',
     );
     expect(remoteCommand).toContain("bun --version >&2 || return 1");
     expect(remoteCommand).not.toContain("corepack enable");
@@ -1041,6 +1041,12 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     );
     expect(remoteCommand).toContain("openclaw_crabbox_bootstrap_macos_js");
     expect(remoteCommand).toContain("node-v${node_version}-darwin-${node_arch}.tar.gz");
+    expect(remoteCommand).toContain(
+      'curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 --retry-delay 2 -o "$tmp_dir/$pkg"',
+    );
+    expect(remoteCommand).toContain(
+      'curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 2 -o "$tmp_dir/SHASUMS256.txt"',
+    );
     expect(remoteCommand).toContain("shasum -a 256 -c -");
     expect(remoteCommand).toContain('ready_marker="$node_dir/.openclaw-crabbox-node-ready"');
     expect(remoteCommand).toContain(
@@ -1363,6 +1369,67 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     );
   });
 
+  it("bootstraps Corepack for AWS macOS node option changed-gate commands", () => {
+    const result = runWrapper(
+      "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
+      [
+        "run",
+        "--provider",
+        "aws",
+        "--target",
+        "macos",
+        "--",
+        "node",
+        "--max-old-space-size",
+        "4096",
+        "--env-file-if-exists",
+        ".env",
+        "--unhandled-rejections",
+        "strict",
+        "--trace-warnings",
+        "--import=tsx",
+        "scripts/check-changed.mjs",
+      ],
+    );
+
+    const output = parseFakeCrabboxOutput(result);
+    const remoteCommand = normalizeShellLineEndings(output.args.at(-1) ?? "");
+    expect(result.status).toBe(0);
+    expect(remoteCommand).toContain("openclaw_crabbox_bootstrap_macos_js");
+    expectGroupedShellCommand(
+      remoteCommand,
+      `openclaw_crabbox_env ${remoteChangedGateEnvPrefix} node --max-old-space-size 4096 --env-file-if-exists .env --unhandled-rejections strict --trace-warnings --import=tsx scripts/check-changed.mjs`,
+    );
+  });
+
+  it("does not treat node script arguments as changed-gate commands", () => {
+    const result = runWrapper(
+      "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
+      [
+        "run",
+        "--provider",
+        "aws",
+        "--target",
+        "macos",
+        "--",
+        "node",
+        "--trace-warnings",
+        "scripts/other.mjs",
+        "scripts/check-changed.mjs",
+      ],
+    );
+
+    const output = parseFakeCrabboxOutput(result);
+    const remoteCommand = normalizeShellLineEndings(output.args.at(-1) ?? "");
+    expect(result.status).toBe(0);
+    expect(remoteCommand).toContain("openclaw_crabbox_bootstrap_macos_js");
+    expect(remoteCommand).not.toContain("OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1");
+    expectGroupedShellCommand(
+      remoteCommand,
+      "node --trace-warnings scripts/other.mjs scripts/check-changed.mjs",
+    );
+  });
+
   it("preserves shell commands when bootstrapping raw AWS macOS JavaScript commands", () => {
     const result = runWrapper(
       "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
@@ -1456,6 +1523,44 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expect(output.args.at(-1)).toBe("arg1");
   });
 
+  it("bootstraps AWS macOS script-stdin shell shebang bodies before the uploaded script", () => {
+    const script = [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      "pnpm --version",
+      "bun --version",
+    ].join("\n");
+    const result = runWrapper(
+      "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
+      ["run", "--provider", "aws", "--target", "macos", "--script-stdin"],
+      { input: script },
+    );
+
+    const output = parseFakeCrabboxOutput(result);
+    expect(result.status).toBe(0);
+    expect(output.scriptContent).toContain("openclaw_crabbox_bootstrap_macos_js || exit $?");
+    expect(output.scriptContent).toContain('corepack enable --install-directory "$PNPM_HOME"');
+    expect(output.scriptContent).toContain("pnpm --version >&2");
+    expect(output.scriptContent).toContain("bun --version >&2 || return 1");
+    expect(output.scriptContent).toContain(`\n${script}\n`);
+  });
+
+  it("bootstraps Corepack for AWS macOS script-stdin env shebangs with option values", () => {
+    const script = ["#!/usr/bin/env -C /tmp -u OPENCLAW_FAKE_VAR pnpm", "--version"].join("\n");
+    const result = runWrapper(
+      "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
+      ["run", "--provider", "aws", "--target", "macos", "--script-stdin"],
+      { input: script },
+    );
+
+    const output = parseFakeCrabboxOutput(result);
+    expect(result.status).toBe(0);
+    expect(output.scriptContent).toContain("openclaw_crabbox_bootstrap_macos_js || exit $?");
+    expect(output.scriptContent).toContain('corepack enable --install-directory "$PNPM_HOME"');
+    expect(output.scriptContent).toContain("pnpm --version >&2");
+    expect(output.scriptContent).toContain(`\n${script}\n`);
+  });
+
   it("bootstraps Bun for AWS macOS script-stdin bun shebangs", () => {
     const script = ["#!/usr/bin/env bun", "console.log(Bun.version);"].join("\n");
     const result = runWrapper(
@@ -1468,7 +1573,7 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expect(result.status).toBe(0);
     expect(output.scriptContent).toContain("bun_version=1.3.14");
     expect(output.scriptContent).toContain(
-      'npm install --global --prefix "$bun_root" "bun@${bun_version}"',
+      'npm install --global --prefix "$bun_root" --fetch-timeout=120000 --fetch-retries=2 --fetch-retry-mintimeout=2000 --fetch-retry-maxtimeout=15000 "bun@${bun_version}"',
     );
     expect(output.scriptContent).toContain("bun --version >&2 || return 1");
     expect(output.scriptContent).not.toContain("corepack enable");
@@ -2407,6 +2512,27 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expectGroupedShellCommand(remoteCommand, `${remoteChangedGateExport} ${shellScript}`);
   });
 
+  it("does not mistake quoted remote-child markers for shell changed-gate environment", () => {
+    const shellScript = 'echo "OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1"; pnpm check:changed';
+    const result = runWrapper(
+      "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
+      ["run", "--provider", "aws", "--target", "macos", "--shell", "--", shellScript],
+      {
+        gitResponses: {
+          [GIT_CONFIG_SPARSE_KEY]: { stdout: "true\n" },
+          [GIT_STATUS_PORCELAIN_KEY]: { stdout: "" },
+          [GIT_MERGE_BASE_MAIN_HEAD_KEY]: { stdout: "abc123\n" },
+        },
+      },
+    );
+
+    const output = parseFakeCrabboxOutput(result);
+    const remoteCommand = normalizeShellLineEndings(output.args.at(-1) ?? "");
+    expect(result.status).toBe(0);
+    expect(remoteCommand).toContain(remoteChangedGateFetch);
+    expectGroupedShellCommand(remoteCommand, `${remoteChangedGateExport} ${shellScript}`);
+  });
+
   it("preserves sparse changed-gate Git bootstrap for assignment-prefix command substitutions", () => {
     const shellScript = "TOOL_ROOT=$(pwd) pnpm check:changed";
     const result = runWrapper(
@@ -2469,9 +2595,7 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expect(result.status).toBe(0);
     expect(remoteCommand).toContain("git init -q");
     expect(remoteCommand).toContain(remoteChangedGateFetch);
-    expect(remoteCommand).toContain(
-      `&& export OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1 OPENCLAW_CHANGED_LANES_RAW_SYNC=1; ${shellScript}`,
-    );
+    expect(remoteCommand).toContain(`&& export ${remoteChangedGateEnvPrefix}; ${shellScript}`);
   });
 
   it("preserves sparse changed-gate Git bootstrap for shell option values before -c", () => {
@@ -2560,7 +2684,7 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
 
   it("preserves sparse changed-gate Git bootstrap for timeout-wrapped shell commands", () => {
     const shellScript =
-      "/usr/bin/time -v timeout 1200s node scripts/check-changed.mjs --base origin/main --head HEAD";
+      "/usr/bin/time -v timeout 1200s node --max-old-space-size=4096 scripts/check-changed.mjs --base origin/main --head HEAD";
     const result = runWrapper(
       "provider: hetzner, aws, local-container, blacksmith-testbox, or cloudflare\n",
       ["run", "--provider", "aws", "--shell", "--", shellScript],
@@ -2933,7 +3057,7 @@ describe.concurrent("scripts/crabbox-wrapper", () => {
     expect(output.args.filter((arg) => arg === "--shell")).toHaveLength(1);
     expect(remoteCommand).toContain(remoteChangedGateFetch);
     expect(remoteCommand).toMatch(
-      /&& export OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1 OPENCLAW_CHANGED_LANES_RAW_SYNC=1; env CI=1 pnpm check:changed$/u,
+      /&& export OPENCLAW_CHECK_CHANGED_REMOTE_CHILD=1 OPENCLAW_CHANGED_LANES_RAW_SYNC=1 CI=1; env CI=1 pnpm check:changed$/u,
     );
   });
 
