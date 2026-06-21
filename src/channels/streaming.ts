@@ -1140,7 +1140,8 @@ export function mergeChannelProgressDraftLine<TLine extends string | ChannelProg
       return next.slice(-maxLines);
     }
   }
-  if (lines.some((entry) => normalizeChannelProgressDraftLineIdentity(entry) === normalized)) {
+  const previous = lines.at(-1);
+  if (previous && normalizeChannelProgressDraftLineIdentity(previous) === normalized) {
     return lines;
   }
   return [...lines, line].slice(-maxLines);
