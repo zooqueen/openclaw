@@ -25,6 +25,7 @@ import {
   createCodexCliSessionNodeHostCommands,
   createCodexCliSessionNodeInvokePolicies,
 } from "./src/node-cli-session-registration.js";
+import { createCodexWebSearchProvider } from "./src/web-search-provider.js";
 
 const ENDED_SESSION_REASONS: ReadonlySet<string> = new Set([
   "new",
