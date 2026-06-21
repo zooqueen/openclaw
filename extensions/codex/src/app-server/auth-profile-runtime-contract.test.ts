@@ -65,6 +65,7 @@ const DISABLED_CODEX_WEB_SEARCH_THREAD_CONFIG_FINGERPRINT = JSON.stringify({
   "features.standalone_web_search": false,
   web_search: "disabled",
 });
+const STARTUP_CONTRACT_WAIT = { interval: 10, timeout: 5_000 };
 
 function writeCodexAppServerBinding(
   ...args: Parameters<typeof writeRawCodexAppServerBinding>
@@ -176,7 +177,7 @@ function createCodexAuthProfileHarness(params: { startMethod: "thread/start" | "
     seenAgentDirs,
     async waitForMethod(method: string) {
       await vi.waitFor(() => expect(requests.map((entry) => entry.method)).toContain(method), {
-        interval: 1,
+        ...STARTUP_CONTRACT_WAIT,
       });
     },
     async completeTurn() {
@@ -220,7 +221,7 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
         expect(harness.seenAuthProfileIds).toEqual([
           AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProfileId,
         ]),
-      { interval: 1 },
+      STARTUP_CONTRACT_WAIT,
     );
     expect(harness.seenAgentDirs).toEqual([tmpDir]);
     await harness.waitForMethod("turn/start");
@@ -246,7 +247,7 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
         expect(harness.seenAuthProfileIds).toEqual([
           AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProfileId,
         ]),
-      { interval: 1 },
+      STARTUP_CONTRACT_WAIT,
     );
     await harness.waitForMethod("turn/start");
     await harness.completeTurn();
@@ -271,7 +272,7 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
         expect(harness.seenAuthProfileIds).toEqual([
           AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProfileId,
         ]),
-      { interval: 1 },
+      STARTUP_CONTRACT_WAIT,
     );
     await harness.waitForMethod("turn/start");
     await harness.completeTurn();
