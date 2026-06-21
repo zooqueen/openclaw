@@ -337,7 +337,9 @@ const codexAppServerNetworkProxySchema = z
     baseProfile: z.enum(["read-only", "workspace"]).optional(),
     mode: z.enum(["limited", "full"]).optional(),
     domains: z.record(z.string(), codexAppServerNetworkProxyDomainPermissionSchema).optional(),
-    unixSockets: z.record(z.string(), codexAppServerNetworkProxyUnixSocketPermissionSchema).optional(),
+    unixSockets: z
+      .record(z.string(), codexAppServerNetworkProxyUnixSocketPermissionSchema)
+      .optional(),
     proxyUrl: z.string().trim().min(1).optional(),
     socksUrl: z.string().trim().min(1).optional(),
     enableSocks5: z.boolean().optional(),
@@ -490,6 +492,19 @@ export function resolveCodexPluginsPolicy(pluginConfig?: unknown): ResolvedCodex
     allowDestructiveActions: destructivePolicy.allowDestructiveActions,
     destructiveApprovalMode: destructivePolicy.destructiveApprovalMode,
     pluginPolicies,
+  };
+}
+
+function resolveCodexPluginDestructivePolicy(policy: CodexPluginDestructivePolicy): {
+  allowDestructiveActions: boolean;
+  destructiveApprovalMode: CodexPluginDestructiveApprovalMode;
+} {
+  if (policy === "auto") {
+    return { allowDestructiveActions: true, destructiveApprovalMode: "auto" };
+  }
+  return {
+    allowDestructiveActions: policy,
+    destructiveApprovalMode: policy ? "allow" : "deny",
   };
 }
 
@@ -672,6 +687,9 @@ export function resolveCodexAppServerRuntime(
         headers,
         ...(transport === "stdio" && clearEnv.length > 0 ? { clearEnv } : {}),
       },
+      connectionClass,
+      remoteAppsSubstrate,
+      ...(remoteWorkspaceRoot ? { remoteWorkspaceRoot } : {}),
       codeModeOnly: config.codeModeOnly === true,
       requestTimeoutMs: normalizePositiveNumber(config.requestTimeoutMs, 60_000),
       turnCompletionIdleTimeoutMs: normalizePositiveNumber(
@@ -688,16 +706,13 @@ export function resolveCodexAppServerRuntime(
         : {}),
       approvalPolicy: forcedPolicy?.approvalPolicy ?? approvalPolicy,
       approvalPolicySource,
-      sandbox:
-        forcedPolicy?.sandbox ??
-        configuredSandbox ??
-        defaultPolicy?.sandbox ??
-        (policyMode === "guardian" ? "workspace-write" : "danger-full-access"),
+      sandbox: resolvedSandbox,
       approvalsReviewer:
         forcedPolicy?.approvalsReviewer ??
         explicitApprovalsReviewer ??
         defaultPolicy?.approvalsReviewer ??
         (policyMode === "guardian" ? "auto_review" : "user"),
+      ...resolveCodexAppServerNetworkProxy(config.networkProxy, resolvedSandbox),
       ...(serviceTier ? { serviceTier } : {}),
     },
   };
@@ -929,7 +944,7 @@ function resolveCodexAppServerNetworkProxy(
     enabled: true,
     mode: config.mode,
     domains: normalizeNetworkProxyPermissionMap(config.domains),
-    unix_sockets: normalizeNetworkProxyPermissionMap(config.unixSockets),
+    unix_sockets: normalizeNetworkProxyUnixSocketPermissionMap(config.unixSockets),
     proxy_url: readNonEmptyString(config.proxyUrl),
     socks_url: readNonEmptyString(config.socksUrl),
     enable_socks5: config.enableSocks5,
@@ -982,6 +997,20 @@ function resolveNetworkProxyPermissionProfileName(
 
 export function fingerprintCodexAppServerNetworkProxyConfigPatch(configPatch: JsonObject): string {
   return createHash("sha256").update(stableStringifyJson(configPatch)).digest("hex");
+}
+
+function normalizeNetworkProxyUnixSocketPermissionMap(
+  value: Record<string, CodexAppServerNetworkProxyUnixSocketPermission> | undefined,
+): Record<string, "allow" | "deny"> | undefined {
+  const normalized = normalizeNetworkProxyPermissionMap(value);
+  return normalized
+    ? Object.fromEntries(
+        Object.entries(normalized).map(([socketPath, permission]) => [
+          socketPath,
+          permission === "none" ? "deny" : permission,
+        ]),
+      )
+    : undefined;
 }
 
 function normalizeNetworkProxyPermissionMap<TPermission extends string>(

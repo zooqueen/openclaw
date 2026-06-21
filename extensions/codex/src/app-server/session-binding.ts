@@ -107,6 +107,7 @@ const pluginAppPolicyContextSchema = z
           marketplaceName: z.literal(CODEX_PLUGINS_MARKETPLACE_NAME),
           pluginName: z.string(),
           allowDestructiveActions: z.boolean(),
+          destructiveApprovalMode: z.enum(["allow", "deny", "auto"]).optional().catch(undefined),
           mcpServerNames: z.array(z.string()),
         })
         .strict(),
@@ -143,11 +144,15 @@ const threadBindingSchema = z.object({
     .preprocess(normalizeCodexServiceTier, z.string().optional())
     .optional()
     .catch(undefined),
+  networkProxyProfileName: optionalStringSchema,
+  networkProxyConfigFingerprint: optionalStringSchema,
   dynamicToolsFingerprint: optionalStringSchema,
   dynamicToolsContainDeferred: optionalBooleanSchema,
+  webSearchThreadConfigFingerprint: optionalStringSchema,
   userMcpServersFingerprint: optionalStringSchema,
   mcpServersFingerprint: optionalStringSchema,
   nativeHookRelayGeneration: optionalNonBlankStringSchema,
+  appServerRuntimeFingerprint: optionalStringSchema,
   pluginAppsFingerprint: optionalStringSchema,
   pluginAppsInputFingerprint: optionalStringSchema,
   pluginAppPolicyContext: pluginAppPolicyContextSchema.optional().catch(undefined),

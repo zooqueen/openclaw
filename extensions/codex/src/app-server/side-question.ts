@@ -75,6 +75,7 @@ import {
   type JsonObject,
   type JsonValue,
 } from "./protocol.js";
+import { resolveCodexProviderWebSearchSupportForClient } from "./provider-capabilities.js";
 import { readRecentCodexRateLimits } from "./rate-limit-cache.js";
 import { formatCodexUsageLimitErrorMessage } from "./rate-limits.js";
 import { buildCodexRuntimeThreadConfig } from "./runtime-thread-config.js";
@@ -157,10 +158,16 @@ export async function runCodexAppServerSideQuestion(
       "Codex /btw needs an active Codex thread. Send a normal message first, then try /btw again.",
     );
   }
+  const sessionAgentId = bindingIdentity.agentId;
+  const sandboxSessionKey =
+    params.sandboxSessionKey?.trim() ||
+    params.sessionKey?.trim() ||
+    params.sessionId ||
+    sessionAgentId;
   const nativeExecutionBlock = resolveCodexNativeExecutionBlock({
     config: params.cfg,
-    agentId: params.agentId,
-    sessionKey: params.sessionKey,
+    agentId: sessionAgentId,
+    sessionKey: sandboxSessionKey,
     sessionId: params.sessionId,
     surface: "/btw side-question mode",
   });
@@ -169,7 +176,6 @@ export async function runCodexAppServerSideQuestion(
   }
 
   const pluginConfig = readCodexPluginConfig(options.pluginConfig);
-  const sessionAgentId = bindingIdentity.agentId;
   const execPolicy = resolveOpenClawExecPolicyForCodexAppServer({
     approvals: loadExecApprovals(),
     config: params.cfg,
@@ -247,11 +253,6 @@ export async function runCodexAppServerSideQuestion(
     const turnRouter = getCodexAppServerTurnRouter(client);
     const cwd = binding.cwd || params.workspaceDir || process.cwd();
     const sideRunParams = buildSideRunAttemptParams(params, { cwd, authProfileId });
-    const sandboxSessionKey =
-      params.sandboxSessionKey?.trim() ||
-      params.sessionKey?.trim() ||
-      params.sessionId ||
-      sessionAgentId;
     const sandbox = await resolveSandboxContext({
       config: params.cfg,
       agentId: sessionAgentId,
@@ -419,10 +420,13 @@ export async function runCodexAppServerSideQuestion(
       : options.nativeHookRelay?.enabled === false
         ? buildCodexNativeHookRelayDisabledConfig()
         : undefined;
-    const runtimeThreadConfig = buildCodexRuntimeThreadConfig(webSearchPlan.threadConfig, {
-      nativeCodeModeEnabled: nativeToolSurfaceEnabled,
-      nativeCodeModeOnlyEnabled: appServer.codeModeOnly,
-    });
+    const runtimeThreadConfig = buildCodexRuntimeThreadConfig(
+      mergeCodexThreadConfigs(webSearchPlan.threadConfig, appServer.networkProxy?.configPatch),
+      {
+        nativeCodeModeEnabled: nativeToolSurfaceEnabled,
+        nativeCodeModeOnlyEnabled: appServer.codeModeOnly,
+      },
+    );
     const threadConfig =
       mergeCodexThreadConfigs(nativeHookRelayConfig, runtimeThreadConfig) ?? runtimeThreadConfig;
     const forkResponse = await validateCodexThreadCreationResponse(
@@ -437,7 +441,7 @@ export async function runCodexAppServerSideQuestion(
           cwd,
           approvalPolicy,
           approvalsReviewer: modelScopedAppServer.approvalsReviewer,
-          ...(modelScopedAppServer.networkProxy ? {} : { sandbox: appServerSandbox }),
+          ...(appServer.networkProxy ? {} : { sandbox: appServerSandbox }),
           ...(serviceTier ? { serviceTier } : {}),
           config: threadConfig,
           developerInstructions: SIDE_DEVELOPER_INSTRUCTIONS,
@@ -518,7 +522,9 @@ export async function runCodexAppServerSideQuestion(
             cwd,
             approvalPolicy,
             approvalsReviewer: modelScopedAppServer.approvalsReviewer,
-            sandboxPolicy: codexSandboxPolicyForTurn(appServerSandbox, cwd),
+            ...(appServer.networkProxy
+              ? {}
+              : { sandboxPolicy: codexSandboxPolicyForTurn(appServerSandbox, cwd) }),
             model: activeModel,
             personality: CODEX_NATIVE_PERSONALITY_NONE,
             ...(serviceTier ? { serviceTier } : {}),

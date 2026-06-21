@@ -49,6 +49,7 @@ type LegacyBindingOwner = {
   sessionId: string;
   sessionKey: string;
   storePath: string;
+  transcriptPath: string;
   agentHarnessId?: string;
 };
 
@@ -115,7 +116,7 @@ async function collectLegacyBindingSources(
     const canonicalSidecar = await canonicalizePath(sidecarPath);
     const source = sources.get(canonicalSidecar) ?? {
       sidecarPath: canonicalSidecar,
-      transcriptPath: canonicalSidecar.slice(0, -LEGACY_BINDING_SUFFIX.length),
+      transcriptPath: sidecarPath.slice(0, -LEGACY_BINDING_SUFFIX.length),
       agentIds: new Set<string>(),
     };
     for (const agentId of surface.agentIds) {
@@ -238,7 +239,9 @@ async function collectBindingOwners(
         storeAgentIds: storeAgentIds.get(storePath),
       });
       let transcriptPath: string;
+      let legacyTranscriptPath: string;
       try {
+        legacyTranscriptPath = resolveLegacySessionFileLocator(sessionsDir, entry, sessionId);
         transcriptPath = await canonicalizePath(
           resolveSessionFilePath(sessionId, entry, { sessionsDir, agentId }),
         );
@@ -253,6 +256,7 @@ async function collectBindingOwners(
         sessionId,
         sessionKey,
         storePath,
+        transcriptPath: legacyTranscriptPath,
         ...(entry.agentHarnessId?.trim() ? { agentHarnessId: entry.agentHarnessId.trim() } : {}),
       };
       const candidates = owners.get(transcriptPath) ?? new Map<string, LegacyBindingOwner>();
@@ -261,6 +265,15 @@ async function collectBindingOwners(
     }
   }
   return new Map([...owners].map(([key, values]) => [key, [...values.values()]]));
+}
+
+function resolveLegacySessionFileLocator(
+  sessionsDir: string,
+  entry: { sessionFile?: string },
+  sessionId: string,
+): string {
+  const sessionFile = entry.sessionFile?.trim();
+  return path.resolve(sessionsDir, sessionFile || `${sessionId}.jsonl`);
 }
 
 function resolveLegacyBindingOwnerAgentId(params: {
@@ -338,18 +351,30 @@ async function migrateSource(
         return retain(`its session is owned by agent harness ${owner.agentHarnessId}`);
       }
 
-      const legacySessionFile =
+      const sourceSessionFile =
         typeof raw.sessionFile === "string" && raw.sessionFile.trim()
           ? raw.sessionFile
           : source.transcriptPath;
-      const conversationKey = bindingStoreKey({
-        kind: "conversation",
-        bindingId: legacyCodexConversationBindingId(legacySessionFile),
-      });
-      const currentConversation = await store.lookup(conversationKey);
+      const ownerSessionFile =
+        typeof raw.sessionFile === "string" && raw.sessionFile.trim()
+          ? raw.sessionFile
+          : owner?.transcriptPath;
+      const conversationKeys = [
+        sourceSessionFile,
+        ...(ownerSessionFile && ownerSessionFile !== sourceSessionFile ? [ownerSessionFile] : []),
+      ].map((sessionFile) =>
+        bindingStoreKey({
+          kind: "conversation",
+          bindingId: legacyCodexConversationBindingId(sessionFile),
+        }),
+      );
+      let currentConversation: StoredCodexAppServerBinding | undefined;
+      for (const key of conversationKeys) {
+        currentConversation ??= await store.lookup(key);
+      }
       const stored = currentConversation ?? baseStored;
       if (stored.state !== "active" && stored.state !== "cleared") {
-        return retain(`canonical plugin state changed at ${conversationKey}`);
+        return retain(`canonical plugin state changed at ${conversationKeys[0]}`);
       }
       const sessionKey = owner
         ? bindingStoreKey({
@@ -360,7 +385,7 @@ async function migrateSource(
           })
         : undefined;
       const entries = [
-        { key: conversationKey, value: stored },
+        ...conversationKeys.map((key) => ({ key, value: stored })),
         ...(owner && sessionKey
           ? [{ key: sessionKey, value: copyBindingForSession(stored, owner.sessionId) }]
           : []),

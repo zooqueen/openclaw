@@ -42,6 +42,7 @@ import type {
   CodexThreadResumeResponse,
   CodexThreadStartResponse,
   CodexTurnStartResponse,
+  JsonObject,
 } from "./app-server/protocol.js";
 import {
   resolveCodexNativeExecutionBlock,
@@ -470,13 +471,16 @@ async function resolveThreadBindingRuntime(
 function buildThreadRequestRuntimeOptions(resolved: CodexThreadBindingRuntime): {
   approvalPolicy: ConversationAppServerRuntime["runtime"]["approvalPolicy"];
   approvalsReviewer: ConversationAppServerRuntime["runtime"]["approvalsReviewer"];
-  sandbox: ConversationAppServerRuntime["runtime"]["sandbox"];
+  sandbox?: ConversationAppServerRuntime["runtime"]["sandbox"];
+  config?: JsonObject;
   serviceTier?: CodexServiceTier;
 } {
   return {
     approvalPolicy: resolved.approvalPolicy,
     approvalsReviewer: resolved.runtime.approvalsReviewer,
-    sandbox: resolved.sandbox,
+    ...(resolved.runtime.networkProxy
+      ? { config: resolved.runtime.networkProxy.configPatch }
+      : { sandbox: resolved.sandbox }),
     ...(resolved.serviceTier ? { serviceTier: resolved.serviceTier } : {}),
   };
 }
@@ -506,7 +510,8 @@ function buildConversationThreadResumeParams(params: {
   modelProvider?: string;
   approvalPolicy: ConversationAppServerRuntime["runtime"]["approvalPolicy"];
   approvalsReviewer: ConversationAppServerRuntime["runtime"]["approvalsReviewer"];
-  sandbox: ConversationAppServerRuntime["runtime"]["sandbox"];
+  sandbox?: ConversationAppServerRuntime["runtime"]["sandbox"];
+  config?: JsonObject;
   serviceTier?: CodexServiceTier;
 }): CodexThreadResumeParams {
   return {
@@ -516,7 +521,7 @@ function buildConversationThreadResumeParams(params: {
     personality: CODEX_NATIVE_PERSONALITY_NONE,
     approvalPolicy: params.approvalPolicy,
     approvalsReviewer: params.approvalsReviewer,
-    sandbox: params.sandbox,
+    ...(params.config ? { config: params.config } : { sandbox: params.sandbox }),
     ...(params.serviceTier ? { serviceTier: params.serviceTier } : {}),
     persistExtendedHistory: true,
     excludeTurns: true,
@@ -570,7 +575,9 @@ async function runBoundTurn(
       cwd: workspaceDir,
       approvalPolicy,
       approvalsReviewer: runtime.approvalsReviewer,
-      sandboxPolicy: codexSandboxPolicyForTurn(sandbox, workspaceDir),
+      ...(runtime.networkProxy
+        ? {}
+        : { sandboxPolicy: codexSandboxPolicyForTurn(sandbox, workspaceDir) }),
       ...(resolved.model ? { model: resolved.model } : {}),
       personality: CODEX_NATIVE_PERSONALITY_NONE,
       ...(serviceTier ? { serviceTier } : {}),
@@ -903,7 +910,7 @@ async function prepareConversationThread(
         const resumeThreadId =
           plan.kind === "resume" ? plan.expected.threadId : requested?.threadId?.trim();
         let response: CodexThreadResumeResponse | CodexThreadStartResponse;
-        if (resumeThreadId) {
+        if (resumeThreadId && !resolved.runtime.networkProxy) {
           turnRoute = reserveConversationTurnRoute(client, resumeThreadId);
           await turnRoute.reservation.activate(conversationTurnRouteHandlers(turnRoute.collector));
           subscribedThreadId = resumeThreadId;
@@ -973,6 +980,8 @@ async function prepareConversationThread(
                   approvalPolicy: runtimeApprovalPolicy,
                   sandbox: resolved.sandbox,
                   serviceTier: resolved.serviceTier,
+                  networkProxyProfileName: resolved.runtime.networkProxy?.profileName,
+                  networkProxyConfigFingerprint: resolved.runtime.networkProxy?.configFingerprint,
                 },
               }
             : {
@@ -986,6 +995,8 @@ async function prepareConversationThread(
                   approvalPolicy: runtimeApprovalPolicy,
                   sandbox: resolved.sandbox,
                   serviceTier: resolved.serviceTier,
+                  networkProxyProfileName: resolved.runtime.networkProxy?.profileName,
+                  networkProxyConfigFingerprint: resolved.runtime.networkProxy?.configFingerprint,
                   conversationStartId: requested?.id ?? inherited?.conversationStartId,
                   ...(sourceTransferComplete
                     ? { conversationSourceTransferComplete: true as const }

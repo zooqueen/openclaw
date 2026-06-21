@@ -25,6 +25,7 @@ const createOpenClawCodingToolsMock = vi.fn();
 const toolExecuteMock = vi.fn();
 const handleCodexAppServerApprovalRequestMock = vi.fn();
 const configRuntimeMock = vi.hoisted(() => ({ rejectedProvider: undefined as string | undefined }));
+const resolveCodexProviderWebSearchSupportForClientMock = vi.fn();
 
 vi.mock("./config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./config.js")>();
@@ -520,6 +521,7 @@ describe("runCodexAppServerSideQuestion", () => {
         senderE164: "+15550001",
         senderIsOwner: true,
       }),
+      { pluginConfig: { appServer: { mode: "yolo", approvalsReviewer: "user" } } },
     );
 
     expect(result).toEqual({ text: "Side answer." });
@@ -1158,7 +1160,7 @@ describe("runCodexAppServerSideQuestion", () => {
               enabled: true,
               profileName: "side-proxy",
               domains: { "api.openai.com": "allow" },
-              unixSockets: { "/tmp/proxy.sock": "allow" },
+              unixSockets: { "/tmp/proxy.sock": "allow", "/tmp/blocked.sock": "none" },
               allowUpstreamProxy: true,
               proxyUrl: "http://127.0.0.1:3128",
             },
@@ -1182,7 +1184,7 @@ describe("runCodexAppServerSideQuestion", () => {
           network: {
             enabled: true,
             domains: { "api.openai.com": "allow" },
-            unix_sockets: { "/tmp/proxy.sock": "allow" },
+            unix_sockets: { "/tmp/proxy.sock": "allow", "/tmp/blocked.sock": "deny" },
             allow_upstream_proxy: true,
             proxy_url: "http://127.0.0.1:3128",
           },
@@ -1191,6 +1193,10 @@ describe("runCodexAppServerSideQuestion", () => {
     });
     expect(config?.["features.code_mode"]).toBe(true);
     expect(config?.["features.code_mode_only"]).toBe(false);
+    const turnStartParams = client.request.mock.calls.find(
+      ([method]) => method === "turn/start",
+    )?.[1] as Record<string, unknown> | undefined;
+    expect(turnStartParams).not.toHaveProperty("sandboxPolicy");
   });
 
   it("keeps Codex code-mode-only while disabling Guardian for provider-qualified local models", async () => {

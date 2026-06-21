@@ -202,7 +202,7 @@ describe("Codex app-server config", () => {
               },
               unix_sockets: {
                 "/tmp/mock-proxy.sock": "allow",
-                "/tmp/blocked.sock": "none",
+                "/tmp/blocked.sock": "deny",
               },
               proxy_url: "http://127.0.0.1:3128",
               socks_url: "socks5h://127.0.0.1:8081",
