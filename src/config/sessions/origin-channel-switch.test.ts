@@ -133,7 +133,8 @@ describe("session origin across a channel switch", () => {
 
   it("preserves sparse existing channel metadata when optional identity fields are first populated", () => {
     const existing = {
-      sessionKey,
+      sessionId: "session-1",
+      updatedAt: 1,
       origin: {
         provider: "slack",
         nativeChannelId: "D111SLACK",
