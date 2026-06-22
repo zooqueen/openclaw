@@ -478,6 +478,7 @@ export function runAgentAttempt(params: {
   fastMode?: FastMode;
   fastModeStartedAtMs?: number;
   fastModeAutoOnSeconds?: number;
+  isFinalFallbackAttempt?: boolean;
   timeoutMs: number;
   runTimeoutOverrideMs?: number;
   runId: string;
@@ -790,6 +791,7 @@ export function runAgentAttempt(params: {
     fastMode: params.fastMode,
     fastModeStartedAtMs: params.fastModeStartedAtMs,
     fastModeAutoOnSeconds: params.fastModeAutoOnSeconds,
+    isFinalFallbackAttempt: params.isFinalFallbackAttempt,
     verboseLevel: params.resolvedVerboseLevel,
     bashElevated: params.opts.bashElevated,
     timeoutMs: params.timeoutMs,

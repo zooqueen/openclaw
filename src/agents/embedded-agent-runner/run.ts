@@ -4123,7 +4123,9 @@ async function runEmbeddedAgentInternal(
           };
         }
       } finally {
-        await maybeEmitFastModeAutoResetBestEffort();
+        if (params.isFinalFallbackAttempt !== false) {
+          await maybeEmitFastModeAutoResetBestEffort();
+        }
         forgetPromptBuildDrainCacheForRun(params.runId);
         stopRuntimeAuthRefreshTimer();
         await runAgentCleanupStep({
