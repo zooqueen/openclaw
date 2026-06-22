@@ -130,7 +130,7 @@ export function createChannelProgressDraftCompositor(params: {
 
   const noteProgress = async (
     line?: ChannelProgressDraftCompositorLine,
-    options?: { toolName?: string; startImmediately?: boolean },
+    options?: { toolName?: string; startImmediately?: boolean; allowAfterFinal?: boolean },
   ) => {
     if (!params.active || finalReplyStarted || finalReplyDelivered) {
       return false;
