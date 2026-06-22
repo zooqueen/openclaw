@@ -2,13 +2,13 @@
 import { render } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import { i18n } from "../i18n/index.ts";
+import { renderMarkdownSidebar } from "../ui/views/markdown-sidebar.ts";
 import {
   md,
   toSanitizedMarkdownHtml,
   toStreamingMarkdownHtml,
   toStreamingPlainTextHtml,
 } from "./markdown.ts";
-import { renderMarkdownSidebar } from "./views/markdown-sidebar.ts";
 
 function htmlFragment(html: string): HTMLElement {
   const container = document.createElement("div");
