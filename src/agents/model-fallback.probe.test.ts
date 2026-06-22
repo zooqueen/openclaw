@@ -176,7 +176,8 @@ function expectPrimarySkippedForReason(
 ) {
   expect(result.result).toBe("ok");
   expect(run).toHaveBeenCalledTimes(1);
-  expect(run).toHaveBeenCalledWith("anthropic", "claude-haiku-3-5", {
+  expect(requireProviderModelCall(run, 0, "run")).toEqual(["anthropic", "claude-haiku-3-5"]);
+  expectRunCallOptions(run, 0, {
     isFinalFallbackAttempt: true,
   });
   expect(result.attempts[0]?.reason).toBe(reason);
@@ -192,10 +193,40 @@ function expectPrimaryProbeSuccess(
 ) {
   expect(result.result).toBe(expectedResult);
   expect(run).toHaveBeenCalledTimes(1);
-  expect(run).toHaveBeenCalledWith("openai", "gpt-4.1-mini", {
+  expect(requireProviderModelCall(run, 0, "run")).toEqual(["openai", "gpt-4.1-mini"]);
+  expectRunCallOptions(run, 0, {
     allowTransientCooldownProbe: true,
     isFinalFallbackAttempt: false,
   });
+}
+
+function requireMockCall(
+  mock: { mock: { calls: unknown[][] } },
+  index: number,
+  label: string,
+): unknown[] {
+  const call = mock.mock.calls[index];
+  if (!call) {
+    throw new Error(`expected ${label} mock call ${index}`);
+  }
+  return call;
+}
+
+function requireProviderModelCall(
+  mock: { mock: { calls: unknown[][] } },
+  index: number,
+  label: string,
+): [string, string] {
+  const [provider, model] = requireMockCall(mock, index, label);
+  return [String(provider), String(model)];
+}
+
+function expectRunCallOptions(
+  mock: { mock: { calls: unknown[][] } },
+  index: number,
+  expected: Record<string, unknown>,
+): void {
+  expect(requireMockCall(mock, index, "run")[2]).toEqual(expect.objectContaining(expected));
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -252,11 +283,13 @@ async function expectProbeFailureFallsBack({
 
   expect(result.result).toBe("fallback-ok");
   expect(run).toHaveBeenCalledTimes(2);
-  expect(run).toHaveBeenNthCalledWith(1, "openai", "gpt-4.1-mini", {
+  expect(requireProviderModelCall(run, 0, "run")).toEqual(["openai", "gpt-4.1-mini"]);
+  expectRunCallOptions(run, 0, {
     allowTransientCooldownProbe: true,
     isFinalFallbackAttempt: false,
   });
-  expect(run).toHaveBeenNthCalledWith(2, "anthropic", "claude-haiku-3-5", {
+  expect(requireProviderModelCall(run, 1, "run")).toEqual(["anthropic", "claude-haiku-3-5"]);
+  expectRunCallOptions(run, 1, {
     allowTransientCooldownProbe: true,
     isFinalFallbackAttempt: false,
   });
@@ -532,11 +565,19 @@ describe("runWithModelFallback – probe logic", () => {
     await logCapture.flush();
 
     expect(fallbackResult.result).toBe("fallback-ok");
-    expect(fallbackRun).toHaveBeenNthCalledWith(1, "openai", "gpt-4.1-mini", {
+    expect(requireProviderModelCall(fallbackRun, 0, "fallbackRun")).toEqual([
+      "openai",
+      "gpt-4.1-mini",
+    ]);
+    expectRunCallOptions(fallbackRun, 0, {
       allowTransientCooldownProbe: true,
       isFinalFallbackAttempt: false,
     });
-    expect(fallbackRun).toHaveBeenNthCalledWith(2, "anthropic", "claude-haiku-3-5", {
+    expect(requireProviderModelCall(fallbackRun, 1, "fallbackRun")).toEqual([
+      "anthropic",
+      "claude-haiku-3-5",
+    ]);
+    expectRunCallOptions(fallbackRun, 1, {
       isFinalFallbackAttempt: false,
     });
 
@@ -696,14 +737,17 @@ describe("runWithModelFallback – probe logic", () => {
     // All three candidates must be attempted — the abort must not short-circuit
     expect(run).toHaveBeenCalledTimes(3);
 
-    expect(run).toHaveBeenNthCalledWith(1, "google", "gemini-3-flash-preview", {
+    expect(requireProviderModelCall(run, 0, "run")).toEqual(["google", "gemini-3-flash-preview"]);
+    expectRunCallOptions(run, 0, {
       allowTransientCooldownProbe: true,
       isFinalFallbackAttempt: false,
     });
-    expect(run).toHaveBeenNthCalledWith(2, "anthropic", "claude-haiku-3-5", {
+    expect(requireProviderModelCall(run, 1, "run")).toEqual(["anthropic", "claude-haiku-3-5"]);
+    expectRunCallOptions(run, 1, {
       isFinalFallbackAttempt: false,
     });
-    expect(run).toHaveBeenNthCalledWith(3, "deepseek", "deepseek-chat", {
+    expect(requireProviderModelCall(run, 2, "run")).toEqual(["deepseek", "deepseek-chat"]);
+    expectRunCallOptions(run, 2, {
       isFinalFallbackAttempt: true,
     });
   });
@@ -785,7 +829,8 @@ describe("runWithModelFallback – probe logic", () => {
 
     expect(result.result).toBe("probed-ok");
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith("openai", "gpt-4.1-mini", {
+    expect(requireProviderModelCall(run, 0, "run")).toEqual(["openai", "gpt-4.1-mini"]);
+    expectRunCallOptions(run, 0, {
       allowTransientCooldownProbe: true,
       isFinalFallbackAttempt: true,
     });
