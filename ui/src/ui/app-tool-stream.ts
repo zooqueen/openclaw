@@ -1,16 +1,16 @@
 import { formatUnknownText, truncateText } from "../lib/format.ts";
-import { normalizeLowercaseStringOrEmpty } from "../lib/string-coerce.ts";
-// Control UI module implements app tool stream behavior.
-import { updateActivityFromToolEvent, type ActivityEntry } from "../pages/activity/data.ts";
-import { createChatModelOverride } from "./chat-model-ref.ts";
-import type { ChatModelOverride } from "./chat-model-ref.types.ts";
 import {
   buildAgentMainSessionKey,
   DEFAULT_AGENT_ID,
   DEFAULT_MAIN_KEY,
   normalizeAgentId,
   parseAgentSessionKey,
-} from "./session-key.ts";
+} from "../lib/session-key.ts";
+import { normalizeLowercaseStringOrEmpty } from "../lib/string-coerce.ts";
+// Control UI module implements app tool stream behavior.
+import { updateActivityFromToolEvent, type ActivityEntry } from "../pages/activity/data.ts";
+import { createChatModelOverride } from "./chat-model-ref.ts";
+import type { ChatModelOverride } from "./chat-model-ref.types.ts";
 
 const TOOL_STREAM_LIMIT = 50;
 const TOOL_STREAM_THROTTLE_MS = 80;

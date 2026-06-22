@@ -6,10 +6,10 @@ import {
 } from "../../../../src/gateway/control-ui-contract.js";
 import { normalizeBasePath } from "../../app-routes.ts";
 import { setUiTimeFormatPreference } from "../../lib/format.ts";
+import { normalizeAgentId, parseAgentSessionKey } from "../../lib/session-key.ts";
 import { normalizeOptionalString } from "../../lib/string-coerce.ts";
 import { normalizeAssistantIdentity } from "../assistant-identity.ts";
 import { resolveControlUiAuthCandidates } from "../control-ui-auth.ts";
-import { normalizeAgentId, parseAgentSessionKey } from "../session-key.ts";
 import { loadLocalAssistantIdentity } from "../storage.ts";
 
 export type ControlUiBootstrapState = {

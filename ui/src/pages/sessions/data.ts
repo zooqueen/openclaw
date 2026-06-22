@@ -1,3 +1,13 @@
+import {
+  areUiSessionKeysEquivalent,
+  isUiGlobalSessionKey,
+  isSubagentSessionKey,
+  normalizeAgentId,
+  parseAgentSessionKey,
+  resolveUiDefaultAgentId,
+  resolveUiGlobalAliasAgentId,
+  resolveUiSelectedGlobalAgentId,
+} from "../../lib/session-key.ts";
 // Control UI controller manages sessions gateway state.
 import {
   reconcileChatRunFromCurrentSessionRow,
@@ -9,16 +19,6 @@ import {
   isMissingOperatorReadScopeError,
 } from "../../ui/controllers/scope-errors.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "../../ui/gateway.ts";
-import {
-  areUiSessionKeysEquivalent,
-  isUiGlobalSessionKey,
-  isSubagentSessionKey,
-  normalizeAgentId,
-  parseAgentSessionKey,
-  resolveUiDefaultAgentId,
-  resolveUiGlobalAliasAgentId,
-  resolveUiSelectedGlobalAgentId,
-} from "../../ui/session-key.ts";
 import { isSessionRunActive } from "../../ui/session-run-state.ts";
 import type {
   FastMode,
