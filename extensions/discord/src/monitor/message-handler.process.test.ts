@@ -3031,7 +3031,6 @@ describe("processDiscordMessage draft streaming", () => {
     const draftStream = createMockDraftStreamForTest();
 
     dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {
-      await params?.replyOptions?.onToolStart?.({ name: "exec", phase: "start" });
       await params?.replyOptions?.onItemEvent?.({
         itemId: "tool:call-1",
         toolCallId: "call-1",

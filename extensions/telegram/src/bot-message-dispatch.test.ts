@@ -2603,7 +2603,6 @@ describe("dispatchTelegramMessage draft streaming", () => {
   it("replaces Telegram command progress items with matching command output", async () => {
     const { answerDraftStream } = setupDraftStreams({ answerMessageId: 2001 });
     dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ replyOptions }) => {
-      await replyOptions?.onToolStart?.({ name: "exec", phase: "start" });
       await replyOptions?.onItemEvent?.({
         itemId: "tool:call-1",
         toolCallId: "call-1",
@@ -2631,7 +2630,10 @@ describe("dispatchTelegramMessage draft streaming", () => {
     expect(lastUpdate?.text).toContain("install dependencies");
     expect(lastUpdate?.text).not.toContain("completed");
     expect(lastUpdate).toEqual(
-      telegramHtmlPreview("<b>Shelling</b><br><b>🛠️ Exec</b> <code>install dependencies</code>"),
+      telegramProgressPreview(
+        "Shelling\n\n🛠️ install dependencies",
+        "<b>Shelling</b>\n<b>🛠️ Exec</b> <code>install dependencies</code>",
+      ),
     );
   });
 
