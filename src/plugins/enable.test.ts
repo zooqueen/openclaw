@@ -164,25 +164,25 @@ describe("enablePluginInConfig", () => {
 });
 
 describe("enableExplicitlySelectedPluginInConfig", () => {
-  it("appends ClickClack to a restrictive allowlist before enabling it", () => {
+  it("appends an explicitly selected plugin to a restrictive allowlist before enabling it", () => {
     const result = enableExplicitlySelectedPluginInConfig(
       {
         plugins: {
           allow: ["memory-core"],
         },
       } as OpenClawConfig,
-      "clickclack",
+      "weixin",
     );
 
     expect(result.enabled).toBe(true);
-    expect(result.config.plugins?.allow).toEqual(["memory-core", "clickclack"]);
-    expect(result.config.plugins?.entries?.clickclack?.enabled).toBe(true);
-    expect(result.config.channels?.clickclack?.enabled).toBe(true);
+    expect(result.config.plugins?.allow).toEqual(["memory-core", "weixin"]);
+    expect(result.config.plugins?.entries?.weixin?.enabled).toBe(true);
   });
 
-  it("keeps unrelated explicit plugin enables blocked by a restrictive allowlist", () => {
+  it("keeps globally disabled plugins blocked without changing the allowlist", () => {
     const cfg = {
       plugins: {
+        enabled: false,
         allow: ["memory-core"],
       },
     } as OpenClawConfig;
@@ -193,24 +193,24 @@ describe("enableExplicitlySelectedPluginInConfig", () => {
       config: cfg,
       enabled: false,
       pluginId: "google",
-      reason: "blocked by allowlist",
+      reason: "plugins disabled",
     });
   });
 
-  it("keeps ClickClack blocked by the denylist without changing the allowlist", () => {
+  it("keeps explicitly selected plugins blocked by the denylist without changing the allowlist", () => {
     const cfg = {
       plugins: {
         allow: ["memory-core"],
-        deny: ["clickclack"],
+        deny: ["weixin"],
       },
     } as OpenClawConfig;
 
-    const result = enableExplicitlySelectedPluginInConfig(cfg, "clickclack");
+    const result = enableExplicitlySelectedPluginInConfig(cfg, "weixin");
 
     expect(result).toEqual({
       config: cfg,
       enabled: false,
-      pluginId: "clickclack",
+      pluginId: "weixin",
       reason: "blocked by denylist",
     });
   });

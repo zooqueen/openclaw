@@ -440,11 +440,11 @@ describe("setupChannels workspace shadow exclusion", () => {
     });
   });
 
-  it("allowlists ClickClack when it is explicitly selected for setup", async () => {
+  it("allowlists a selected setup plugin when plugins.allow is restrictive", async () => {
     const setupWizard = {
-      channel: "clickclack",
+      channel: "weixin",
       getStatus: vi.fn(async () => ({
-        channel: "clickclack",
+        channel: "weixin",
         configured: false,
         statusLines: [],
       })),
@@ -453,25 +453,25 @@ describe("setupChannels workspace shadow exclusion", () => {
           ...cfg,
           channels: {
             ...cfg.channels,
-            clickclack: {
-              ...cfg.channels?.clickclack,
+            weixin: {
+              ...cfg.channels?.weixin,
               token: "secret",
             },
           },
         },
       })),
     };
-    const clickClackPlugin = makeSetupPlugin({
-      id: "clickclack",
-      label: "ClickClack",
+    const weixinPlugin = makeSetupPlugin({
+      id: "weixin",
+      label: "Weixin",
       setupWizard,
     });
     resolveChannelSetupEntries.mockReturnValue(
       makeChannelSetupEntries({
         entries: [
           {
-            id: "clickclack",
-            meta: makeMeta("clickclack", "ClickClack"),
+            id: "weixin",
+            meta: makeMeta("weixin", "Weixin"),
           },
         ],
       }),
@@ -480,15 +480,15 @@ describe("setupChannels workspace shadow exclusion", () => {
       makePluginRegistry({
         channelSetups: [
           {
-            pluginId: "clickclack",
+            pluginId: "weixin",
             source: "bundled",
             enabled: true,
-            plugin: clickClackPlugin,
+            plugin: weixinPlugin,
           },
         ],
       }),
     );
-    const select = vi.fn().mockResolvedValueOnce("clickclack").mockResolvedValueOnce("__done__");
+    const select = vi.fn().mockResolvedValueOnce("weixin").mockResolvedValueOnce("__done__");
 
     const next = await setupChannels(
       {
@@ -509,10 +509,9 @@ describe("setupChannels workspace shadow exclusion", () => {
       },
     );
 
-    expect(next.plugins?.allow).toEqual(["memory-core", "clickclack"]);
-    expect(next.plugins?.entries?.clickclack?.enabled).toBe(true);
-    expect(next.channels?.clickclack).toEqual({
-      enabled: true,
+    expect(next.plugins?.allow).toEqual(["memory-core", "weixin"]);
+    expect(next.plugins?.entries?.weixin?.enabled).toBe(true);
+    expect(next.channels?.weixin).toEqual({
       token: "secret",
     });
   });
