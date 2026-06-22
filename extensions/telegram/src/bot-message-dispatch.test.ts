@@ -2603,6 +2603,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
   it("replaces Telegram command progress items with matching command output", async () => {
     const { answerDraftStream } = setupDraftStreams({ answerMessageId: 2001 });
     dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ replyOptions }) => {
+      await replyOptions?.onToolStart?.({ name: "exec", phase: "start" });
       await replyOptions?.onItemEvent?.({
         itemId: "tool:call-1",
         toolCallId: "call-1",
