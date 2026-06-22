@@ -1,3 +1,5 @@
+import { saveConfig } from "../../pages/config/data.ts";
+import type { ConfigState } from "../../pages/config/data.ts";
 // Control UI controller manages agents gateway state.
 import {
   normalizeChatModelOverrideValue,
@@ -13,8 +15,6 @@ import type {
   ToolsCatalogResult,
   ToolsEffectiveResult,
 } from "../types.ts";
-import { saveConfig } from "./config.ts";
-import type { ConfigState } from "./config.ts";
 import {
   formatMissingOperatorReadScopeMessage,
   isMissingOperatorReadScopeError,
