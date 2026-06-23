@@ -68,6 +68,8 @@ export class IMessageRpcClient {
   private readonly closed: Promise<void>;
   private closedResolve: (() => void) | null = null;
   private child: ChildProcessWithoutNullStreams | null = null;
+  private closeError: Error | null = null;
+  private stopping = false;
   private stdoutBuffer = "";
   private readonly stdoutDecoder = new StringDecoder("utf8");
   private nextId = 1;
@@ -119,7 +121,9 @@ export class IMessageRpcClient {
     });
 
     child.on("error", (err) => {
-      this.failAll(err instanceof Error ? err : new Error(String(err)));
+      const closeError = err instanceof Error ? err : new Error(String(err));
+      this.closeError = closeError;
+      this.failAll(closeError);
       this.closedResolve?.();
     });
 
@@ -133,7 +137,9 @@ export class IMessageRpcClient {
       if (this.child === child) {
         this.flushStdoutBuffer();
       }
-      this.failAll(this.buildCloseError(code, signal));
+      const closeError = this.buildCloseError(code, signal);
+      this.closeError = closeError;
+      this.failAll(closeError);
       this.closedResolve?.();
     });
   }
@@ -142,6 +148,7 @@ export class IMessageRpcClient {
     if (!this.child) {
       return;
     }
+    this.stopping = true;
     this.stdoutBuffer = "";
     this.stdoutDecoder.end();
     this.child.stdin?.end();
@@ -163,6 +170,9 @@ export class IMessageRpcClient {
 
   async waitForClose(): Promise<void> {
     await this.closed;
+    if (this.closeError && !this.stopping) {
+      throw this.closeError;
+    }
   }
 
   async request<T = unknown>(

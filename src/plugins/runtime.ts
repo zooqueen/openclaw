@@ -48,6 +48,7 @@ const state: RegistryState = (() => {
       },
       agentEventBridgeUnsubscribe: undefined,
       key: null,
+      pluginIdScope: null,
       workspaceDir: null,
       runtimeSubagentMode: "default",
       importedPluginIds: new Set<string>(),
@@ -200,6 +201,7 @@ export function setActivePluginRegistry(
   cacheKey?: string,
   runtimeSubagentMode: "default" | "explicit" | "gateway-bindable" = "default",
   workspaceDir?: string,
+  pluginIdScope?: readonly string[],
 ) {
   const previousRegistry = asPluginRegistry(state.activeRegistry);
   state.activeRegistry = registry;
@@ -209,6 +211,7 @@ export function setActivePluginRegistry(
   syncTrackedSurface(state.channel, registry, true);
   syncTrackedSurface(state.sessionExtension, registry, true);
   state.key = cacheKey ?? null;
+  state.pluginIdScope = pluginIdScope ? [...pluginIdScope] : null;
   state.workspaceDir = workspaceDir ?? null;
   state.runtimeSubagentMode = runtimeSubagentMode;
   syncPluginAgentEventBridge();
@@ -389,6 +392,10 @@ export function getActivePluginSessionExtensionRegistry(): PluginRegistry | null
 
 export function getActivePluginRegistryKey(): string | null {
   return state.key;
+}
+
+export function getActivePluginRegistryPluginIdScope(): readonly string[] | null {
+  return state.pluginIdScope;
 }
 
 export function getActivePluginRuntimeSubagentMode(): "default" | "explicit" | "gateway-bindable" {

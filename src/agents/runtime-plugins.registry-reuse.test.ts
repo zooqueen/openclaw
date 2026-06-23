@@ -87,4 +87,49 @@ describe("ensureRuntimePluginsLoaded registry reuse", () => {
     });
     expect(mocks.loadOpenClawPlugins).not.toHaveBeenCalled();
   });
+
+  it("reuses the startup registry when the turn workspace differs from gateway activation", () => {
+    const config = { plugins: { allow: ["telegram"] } };
+    const activeRegistry = createRegistryWithPlugin("telegram");
+    activeRegistry.coreGatewayMethodNames = ["sessions.get", "sessions.list"];
+    const startupLoadOptions = {
+      config,
+      activationSourceConfig: config,
+      autoEnabledReasons: {},
+      workspaceDir: "/tmp/gateway-workspace",
+      onlyPluginIds: ["telegram"],
+      coreGatewayMethodNames: ["sessions.get", "sessions.list"],
+      runtimeOptions: {
+        allowGatewaySubagentBinding: true,
+      },
+      preferBuiltPluginArtifacts: true,
+    };
+    const { cacheKey } = testing.resolvePluginLoadCacheContext(startupLoadOptions);
+    setActivePluginRegistry(
+      activeRegistry,
+      cacheKey,
+      "gateway-bindable",
+      "/tmp/gateway-workspace",
+      startupLoadOptions.onlyPluginIds,
+    );
+    mocks.getCurrentPluginMetadataSnapshot.mockReturnValue({
+      startup: {
+        pluginIds: ["telegram"],
+      },
+    });
+    mocks.loadOpenClawPlugins.mockImplementation(() => {
+      throw new Error("dispatch should reuse the active gateway startup registry");
+    });
+
+    ensureRuntimePluginsLoaded({
+      config,
+      workspaceDir: "/tmp/agent-workspace",
+    });
+
+    expect(mocks.getCurrentPluginMetadataSnapshot).toHaveBeenCalledWith({
+      config,
+      workspaceDir: "/tmp/agent-workspace",
+    });
+    expect(mocks.loadOpenClawPlugins).not.toHaveBeenCalled();
+  });
 });

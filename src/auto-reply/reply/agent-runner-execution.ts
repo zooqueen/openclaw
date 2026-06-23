@@ -2106,6 +2106,9 @@ export async function runAgentTurnWithFallback(params: {
         sessionKey: params.sessionKey,
         milestone: "before_model_fallback",
       });
+      await params.opts?.onAgentModelPreparationPhase?.({
+        phase: "model-fallback-started",
+      });
       const fallbackResult = await agentTurnTiming.measure("model_fallback", () =>
         runWithModelFallback<EmbeddedAgentRunResult>({
           ...resolveModelFallbackOptions(effectiveRun, runtimeConfig),
@@ -2120,6 +2123,11 @@ export async function runAgentTurnWithFallback(params: {
               cfg: runtimeConfig,
             }),
           prepareAgentHarnessRuntime: async ({ provider, model, agentHarnessRuntimeOverride }) => {
+            await params.opts?.onAgentModelPreparationPhase?.({
+              phase: "prepare-harness-started",
+              provider,
+              model,
+            });
             await agentTurnTiming.measure("fallback_prepare_harness", () =>
               ensureSelectedAgentHarnessPlugin({
                 config: runtimeConfig,
@@ -2131,6 +2139,11 @@ export async function runAgentTurnWithFallback(params: {
                 workspaceDir: params.followupRun.run.workspaceDir,
               }),
             );
+            await params.opts?.onAgentModelPreparationPhase?.({
+              phase: "prepare-harness-finished",
+              provider,
+              model,
+            });
           },
           onFallbackStep: (step) => {
             emitModelFallbackStepLifecycle({
@@ -2138,6 +2151,9 @@ export async function runAgentTurnWithFallback(params: {
               sessionKey: params.sessionKey,
               step,
             });
+          },
+          onFallbackPhase: async (phase) => {
+            await params.opts?.onAgentModelPreparationPhase?.(phase);
           },
           classifyResult: async ({ result, provider, model }) => {
             const classification = outcomePlan.classifyRunResult({
@@ -2158,6 +2174,11 @@ export async function runAgentTurnWithFallback(params: {
           run: async (provider, model, runOptions) => {
             attemptedRuntimeProvider = provider;
             attemptedRuntimeModel = model;
+            await params.opts?.onAgentModelPreparationPhase?.({
+              phase: "run-callback-started",
+              provider,
+              model,
+            });
             const suppressQueuedUserPersistenceForCandidate =
               (params.followupRun.run.suppressNextUserMessagePersistence ?? false) ||
               queuedUserMessagePersistedAcrossFallback;
@@ -2492,6 +2513,8 @@ export async function runAgentTurnWithFallback(params: {
                 }),
               });
               pendingLifecycleTerminal = { provider, model, backstop: lifecycleBackstop };
+              let didObserveAgentModelCallStart = false;
+              let didNotifyAgentModelFirstEvent = false;
               try {
                 // Profiler-only milestone: it exposes time spent before Codex
                 // dispatch while leaving the regular embedded run path inert.
@@ -2570,6 +2593,9 @@ export async function runAgentTurnWithFallback(params: {
                         lifecycleGeneration = info.lifecycleGeneration;
                       }
                     },
+                    onExecutionPhase: async (info) => {
+                      await params.opts?.onAgentExecutionPhase?.(info);
+                    },
                     blockReplyBreak: params.resolvedBlockStreamingBreak,
                     blockReplyChunking: params.blockReplyChunking,
                     onPartialReply: async (payload) => {
@@ -2608,6 +2634,33 @@ export async function runAgentTurnWithFallback(params: {
                         evt.stream === "lifecycle" && typeof evt.data.phase === "string";
                       if (evt.stream !== "lifecycle" || hasLifecyclePhase) {
                         notifyAgentRunStart();
+                      }
+                      if (
+                        evt.stream === "codex_app_server.lifecycle" &&
+                        readStringValue(evt.data.phase) === "turn_starting"
+                      ) {
+                        didObserveAgentModelCallStart = true;
+                        await params.opts?.onAgentModelCallStart?.({
+                          provider,
+                          model,
+                          phase: "turn_starting",
+                        });
+                      } else if (
+                        params.opts?.onAgentModelFirstEvent &&
+                        didObserveAgentModelCallStart &&
+                        !didNotifyAgentModelFirstEvent &&
+                        evt.stream !== "lifecycle" &&
+                        evt.stream !== "codex_app_server.lifecycle"
+                      ) {
+                        didNotifyAgentModelFirstEvent = true;
+                        await params.opts.onAgentModelFirstEvent({
+                          provider,
+                          model,
+                          stream: evt.stream,
+                          phase: readStringValue(evt.data.phase),
+                          kind: readStringValue(evt.data.kind),
+                          name: readStringValue(evt.data.name),
+                        });
                       }
                       // Trigger typing when tools start executing.
                       // Must await to ensure typing indicator starts before tool summaries are emitted.

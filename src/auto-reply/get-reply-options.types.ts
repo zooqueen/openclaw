@@ -1,8 +1,8 @@
+import type { FastMode } from "@openclaw/normalization-core/string-coerce";
 /** Public option types for reply generation callbacks, streaming, and delivery policy. */
 import type { ImageContent } from "../llm/types.js";
 import type { PromptImageOrderEntry } from "../media/prompt-image-order.js";
 import type { UserTurnTranscriptRecorder } from "../sessions/user-turn-transcript.types.js";
-import type { FastMode } from "@openclaw/normalization-core/string-coerce";
 import type { ReplyPayload } from "./reply-payload.js";
 import type { TypingController } from "./reply/typing.js";
 
@@ -67,6 +67,41 @@ export type GetReplyOptions = {
   imageOrder?: PromptImageOrderEntry[];
   /** Notifies when an agent run actually starts (useful for webchat command handling). */
   onAgentRunStart?: (runId: string) => void;
+  /** Notifies when the provider/model turn is about to be submitted. */
+  onAgentModelCallStart?: (ctx: {
+    provider: string;
+    model: string;
+    phase?: string;
+  }) => Promise<void> | void;
+  /** Notifies about local preparation work before the selected model run starts. */
+  onAgentModelPreparationPhase?: (ctx: {
+    phase: string;
+    provider?: string;
+    model?: string;
+    candidateCount?: number;
+    attempt?: number;
+    total?: number;
+  }) => Promise<void> | void;
+  /** Notifies when the first non-lifecycle provider event arrives after model call start. */
+  onAgentModelFirstEvent?: (ctx: {
+    provider: string;
+    model: string;
+    stream: string;
+    phase?: string;
+    kind?: string;
+    name?: string;
+  }) => Promise<void> | void;
+  /** Notifies about embedded agent runtime execution phases. */
+  onAgentExecutionPhase?: (ctx: {
+    phase: string;
+    provider?: string;
+    model?: string;
+    backend?: string;
+    source?: string;
+    tool?: string;
+    toolCallId?: string;
+    itemId?: string;
+  }) => Promise<void> | void;
   /** Shared lifecycle owner for the current user-turn transcript append. */
   userTurnTranscriptRecorder?: UserTurnTranscriptRecorder;
   onReplyStart?: () => Promise<void> | void;

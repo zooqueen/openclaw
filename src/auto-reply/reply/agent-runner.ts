@@ -1232,12 +1232,24 @@ export async function runReplyAgent(params: {
     isActive,
     blockStreamingEnabled,
   };
-  const traceAgentPhase = <T>(name: string, run: () => Promise<T> | T): Promise<T> =>
-    measureDiagnosticsTimelineSpan(name, run, {
-      phase: "agent-turn",
-      config: followupRun.run.config,
-      attributes: traceAttributes,
-    });
+  const notifyReplyPreparationPhase = async (phase: string): Promise<void> => {
+    await opts?.onAgentModelPreparationPhase?.({ phase });
+  };
+  const traceAgentPhase = async <T>(name: string, run: () => Promise<T> | T): Promise<T> => {
+    await notifyReplyPreparationPhase(`${name}:started`);
+    try {
+      const result = await measureDiagnosticsTimelineSpan(name, run, {
+        phase: "agent-turn",
+        config: followupRun.run.config,
+        attributes: traceAttributes,
+      });
+      await notifyReplyPreparationPhase(`${name}:finished`);
+      return result;
+    } catch (err) {
+      await notifyReplyPreparationPhase(`${name}:failed`);
+      throw err;
+    }
+  };
   const effectiveShouldSteer = !isHeartbeat && !effectiveResetTriggered && shouldSteer;
   const effectiveShouldFollowup = !effectiveResetTriggered && shouldFollowup;
   const typingSignals = createTypingSignaler({

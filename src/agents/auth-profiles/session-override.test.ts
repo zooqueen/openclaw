@@ -20,14 +20,18 @@ const authStoreMocks = vi.hoisted(() => {
     hasSource: false,
     store: { version: 1, profiles: {} },
   };
+  const getEffectiveRuntimeAuthProfileStoreSnapshot = vi.fn(() => undefined);
   return {
     state,
     ensureAuthProfileStore: vi.fn(() => state.store),
+    getEffectiveRuntimeAuthProfileStoreSnapshot,
     hasAnyAuthProfileStoreSource: vi.fn(() => state.hasSource),
     isProfileInCooldown: vi.fn((_store: AuthProfileStore, _profileId: string) => false),
     reset() {
       state.hasSource = false;
       state.store = { version: 1, profiles: {} };
+      getEffectiveRuntimeAuthProfileStoreSnapshot.mockReset();
+      getEffectiveRuntimeAuthProfileStoreSnapshot.mockReturnValue(undefined);
     },
     resolveAuthProfileOrder: vi.fn(
       ({
@@ -68,6 +72,8 @@ const authStoreMocks = vi.hoisted(() => {
 
 vi.mock("./store.js", () => ({
   ensureAuthProfileStore: authStoreMocks.ensureAuthProfileStore,
+  getEffectiveRuntimeAuthProfileStoreSnapshot:
+    authStoreMocks.getEffectiveRuntimeAuthProfileStoreSnapshot,
   hasAnyAuthProfileStoreSource: authStoreMocks.hasAnyAuthProfileStoreSource,
 }));
 
@@ -417,6 +423,50 @@ describe("resolveSessionAuthProfileOverride", () => {
 
       expect(resolved).toBe(TEST_PRIMARY_PROFILE_ID);
       expect(sessionEntry.authProfileOverride).toBe(TEST_PRIMARY_PROFILE_ID);
+    });
+  });
+
+  it("uses prepared runtime auth snapshots without reloading the external auth store", async () => {
+    await withAuthState(async (state) => {
+      const agentDir = state.agentDir();
+      await fs.mkdir(agentDir, { recursive: true });
+      const runtimeStore = createAuthStoreWithProfiles({
+        profiles: {
+          [TEST_PRIMARY_PROFILE_ID]: {
+            type: "api_key",
+            provider: "openai",
+            key: "sk-runtime",
+          },
+        },
+        order: {
+          openai: [TEST_PRIMARY_PROFILE_ID],
+        },
+      });
+      authStoreMocks.state.hasSource = true;
+      authStoreMocks.state.store = { version: 1, profiles: {} };
+      authStoreMocks.getEffectiveRuntimeAuthProfileStoreSnapshot.mockReturnValue(runtimeStore);
+
+      const sessionEntry: SessionEntry = {
+        sessionId: "s1",
+        updatedAt: Date.now(),
+        authProfileOverride: TEST_PRIMARY_PROFILE_ID,
+        authProfileOverrideSource: "auto",
+      };
+      const sessionStore = { "agent:main:main": sessionEntry };
+
+      const resolved = await resolveSessionAuthProfileOverride({
+        cfg: {} as OpenClawConfig,
+        provider: "openai",
+        agentDir,
+        sessionEntry,
+        sessionStore,
+        sessionKey: "agent:main:main",
+        storePath: undefined,
+        isNewSession: false,
+      });
+
+      expect(resolved).toBe(TEST_PRIMARY_PROFILE_ID);
+      expect(authStoreMocks.ensureAuthProfileStore).not.toHaveBeenCalled();
     });
   });
 

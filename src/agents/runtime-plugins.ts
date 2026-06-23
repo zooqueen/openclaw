@@ -5,7 +5,10 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";
 import { getCurrentPluginMetadataSnapshot } from "../plugins/current-plugin-metadata-snapshot.js";
-import { getActivePluginRuntimeSubagentMode } from "../plugins/runtime.js";
+import {
+  getActivePluginRegistryWorkspaceDir,
+  getActivePluginRuntimeSubagentMode,
+} from "../plugins/runtime.js";
 import { ensureStandaloneRuntimePluginRegistryLoaded } from "../plugins/runtime/standalone-runtime-registry-loader.js";
 import { resolveUserPath } from "../utils.js";
 
@@ -49,6 +52,10 @@ export function ensureRuntimePluginsLoaded(params: {
     config: params.config,
     workspaceDir,
   });
+  const loadWorkspaceDir =
+    startupPluginIds === undefined
+      ? workspaceDir
+      : (getActivePluginRegistryWorkspaceDir() ?? workspaceDir);
   const allowGatewaySubagentBinding =
     params.allowGatewaySubagentBinding === true ||
     getActivePluginRuntimeSubagentMode() === "gateway-bindable";
@@ -56,7 +63,7 @@ export function ensureRuntimePluginsLoaded(params: {
     requiredPluginIds: startupPluginIds,
     loadOptions: {
       config: params.config,
-      workspaceDir,
+      workspaceDir: loadWorkspaceDir,
       ...(startupPluginIds === undefined ? {} : { onlyPluginIds: startupPluginIds }),
       ...(startupPluginIds === undefined ? {} : { forceFullRuntimeForChannelPlugins: true }),
       runtimeOptions: allowGatewaySubagentBinding

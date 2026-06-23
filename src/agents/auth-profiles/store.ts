@@ -1019,6 +1019,13 @@ export function getRuntimeAuthProfileStoreSnapshot(
   return getRuntimeAuthProfileStoreSnapshotImpl(agentDir);
 }
 
+/** Return the effective runtime snapshot, including inherited main profiles. */
+export function getEffectiveRuntimeAuthProfileStoreSnapshot(
+  agentDir?: string,
+): AuthProfileStore | undefined {
+  return resolveRuntimeAuthProfileStore(agentDir, { allowKeychainPrompt: false }) ?? undefined;
+}
+
 /** Replace runtime auth-profile snapshots, used by tests and prepared runtimes. */
 export function replaceRuntimeAuthProfileStoreSnapshots(
   entries: Array<{ agentDir?: string; store: AuthProfileStore }>,

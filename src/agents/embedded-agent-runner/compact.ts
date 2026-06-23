@@ -958,6 +958,10 @@ async function compactEmbeddedAgentSessionDirectOnce(
       senderUsername: params.senderUsername,
       senderE164: params.senderE164,
       warn: (message) => log.warn(message),
+      // Core tools already emitted the primary policy audit. The bundled pass is
+      // still required for late MCP/LSP tools, but keep its audit out of the
+      // hot-path info trace so duplicate policy passes do not mask real costs.
+      toolPolicyAuditLogLevel: "debug",
     });
     const normalizableBundledToolProjection = filterProviderNormalizableTools(filteredBundledTools);
     if (normalizableBundledToolProjection.diagnostics.length > 0) {

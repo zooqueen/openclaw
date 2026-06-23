@@ -267,6 +267,14 @@ type ModelFallbackErrorHandler = (attempt: {
 }) => void | Promise<void>;
 
 type ModelFallbackStepHandler = (step: ModelFallbackStepFields) => void | Promise<void>;
+type ModelFallbackPhaseHandler = (phase: {
+  phase: string;
+  provider?: string;
+  model?: string;
+  candidateCount?: number;
+  attempt?: number;
+  total?: number;
+}) => void | Promise<void>;
 
 export type ModelFallbackResultClassification =
   | {
@@ -1298,6 +1306,7 @@ type RunWithModelFallbackParams<T> = {
   run: ModelFallbackRunFn<T>;
   onError?: ModelFallbackErrorHandler;
   onFallbackStep?: ModelFallbackStepHandler;
+  onFallbackPhase?: ModelFallbackPhaseHandler;
   classifyResult?: ModelFallbackResultClassifier<T>;
   mergeExhaustedResult?: (params: { latestResult: T; preferredResult: T }) => T;
   skipAuthProfileRuntime?: boolean;
@@ -1359,10 +1368,28 @@ async function runWithModelFallbackInternal<T>(
     fallbacksOverride: params.fallbacksOverride,
     manifestPlugins: params.manifestPlugins,
   });
+  await params.onFallbackPhase?.({
+    phase: "candidate-chain-resolved",
+    provider: params.provider,
+    model: params.model,
+    candidateCount: candidates.length,
+  });
+  await params.onFallbackPhase?.({
+    phase: "auth-runtime-started",
+    provider: params.provider,
+    model: params.model,
+    candidateCount: candidates.length,
+  });
   const authRuntime =
     !params.skipAuthProfileRuntime && params.cfg && hasAnyAuthProfileStoreSource(params.agentDir)
       ? await loadModelFallbackAuthRuntime()
       : null;
+  await params.onFallbackPhase?.({
+    phase: "auth-runtime-finished",
+    provider: params.provider,
+    model: params.model,
+    candidateCount: candidates.length,
+  });
   const authStore = authRuntime
     ? authRuntime.ensureAuthProfileStore(params.agentDir, {
         externalCli: externalCliDiscoveryForProviders({
@@ -1371,6 +1398,12 @@ async function runWithModelFallbackInternal<T>(
         }),
       })
     : null;
+  await params.onFallbackPhase?.({
+    phase: "auth-store-ready",
+    provider: params.provider,
+    model: params.model,
+    candidateCount: candidates.length,
+  });
   const attempts: FallbackAttempt[] = [];
   let lastError: unknown;
   let latestClassifiedResult: ModelFallbackClassifiedResult<T> | undefined;
@@ -1405,6 +1438,13 @@ async function runWithModelFallbackInternal<T>(
 
   for (let i = 0; i < candidates.length; i += 1) {
     const candidate = candidates[i];
+    await params.onFallbackPhase?.({
+      phase: "candidate-precheck-started",
+      provider: candidate.provider,
+      model: candidate.model,
+      attempt: i + 1,
+      total: candidates.length,
+    });
     const candidateHarnessAuth = await resolveModelFallbackCandidateHarnessAuthPrecheck({
       cfg: params.cfg,
       agentId: params.agentId,
@@ -1412,6 +1452,13 @@ async function runWithModelFallbackInternal<T>(
       resolveAgentHarnessRuntimeOverride: params.resolveAgentHarnessRuntimeOverride,
       prepareAgentHarnessRuntime: params.prepareAgentHarnessRuntime,
       ...candidate,
+    });
+    await params.onFallbackPhase?.({
+      phase: "candidate-precheck-finished",
+      provider: candidate.provider,
+      model: candidate.model,
+      attempt: i + 1,
+      total: candidates.length,
     });
     const isPrimary = i === 0;
     const requestedModel = requestedCandidate
@@ -1473,6 +1520,13 @@ async function runWithModelFallbackInternal<T>(
     let attemptedDuringCooldown = false;
     let transientProbeProviderForAttempt: string | null = null;
     if (authRuntime && authStore && !candidateHarnessAuth.skipsProviderAuthCooldown) {
+      await params.onFallbackPhase?.({
+        phase: "auth-cooldown-check-started",
+        provider: candidate.provider,
+        model: candidate.model,
+        attempt: i + 1,
+        total: candidates.length,
+      });
       const profileIds = authRuntime.resolveAuthProfileOrder({
         cfg: params.cfg,
         store: authStore,
@@ -1652,8 +1706,22 @@ async function runWithModelFallbackInternal<T>(
           profileCount: profileIds.length,
         });
       }
+      await params.onFallbackPhase?.({
+        phase: "auth-cooldown-check-finished",
+        provider: candidate.provider,
+        model: candidate.model,
+        attempt: i + 1,
+        total: candidates.length,
+      });
     }
 
+    await params.onFallbackPhase?.({
+      phase: "candidate-run-starting",
+      provider: candidate.provider,
+      model: candidate.model,
+      attempt: i + 1,
+      total: candidates.length,
+    });
     const attemptRun = await runFallbackAttempt({
       run: params.run,
       ...candidate,

@@ -179,6 +179,36 @@ describe("createIMessageRpcClient", () => {
 
     expect(onNotification).not.toHaveBeenCalled();
   });
+
+  it("rejects waitForClose when imsg exits without an explicit stop", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "");
+    const child = createMockChildProcess();
+    spawnMock.mockReturnValue(child);
+    const { IMessageRpcClient } = await import("./client.js");
+    const client = new IMessageRpcClient();
+
+    await client.start();
+    const closed = client.waitForClose();
+    child.emit("close", 0, null);
+
+    await expect(closed).rejects.toThrow("imsg rpc closed");
+  });
+
+  it("does not reject waitForClose for an intentional stop", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "");
+    const child = createMockChildProcess();
+    spawnMock.mockReturnValue(child);
+    const { IMessageRpcClient } = await import("./client.js");
+    const client = new IMessageRpcClient();
+
+    await client.start();
+    const closed = client.waitForClose();
+    await client.stop();
+
+    await expect(closed).resolves.toBeUndefined();
+  });
 });
 
 describe("imessage setup status", () => {

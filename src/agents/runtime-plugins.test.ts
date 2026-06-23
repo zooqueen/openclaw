@@ -147,6 +147,39 @@ describe("ensureRuntimePluginsLoaded", () => {
     });
   });
 
+  it("uses the active startup registry workspace for startup-scoped runtime reuse", () => {
+    hoisted.getCurrentPluginMetadataSnapshot.mockReturnValue({
+      startup: {
+        pluginIds: ["telegram"],
+      },
+    });
+    hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("gateway-bindable");
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReturnValue("/tmp/gateway-workspace");
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/agent-workspace",
+      allowGatewaySubagentBinding: true,
+    });
+
+    expect(hoisted.getCurrentPluginMetadataSnapshot).toHaveBeenCalledWith({
+      config: {} as never,
+      workspaceDir: "/tmp/agent-workspace",
+    });
+    expect(hoisted.ensureStandaloneRuntimePluginRegistryLoaded).toHaveBeenCalledWith({
+      requiredPluginIds: ["telegram"],
+      loadOptions: {
+        config: {} as never,
+        onlyPluginIds: ["telegram"],
+        workspaceDir: "/tmp/gateway-workspace",
+        forceFullRuntimeForChannelPlugins: true,
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      },
+    });
+  });
+
   it("lets the loader decide when startup ids match but config changes", () => {
     const config = {
       plugins: {

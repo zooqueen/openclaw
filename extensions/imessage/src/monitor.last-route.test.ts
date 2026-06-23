@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { GetReplyOptions, MsgContext } from "openclaw/plugin-sdk/reply-runtime";
+import { setVerbose } from "openclaw/plugin-sdk/runtime-env";
 import type { waitForTransportReady } from "openclaw/plugin-sdk/transport-ready-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createIMessageRpcClient } from "./client.js";
@@ -128,14 +129,86 @@ describe("iMessage monitor last-route updates", () => {
   });
 
   afterEach(() => {
+    setVerbose(false);
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     for (const dir of tempDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
+  it("handles watch replay messages before watch.subscribe returns", async () => {
+    setCachedIMessagePrivateApiStatus("imsg", {
+      available: true,
+      v2Ready: true,
+      selectors: {},
+      rpcMethods: ["watch.subscribe", "send", "typing"],
+    });
+
+    let onNotification: ((message: { method: string; params: unknown }) => void) | undefined;
+    const client = {
+      request: vi.fn(async (method: string) => {
+        if (method === "watch.subscribe") {
+          onNotification?.({
+            method: "message",
+            params: {
+              id: 321,
+              guid: "replay-guid",
+              chat_id: 456,
+              sender: "+15550001111",
+              is_from_me: false,
+              text: "replayed during subscribe",
+              is_group: false,
+              created_at: new Date().toISOString(),
+            },
+          });
+          await Promise.resolve();
+          await Promise.resolve();
+          return { subscription: 1 };
+        }
+        return { ok: true };
+      }),
+      waitForClose: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+    };
+    createIMessageRpcClientMock.mockImplementation(async (params) => {
+      if (!params?.onNotification) {
+        throw new Error("expected iMessage notification handler");
+      }
+      onNotification = params.onNotification;
+      return client as never;
+    });
+    const runtime = { error: vi.fn(), exit: vi.fn(), log: vi.fn() };
+
+    await monitorIMessageProvider({
+      config: {
+        channels: {
+          imessage: {
+            dmPolicy: "allowlist",
+            allowFrom: ["+15550001111"],
+            sendReadReceipts: false,
+          },
+        },
+        messages: { inbound: { debounceMs: 0 } },
+        session: { mainKey: "main" },
+      } as never,
+      runtime,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      runtime.error.mock.calls.some(([message]) =>
+        String(message).includes("imessage monitor client not initialized"),
+      ),
+    ).toBe(false);
+  });
+
   it("keeps native typing alive when tool activity arrives before reply text", async () => {
+    setVerbose(true);
+    const consoleLogMock = vi.spyOn(console, "log").mockImplementation(() => {});
     setCachedIMessagePrivateApiStatus("imsg", {
       available: true,
       v2Ready: true,
@@ -145,6 +218,13 @@ describe("iMessage monitor last-route updates", () => {
     dispatchInboundMessageMock.mockImplementationOnce(async (params) => {
       expect(params.replyOptions?.suppressDefaultToolProgressMessages).toBe(true);
       expect(params.replyOptions?.allowProgressCallbacksWhenSourceDeliverySuppressed).toBe(true);
+      expect(typeof params.replyOptions?.onAgentRunStart).toBe("function");
+      expect(typeof params.replyOptions?.onAgentModelCallStart).toBe("function");
+      expect(typeof params.replyOptions?.onAgentModelPreparationPhase).toBe("function");
+      expect(typeof params.replyOptions?.onAgentModelFirstEvent).toBe("function");
+      expect(typeof params.replyOptions?.onAgentExecutionPhase).toBe("function");
+      expect(typeof params.replyOptions?.onModelSelected).toBe("function");
+      expect(params.replyOptions?.onToolResult).toBeUndefined();
       let active = false;
       let runComplete = false;
       let dispatchIdle = false;
@@ -179,6 +259,39 @@ describe("iMessage monitor last-route updates", () => {
         },
       };
       params.replyOptions?.onTypingController?.(typingController);
+      params.replyOptions?.onAgentRunStart?.("agent-run-1");
+      await params.replyOptions?.onAgentModelPreparationPhase?.({
+        phase: "candidate-run-starting",
+        provider: "openai",
+        model: "gpt-5.5",
+        attempt: 1,
+        total: 1,
+      });
+      params.replyOptions?.onModelSelected?.({
+        provider: "openai",
+        model: "gpt-5.5",
+        thinkLevel: undefined,
+      });
+      await params.replyOptions?.onAgentModelCallStart?.({
+        provider: "openai",
+        model: "gpt-5.5",
+        phase: "turn_starting",
+      });
+      await params.replyOptions?.onAgentModelFirstEvent?.({
+        provider: "openai",
+        model: "gpt-5.5",
+        stream: "tool",
+        phase: "start",
+        name: "exec",
+      });
+      await params.replyOptions?.onAgentExecutionPhase?.({
+        phase: "tool_execution_started",
+        provider: "openai",
+        model: "gpt-5.5",
+        backend: "codex-app-server",
+        tool: "exec",
+        toolCallId: "call-1",
+      });
       await params.replyOptions?.onToolStart?.({ name: "exec", phase: "start" });
       typingController.markRunComplete();
       typingController.markDispatchIdle();
@@ -254,6 +367,29 @@ describe("iMessage monitor last-route updates", () => {
         expect.any(Object),
       );
     });
+    const perfPhases = consoleLogMock.mock.calls
+      .map((call) => call.map(String).join(" "))
+      .filter((line) => line.includes("imessage perf:"))
+      .map((line) => line.match(/\bphase=([^ ]+)/)?.[1])
+      .filter((phase): phase is string => Boolean(phase));
+    expect(perfPhases).toEqual(
+      expect.arrayContaining([
+        "watch-received",
+        "debounce-flushed",
+        "processing-started",
+        "routed",
+        "context-ready",
+        "gateway-dispatch-started",
+        "agent-model-prep",
+        "model-selected",
+        "agent-run-started",
+        "agent-model-call-starting",
+        "agent-model-first-event",
+        "agent-execution-phase",
+        "tool-started",
+        "gateway-dispatch-finished",
+      ]),
+    );
   });
 
   it("starts direct typing before dispatching the inbound turn", async () => {

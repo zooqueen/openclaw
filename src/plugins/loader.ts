@@ -146,6 +146,7 @@ import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./
 import {
   getActivePluginRegistry,
   getActivePluginRegistryKey,
+  getActivePluginRegistryPluginIdScope,
   getActivePluginRuntimeSubagentMode,
   recordImportedPluginId,
   setActivePluginRegistry,
@@ -1223,6 +1224,17 @@ function registryContainsPluginScope(
   return onlyPluginIds.every((pluginId) => loadedPluginIds.has(pluginId));
 }
 
+function pluginScopeContainsPluginScope(params: {
+  wider: readonly string[] | null;
+  requested: readonly string[] | undefined;
+}): boolean {
+  if (!params.wider || !params.requested || params.requested.length === 0) {
+    return false;
+  }
+  const wider = new Set(params.wider);
+  return params.requested.every((pluginId) => wider.has(pluginId));
+}
+
 function scopedPluginLoadOptionsMatchWiderActiveCacheKey(
   options: PluginLoadOptions,
   expectedCacheKey: string,
@@ -1232,13 +1244,38 @@ function scopedPluginLoadOptionsMatchWiderActiveCacheKey(
   if (!registryContainsPluginScope(activeRegistry, onlyPluginIds)) {
     return false;
   }
-  return pluginLoadOptionsMatchCacheKey(
-    {
+  const activePluginIdScope = getActivePluginRegistryPluginIdScope();
+  const matchesActiveScopedCacheKey = (candidate: PluginLoadOptions): boolean => {
+    if (pluginLoadOptionsMatchCacheKey(candidate, expectedCacheKey)) {
+      return true;
+    }
+    if (candidate.coreGatewayMethodNames !== undefined) {
+      return false;
+    }
+    return pluginLoadOptionsMatchCacheKey(
+      {
+        ...candidate,
+        coreGatewayMethodNames: activeRegistry.coreGatewayMethodNames ?? [],
+      },
+      expectedCacheKey,
+    );
+  };
+  if (
+    pluginScopeContainsPluginScope({
+      wider: activePluginIdScope,
+      requested: onlyPluginIds,
+    }) &&
+    matchesActiveScopedCacheKey({
       ...options,
-      onlyPluginIds: undefined,
-    },
-    expectedCacheKey,
-  );
+      onlyPluginIds: activePluginIdScope ? [...activePluginIdScope] : undefined,
+    })
+  ) {
+    return true;
+  }
+  return matchesActiveScopedCacheKey({
+    ...options,
+    onlyPluginIds: undefined,
+  });
 }
 
 type PluginRegistrationPlan = {
@@ -1810,11 +1847,12 @@ function activatePluginRegistry(
   cacheKey: string,
   runtimeSubagentMode: "default" | "explicit" | "gateway-bindable",
   workspaceDir?: string,
+  pluginIdScope?: readonly string[],
 ): void {
   // Always re-initialize: the global runner resolves hooks from the live
   // registry set (active + pinned surfaces), so activation order and scope
   // cannot drop hooks the way the old preserve-one-runner gate did (#91918).
-  setActivePluginRegistry(registry, cacheKey, runtimeSubagentMode, workspaceDir);
+  setActivePluginRegistry(registry, cacheKey, runtimeSubagentMode, workspaceDir, pluginIdScope);
   initializeGlobalHookRunner(registry);
 }
 
@@ -1830,6 +1868,7 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
         `empty-plugin-scope::${resolveRuntimeSubagentMode(options.runtimeOptions)}::${options.workspaceDir ?? ""}`,
         resolveRuntimeSubagentMode(options.runtimeOptions),
         options.workspaceDir,
+        requestedOnlyPluginIds,
       );
     }
     return emptyRegistry;
@@ -1888,6 +1927,7 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
           cached.cacheKey,
           cached.runtimeSubagentMode,
           options.workspaceDir,
+          onlyPluginIds,
         );
       }
       return cached.state.registry;
@@ -2970,7 +3010,13 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
       );
     }
     if (shouldActivate) {
-      activatePluginRegistry(registry, cacheKey, runtimeSubagentMode, options.workspaceDir);
+      activatePluginRegistry(
+        registry,
+        cacheKey,
+        runtimeSubagentMode,
+        options.workspaceDir,
+        onlyPluginIds,
+      );
     }
     return registry;
   } finally {

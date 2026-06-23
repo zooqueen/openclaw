@@ -318,14 +318,26 @@ export async function getReplyFromConfig(
         agentId,
       },
     });
-  const traceGetReplyPhase = <T>(name: string, run: () => Promise<T> | T): Promise<T> =>
-    resolverTiming.measure(name, () =>
-      measureDiagnosticsTimelineSpan(name, run, {
-        phase: "agent-turn",
-        config: cfg,
-        attributes: traceAttributes,
-      }),
-    );
+  const notifyReplyPreparationPhase = async (phase: string): Promise<void> => {
+    await opts?.onAgentModelPreparationPhase?.({ phase });
+  };
+  const traceGetReplyPhase = async <T>(name: string, run: () => Promise<T> | T): Promise<T> => {
+    await notifyReplyPreparationPhase(`${name}:started`);
+    try {
+      const result = await resolverTiming.measure(name, () =>
+        measureDiagnosticsTimelineSpan(name, run, {
+          phase: "agent-turn",
+          config: cfg,
+          attributes: traceAttributes,
+        }),
+      );
+      await notifyReplyPreparationPhase(`${name}:finished`);
+      return result;
+    } catch (err) {
+      await notifyReplyPreparationPhase(`${name}:failed`);
+      throw err;
+    }
+  };
   const mergedSkillFilter = resolverTiming.measureSync("reply.resolve_skill_filter", () =>
     mergeSkillFilters(opts?.skillFilter, resolveAgentSkillsFilter(cfg, agentId)),
   );

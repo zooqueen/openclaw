@@ -280,12 +280,14 @@ function installToolManifestSnapshot(params: {
   compatibleConfigs?: ReturnType<typeof createContext>["config"][];
   env?: NodeJS.ProcessEnv;
   plugin: Record<string, unknown>;
+  workspaceDir?: string;
 }) {
   installToolManifestSnapshots({
     config: params.config,
     compatibleConfigs: params.compatibleConfigs,
     env: params.env,
     plugins: [params.plugin],
+    workspaceDir: params.workspaceDir,
   });
 }
 
@@ -294,12 +296,14 @@ function installToolManifestSnapshots(params: {
   compatibleConfigs?: ReturnType<typeof createContext>["config"][];
   env?: NodeJS.ProcessEnv;
   plugins: Record<string, unknown>[];
+  workspaceDir?: string;
 }) {
   const plugins = params.plugins;
+  const workspaceDir = params.workspaceDir ?? "/tmp";
   setCurrentPluginMetadataSnapshot(
     {
       policyHash: resolveInstalledPluginIndexPolicyHash(params.config),
-      workspaceDir: "/tmp",
+      workspaceDir,
       index: {
         version: 1,
         hostContractVersion: "test",
@@ -352,7 +356,7 @@ function installToolManifestSnapshots(params: {
       config: params.config,
       compatibleConfigs: params.compatibleConfigs,
       env: params.env ?? process.env,
-      workspaceDir: "/tmp",
+      workspaceDir,
     },
   );
 }
@@ -2368,6 +2372,42 @@ describe("resolvePluginTools optional tools", () => {
     );
 
     expectResolvedToolNames(tools, ["optional_tool"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses the active gateway registry when the turn workspace differs", () => {
+    const turnWorkspaceDir = "/tmp/openclaw-turn-workspace";
+    const activeRegistry = {
+      plugins: [{ id: "optional-demo", status: "loaded" }],
+      tools: [createOptionalDemoEntry()],
+      diagnostics: [],
+    };
+    installToolManifestSnapshot({
+      config: createContext().config,
+      workspaceDir: turnWorkspaceDir,
+      plugin: {
+        id: "optional-demo",
+        origin: "bundled",
+        enabledByDefault: true,
+        channels: [],
+        providers: [],
+        contracts: {
+          tools: ["optional_tool"],
+        },
+      },
+    });
+    setActivePluginRegistry(activeRegistry as never, "gateway-startup", "gateway-bindable", "/tmp");
+
+    const tools = resolvePluginTools(
+      createResolveToolsParams({
+        context: { ...createContext(), workspaceDir: turnWorkspaceDir },
+        toolAllowlist: ["optional_tool"],
+        allowGatewaySubagentBinding: true,
+      }),
+    );
+
+    expectResolvedToolNames(tools, ["optional_tool"]);
+    expect(resolveRuntimePluginRegistryMock).not.toHaveBeenCalled();
     expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
   });
 

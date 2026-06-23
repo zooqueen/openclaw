@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { resolveHumanDelayConfig } from "openclaw/plugin-sdk/agent-runtime";
 import { CHANNEL_APPROVAL_NATIVE_RUNTIME_CONTEXT_CAPABILITY } from "openclaw/plugin-sdk/approval-handler-runtime";
 import { logTypingFailure } from "openclaw/plugin-sdk/channel-feedback";
@@ -118,6 +119,64 @@ const IMESSAGE_TYPING_KEEPALIVE_INTERVAL_MS = 8_000;
 const IMESSAGE_TYPING_KEEPALIVE_MAX_DURATION_MS = 10 * 60_000;
 const IMESSAGE_SPLIT_SEND_COMPAT_DEBOUNCE_MS = 7_000;
 type IMessageTypingController = Parameters<NonNullable<GetReplyOptions["onTypingController"]>>[0];
+
+type IMessagePerformanceTrace = {
+  accountId: string;
+  startedAtMs: number;
+  lastAtMs: number;
+  messageId: string;
+  chatId: string;
+  isGroup: boolean;
+  guidPresent: boolean;
+  sourceMessageCount: number;
+};
+
+function formatIMessagePerfMs(value: number): string {
+  return Math.max(0, value).toFixed(1);
+}
+
+function createIMessagePerformanceTrace(params: {
+  accountId: string;
+  message: IMessagePayload;
+  sourceMessageCount?: number;
+}): IMessagePerformanceTrace {
+  const now = performance.now();
+  return {
+    accountId: params.accountId,
+    startedAtMs: now,
+    lastAtMs: now,
+    messageId: params.message.id != null ? String(params.message.id) : "unknown",
+    chatId: params.message.chat_id != null ? String(params.message.chat_id) : "unknown",
+    isGroup: params.message.is_group === true,
+    guidPresent: typeof params.message.guid === "string" && params.message.guid.trim().length > 0,
+    sourceMessageCount: params.sourceMessageCount ?? 1,
+  };
+}
+
+function markIMessagePerformanceTrace(
+  trace: IMessagePerformanceTrace | undefined,
+  phase: string,
+  fields: Record<string, string | number | boolean | undefined> = {},
+): void {
+  if (!trace || !shouldLogVerbose()) {
+    return;
+  }
+  const now = performance.now();
+  const totalMs = now - trace.startedAtMs;
+  const deltaMs = now - trace.lastAtMs;
+  trace.lastAtMs = now;
+  const extra = Object.entries(fields)
+    .filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  logVerbose(
+    `imessage perf: phase=${phase} total_ms=${formatIMessagePerfMs(totalMs)} ` +
+      `delta_ms=${formatIMessagePerfMs(deltaMs)} account=${trace.accountId} ` +
+      `chat_id=${trace.chatId} group=${trace.isGroup} message_id=${trace.messageId} ` +
+      `guid=${trace.guidPresent ? "present" : "missing"} sources=${trace.sourceMessageCount}` +
+      (extra ? ` ${extra}` : ""),
+  );
+}
 
 function resolveConfiguredIMessageTypingMode(cfg: OpenClawConfig) {
   return cfg.session?.typingMode ?? cfg.agents?.defaults?.typingMode;
@@ -593,6 +652,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
 
   const { debouncer: inboundDebouncer } = createChannelInboundDebouncer<{
     message: IMessagePayload;
+    perfTrace?: IMessagePerformanceTrace;
     // Exact replay-guard key claimed for this row at ingestion (GUID or, for a
     // GUID-less row, the composite fallback). Carried through so flush commits
     // or releases the same key it claimed, even after a debounce merge rewrites
@@ -654,14 +714,29 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       // dispatch throws so a transient failure can retry on a later re-emit. Per
       // unit so a failure in one bucket entry cannot strand another's claim.
       const dispatchUnit = async (
-        unitEntries: { message: IMessagePayload; replayKey: string | null }[],
+        unitEntries: {
+          message: IMessagePayload;
+          perfTrace?: IMessagePerformanceTrace;
+          replayKey: string | null;
+        }[],
         message: IMessagePayload,
       ) => {
+        const perfTrace =
+          unitEntries[0]?.perfTrace ??
+          createIMessagePerformanceTrace({
+            accountId: accountInfo.accountId,
+            message,
+            sourceMessageCount: unitEntries.length,
+          });
+        perfTrace.sourceMessageCount = unitEntries.length;
+        markIMessagePerformanceTrace(perfTrace, "debounce-flushed", {
+          merged: unitEntries.length > 1,
+        });
         const keys = unitEntries
           .map((entry) => entry.replayKey)
           .filter((key): key is string => key !== null);
         try {
-          await handleMessageNow(message);
+          await handleMessageNow(message, { perfTrace });
           await commitIMessageInboundReplay({
             guard: inboundReplayGuard,
             accountId: accountInfo.accountId,
@@ -696,7 +771,11 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       // Standalone URL preview rows merge with the immediately preceding row;
       // already-complete URL messages flush any pending ordinary row first.
       if (messages.some(hasIMessageUrlBalloonBundleID)) {
-        let pending: { message: IMessagePayload; replayKey: string | null } | null = null;
+        let pending: {
+          message: IMessagePayload;
+          perfTrace?: IMessagePerformanceTrace;
+          replayKey: string | null;
+        } | null = null;
         for (const entry of entries) {
           if (isStandaloneIMessageUrlPreviewPayload(entry.message) && pending) {
             const unitEntries = [pending, entry];
@@ -823,9 +902,13 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
 
   async function handleMessageNow(
     message: IMessagePayload,
-    options: { advanceCatchupCursor?: boolean } = {},
+    options: { advanceCatchupCursor?: boolean; perfTrace?: IMessagePerformanceTrace } = {},
   ) {
-    await handleMessageNowInner(message);
+    const perfTrace =
+      options.perfTrace ??
+      createIMessagePerformanceTrace({ accountId: accountInfo.accountId, message });
+    markIMessagePerformanceTrace(perfTrace, "processing-started");
+    await handleMessageNowInner(message, perfTrace);
     if (options.advanceCatchupCursor !== false) {
       await maybeAdvanceLiveCatchupCursor(message);
     }
@@ -875,9 +958,13 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     };
   }
 
-  async function handleMessageNowInner(rawMessage: IMessagePayload) {
+  async function handleMessageNowInner(
+    rawMessage: IMessagePayload,
+    perfTrace: IMessagePerformanceTrace,
+  ) {
     const message = await repairMessageConversationAnchor(rawMessage);
     if (!message) {
+      markIMessagePerformanceTrace(perfTrace, "conversation-repair-dropped");
       return;
     }
 
@@ -904,6 +991,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
         logVerboseMessage: logVerbose,
       })
     ) {
+      markIMessagePerformanceTrace(perfTrace, "approval-reaction-handled");
       return;
     }
 
@@ -940,6 +1028,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     const rateLimitKey = `${accountInfo.accountId}:${conversationKey}`;
 
     if (decision.kind === "drop") {
+      markIMessagePerformanceTrace(perfTrace, "dropped", { reason: decision.reason });
       // Record echo/reflection drops so the rate limiter can detect sustained loops.
       // Only loop-related drop reasons feed the counter; policy/mention/empty drops
       // are normal and should not escalate.
@@ -986,13 +1075,16 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     // remaining messages as a safety net against amplification that slips
     // through the primary guards.
     if (decision.kind === "dispatch" && loopRateLimiter.isRateLimited(rateLimitKey)) {
+      markIMessagePerformanceTrace(perfTrace, "rate-limited");
       logVerbose(`imessage: rate-limited conversation ${conversationKey} (echo loop detected)`);
       return;
     }
 
     if (decision.kind === "pairing") {
+      markIMessagePerformanceTrace(perfTrace, "pairing-started");
       const sender = (message.sender ?? "").trim();
       if (!sender) {
+        markIMessagePerformanceTrace(perfTrace, "pairing-dropped", { reason: "missing-sender" });
         return;
       }
       await createChannelPairingChallengeIssuer({
@@ -1033,9 +1125,15 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     }
 
     if (decision.kind === "reaction") {
+      markIMessagePerformanceTrace(perfTrace, "reaction-enqueued");
       enqueueIMessageReactionSystemEvent({ decision, runtime, logVerbose });
       return;
     }
+
+    markIMessagePerformanceTrace(perfTrace, "routed", {
+      agent: decision.route.agentId,
+      session: decision.route.sessionKey,
+    });
 
     const storePath = resolveStorePath(cfg.session?.store, {
       agentId: decision.route.agentId,
@@ -1074,6 +1172,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       : undefined;
     let stopEarlyDirectTyping: (() => void) | undefined;
     if (earlyDirectTypingTarget) {
+      markIMessagePerformanceTrace(perfTrace, "early-typing-start-queued");
       // Start channel-native feedback before the expensive history/context/model
       // path. Use a short-lived client so a slow typing RPC cannot block the
       // monitor client's watch stream. Stop is sequenced after start so fast
@@ -1180,6 +1279,10 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       allowFrom,
       normalizeEntry: normalizeIMessageHandle,
     });
+    markIMessagePerformanceTrace(perfTrace, "context-ready", {
+      has_media: mediaAttachments.length > 0,
+      dm_history: dmHistory?.inboundHistory?.length ?? 0,
+    });
     if (shouldLogVerbose()) {
       const preview = truncateUtf16Safe(ctxPayload.Body ?? "", 200).replace(/\n/g, "\\n");
       logVerbose(
@@ -1262,50 +1365,81 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       ...replyPipeline,
       humanDelay: resolveHumanDelayConfig(cfg, decision.route.agentId),
       deliver: async (payload, info) => {
+        markIMessagePerformanceTrace(perfTrace, "reply-delivery-started", {
+          kind: info.kind,
+        });
         const target = ctxPayload.To;
         if (!target) {
+          markIMessagePerformanceTrace(perfTrace, "reply-delivery-dropped", {
+            reason: "missing-target",
+            kind: info.kind,
+          });
           runtime.error?.(danger("imessage: missing delivery target"));
           return;
         }
-        const durable = await deliverInboundReplyWithMessageSendContext({
-          cfg,
-          channel: "imessage",
-          accountId: accountInfo.accountId,
-          agentId: decision.route.agentId,
-          ctxPayload,
-          payload,
-          info,
-          to: target,
-          deps: {
-            imessage: createIMessageEchoCachingSend({
-              accountId: accountInfo.accountId,
-              sentMessageCache,
-            }),
-          },
-        });
-        if (durable.status === "failed") {
-          throw durable.error;
+        try {
+          const durable = await deliverInboundReplyWithMessageSendContext({
+            cfg,
+            channel: "imessage",
+            accountId: accountInfo.accountId,
+            agentId: decision.route.agentId,
+            ctxPayload,
+            payload,
+            info,
+            to: target,
+            deps: {
+              imessage: createIMessageEchoCachingSend({
+                accountId: accountInfo.accountId,
+                sentMessageCache,
+              }),
+            },
+          });
+          if (durable.status === "failed") {
+            throw durable.error;
+          }
+          if (durable.status === "handled_visible" || durable.status === "handled_no_send") {
+            markIMessagePerformanceTrace(perfTrace, "reply-delivery-finished", {
+              kind: info.kind,
+              status: durable.status,
+            });
+            return;
+          }
+          await deliverReplies({
+            cfg,
+            replies: [payload],
+            target,
+            accountId: accountInfo.accountId,
+            runtime,
+            maxBytes: mediaMaxBytes,
+            textLimit,
+            sentMessageCache,
+          });
+          markIMessagePerformanceTrace(perfTrace, "reply-delivery-finished", {
+            kind: info.kind,
+            status: "sent",
+          });
+        } catch (err) {
+          markIMessagePerformanceTrace(perfTrace, "reply-delivery-failed", {
+            kind: info.kind,
+          });
+          throw err;
         }
-        if (durable.status === "handled_visible" || durable.status === "handled_no_send") {
-          return;
-        }
-        await deliverReplies({
-          cfg,
-          replies: [payload],
-          target,
-          accountId: accountInfo.accountId,
-          runtime,
-          maxBytes: mediaMaxBytes,
-          textLimit,
-          sentMessageCache,
-        });
       },
       onError: (err, info) => {
+        markIMessagePerformanceTrace(perfTrace, "reply-error", {
+          kind: info.kind,
+        });
         runtime.error?.(danger(`imessage ${info.kind} reply failed: ${String(err)}`));
       },
     });
     let directTypingController: IMessageTypingController | undefined;
-    const directToolTypingOptions = shouldStartDirectTyping
+    const directToolTypingOptions: Pick<
+      GetReplyOptions,
+      | "allowProgressCallbacksWhenSourceDeliverySuppressed"
+      | "onToolStart"
+      | "onTypingController"
+      | "suppressDefaultToolProgressMessages"
+    > = shouldStartDirectTyping
       ? ({
           // iMessage's native typing bubble is channel-owned UI, not a
           // visible tool-progress message. The suppress flag is what lets
@@ -1324,6 +1458,20 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
           },
         } as const)
       : {};
+    const directToolTypingOnToolStart = directToolTypingOptions.onToolStart;
+    const tracedDirectToolTypingOptions: typeof directToolTypingOptions =
+      directToolTypingOnToolStart
+        ? {
+            ...directToolTypingOptions,
+            onToolStart: async (payload) => {
+              markIMessagePerformanceTrace(perfTrace, "tool-started", {
+                tool: payload.name,
+                phase: payload.phase,
+              });
+              await directToolTypingOnToolStart(payload);
+            },
+          }
+        : directToolTypingOptions;
     const configuredBlockStreaming = resolveChannelStreamingBlockEnabled(accountInfo.config);
     const inboundLastRouteSessionKey = resolveInboundLastRouteSessionKey({
       route: decision.route,
@@ -1393,6 +1541,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
           },
           runDispatch: async () => {
             try {
+              markIMessagePerformanceTrace(perfTrace, "gateway-dispatch-started");
               return await dispatchInboundMessage({
                 ctx: ctxPayload,
                 cfg,
@@ -1403,11 +1552,63 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
                     typeof configuredBlockStreaming === "boolean"
                       ? !configuredBlockStreaming
                       : undefined,
-                  onModelSelected,
-                  ...directToolTypingOptions,
+                  ...tracedDirectToolTypingOptions,
+                  onAgentRunStart: (runId) => {
+                    markIMessagePerformanceTrace(perfTrace, "agent-run-started", {
+                      run_id: runId,
+                    });
+                  },
+                  onAgentModelCallStart: (modelCall) => {
+                    markIMessagePerformanceTrace(perfTrace, "agent-model-call-starting", {
+                      provider: modelCall.provider,
+                      model: modelCall.model,
+                      event_phase: modelCall.phase,
+                    });
+                  },
+                  onAgentModelPreparationPhase: (prep) => {
+                    markIMessagePerformanceTrace(perfTrace, "agent-model-prep", {
+                      prep_phase: prep.phase,
+                      provider: prep.provider,
+                      model: prep.model,
+                      candidate_count: prep.candidateCount,
+                      attempt: prep.attempt,
+                      total: prep.total,
+                    });
+                  },
+                  onAgentModelFirstEvent: (event) => {
+                    markIMessagePerformanceTrace(perfTrace, "agent-model-first-event", {
+                      provider: event.provider,
+                      model: event.model,
+                      stream: event.stream,
+                      event_phase: event.phase,
+                      kind: event.kind,
+                      name: event.name,
+                    });
+                  },
+                  onAgentExecutionPhase: (phase) => {
+                    markIMessagePerformanceTrace(perfTrace, "agent-execution-phase", {
+                      execution_phase: phase.phase,
+                      provider: phase.provider,
+                      model: phase.model,
+                      backend: phase.backend,
+                      source: phase.source,
+                      tool: phase.tool,
+                      tool_call_id: phase.toolCallId,
+                      item_id: phase.itemId,
+                    });
+                  },
+                  onModelSelected: (modelSelection) => {
+                    markIMessagePerformanceTrace(perfTrace, "model-selected", {
+                      provider: modelSelection.provider,
+                      model: modelSelection.model,
+                      think_level: modelSelection.thinkLevel,
+                    });
+                    onModelSelected(modelSelection);
+                  },
                 },
               });
             } finally {
+              markIMessagePerformanceTrace(perfTrace, "gateway-dispatch-finished");
               markDispatchIdle();
               stopEarlyDirectTyping?.();
             }
@@ -1432,6 +1633,11 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       runtime.error?.(`imessage: dropping malformed RPC message payload (keys=${shape})`);
       return;
     }
+    const perfTrace = createIMessagePerformanceTrace({
+      accountId: accountInfo.accountId,
+      message,
+    });
+    markIMessagePerformanceTrace(perfTrace, "watch-received");
     if (!imsgEmitsBalloonMetadata && hasIMessageBalloonMetadata(message)) {
       imsgEmitsBalloonMetadata = true;
     }
@@ -1452,6 +1658,9 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       ? IMESSAGE_RECOVERY_MAX_AGE_MS
       : IMESSAGE_STALE_INBOUND_THRESHOLD_MS;
     if (isStaleIMessageBacklog(message, Date.now(), staleThresholdMs)) {
+      markIMessagePerformanceTrace(perfTrace, "stale-backlog-suppressed", {
+        recovery: isRecoveryReplay,
+      });
       staleBacklogSuppressed += 1;
       runtime.log?.(
         warn(
@@ -1480,6 +1689,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     }
     const repairedMessage = await repairMessageConversationAnchor(message);
     if (!repairedMessage) {
+      markIMessagePerformanceTrace(perfTrace, "conversation-repair-dropped");
       return;
     }
     // Replay dedupe: a recovered bridge can re-emit a row already dispatched.
@@ -1495,13 +1705,14 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       message: repairedMessage,
     });
     if (!replay.claimed) {
+      markIMessagePerformanceTrace(perfTrace, "duplicate-dropped");
       logVerbose(
         `imessage: dropping duplicate inbound notification account=${accountInfo.accountId}`,
       );
       return;
     }
     trackPendingRecoveryReplayRow(repairedMessage);
-    await inboundDebouncer.enqueue({ message: repairedMessage, replayKey: replay.key });
+    await inboundDebouncer.enqueue({ message: repairedMessage, perfTrace, replayKey: replay.key });
   };
 
   await waitForTransportReady({
@@ -1564,6 +1775,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     let keepAttemptClient = false;
     try {
       attemptClient = requireWatchClient(await createWatchClient());
+      client = attemptClient;
       let attemptSubscriptionId: number | null = null;
       attemptDetachAbortHandler = attachIMessageMonitorAbortHandler({
         abortSignal: abort,
@@ -1589,7 +1801,6 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
         { timeoutMs: probeTimeoutMs },
       );
       attemptSubscriptionId = result?.subscription ?? null;
-      client = attemptClient;
       detachAbortHandler = attemptDetachAbortHandler;
       keepAttemptClient = true;
       break;
@@ -1639,7 +1850,11 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       // cannot keep emitting notifications into the next retry window.
       attemptDetachAbortHandler();
       attemptDetachAbortHandler = () => {};
-      await attemptClient?.stop();
+      const failedClient = attemptClient;
+      await failedClient?.stop();
+      if (client === failedClient) {
+        client = undefined;
+      }
       attemptClient = undefined;
       await waitForWatchSubscribeRetryDelay({
         ms: WATCH_SUBSCRIBE_RETRY_DELAY_MS,
@@ -1650,8 +1865,12 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       }
     } finally {
       if (!keepAttemptClient) {
+        const failedClient = attemptClient;
         attemptDetachAbortHandler();
-        await attemptClient?.stop();
+        await failedClient?.stop();
+        if (client === failedClient) {
+          client = undefined;
+        }
       }
     }
   }

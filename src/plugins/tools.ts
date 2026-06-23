@@ -19,6 +19,7 @@ import type { PluginManifestRecord } from "./manifest-registry.js";
 import { hasManifestToolAvailability } from "./manifest-tool-availability.js";
 import type { PluginMetadataManifestView } from "./plugin-metadata-snapshot.types.js";
 import type { PluginRegistry, PluginToolRegistration } from "./registry-types.js";
+import { getActivePluginRegistryWorkspaceDir } from "./runtime.js";
 import { withPluginRuntimePluginScope } from "./runtime/gateway-request-scope.js";
 import {
   buildPluginRuntimeLoadOptions,
@@ -900,10 +901,18 @@ function resolvePluginToolRegistry(params: {
   loadOptions: PluginLoadOptions;
   onlyPluginIds?: readonly string[];
 }) {
+  const activeWorkspaceDir = getActivePluginRegistryWorkspaceDir();
+  const activeLoadOptions =
+    activeWorkspaceDir && activeWorkspaceDir !== params.loadOptions.workspaceDir
+      ? {
+          ...params.loadOptions,
+          workspaceDir: activeWorkspaceDir,
+        }
+      : params.loadOptions;
   const lookup = {
-    env: params.loadOptions.env,
-    loadOptions: params.loadOptions,
-    workspaceDir: params.loadOptions.workspaceDir,
+    env: activeLoadOptions.env,
+    loadOptions: activeLoadOptions,
+    workspaceDir: activeLoadOptions.workspaceDir,
     requiredPluginIds: params.onlyPluginIds,
   };
   const channelRegistry = getLoadedRuntimePluginRegistry({

@@ -665,6 +665,68 @@ describe("getCompatibleActivePluginRegistry", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("reuses a scoped gateway startup registry for compatible provider-hook subset loads", () => {
+    const registry = createEmptyPluginRegistry();
+    registry.plugins.push(
+      createLoadedPluginRecord("acpx"),
+      createLoadedPluginRecord("telegram"),
+      createLoadedPluginRecord("travel-hub"),
+    );
+    registry.coreGatewayMethodNames = ["sessions.get", "sessions.list"];
+    const config = {
+      plugins: {
+        allow: ["acpx", "telegram", "travel-hub"],
+      },
+    };
+    const startupOptions = {
+      config,
+      activationSourceConfig: config,
+      autoEnabledReasons: {},
+      workspaceDir: "/tmp/workspace-a",
+      onlyPluginIds: ["acpx", "telegram", "travel-hub"],
+      coreGatewayMethodNames: ["sessions.get", "sessions.list"],
+      runtimeOptions: {
+        allowGatewaySubagentBinding: true,
+      },
+      preferBuiltPluginArtifacts: true,
+    };
+    const { cacheKey } = testing.resolvePluginLoadCacheContext(startupOptions);
+    setActivePluginRegistry(
+      registry,
+      cacheKey,
+      "gateway-bindable",
+      "/tmp/workspace-a",
+      startupOptions.onlyPluginIds,
+    );
+
+    expect(
+      testing.getCompatibleActivePluginRegistry({
+        config,
+        workspaceDir: "/tmp/workspace-a",
+        onlyPluginIds: ["travel-hub"],
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      }),
+    ).toBe(registry);
+
+    expect(
+      testing.getCompatibleActivePluginRegistry({
+        config: {
+          plugins: {
+            allow: ["acpx", "telegram", "travel-hub"],
+            load: { paths: ["/tmp/changed.js"] },
+          },
+        },
+        workspaceDir: "/tmp/workspace-a",
+        onlyPluginIds: ["travel-hub"],
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe("resolveRuntimePluginRegistry", () => {

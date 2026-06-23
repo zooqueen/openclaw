@@ -11,7 +11,11 @@ import {
   isStoredCredentialCompatibleWithAuthProvider,
   resolveAuthProfileOrder,
 } from "../auth-profiles/order.js";
-import { ensureAuthProfileStore, hasAnyAuthProfileStoreSource } from "../auth-profiles/store.js";
+import {
+  ensureAuthProfileStore,
+  getEffectiveRuntimeAuthProfileStoreSnapshot,
+  hasAnyAuthProfileStoreSource,
+} from "../auth-profiles/store.js";
 import { isProfileInCooldown } from "../auth-profiles/usage.js";
 
 const sessionStoreRuntimeLoader = createLazyImportLoader(
@@ -127,7 +131,9 @@ export async function resolveSessionAuthProfileOverride(params: {
     return undefined;
   }
 
-  const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
+  const store =
+    getEffectiveRuntimeAuthProfileStoreSnapshot(agentDir) ??
+    ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
   const providers = uniqueProviders(provider, params.acceptedProviderIds);
   const order = [
     ...new Set(
