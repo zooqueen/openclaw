@@ -934,6 +934,7 @@ export async function runEmbeddedAttempt(
       config: params.config,
       workspaceDir: effectiveWorkspace,
       env: process.env,
+      allowGatewayRegistryWorkspaceReuse: true,
       ...(pluginMetadataSnapshotCoversProvider(pluginMetadataSnapshot, params.provider)
         ? { pluginMetadataSnapshot }
         : {}),

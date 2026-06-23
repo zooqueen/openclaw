@@ -538,6 +538,115 @@ describe("provider-runtime", () => {
     expect(resolvePluginProvidersMock).not.toHaveBeenCalled();
   });
 
+  it("uses the active startup registry for provider hook lookup when the turn workspace differs", () => {
+    const provider: ProviderPlugin = {
+      id: DEMO_PROVIDER_ID,
+      label: "Demo",
+      auth: [],
+      prepareExtraParams: ({ extraParams }) => ({
+        ...extraParams,
+        fromActiveRegistry: true,
+      }),
+    };
+    const registry = createEmptyPluginRegistry();
+    registry.providers.push({
+      pluginId: DEMO_PROVIDER_ID,
+      provider,
+      source: "test",
+    });
+    setActivePluginRegistry(registry, "startup-registry", "gateway-bindable", "/tmp/gateway");
+
+    expect(
+      prepareProviderExtraParams({
+        provider: DEMO_PROVIDER_ID,
+        workspaceDir: "/tmp/turn-workspace",
+        allowGatewayRegistryWorkspaceReuse: true,
+        context: createDemoRuntimeContext({
+          extraParams: {},
+        }),
+      }),
+    ).toEqual({
+      fromActiveRegistry: true,
+    });
+    expect(resolvePluginProvidersMock).not.toHaveBeenCalled();
+  });
+
+  it("does not use a gateway-bindable active registry for workspace mismatches without opt-in", () => {
+    const activeProvider: ProviderPlugin = {
+      id: DEMO_PROVIDER_ID,
+      label: "Active workspace provider",
+      auth: [],
+    };
+    const requestedProvider: ProviderPlugin = {
+      id: DEMO_PROVIDER_ID,
+      label: "Requested workspace provider",
+      auth: [],
+      prepareExtraParams: ({ extraParams }) => ({
+        ...extraParams,
+        fromRequestedWorkspace: true,
+      }),
+    };
+    const registry = createEmptyPluginRegistry();
+    registry.providers.push({
+      pluginId: DEMO_PROVIDER_ID,
+      provider: activeProvider,
+      source: "test",
+    });
+    setActivePluginRegistry(registry, "startup-registry", "gateway-bindable", "/tmp/gateway");
+    resolvePluginProvidersMock.mockReturnValueOnce([requestedProvider]);
+
+    expect(
+      prepareProviderExtraParams({
+        provider: DEMO_PROVIDER_ID,
+        workspaceDir: "/tmp/explicit-workspace",
+        context: createDemoRuntimeContext({
+          extraParams: {},
+        }),
+      }),
+    ).toEqual({
+      fromRequestedWorkspace: true,
+    });
+    expect(resolvePluginProvidersMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not use a default-mode active registry when an explicit lookup workspace differs", () => {
+    const activeProvider: ProviderPlugin = {
+      id: DEMO_PROVIDER_ID,
+      label: "Active workspace provider",
+      auth: [],
+    };
+    const requestedProvider: ProviderPlugin = {
+      id: DEMO_PROVIDER_ID,
+      label: "Requested workspace provider",
+      auth: [],
+      prepareExtraParams: ({ extraParams }) => ({
+        ...extraParams,
+        fromRequestedWorkspace: true,
+      }),
+    };
+    const registry = createEmptyPluginRegistry();
+    registry.providers.push({
+      pluginId: DEMO_PROVIDER_ID,
+      provider: activeProvider,
+      source: "test",
+    });
+    setActivePluginRegistry(registry, "workspace-a", "default", "/tmp/workspace-a");
+    resolvePluginProvidersMock.mockReturnValueOnce([requestedProvider]);
+
+    expect(
+      prepareProviderExtraParams({
+        provider: DEMO_PROVIDER_ID,
+        workspaceDir: "/tmp/workspace-b",
+        context: createDemoRuntimeContext({
+          extraParams: {},
+        }),
+      }),
+    ).toEqual({
+      fromRequestedWorkspace: true,
+    });
+    expect(resolvePluginProvidersMock).toHaveBeenCalledOnce();
+  });
+
   it("matches active provider hooks through a custom provider's native api owner", () => {
     const provider: ProviderPlugin = {
       id: "ollama",

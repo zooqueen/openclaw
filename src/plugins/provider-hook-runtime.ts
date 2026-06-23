@@ -44,6 +44,7 @@ export type ProviderRuntimePluginLookupParams = {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   applyAutoEnable?: boolean;
   bundledProviderVitestCompat?: boolean;
   pluginMetadataSnapshot?: PluginMetadataRegistryView;
@@ -82,6 +83,7 @@ function resolveProviderRuntimePluginCacheKey(
   return JSON.stringify({
     provider: normalizeLowercaseStringOrEmpty(params.provider),
     modelId: resolveProviderRuntimeLookupModelId(params) ?? null,
+    allowGatewayRegistryWorkspaceReuse: params.allowGatewayRegistryWorkspaceReuse ?? false,
     pluginControlPlane: resolvePluginControlPlaneFingerprint({
       config: params.config,
       env: params.env,
@@ -141,9 +143,19 @@ function findProviderRuntimePluginInLoadedRegistries(params: {
   lookup: ProviderRuntimePluginLookupParams;
   apiOwnerHint?: string;
 }): ProviderPlugin | undefined {
+  const registryState = getPluginRegistryState();
+  const activeWorkspaceDir =
+    params.lookup.allowGatewayRegistryWorkspaceReuse === true &&
+    registryState?.runtimeSubagentMode === "gateway-bindable"
+      ? getActivePluginRegistryWorkspaceDirFromState()
+      : undefined;
+  const lookupWorkspaceDir =
+    activeWorkspaceDir && activeWorkspaceDir !== params.lookup.workspaceDir
+      ? activeWorkspaceDir
+      : params.lookup.workspaceDir;
   const activeRegistry = getLoadedRuntimePluginRegistry({
     env: params.lookup.env,
-    workspaceDir: params.lookup.workspaceDir,
+    workspaceDir: lookupWorkspaceDir,
   });
   const activePlugin = activeRegistry
     ? findProviderRuntimePluginInRegistry({
@@ -158,7 +170,7 @@ function findProviderRuntimePluginInLoadedRegistries(params: {
   for (const surface of PREPARED_PROVIDER_RUNTIME_SURFACES) {
     const registry = getLoadedRuntimePluginRegistry({
       env: params.lookup.env,
-      workspaceDir: params.lookup.workspaceDir,
+      workspaceDir: lookupWorkspaceDir,
       surface,
     });
     const plugin = registry
@@ -371,6 +383,14 @@ export function ensureProviderRuntimePluginHandle(
       config: params.config ?? params.runtimeHandle?.config,
       workspaceDir: params.workspaceDir ?? params.runtimeHandle?.workspaceDir,
       env: params.env ?? params.runtimeHandle?.env,
+      ...((params.allowGatewayRegistryWorkspaceReuse ??
+      params.runtimeHandle?.allowGatewayRegistryWorkspaceReuse)
+        ? {
+            allowGatewayRegistryWorkspaceReuse:
+              params.allowGatewayRegistryWorkspaceReuse ??
+              params.runtimeHandle?.allowGatewayRegistryWorkspaceReuse,
+          }
+        : {}),
       applyAutoEnable: params.runtimeHandle?.applyAutoEnable,
       bundledProviderVitestCompat: params.runtimeHandle?.bundledProviderVitestCompat,
       pluginMetadataSnapshot:
@@ -385,6 +405,7 @@ export function prepareProviderExtraParams(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderPrepareExtraParamsContext;
 }) {
@@ -399,6 +420,7 @@ export function resolveProviderExtraParamsForTransport(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderExtraParamsForTransportContext;
 }) {
@@ -413,6 +435,7 @@ export function resolveProviderAuthProfileId(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderResolveAuthProfileIdContext;
 }): string | undefined {
@@ -427,6 +450,7 @@ export function resolveProviderFollowupFallbackRoute(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderFollowupFallbackRouteContext;
 }): ProviderFollowupFallbackRouteResult | undefined {
@@ -441,6 +465,7 @@ export function wrapProviderStreamFn(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderWrapStreamFnContext;
 }) {
@@ -454,6 +479,7 @@ export function wrapProviderSimpleCompletionStreamFn(params: {
   config?: OpenClawConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
+  allowGatewayRegistryWorkspaceReuse?: boolean;
   runtimeHandle?: ProviderRuntimePluginHandle;
   context: ProviderWrapStreamFnContext;
 }) {
