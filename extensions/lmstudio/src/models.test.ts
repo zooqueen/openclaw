@@ -420,10 +420,9 @@ describe("lmstudio-models", () => {
   it("caps oversized direct fetch timeouts before discovering models", async () => {
     const timeoutController = new AbortController();
     const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
-    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => ({
-      ...jsonResponse({ models: [] }),
-      requestInit: init,
-    }));
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) =>
+      Object.assign(jsonResponse({ models: [] }), { requestInit: init }),
+    );
 
     const result = await fetchLmstudioModels({
       baseUrl: "http://localhost:1234/v1",
