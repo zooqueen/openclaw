@@ -138,7 +138,7 @@ describe("exec resolve_exec_env hook wiring", () => {
     mocks.spawnInputs.length = 0;
   });
 
-  it("adds channel context env to gateway exec subprocesses", async () => {
+  it("adds only channel identity env to gateway exec subprocesses", async () => {
     const tool = createExecTool({
       host: "auto",
       security: "full",
@@ -156,7 +156,7 @@ describe("exec resolve_exec_env hook wiring", () => {
 
     expect(JSON.parse(mocks.gatewayParams[0]?.env[CHANNEL_CONTEXT_ENV_KEY] ?? "{}")).toEqual({
       chat: { id: "oc_1" },
-      sender: { id: "ou_1", unionId: "on_1" },
+      sender: { id: "ou_1" },
     });
     expect(mocks.spawnInputs[0]?.env?.[CHANNEL_CONTEXT_ENV_KEY]).toBe(
       mocks.gatewayParams[0]?.env[CHANNEL_CONTEXT_ENV_KEY],
@@ -216,7 +216,7 @@ describe("exec resolve_exec_env hook wiring", () => {
       JSON.parse(mocks.gatewayParams[0]?.requestedEnv?.[CHANNEL_CONTEXT_ENV_KEY] ?? "{}"),
     ).toEqual({
       chat: { id: "oc_1" },
-      sender: { id: "ou_1", unionId: "on_1" },
+      sender: { id: "ou_1" },
     });
     expect(mocks.gatewayParams[0]?.env).toMatchObject({
       EXISTING: "plugin",
