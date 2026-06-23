@@ -7,7 +7,6 @@ export type ExecPolicyLayer = {
   ask?: ExecAsk;
 };
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Preserve each caller's required policy fields.
 export function applyExecPolicyLayer<TBase extends ExecPolicyLayer>(
   base: TBase,
   layer?: ExecPolicyLayer,
@@ -17,12 +16,16 @@ export function applyExecPolicyLayer<TBase extends ExecPolicyLayer>(
   }
   if (layer.mode) {
     return {
+      ...base,
       mode: layer.mode,
       ...resolveExecPolicyForMode(layer.mode),
-    } as TBase & ExecPolicyLayer;
+    };
   }
   if (layer.security !== undefined || layer.ask !== undefined) {
     return {
+      ...base,
+      mode: undefined,
+      autoReview: undefined,
       security: layer.security ?? base.security,
       ask: layer.ask ?? base.ask,
     } as TBase & ExecPolicyLayer;
