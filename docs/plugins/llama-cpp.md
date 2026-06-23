@@ -46,8 +46,10 @@ The default model is `embeddinggemma-300m-qat-Q8_0.gguf`. You can also point
 
 ## Native Runtime
 
-Use Node 24 for the smoothest native install path. Source checkouts using pnpm
-may need to approve and rebuild the native dependency:
+Use Node 24 for the smoothest native install path. Source checkouts leave the
+native build unapproved by default so normal workspace installs do not compile
+llama.cpp. When you actually use local GGUF embeddings from source, approve and
+rebuild the provider runtime:
 
 ```bash
 pnpm approve-builds

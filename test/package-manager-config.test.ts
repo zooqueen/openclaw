@@ -55,13 +55,13 @@ function collectPnpmLockPackages(): Set<string> {
 }
 
 describe("package manager build policy", () => {
-  it("keeps optional native Discord opus builds disabled by default", () => {
+  it("keeps optional native Discord builds disabled without denying llama.cpp source opt-in rebuilds", () => {
     const packageJson = readJson("package.json") as RootPackageJson;
     const workspace = parse(fs.readFileSync("pnpm-workspace.yaml", "utf8")) as WorkspaceConfig;
 
     expect(packageJson.pnpm).toBeUndefined();
     expect(workspace.allowBuilds?.["@discordjs/opus"]).toBe(false);
-    expect(workspace.allowBuilds?.["node-llama-cpp"]).toBe(false);
+    expect(workspace.allowBuilds?.["node-llama-cpp"]).toBeUndefined();
     expect(workspace.blockExoticSubdeps).toBe(true);
     expect(workspace.onlyBuiltDependencies).toBeUndefined();
   });

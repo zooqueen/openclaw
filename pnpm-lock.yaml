@@ -929,7 +929,7 @@ importers:
         version: link:../../packages/plugin-sdk
 
   extensions/llama-cpp:
-    optionalDependencies:
+    dependencies:
       node-llama-cpp:
         specifier: 3.18.1
         version: 3.18.1(typescript@6.0.3)

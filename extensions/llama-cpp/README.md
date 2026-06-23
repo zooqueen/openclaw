@@ -11,7 +11,9 @@ openclaw plugins install @openclaw/llama-cpp-provider
 ```
 
 Restart the Gateway after installing or updating the plugin. Use Node 24 for
-native installs and updates.
+native installs and updates. Source checkouts leave the native build unapproved
+by default; run `pnpm approve-builds` and `pnpm rebuild node-llama-cpp` before
+using local GGUF embeddings from source.
 
 ## Configure
 
