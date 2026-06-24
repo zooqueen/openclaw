@@ -5,7 +5,11 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";
 import { getCurrentPluginMetadataSnapshot } from "../plugins/current-plugin-metadata-snapshot.js";
-import { getActivePluginRuntimeSubagentMode } from "../plugins/runtime.js";
+import {
+  getActivePluginRegistryWorkspaceDir,
+  getActivePluginRuntimeSubagentMode,
+} from "../plugins/runtime.js";
+import { getLoadedRuntimePluginRegistry } from "../plugins/active-runtime-registry.js";
 import { ensureStandaloneRuntimePluginRegistryLoaded } from "../plugins/runtime/standalone-runtime-registry-loader.js";
 import { resolveUserPath } from "../utils.js";
 
@@ -52,16 +56,32 @@ export function ensureRuntimePluginsLoaded(params: {
   const allowGatewaySubagentBinding =
     params.allowGatewaySubagentBinding === true ||
     getActivePluginRuntimeSubagentMode() === "gateway-bindable";
+  const baseLoadOptions = {
+    config: params.config,
+    workspaceDir,
+    ...(startupPluginIds === undefined ? {} : { onlyPluginIds: startupPluginIds }),
+    ...(startupPluginIds === undefined ? {} : { forceFullRuntimeForChannelPlugins: true }),
+    runtimeOptions: allowGatewaySubagentBinding
+      ? { allowGatewaySubagentBinding: true }
+      : undefined,
+  };
+  const activeWorkspaceDir =
+    startupPluginIds === undefined ? undefined : getActivePluginRegistryWorkspaceDir();
+  if (activeWorkspaceDir && activeWorkspaceDir !== workspaceDir) {
+    const activeRegistry = getLoadedRuntimePluginRegistry({
+      requiredPluginIds: startupPluginIds,
+      loadOptions: {
+        ...baseLoadOptions,
+        workspaceDir: activeWorkspaceDir,
+      },
+      workspaceDir: activeWorkspaceDir,
+    });
+    if (activeRegistry) {
+      return;
+    }
+  }
   ensureStandaloneRuntimePluginRegistryLoaded({
     requiredPluginIds: startupPluginIds,
-    loadOptions: {
-      config: params.config,
-      workspaceDir,
-      ...(startupPluginIds === undefined ? {} : { onlyPluginIds: startupPluginIds }),
-      ...(startupPluginIds === undefined ? {} : { forceFullRuntimeForChannelPlugins: true }),
-      runtimeOptions: allowGatewaySubagentBinding
-        ? { allowGatewaySubagentBinding: true }
-        : undefined,
-    },
+    loadOptions: baseLoadOptions,
   });
 }

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const hoisted = vi.hoisted(() => ({
   getCurrentPluginMetadataSnapshot: vi.fn(),
   ensureStandaloneRuntimePluginRegistryLoaded: vi.fn(),
+  getLoadedRuntimePluginRegistry: vi.fn(),
   getActivePluginRuntimeSubagentMode: vi.fn<() => "default" | "explicit" | "gateway-bindable">(
     () => "default",
   ),
@@ -16,6 +17,10 @@ vi.mock("../plugins/current-plugin-metadata-snapshot.js", () => ({
 
 vi.mock("../plugins/runtime/standalone-runtime-registry-loader.js", () => ({
   ensureStandaloneRuntimePluginRegistryLoaded: hoisted.ensureStandaloneRuntimePluginRegistryLoaded,
+}));
+
+vi.mock("../plugins/active-runtime-registry.js", () => ({
+  getLoadedRuntimePluginRegistry: hoisted.getLoadedRuntimePluginRegistry,
 }));
 
 vi.mock("../plugins/runtime.js", () => ({
@@ -32,6 +37,8 @@ describe("ensureRuntimePluginsLoaded", () => {
     hoisted.getCurrentPluginMetadataSnapshot.mockReturnValue(undefined);
     hoisted.ensureStandaloneRuntimePluginRegistryLoaded.mockReset();
     hoisted.ensureStandaloneRuntimePluginRegistryLoaded.mockReturnValue(undefined);
+    hoisted.getLoadedRuntimePluginRegistry.mockReset();
+    hoisted.getLoadedRuntimePluginRegistry.mockReturnValue(undefined);
     hoisted.getActivePluginRuntimeSubagentMode.mockReset();
     hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("default");
     hoisted.getActivePluginRegistryWorkspaceDir.mockReset();
@@ -139,6 +146,84 @@ describe("ensureRuntimePluginsLoaded", () => {
         config: {} as never,
         onlyPluginIds: ["telegram"],
         workspaceDir: "/tmp/workspace",
+        forceFullRuntimeForChannelPlugins: true,
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      },
+    });
+  });
+
+  it("reuses the active startup registry workspace only on a compatible cache hit", () => {
+    hoisted.getCurrentPluginMetadataSnapshot.mockReturnValue({
+      startup: {
+        pluginIds: ["telegram"],
+      },
+    });
+    hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("gateway-bindable");
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReturnValue("/tmp/gateway-workspace");
+    hoisted.getLoadedRuntimePluginRegistry.mockReturnValue({});
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/agent-workspace",
+      allowGatewaySubagentBinding: true,
+    });
+
+    expect(hoisted.getCurrentPluginMetadataSnapshot).toHaveBeenCalledWith({
+      config: {} as never,
+      workspaceDir: "/tmp/agent-workspace",
+    });
+    expect(hoisted.getLoadedRuntimePluginRegistry).toHaveBeenCalledWith({
+      requiredPluginIds: ["telegram"],
+      workspaceDir: "/tmp/gateway-workspace",
+      loadOptions: {
+        config: {} as never,
+        onlyPluginIds: ["telegram"],
+        workspaceDir: "/tmp/gateway-workspace",
+        forceFullRuntimeForChannelPlugins: true,
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      },
+    });
+    expect(hoisted.ensureStandaloneRuntimePluginRegistryLoaded).not.toHaveBeenCalled();
+  });
+
+  it("loads from the requested workspace when active startup registry reuse misses", () => {
+    hoisted.getCurrentPluginMetadataSnapshot.mockReturnValue({
+      startup: {
+        pluginIds: ["telegram"],
+      },
+    });
+    hoisted.getActivePluginRuntimeSubagentMode.mockReturnValue("gateway-bindable");
+    hoisted.getActivePluginRegistryWorkspaceDir.mockReturnValue("/tmp/gateway-workspace");
+
+    ensureRuntimePluginsLoaded({
+      config: {} as never,
+      workspaceDir: "/tmp/agent-workspace",
+      allowGatewaySubagentBinding: true,
+    });
+
+    expect(hoisted.getLoadedRuntimePluginRegistry).toHaveBeenCalledWith({
+      requiredPluginIds: ["telegram"],
+      workspaceDir: "/tmp/gateway-workspace",
+      loadOptions: {
+        config: {} as never,
+        onlyPluginIds: ["telegram"],
+        workspaceDir: "/tmp/gateway-workspace",
+        forceFullRuntimeForChannelPlugins: true,
+        runtimeOptions: {
+          allowGatewaySubagentBinding: true,
+        },
+      },
+    });
+    expect(hoisted.ensureStandaloneRuntimePluginRegistryLoaded).toHaveBeenCalledWith({
+      requiredPluginIds: ["telegram"],
+      loadOptions: {
+        config: {} as never,
+        onlyPluginIds: ["telegram"],
+        workspaceDir: "/tmp/agent-workspace",
         forceFullRuntimeForChannelPlugins: true,
         runtimeOptions: {
           allowGatewaySubagentBinding: true,

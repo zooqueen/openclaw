@@ -21,6 +21,7 @@ export type RegistryState = {
   sessionExtension: RegistrySurfaceState;
   agentEventBridgeUnsubscribe?: (() => void) | undefined;
   key: string | null;
+  pluginIdScope: string[] | null;
   workspaceDir: string | null;
   runtimeSubagentMode: "default" | "explicit" | "gateway-bindable";
   importedPluginIds: Set<string>;
