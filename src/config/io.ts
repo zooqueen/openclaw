@@ -1199,6 +1199,7 @@ function resolveConfigIncludesForRead(
   deps: Required<ConfigIoDeps>,
   includeFileHashesForWrite?: Record<string, string>,
   includeFileTargetsForWrite?: Record<string, string>,
+  includeFilePaths?: Set<string>,
 ): unknown {
   const allowedRoots = resolveIncludeRoots(deps.env, deps.homedir);
   const recordIncludeTarget = (resolvedPath: string, canonicalPath?: string) => {
@@ -1231,7 +1232,10 @@ function resolveConfigIncludesForRead(
             resolvedPath,
             rootRealDir,
             ioFs: deps.fs,
-            onResolvedPath: (canonicalPath) => recordIncludeTarget(resolvedPath, canonicalPath),
+            onResolvedPath: (canonicalPath) => {
+              recordIncludeTarget(resolvedPath, canonicalPath);
+              includeFilePaths?.add(path.normalize(canonicalPath));
+            },
           });
           if (includeFileHashesForWrite) {
             includeFileHashesForWrite[path.normalize(resolvedPath)] = hashConfigIncludeRaw(raw);
@@ -1307,11 +1311,13 @@ type ReadConfigFileSnapshotInternalResult = {
   envSnapshotForRestore?: Record<string, string | undefined>;
   includeFileHashesForWrite?: Record<string, string>;
   includeFileTargetsForWrite?: Record<string, string>;
+  includeFilePaths?: readonly string[];
   pluginMetadataSnapshot?: PluginMetadataSnapshot;
 };
 
 export type ReadConfigFileSnapshotWithPluginMetadataResult = {
   snapshot: ConfigFileSnapshot;
+  includeFilePaths?: readonly string[];
   pluginMetadataSnapshot?: PluginMetadataSnapshot;
 };
 
@@ -1868,6 +1874,7 @@ export function createConfigIO(
     let fallbackEnvSnapshotForRestore: Record<string, string | undefined> | undefined;
     const includeFileHashesForWrite: Record<string, string> = {};
     const includeFileTargetsForWrite: Record<string, string> = {};
+    const includeFilePaths = new Set<string>();
 
     try {
       const raw = await deps.measure("config.snapshot.read.file", () =>
@@ -1916,6 +1923,7 @@ export function createConfigIO(
             deps,
             includeFileHashesForWrite,
             includeFileTargetsForWrite,
+            includeFilePaths,
           ),
         );
       } catch (err) {
@@ -2086,6 +2094,7 @@ export function createConfigIO(
             envSnapshotForRestore: readResolution.envSnapshotForRestore,
             includeFileHashesForWrite,
             includeFileTargetsForWrite,
+            includeFilePaths: [...includeFilePaths].toSorted(),
             pluginMetadataSnapshot: validationPluginMetadata.getSnapshot(),
           },
           { observe: !callerRejectedSuspiciousRecovery },
@@ -2151,6 +2160,7 @@ export function createConfigIO(
     });
     return {
       snapshot: result.snapshot,
+      ...(result.snapshot.valid ? { includeFilePaths: result.includeFilePaths ?? [] } : {}),
       ...(result.pluginMetadataSnapshot
         ? { pluginMetadataSnapshot: result.pluginMetadataSnapshot }
         : {}),
