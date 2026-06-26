@@ -11,11 +11,13 @@ export {
   parseCanonicalSessionSyncTargetFromPath,
   resolveSessionIdentityForTranscriptFile,
   resolveSessionFileForSyncTarget,
+  scanSessionFilesForAgent,
   sessionPathForFile,
   type BuildSessionEntryOptions,
   type ResolvedMemorySessionSyncTarget,
   type ResolvedSessionTranscriptIdentity,
   type SessionFileEntry,
+  type SessionFilesScanResult,
   type SessionTranscriptClassification,
   type SessionTranscriptCorpusEntry,
 } from "./host/session-files.js";

@@ -1,8 +1,9 @@
 // Memory Host SDK module implements session files behavior.
 import fsSync from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { normalizeAgentId } from "./config-utils.js";
-import { readRegularFile, statRegularFile } from "./fs-utils.js";
+import { isFileMissingError, readRegularFile, statRegularFile } from "./fs-utils.js";
 import { hashText } from "./hash.js";
 import { createSubsystemLogger, redactSensitiveText } from "./openclaw-runtime-io.js";
 import {
@@ -377,6 +378,40 @@ function classifySessionTranscriptFromSessionStore(absPath: string): {
   };
 }
 
+// Result of scanning an agent's sessions directory. `ok` distinguishes an
+// authoritative enumeration (the directory was read, or it does not exist —
+// agent/session dirs are only created when state is written) from a failed scan
+// (e.g. a transient NFS EIO/ESTALE or a permission error). Callers that prune
+// indexed state from this listing must only treat `ok: true` as authoritative:
+// a failed scan surfaces an empty `files` array but must not be read as "no
+// sessions exist", or one blip would wipe the session index.
+export type SessionFilesScanResult = { ok: boolean; files: string[] };
+
+export async function scanSessionFilesForAgent(agentId: string): Promise<SessionFilesScanResult> {
+  const dir = resolveSessionTranscriptsDirForAgent(agentId);
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const files = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => isUsageCountedSessionTranscriptFileName(name))
+      .map((name) => path.join(dir, name));
+    return { ok: true, files };
+  } catch (err) {
+    // A missing sessions path is authoritative: fresh agents have no agent or
+    // sessions dir until state is first written, so ENOENT means no transcripts.
+    if (isFileMissingError(err)) {
+      return { ok: true, files: [] };
+    }
+    // Anything else (transient NFS error, permission) is non-authoritative
+    // for destructive callers; surface empty but flag not-ok.
+    return { ok: false, files: [] };
+  }
+}
+
+// Corpus-backed listing stays the canonical enumerator (active sessions +
+// archive artifacts + dreaming/cron classification). `scanSessionFilesForAgent`
+// above only feeds the destructive-prune ok-gate, not this list.
 export async function listSessionFilesForAgent(agentId: string): Promise<string[]> {
   return (await listSessionTranscriptCorpusEntriesForAgent(agentId)).map(
     (entry) => entry.sessionFile,

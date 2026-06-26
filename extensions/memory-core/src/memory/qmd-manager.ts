@@ -30,6 +30,7 @@ import {
   resolveSessionIdentityForTranscriptFile,
   resolveCliSpawnInvocation,
   runCliCommand,
+  scanSessionFilesForAgent,
   type QmdQueryResult,
   type SessionFileEntry,
   type SessionTranscriptCorpusEntry,
@@ -2597,6 +2598,9 @@ export class QmdMemoryManager implements MemorySearchManager {
     await fs.mkdir(exportDir, { recursive: true });
     const exportRoot = await root(exportDir);
     const corpusEntries = await listSessionTranscriptCorpusEntriesForAgent(this.agentId);
+    // Corpus drives the export; the raw scan only supplies the ok-flag that
+    // gates the reconcile-delete below (a failed listing must not wipe exports).
+    const scan = await scanSessionFilesForAgent(this.agentId);
     const keep = new Set<string>();
     const tracked = new Set<string>();
     const artifactMappings: QmdSessionArtifactMapping[] = [];
@@ -2639,6 +2643,12 @@ export class QmdMemoryManager implements MemorySearchManager {
         target,
       });
       keep.add(target);
+    }
+    if (!scan.ok) {
+      // A failed listing is non-authoritative: reconciling against it would
+      // delete the whole exported corpus and force a full re-export on the
+      // next pass. Abort so runUpdate keeps dirty state and retries later.
+      throw new Error("QMD session export aborted: session enumeration failed");
     }
     const exported = await exportRoot.list(".").catch(() => []);
     for (const name of exported) {

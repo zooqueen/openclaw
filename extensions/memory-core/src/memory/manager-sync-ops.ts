@@ -24,6 +24,7 @@ import {
   listSessionTranscriptCorpusEntriesForAgent,
   parseCanonicalSessionSyncTargetFromPath,
   resolveSessionFileForSyncTarget,
+  scanSessionFilesForAgent,
   sessionPathForFile,
   type SessionTranscriptCorpusEntry,
 } from "openclaw/plugin-sdk/memory-core-host-engine-qmd";
@@ -31,7 +32,6 @@ import {
   buildFileEntry,
   ensureMemoryIndexSchema,
   isFileMissingError,
-  listMemoryFiles,
   loadSqliteVecExtension,
   MEMORY_EMBEDDING_CACHE_TABLE,
   MEMORY_INDEX_FTS_TABLE,
@@ -39,6 +39,7 @@ import {
   normalizeExtraMemoryPaths,
   retryTransientMemoryRead,
   runWithConcurrency,
+  scanMemoryFiles,
   type MemorySource,
   type MemorySessionSyncTarget,
   type MemorySyncParams,
@@ -137,6 +138,10 @@ export type MemoryIndexWorkItem = {
 type MemorySourceSyncPlan = {
   indexItems: MemoryIndexWorkItem[];
   finalize: () => Promise<void> | void;
+  // False when the source enumeration failed (non-authoritative listing).
+  // runSync then keeps the source's dirty state so the next eligible sync
+  // retries, instead of reporting a clean sync that indexed nothing.
+  scanOk: boolean;
 };
 
 type MemorySessionDeltaState = { lastSize: number; pendingBytes: number; pendingMessages: number };
@@ -156,6 +161,11 @@ const LEGACY_VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = MEMORY_INDEX_FTS_TABLE;
 const EMBEDDING_CACHE_TABLE = MEMORY_EMBEDDING_CACHE_TABLE;
 const SESSION_DIRTY_DEBOUNCE_MS = 5000;
+// Targeted delta syncs skip the sessions-dir enumeration entirely, so rows for
+// files deleted out-of-band (another process/node on shared storage) are only
+// pruned by full enumerations. Force one full-enumeration delta sync at most
+// this often to bound how long such stale rows can linger in search.
+const SESSION_PRUNE_RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
 const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
 const SESSION_SYNC_YIELD_EVERY = 10;
 const SOURCE_WIDE_SESSION_INDEX_FLUSH_FILES = 128;
@@ -344,6 +354,10 @@ export abstract class MemoryManagerSyncOps {
   protected sessionsFullRetryDirty = false;
   private readonly memoryWatchPressureWarning: MemoryWatchPressureWarningState = { shown: false };
   protected sessionsDirtyFiles = new Set<string>();
+  // Epoch ms of the last completed session stale-row prune (authoritative full
+  // enumeration). Starts at 0 so the first active delta sync reconciles unless
+  // the startup catch-up sync already did.
+  private lastSessionPruneReconcileAt = 0;
   protected sessionPendingFiles = new Set<string>();
   protected sessionPendingTargets = new Map<string, MemorySessionSyncTarget>();
   protected sessionDeltas = new Map<string, MemorySessionDeltaState>();
@@ -375,7 +389,20 @@ export abstract class MemoryManagerSyncOps {
   }
 
   private emptySourceSyncPlan(): MemorySourceSyncPlan {
-    return { indexItems: [], finalize: () => {} };
+    return { indexItems: [], finalize: () => {}, scanOk: true };
+  }
+
+  // A full reindex builds a fresh index from the enumeration alone, so a
+  // failed scan would persist an empty index over existing rows. Abort: the
+  // safe path restores the original DB on throw, and the unsafe path skips
+  // writeMeta so the next sync retries the full rebuild.
+  private assertReindexScanOk(source: MemorySource, scanOk: boolean): void {
+    if (scanOk) {
+      return;
+    }
+    throw new Error(
+      `Memory reindex aborted: ${source} enumeration failed; keeping the existing index.`,
+    );
   }
 
   private snapshotReindexRetryState(): MemoryReindexRetryState {
@@ -496,7 +523,7 @@ export abstract class MemoryManagerSyncOps {
     needsFullSessionReindex?: boolean;
     targetSessionFiles?: string[];
     progress?: MemorySyncProgressState;
-  }): Promise<void> {
+  }): Promise<{ memoryScanOk: boolean; sessionsScanOk: boolean }> {
     const memoryPlan = params.shouldSyncMemory
       ? await this.syncMemoryFiles({
           needsFullReindex: params.needsFullReindex,
@@ -505,7 +532,7 @@ export abstract class MemoryManagerSyncOps {
         })
       : this.emptySourceSyncPlan();
     if (params.shouldSyncSessions) {
-      await this.syncSessionFiles({
+      const sessionPlan = await this.syncSessionFiles({
         needsFullReindex: params.needsFullSessionReindex ?? params.needsFullReindex,
         targetSessionFiles: params.targetSessionFiles,
         progress: params.progress,
@@ -513,9 +540,10 @@ export abstract class MemoryManagerSyncOps {
         prefixIndexItems: memoryPlan.indexItems,
       });
       await memoryPlan.finalize();
-      return;
+      return { memoryScanOk: memoryPlan.scanOk, sessionsScanOk: sessionPlan.scanOk };
     }
     await this.executeSourceSyncPlans([memoryPlan], params.progress);
+    return { memoryScanOk: memoryPlan.scanOk, sessionsScanOk: true };
   }
 
   protected hasIndexedChunks(): boolean {
@@ -1581,6 +1609,7 @@ export abstract class MemoryManagerSyncOps {
     this.sessionPendingTargets.clear();
     pending.push(...Array.from(await this.resolveSessionFilesForSyncTargets(pendingTargets)));
     let shouldSync = false;
+    let needsFullSessionEnumeration = false;
     for (const sessionFile of pending) {
       // Usage-counted session archives (`.jsonl.reset.<iso>` and
       // `.jsonl.deleted.<iso>`) are one-shot mutation events: the file is
@@ -1597,6 +1626,7 @@ export abstract class MemoryManagerSyncOps {
       ) {
         this.sessionsDirtyFiles.add(sessionFile);
         this.sessionsDirty = true;
+        needsFullSessionEnumeration = true;
         shouldSync = true;
         continue;
       }
@@ -1624,7 +1654,26 @@ export abstract class MemoryManagerSyncOps {
       shouldSync = true;
     }
     if (shouldSync) {
-      void this.sync({ reason: "session-delta" }).catch((err: unknown) => {
+      // The dirty set already names every live transcript this sync must index,
+      // so pass it through and skip the sessions-dir enumeration (expensive on
+      // networked filesystems). Archive/reset events force a full enumeration
+      // because their old live transcript row must be pruned authoritatively.
+      const dirtySessionFiles = Array.from(this.sessionsDirtyFiles);
+      const dirtySetNeedsFullEnumeration = dirtySessionFiles.some((file) => {
+        const baseName = path.basename(file);
+        return (
+          isSessionArchiveArtifactName(baseName) &&
+          isUsageCountedSessionTranscriptFileName(baseName)
+        );
+      });
+      const reconcileDue =
+        needsFullSessionEnumeration ||
+        dirtySetNeedsFullEnumeration ||
+        Date.now() - this.lastSessionPruneReconcileAt >= SESSION_PRUNE_RECONCILE_INTERVAL_MS;
+      const syncParams = reconcileDue
+        ? { reason: "session-delta" }
+        : { reason: "session-delta", sessionFiles: dirtySessionFiles };
+      void this.sync(syncParams).catch((err: unknown) => {
         log.warn(`memory sync failed (session-delta): ${String(err)}`);
       });
     }
@@ -1983,11 +2032,15 @@ export abstract class MemoryManagerSyncOps {
         ? this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
         : null;
 
-    const files = await listMemoryFiles(
+    // Track whether the enumeration actually read every root, so a transient
+    // failure cannot surface an empty/partial listing that the stale-row prune
+    // below would treat as mass deletion.
+    const scan = await scanMemoryFiles(
       this.workspaceDir,
       this.settings.extraPaths,
       this.settings.multimodal,
     );
+    const files = scan.files;
     const fileEntries = (
       await runWithConcurrency(
         files.map(
@@ -2020,6 +2073,15 @@ export abstract class MemoryManagerSyncOps {
     }
 
     const deleteStaleRows = async () => {
+      if (!scan.ok) {
+        // A failed enumeration is non-authoritative: pruning against it would
+        // delete index rows for files that still exist on disk. Keep the rows
+        // until the next successful scan reconciles.
+        log.warn(
+          `memory sync: skipping memory-file prune after a failed enumeration; retaining ${existingRows.length} indexed rows until the next successful scan`,
+        );
+        return;
+      }
       for (const stale of existingRows) {
         if (activePaths.has(stale.path)) {
           continue;
@@ -2058,7 +2120,7 @@ export abstract class MemoryManagerSyncOps {
         (entry): MemoryIndexWorkItem => ({ entry, source: "memory" }),
       );
       if (params.deferIndex) {
-        return { indexItems, finalize: deleteStaleRows };
+        return { indexItems, finalize: deleteStaleRows, scanOk: scan.ok };
       }
       await this.indexQueuedFiles(indexItems, params.progress);
     } else {
@@ -2086,7 +2148,7 @@ export abstract class MemoryManagerSyncOps {
     }
 
     await deleteStaleRows();
-    return this.emptySourceSyncPlan();
+    return { ...this.emptySourceSyncPlan(), scanOk: scan.ok };
   }
 
   private async syncSessionFiles(params: {
@@ -2120,6 +2182,13 @@ export abstract class MemoryManagerSyncOps {
     const corpusEntryByPath = new Map<string, SessionTranscriptCorpusEntry>(
       corpusEntries.map((entry) => [entry.sessionFile, entry]),
     );
+    // Indexing stays corpus-driven (active sessions + archive artifacts +
+    // dreaming/cron classification). Full enumerations additionally scan the
+    // sessions dir so a transient NFS failure cannot masquerade as an empty dir
+    // and drive the destructive stale-row prune below; only `scan.ok` gates it.
+    const scan = targetSessionFiles
+      ? { ok: true, files: Array.from(targetSessionFiles) }
+      : await scanSessionFilesForAgent(this.agentId);
     const files = targetSessionFiles
       ? Array.from(targetSessionFiles)
       : corpusEntries.map((entry) => entry.sessionFile);
@@ -2135,8 +2204,9 @@ export abstract class MemoryManagerSyncOps {
             source: "sessions",
           }).rows,
       sessionPathForFile,
+      scanOk: scan.ok,
     });
-    const { activePaths, existingRows, existingHashes, indexAll } = sessionPlan;
+    const { activePaths, existingRows, existingHashes, indexAll, pruneStaleRows } = sessionPlan;
     log.debug("memory sync: indexing session files", {
       files: files.length,
       indexAll,
@@ -2156,7 +2226,21 @@ export abstract class MemoryManagerSyncOps {
 
     const yieldAfterSessionFile = createSessionSyncYield(files.length);
     const deleteStaleRows = async () => {
-      if (activePaths === null) {
+      if (!pruneStaleRows || activePaths === null) {
+        // Skip the stale-row prune unless we hold an authoritative full
+        // enumeration. Targeted syncs (activePaths === null) only refresh the
+        // requested transcripts. A failed directory scan also lands here: it
+        // surfaces an empty listing for reasons unrelated to on-disk state
+        // (e.g. transient NFS EIO/ESTALE), so pruning would wipe the entire
+        // session index on one blip. Leave the index intact and let the next
+        // successful enumeration reconcile.
+        if (activePaths !== null && !scan.ok) {
+          log.warn(
+            `memory sync: skipping session prune after a failed directory scan; retaining ${
+              (existingRows ?? []).length
+            } indexed session rows until the next successful enumeration`,
+          );
+        }
         return;
       }
 
@@ -2183,6 +2267,9 @@ export abstract class MemoryManagerSyncOps {
           await yieldAfterStaleSessionRow();
         }
       }
+      // A completed authoritative prune is the reconciliation point targeted
+      // delta syncs rely on; record it so they keep skipping enumerations.
+      this.lastSessionPruneReconcileAt = Date.now();
     };
 
     if (params.deferIndex) {
@@ -2280,7 +2367,7 @@ export abstract class MemoryManagerSyncOps {
 
       await flushPendingIndexItems();
       await deleteStaleRows();
-      return this.emptySourceSyncPlan();
+      return { ...this.emptySourceSyncPlan(), scanOk: scan.ok };
     }
     if ((params.prefixIndexItems?.length ?? 0) > 0) {
       throw new Error("Memory session sync prefix requires deferred source-wide indexing.");
@@ -2351,7 +2438,7 @@ export abstract class MemoryManagerSyncOps {
     await runWithConcurrency(tasks, this.getIndexConcurrency());
 
     await deleteStaleRows();
-    return this.emptySourceSyncPlan();
+    return { ...this.emptySourceSyncPlan(), scanOk: scan.ok };
   }
 
   private createSyncProgress(
@@ -2531,8 +2618,11 @@ export abstract class MemoryManagerSyncOps {
         ((!hasTargetSessionFiles && params?.force) || needsFullReindex || this.dirty);
       const shouldSyncSessions = this.shouldSyncSessions(params, needsFullReindex);
 
+      // A sync whose enumeration failed indexed nothing for that source; keep
+      // its dirty state so the next eligible sync retries instead of treating
+      // the source as clean until something marks it dirty again.
       if (this.shouldDeferSourceWideBatch()) {
-        await this.executeSourceWideSync({
+        const outcome = await this.executeSourceWideSync({
           shouldSyncMemory,
           shouldSyncSessions,
           needsFullReindex,
@@ -2540,27 +2630,36 @@ export abstract class MemoryManagerSyncOps {
           targetSessionFiles: targetSessionFiles ? Array.from(targetSessionFiles) : undefined,
           progress: progress ?? undefined,
         });
-        if (shouldSyncMemory) {
+        if (shouldSyncMemory && outcome.memoryScanOk) {
           this.clearMemoryRetryState();
         }
         if (shouldSyncSessions) {
-          this.clearSessionRetryState();
+          if (outcome.sessionsScanOk) {
+            this.clearSessionRetryState();
+          }
         } else {
           this.refreshSessionDirtyFlag();
         }
       } else {
         if (shouldSyncMemory) {
-          await this.syncMemoryFiles({ needsFullReindex, progress: progress ?? undefined });
-          this.clearMemoryRetryState();
+          const memoryPlan = await this.syncMemoryFiles({
+            needsFullReindex,
+            progress: progress ?? undefined,
+          });
+          if (memoryPlan.scanOk) {
+            this.clearMemoryRetryState();
+          }
         }
 
         if (shouldSyncSessions) {
-          await this.syncSessionFiles({
+          const sessionPlan = await this.syncSessionFiles({
             needsFullReindex: needsFullSessionReindex,
             targetSessionFiles: targetSessionFiles ? Array.from(targetSessionFiles) : undefined,
             progress: progress ?? undefined,
           });
-          this.clearSessionRetryState();
+          if (sessionPlan.scanOk) {
+            this.clearSessionRetryState();
+          }
         } else {
           this.refreshSessionDirtyFlag();
         }
@@ -2723,12 +2822,16 @@ export abstract class MemoryManagerSyncOps {
       const shouldSyncSessions = shouldRetrySessionsOnFailure;
 
       if (this.shouldDeferSourceWideBatch()) {
-        await this.executeSourceWideSync({
+        const outcome = await this.executeSourceWideSync({
           shouldSyncMemory,
           shouldSyncSessions,
           needsFullReindex: true,
           progress: params.progress,
         });
+        // A failed enumeration must abort the reindex before the empty rebuild
+        // publishes, or the swap wipes the live index exactly like an unguarded prune.
+        this.assertReindexScanOk("memory", outcome.memoryScanOk);
+        this.assertReindexScanOk("sessions", outcome.sessionsScanOk);
         if (shouldSyncMemory) {
           this.clearMemoryRetryState();
         }
@@ -2739,12 +2842,20 @@ export abstract class MemoryManagerSyncOps {
         }
       } else {
         if (shouldSyncMemory) {
-          await this.syncMemoryFiles({ needsFullReindex: true, progress: params.progress });
+          const memoryPlan = await this.syncMemoryFiles({
+            needsFullReindex: true,
+            progress: params.progress,
+          });
+          this.assertReindexScanOk("memory", memoryPlan.scanOk);
           this.clearMemoryRetryState();
         }
 
         if (shouldSyncSessions) {
-          await this.syncSessionFiles({ needsFullReindex: true, progress: params.progress });
+          const sessionPlan = await this.syncSessionFiles({
+            needsFullReindex: true,
+            progress: params.progress,
+          });
+          this.assertReindexScanOk("sessions", sessionPlan.scanOk);
           this.clearSessionRetryState();
         } else {
           this.refreshSessionDirtyFlag();

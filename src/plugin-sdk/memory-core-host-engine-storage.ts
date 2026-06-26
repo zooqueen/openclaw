@@ -34,6 +34,7 @@ export {
   requireNodeSqlite,
   resolveMemoryBackendConfig,
   runWithConcurrency,
+  scanMemoryFiles,
   statRegularFile,
 } from "../../packages/memory-host-sdk/src/engine-storage.js";
 
@@ -66,6 +67,7 @@ export type MemoryEmbeddingProbeResult = {
 export type {
   MemoryChunk,
   MemoryFileEntry,
+  MemoryFilesScanResult,
   MemoryProviderStatus,
   MemoryReadResult,
   MemorySearchManager,
