@@ -1303,21 +1303,6 @@
   background: var(--bg-content);
 }
 
-.content--sessions {
-  --sessions-bg: #58a63c;
-  --sessions-foreground: #081108;
-  --bg-content: var(--sessions-bg);
-  background: var(--sessions-bg);
-}
-
-.content--sessions .page-title {
-  color: var(--sessions-foreground);
-}
-
-.content--sessions .page-sub {
-  color: var(--sessions-foreground);
-}
-
 .content--chat {
   display: flex;
   flex-direction: column;

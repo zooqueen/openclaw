@@ -2649,11 +2649,10 @@ export function renderApp(state: AppViewState) {
         </aside>
       </div>
       <main
-        class="content ${isChat ? "content--chat" : ""} ${state.tab === "sessions"
-          ? "content--sessions"
-          : ""} ${state.tab === "logs" ? "content--logs" : ""} ${state.tab === "workboard"
-          ? "content--workboard"
-          : ""} ${state.tab === "skillWorkshop"
+        class="content ${isChat ? "content--chat" : ""} ${state.tab === "logs"
+          ? "content--logs"
+          : ""} ${state.tab === "workboard" ? "content--workboard" : ""} ${state.tab ===
+        "skillWorkshop"
           ? `content--skill-workshop ${
               state.skillWorkshopMode === "today" ? "content--skill-workshop-today" : ""
             }`

@@ -348,15 +348,6 @@ describe("renderApp assistant avatar routing", () => {
     expect(content?.classList.contains("content--chat")).toBe(false);
   });
 
-  it("marks the sessions route for its page background", () => {
-    const container = document.createElement("div");
-
-    render(renderApp(createState({ tab: "sessions" })), container);
-
-    const content = container.querySelector<HTMLElement>("main.content");
-    expect(content?.classList.contains("content--sessions")).toBe(true);
-  });
-
   it("does not render chat errors in non-chat page headers", () => {
     const container = document.createElement("div");
 
