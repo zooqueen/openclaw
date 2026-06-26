@@ -1303,6 +1303,20 @@
   background: var(--bg-content);
 }
 
+.content--sessions {
+  --sessions-bg: color-mix(in srgb, var(--danger) 72%, black);
+  --bg-content: var(--sessions-bg);
+  background: var(--sessions-bg);
+}
+
+.content--sessions .page-title {
+  color: var(--destructive-foreground);
+}
+
+.content--sessions .page-sub {
+  color: var(--destructive-foreground);
+}
+
 .content--chat {
   display: flex;
   flex-direction: column;
