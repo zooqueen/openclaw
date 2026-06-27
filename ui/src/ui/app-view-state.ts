@@ -8,7 +8,6 @@ import type {
   ConfigSnapshot,
   ConfigUiHints,
   HealthSummary,
-  ChatModelOverride,
   ModelAuthStatusResult,
   ModelCatalogEntry,
   NostrProfile,
@@ -125,7 +124,6 @@ export type AppViewState = {
   chatAvatarStatus?: "none" | "local" | "remote" | "data" | null;
   chatAvatarReason?: string | null;
   chatThinkingLevel: string | null;
-  chatModelOverrides: Record<string, ChatModelOverride | null>;
   chatModelSwitchPromises: Record<string, Promise<boolean>>;
   chatModelsLoading: boolean;
   chatModelCatalog: ModelCatalogEntry[];

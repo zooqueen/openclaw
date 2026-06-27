@@ -16,6 +16,7 @@ function createState(): { state: AgentsState; request: ReturnType<typeof vi.fn<T
     agentsError: null,
     agentsList: null,
     agentsSelectedId: "main",
+    sessions: { state: { modelOverrides: {} } },
     toolsCatalogLoading: false,
     toolsCatalogError: null,
     toolsCatalogResult: null,
@@ -40,7 +41,6 @@ function createState(): { state: AgentsState; request: ReturnType<typeof vi.fn<T
         },
       ],
     },
-    chatModelOverrides: {},
     chatModelCatalog: [{ id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai" }],
     agentsPanel: "overview",
   };
