@@ -92,20 +92,16 @@ vi.mock("../pages/chat/chat-avatar.ts", () => ({
 }));
 
 import type { SessionsListResult } from "../api/types.ts";
-import type { SessionCapability } from "../lib/sessions/index.ts";
-import { switchChatSession, switchChatSessionAndWait } from "../pages/chat/session-switch.ts";
 import {
-  dismissChatError,
-  dismissRealtimeTalkError,
-  handleChatManualRefresh,
   isCronSessionKey,
   parseSessionKey,
-  resolveAssistantAttachmentAuthToken,
-  resolveDashboardHeaderContext,
-  resolveSessionOptionGroups,
   resolveSessionDisplayName,
-} from "./app-render.helpers.ts";
+} from "../lib/session-display.ts";
+import type { SessionCapability } from "../lib/sessions/index.ts";
+import { switchChatSession, switchChatSessionAndWait } from "../pages/chat/session-switch.ts";
+import { resolveDashboardHeaderContext } from "./app-render.helpers.ts";
 import type { AppViewState } from "./app-view-state.ts";
+import { resolveSessionOptionGroups } from "./chat/session-controls.ts";
 
 type SessionRow = SessionsListResult["sessions"][number];
 
@@ -325,48 +321,6 @@ describe("parseSessionKey", () => {
       prefix: "",
       fallbackName: "something-unknown",
     });
-  });
-});
-
-describe("resolveAssistantAttachmentAuthToken", () => {
-  it("prefers the paired device token when present", () => {
-    expect(
-      resolveAssistantAttachmentAuthToken({
-        hello: { auth: { deviceToken: "device-token" } } as AppViewState["hello"],
-        settings: { token: "session-token" } as AppViewState["settings"],
-        password: "shared-password",
-      }),
-    ).toBe("device-token");
-  });
-
-  it("prefers the explicit gateway token when present", () => {
-    expect(
-      resolveAssistantAttachmentAuthToken({
-        hello: null,
-        settings: { token: "session-token" } as AppViewState["settings"],
-        password: "shared-password",
-      }),
-    ).toBe("session-token");
-  });
-
-  it("falls back to the shared password when token is blank", () => {
-    expect(
-      resolveAssistantAttachmentAuthToken({
-        hello: null,
-        settings: { token: "   " } as AppViewState["settings"],
-        password: "shared-password",
-      }),
-    ).toBe("shared-password");
-  });
-
-  it("returns null when neither auth secret is available", () => {
-    expect(
-      resolveAssistantAttachmentAuthToken({
-        hello: null,
-        settings: { token: "" } as AppViewState["settings"],
-        password: "   ",
-      }),
-    ).toBeNull();
   });
 });
 
@@ -763,73 +717,6 @@ describe("resolveSessionOptionGroups", () => {
     });
 
     expect(labels).toEqual(["Spock"]);
-  });
-});
-
-describe("handleChatManualRefresh", () => {
-  it("waits for chat history before scrolling and clearing refresh state", async () => {
-    const animationFrame = { callback: undefined as FrameRequestCallback | undefined };
-    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
-    Object.defineProperty(globalThis, "requestAnimationFrame", {
-      configurable: true,
-      writable: true,
-      value: vi.fn((callback: FrameRequestCallback) => {
-        animationFrame.callback = callback;
-        return 1;
-      }),
-    });
-    try {
-      let resolveRefresh: (() => void) | undefined;
-      refreshChatMock.mockReturnValueOnce(
-        new Promise<void>((resolve) => {
-          resolveRefresh = resolve;
-        }),
-      );
-      const state = {
-        chatManualRefreshInFlight: false,
-        chatNewMessagesBelow: true,
-        updateComplete: Promise.resolve(),
-        resetToolStream: vi.fn(),
-        scrollToBottom: vi.fn(),
-      } as unknown as Parameters<typeof handleChatManualRefresh>[0];
-
-      const run = handleChatManualRefresh(state);
-      await Promise.resolve();
-
-      expect(state.scrollToBottom).not.toHaveBeenCalled();
-      if (!resolveRefresh) {
-        throw new Error("Expected chat refresh resolver to be initialized");
-      }
-      resolveRefresh();
-      await run;
-
-      expect(refreshChatMock).toHaveBeenCalledWith(state, {
-        awaitHistory: true,
-        scheduleScroll: false,
-      });
-      expect(state.scrollToBottom).toHaveBeenCalledWith({ smooth: true });
-      expect(state.chatManualRefreshInFlight).toBe(true);
-      expect(animationFrame.callback).toBeTypeOf("function");
-
-      const callback = animationFrame.callback;
-      if (!callback) {
-        throw new Error("expected manual refresh to schedule a frame callback");
-      }
-      callback(0);
-
-      expect(state.chatManualRefreshInFlight).toBe(false);
-      expect(state.chatNewMessagesBelow).toBe(false);
-    } finally {
-      if (previousRequestAnimationFrame === undefined) {
-        Reflect.deleteProperty(globalThis, "requestAnimationFrame");
-      } else {
-        Object.defineProperty(globalThis, "requestAnimationFrame", {
-          configurable: true,
-          writable: true,
-          value: previousRequestAnimationFrame,
-        });
-      }
-    }
   });
 });
 
@@ -1310,61 +1197,5 @@ describe("switchChatSession", () => {
     expect(state.chatMessages).toEqual(projectMessages);
     expect(state.chatMessagesBySession.get("agent:main:project")).toEqual(projectMessages);
     expect(state.chatMessagesBySession.size).toBe(2);
-  });
-});
-
-describe("dismissChatError", () => {
-  it("leaves persistent Talk error state for its dedicated dismiss action", () => {
-    const stop = vi.fn();
-    const state = {
-      lastError: "unrelated gateway error",
-      lastErrorCode: "UNAVAILABLE",
-      chatError: "unrelated chat error",
-      realtimeTalkActive: true,
-      realtimeTalkSession: { stop },
-      realtimeTalkStatus: "error",
-      realtimeTalkDetail: 'Realtime voice provider "openai" is not configured',
-      realtimeTalkTranscript: "partial transcript",
-    } as unknown as AppViewState & { realtimeTalkSession: { stop(): void } | null };
-
-    dismissChatError(state);
-
-    expect(state.lastError).toBeNull();
-    expect(state.lastErrorCode).toBeNull();
-    expect(state.chatError).toBeNull();
-    expect(stop).not.toHaveBeenCalled();
-    expect(state.realtimeTalkSession).toEqual({ stop });
-    expect(state.realtimeTalkActive).toBe(true);
-    expect(state.realtimeTalkStatus).toBe("error");
-    expect(state.realtimeTalkDetail).toBe('Realtime voice provider "openai" is not configured');
-    expect(state.realtimeTalkTranscript).toBe("partial transcript");
-  });
-});
-
-describe("dismissRealtimeTalkError", () => {
-  it("clears only Talk-owned error state", () => {
-    const stop = vi.fn();
-    const state = {
-      lastError: "unrelated gateway error",
-      lastErrorCode: "UNAVAILABLE",
-      chatError: "unrelated chat error",
-      realtimeTalkActive: true,
-      realtimeTalkSession: { stop },
-      realtimeTalkStatus: "error",
-      realtimeTalkDetail: 'Realtime voice provider "openai" is not configured',
-      realtimeTalkTranscript: "partial transcript",
-    } as unknown as AppViewState & { realtimeTalkSession: { stop(): void } | null };
-
-    dismissRealtimeTalkError(state);
-
-    expect(state.lastError).toBe("unrelated gateway error");
-    expect(state.lastErrorCode).toBe("UNAVAILABLE");
-    expect(state.chatError).toBe("unrelated chat error");
-    expect(stop).toHaveBeenCalledOnce();
-    expect(state.realtimeTalkSession).toBeNull();
-    expect(state.realtimeTalkActive).toBe(false);
-    expect(state.realtimeTalkStatus).toBe("idle");
-    expect(state.realtimeTalkDetail).toBeNull();
-    expect(state.realtimeTalkTranscript).toBeNull();
   });
 });
