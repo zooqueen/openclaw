@@ -5,6 +5,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
+import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type {
   SessionWorkspaceListResult,
   SessionGoal,
@@ -12,9 +13,9 @@ import type {
 } from "../../api/types.ts";
 import { resolveLocalUserName } from "../../app/user-identity.ts";
 import { icons } from "../../components/icons.ts";
+import { handleMarkdownCodeBlockCopy } from "../../components/markdown.ts";
 import "../../components/tooltip.ts";
 import { t } from "../../i18n/index.ts";
-import { copyToClipboard } from "../../lib/clipboard.ts";
 import { formatGoalDetail, formatGoalSummary } from "../../lib/session-goal.ts";
 import { detectTextDirection } from "../../lib/text-direction.ts";
 import type { CompactionStatus, FallbackStatus } from "../../ui/app-tool-stream.ts";
@@ -28,7 +29,6 @@ import {
 } from "../../ui/chat/slash-commands.ts";
 import type { EmbedSandboxMode } from "../../ui/embed-sandbox.ts";
 import type { SidebarContent } from "../../ui/sidebar-content.ts";
-import { renderMarkdownSidebar } from "../../ui/views/markdown-sidebar.ts";
 import {
   getChatAttachmentPreviewUrl,
   registerChatAttachmentPayload,
@@ -37,7 +37,7 @@ import {
 import { CHAT_ATTACHMENT_ACCEPT, isSupportedChatAttachmentFile } from "./attachment-support.ts";
 import { buildChatItems, type BuildChatItemsProps } from "./build-chat-items.ts";
 import { renderChatQueue } from "./chat-queue.ts";
-import { buildRawSidebarContent } from "./chat-sidebar-raw.ts";
+import "./chat-detail-panel.ts";
 import { renderWelcomeState, resolveAssistantDisplayAvatar } from "./chat-welcome.ts";
 import { renderContextNotice } from "./context-notice.ts";
 import { DeletedMessages } from "./deleted-messages.ts";
@@ -148,9 +148,9 @@ export type ChatProps = {
   error: string | null;
   sessions: SessionsListResult | null;
   focusMode?: boolean;
+  client?: GatewayBrowserClient | null;
   sidebarOpen?: boolean;
   sidebarContent?: SidebarContent | null;
-  sidebarError?: string | null;
   splitRatio?: number;
   canvasPluginSurfaceUrl?: string | null;
   embedSandboxMode?: EmbedSandboxMode;
@@ -2075,21 +2075,6 @@ export function renderChat(props: ChatProps) {
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
   const displayStream = props.stream ?? null;
   const historyRenderLimit = resolveChatHistoryRenderWindow(props);
-
-  const handleCodeBlockCopy = (e: Event) => {
-    const btn = (e.target as HTMLElement).closest(".code-block-copy");
-    if (!btn) {
-      return;
-    }
-    const code = (btn as HTMLElement).dataset.code ?? "";
-    void copyToClipboard(code).then((copied) => {
-      if (!copied) {
-        return;
-      }
-      btn.classList.add("copied");
-      setTimeout(() => btn.classList.remove("copied"), 1500);
-    });
-  };
   const handleChatThreadScroll = (event: Event) => {
     maybeExpandChatHistoryRenderWindow(event, requestUpdate);
     props.onChatScroll?.(event);
@@ -2134,7 +2119,7 @@ export function renderChat(props: ChatProps) {
         );
       })}
       @scroll=${handleChatThreadScroll}
-      @click=${handleCodeBlockCopy}
+      @click=${handleMarkdownCodeBlockCopy}
     >
       <div class="chat-thread-inner">
         ${showLoadingSkeleton
@@ -2779,25 +2764,15 @@ export function renderChat(props: ChatProps) {
                       .label=${t("nav.resize")}
                       @resize=${(e: CustomEvent) => props.onSplitRatioChange?.(e.detail.splitRatio)}
                     ></resizable-divider>
-                    <div class="chat-sidebar" @click=${handleCodeBlockCopy}>
-                      ${renderMarkdownSidebar({
-                        content: props.sidebarContent ?? null,
-                        error: props.sidebarError ?? null,
-                        canvasPluginSurfaceUrl: props.canvasPluginSurfaceUrl,
-                        embedSandboxMode: props.embedSandboxMode ?? "scripts",
-                        allowExternalEmbedUrls: props.allowExternalEmbedUrls ?? false,
-                        onClose: props.onCloseSidebar!,
-                        onViewRawText: () => {
-                          if (!props.onOpenSidebar) {
-                            return;
-                          }
-                          const rawContent = buildRawSidebarContent(props.sidebarContent);
-                          if (rawContent) {
-                            props.onOpenSidebar(rawContent);
-                          }
-                        },
-                      })}
-                    </div>
+                    <openclaw-chat-detail-panel
+                      class="chat-sidebar"
+                      .content=${props.sidebarContent ?? null}
+                      .client=${props.client ?? null}
+                      .canvasPluginSurfaceUrl=${props.canvasPluginSurfaceUrl ?? null}
+                      .embedSandboxMode=${props.embedSandboxMode ?? "scripts"}
+                      .allowExternalEmbedUrls=${props.allowExternalEmbedUrls ?? false}
+                      @chat-detail-panel-close=${() => props.onCloseSidebar?.()}
+                    ></openclaw-chat-detail-panel>
                   `
                 : nothing
             }

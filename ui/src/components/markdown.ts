@@ -20,6 +20,7 @@ import markdownItTaskLists from "markdown-it-task-lists";
 import { stripUnsupportedCitationControlMarkers } from "../../../src/shared/text/citation-control-markers.js";
 import { inferBasePathFromPathname, normalizeBasePath, routeIdFromPath } from "../app-routes.ts";
 import { i18n, t } from "../i18n/index.ts";
+import { copyToClipboard } from "../lib/clipboard.ts";
 import { truncateText } from "../lib/format.ts";
 import { normalizeLowercaseStringOrEmpty } from "../lib/string-coerce.ts";
 
@@ -367,6 +368,25 @@ function normalizeMarkdownRenderOptions(options: MarkdownRenderOptions = {}): Ma
 
 function shouldRenderCodeBlockCopy(env: unknown): boolean {
   return (env as Partial<MarkdownRenderEnv> | undefined)?.codeBlockChrome !== "none";
+}
+
+export function handleMarkdownCodeBlockCopy(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest<HTMLElement>(".code-block-copy");
+  if (!button) {
+    return;
+  }
+  const code = button.dataset.code ?? "";
+  void copyToClipboard(code).then((copied) => {
+    if (!copied) {
+      return;
+    }
+    button.classList.add("copied");
+    setTimeout(() => button.classList.remove("copied"), 1500);
+  });
 }
 
 function isHostLocalFileHref(href: string): boolean {

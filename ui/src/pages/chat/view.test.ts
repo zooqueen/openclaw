@@ -540,7 +540,6 @@ function createChatProps(
     sessions: null,
     sidebarOpen: false,
     sidebarContent: null,
-    sidebarError: null,
     splitRatio: 0.6,
     canvasPluginSurfaceUrl: null,
     embedSandboxMode: "scripts",
