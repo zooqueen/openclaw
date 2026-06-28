@@ -176,7 +176,6 @@ export type AppViewState = {
   navDrawerOpen: boolean;
   sidebarOpen: boolean;
   sidebarContent: SidebarContent | null;
-  sidebarError: string | null;
   splitRatio: number;
   scrollToBottom: (opts?: { smooth?: boolean }) => void;
   devicesLoading: boolean;
