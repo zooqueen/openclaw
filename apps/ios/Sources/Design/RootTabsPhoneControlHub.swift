@@ -7,11 +7,13 @@ struct RootTabsPhoneControlHub: View {
     @State private var navigationPath: [RootTabs.SidebarDestination] = []
     @State private var didApplyInitialDestination = false
     @State private var handledDestinationRequestID = 0
+    @State private var handledRootRequestID = 0
 
     let groups: [RootTabs.SidebarGroup]
     let initialDestination: RootTabs.SidebarDestination?
     let requestedDestination: RootTabs.SidebarDestination?
     let destinationRequestID: Int
+    let rootRequestID: Int
     let openRootDestination: (RootTabs.SidebarDestination) -> Void
     let openChatFromControlDetail: (RootTabs.SidebarDestination) -> Void
 
@@ -41,9 +43,13 @@ struct RootTabsPhoneControlHub: View {
             .onAppear {
                 self.applyInitialDestinationIfNeeded()
                 self.applyRequestedDestinationIfNeeded()
+                self.applyRootRequestIfNeeded()
             }
             .onChange(of: self.destinationRequestID) { _, _ in
                 self.applyRequestedDestinationIfNeeded()
+            }
+            .onChange(of: self.rootRequestID) { _, _ in
+                self.applyRootRequestIfNeeded()
             }
         }
     }
@@ -300,6 +306,12 @@ struct RootTabsPhoneControlHub: View {
         self.applyDestination(requestedDestination)
     }
 
+    private func applyRootRequestIfNeeded() {
+        guard self.rootRequestID != self.handledRootRequestID else { return }
+        self.handledRootRequestID = self.rootRequestID
+        self.navigationPath.removeAll()
+    }
+
     private func applyDestination(_ destination: RootTabs.SidebarDestination) {
         if self.opensRootTab(destination) {
             self.openPhoneRootDestination(destination)
@@ -438,6 +450,7 @@ extension RootTabsPhoneControlHub {
             initialDestination: nil,
             requestedDestination: nil,
             destinationRequestID: 0,
+            rootRequestID: 0,
             openRootDestination: { _ in },
             openChatFromControlDetail: { _ in })
             .environment(appModel)

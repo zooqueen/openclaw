@@ -82,6 +82,23 @@ import Testing
         #expect(resetRange.lowerBound < destinationRange.lowerBound)
     }
 
+    @Test func phoneControlTabReturnsToRootWithoutBreakingChatDetailBack() throws {
+        let source = try String(contentsOf: Self.rootTabsSourceURL(), encoding: .utf8)
+        let tabChange = try Self.extract(
+            source,
+            from: "private func handlePhoneSelectedTabChange",
+            to: "private func requestPhoneControlDestinationIfNeeded")
+        let openPhoneControlDetail = try Self.extract(
+            source,
+            from: "private func openPhoneControlDetail",
+            to: "private func handlePhoneSelectedTabChange")
+
+        #expect(tabChange.contains("guard selectedTab == .control"))
+        #expect(tabChange.contains("self.requestedPhoneControlRootRequestID &+= 1"))
+        #expect(tabChange.contains("guard !self.suppressNextPhoneControlRootReset"))
+        #expect(openPhoneControlDetail.contains("self.suppressNextPhoneControlRootReset = true"))
+    }
+
     @Test func embeddedOverviewRoutesViewMoreThroughOwningNavigationStack() throws {
         let rootTabsSource = try String(contentsOf: Self.rootTabsSourceURL(), encoding: .utf8)
         let commandCenterSource = try String(contentsOf: Self.commandCenterSourceURL(), encoding: .utf8)

@@ -28,7 +28,9 @@ struct RootTabs: View {
     @State private var selectedSettingsRouteRequestID: Int = 0
     @State private var requestedPhoneControlDestination: SidebarDestination?
     @State private var requestedPhoneControlDestinationID: Int = 0
+    @State private var requestedPhoneControlRootRequestID: Int = 0
     @State private var chatReturnDestination: SidebarDestination?
+    @State private var suppressNextPhoneControlRootReset = false
     // Embedded Settings rows push onto the sidebar stack; clear it before
     // changing sidebar roots so stale settings detail screens cannot survive.
     @State private var sidebarNavigationPath: [SettingsRoute] = []
@@ -147,6 +149,7 @@ struct RootTabs: View {
                 initialDestination: Self.requestedInitialSidebarDestination,
                 requestedDestination: self.requestedPhoneControlDestination,
                 destinationRequestID: self.requestedPhoneControlDestinationID,
+                rootRequestID: self.requestedPhoneControlRootRequestID,
                 openRootDestination: { self.selectSidebarDestination($0) },
                 openChatFromControlDetail: { self.openChatFromControlDetail($0) })
                 .tabItem { Label("Control", systemImage: "square.grid.2x2") }
@@ -995,6 +998,7 @@ extension RootTabs {
     }
 
     private func openPhoneControlDetail(_ destination: SidebarDestination) {
+        self.suppressNextPhoneControlRootReset = true
         self.selectSidebarDestination(destination)
         if destination == .overview {
             self.requestPhoneControlDestinationIfNeeded(destination, force: true)
@@ -1002,8 +1006,18 @@ extension RootTabs {
     }
 
     private func handlePhoneSelectedTabChange(_ selectedTab: AppTab) {
-        guard selectedTab != .chat else { return }
-        self.chatReturnDestination = nil
+        if selectedTab != .chat {
+            self.chatReturnDestination = nil
+        }
+        guard selectedTab == .control else {
+            self.suppressNextPhoneControlRootReset = false
+            return
+        }
+        guard !self.suppressNextPhoneControlRootReset else {
+            self.suppressNextPhoneControlRootReset = false
+            return
+        }
+        self.requestedPhoneControlRootRequestID &+= 1
     }
 
     private func requestPhoneControlDestinationIfNeeded(

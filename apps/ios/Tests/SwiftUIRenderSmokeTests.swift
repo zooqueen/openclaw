@@ -79,6 +79,7 @@ import UIKit
                 initialDestination: nil,
                 requestedDestination: nil,
                 destinationRequestID: 0,
+                rootRequestID: 0,
                 openRootDestination: { _ in },
                 openChatFromControlDetail: { _ in })
                 .environment(appModel)
@@ -94,6 +95,7 @@ import UIKit
             initialDestination: nil,
             requestedDestination: nil,
             destinationRequestID: 0,
+            rootRequestID: 0,
             openRootDestination: { _ in },
             openChatFromControlDetail: { _ in })
             .environment(appModel)
