@@ -77,6 +77,7 @@ import {
 } from "../../../infra/diagnostic-trace-context.js";
 import {
   beginNodePairingConnect,
+  approveNodePairing,
   finalizeNodePairingCleanupClaim,
   releaseNodePairingCleanupClaim,
   requestNodePairing,
@@ -1269,6 +1270,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
             ? await getDeviceBootstrapTokenProfile({ token: bootstrapTokenCandidate })
             : null;
         let handoffBootstrapProfile: DeviceBootstrapProfile | null = null;
+        let setupCodeMobileDeviceBootstrapApproved = false;
         const trustedProxyAuthOk = isTrustedProxyControlUiOperatorAuth({
           isControlUi,
           role,
@@ -1460,6 +1462,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
               if (approved?.status === "approved") {
                 if (allowSetupCodeMobileBootstrapPairing && boundBootstrapProfile) {
                   handoffBootstrapProfile = boundBootstrapProfile;
+                  setupCodeMobileDeviceBootstrapApproved = true;
                 }
                 logGateway.info(
                   `device pairing auto-approved device=${approved.device.deviceId} role=${approved.device.role ?? "unknown"}`,
@@ -1788,6 +1791,42 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
                 });
               },
             });
+            if (
+              setupCodeMobileDeviceBootstrapApproved &&
+              pairedNode === null &&
+              reconciliation.pendingPairing
+            ) {
+              const bootstrapNodeApproval = await approveNodePairing(
+                reconciliation.pendingPairing.request.requestId,
+                {
+                  callerScopes: ["operator.pairing", "operator.write"],
+                },
+              );
+              if (bootstrapNodeApproval && "node" in bootstrapNodeApproval) {
+                const { pendingPairing: _pendingPairing, ...approvedReconciliation } =
+                  reconciliation;
+                reconciliation = {
+                  ...approvedReconciliation,
+                  effectiveCaps: reconciliation.declaredCaps,
+                  effectiveCommands: reconciliation.declaredCommands,
+                  effectivePermissions: reconciliation.declaredPermissions,
+                  shouldClearPendingPairings: true,
+                };
+                buildRequestContext().broadcast(
+                  "node.pair.resolved",
+                  {
+                    requestId: bootstrapNodeApproval.requestId,
+                    nodeId: bootstrapNodeApproval.node.nodeId,
+                    decision: "approved",
+                    ts: Date.now(),
+                  },
+                  { dropIfSlow: true },
+                );
+                logGateway.info(
+                  `node pairing auto-approved via setup-code bootstrap node=${bootstrapNodeApproval.node.nodeId}`,
+                );
+              }
+            }
           } catch (error) {
             await releasePendingNodePairingCleanup();
             if (error instanceof NodePairingRateLimitError) {

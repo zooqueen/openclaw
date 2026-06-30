@@ -9,6 +9,10 @@ import { trimToUndefined } from "../gateway/credentials.js";
 import { resolveRequiredConfiguredSecretRefInputString } from "../gateway/resolve-configured-secret-input-string.js";
 import { renderQrTerminal } from "../media/qr-terminal.ts";
 import { resolvePairingSetupFromConfig, encodePairingSetupCode } from "../pairing/setup-code.js";
+import {
+  formatPairingSetupShortCode,
+  registerPairingSetupShortCode,
+} from "../pairing/setup-short-code.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { defaultRuntime } from "../runtime.js";
 import { resolveCommandSecretRefsViaGateway } from "./command-secret-gateway.js";
@@ -216,9 +220,17 @@ export function registerQrCli(program: Command) {
           return;
         }
 
+        const shortCode = registerPairingSetupShortCode({
+          payload: resolved.payload,
+          authLabel: resolved.authLabel,
+          urlSource: resolved.urlSource,
+        });
+
         if (opts.json) {
           defaultRuntime.writeJson({
             setupCode,
+            shortCode: shortCode.ok ? shortCode.code : undefined,
+            shortCodeExpiresAtMs: shortCode.ok ? shortCode.expiresAtMs : undefined,
             gatewayUrl: resolved.payload.url,
             auth: resolved.authLabel,
             urlSource: resolved.urlSource,
@@ -238,6 +250,7 @@ export function registerQrCli(program: Command) {
         }
 
         lines.push(
+          `${theme.muted("Short code:")} ${shortCode.ok ? formatPairingSetupShortCode(shortCode.code) : "unavailable"}`,
           `${theme.muted("Setup code:")} ${setupCode}`,
           `${theme.muted("Gateway:")} ${resolved.payload.url}`,
           `${theme.muted("Auth:")} ${resolved.authLabel}`,

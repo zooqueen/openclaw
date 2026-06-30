@@ -110,6 +110,9 @@ export function registerControlUiAndPairingSuite(): void {
       mode: "node";
       deviceFamily: string;
     };
+    caps?: string[];
+    commands?: string[];
+    permissions?: Record<string, boolean>;
   }) => {
     const { issueDeviceBootstrapToken } = await import("../infra/device-bootstrap.js");
     const { server, port, prevToken } = await startControlUiServer("secret");
@@ -122,6 +125,9 @@ export function registerControlUiAndPairingSuite(): void {
         bootstrapToken: issued.token,
         role: "node",
         scopes: [],
+        caps: params.caps,
+        commands: params.commands,
+        permissions: params.permissions,
         client: params.client,
         deviceIdentityPath: identityPath,
       });
@@ -144,6 +150,15 @@ export function registerControlUiAndPairingSuite(): void {
     const admin = await rpcReq(ws, "set-heartbeats", { enabled: false });
     expect(admin.ok).toBe(true);
   };
+
+  const IOS_SETUP_NODE_CAPS = ["device", "photos", "talk"];
+  const IOS_SETUP_NODE_COMMANDS = [
+    "device.status",
+    "device.info",
+    "photos.latest",
+    "system.notify",
+    "talk.ptt.once",
+  ];
 
   const connectControlUiWithoutDeviceAndExpectOk = async (params: {
     ws: WebSocket;
@@ -1140,6 +1155,7 @@ export function registerControlUiAndPairingSuite(): void {
     const { publicKeyRawBase64UrlFromPem } = await import("../infra/device-identity.js");
     const { getPairedDevice, listDevicePairing, verifyDeviceToken } =
       await import("../infra/device-pairing.js");
+    const { listNodePairing } = await import("../infra/node-pairing.js");
     const { server, port, prevToken } = await startControlUiServer("secret");
 
     const { identityPath, identity } = await createOperatorIdentityFixture(
@@ -1161,6 +1177,9 @@ export function registerControlUiAndPairingSuite(): void {
         bootstrapToken: issued.token,
         role: "node",
         scopes: [],
+        caps: IOS_SETUP_NODE_CAPS,
+        commands: IOS_SETUP_NODE_COMMANDS,
+        permissions: { photos: true },
         client,
         deviceIdentityPath: identityPath,
       });
@@ -1208,6 +1227,10 @@ export function registerControlUiAndPairingSuite(): void {
         (entry) => entry.deviceId === identity.deviceId,
       );
       expect(pendingForDevice).toEqual([]);
+      const pendingNodeAfterInitial = (await listNodePairing()).pending.filter(
+        (entry) => entry.nodeId === identity.deviceId,
+      );
+      expect(pendingNodeAfterInitial).toEqual([]);
       wsBootstrap.close();
 
       const afterBootstrap = await listDevicePairing();
@@ -1231,6 +1254,12 @@ export function registerControlUiAndPairingSuite(): void {
         "operator.talk.secrets",
         "operator.write",
       ]);
+      const pairedNode = (await listNodePairing()).paired.find(
+        (entry) => entry.nodeId === identity.deviceId,
+      );
+      expect(pairedNode?.caps).toEqual(IOS_SETUP_NODE_CAPS);
+      expect(pairedNode?.commands).toEqual(IOS_SETUP_NODE_COMMANDS);
+      expect(pairedNode?.permissions).toEqual({ photos: true });
 
       const wsReplay = await openWs(port, REMOTE_BOOTSTRAP_HEADERS);
       const replay = await connectReq(wsReplay, {
@@ -1339,9 +1368,13 @@ export function registerControlUiAndPairingSuite(): void {
     "qr setup code auto-approves $name clients when mobile metadata matches",
     async ({ client, identityPrefix }) => {
       const { getPairedDevice, listDevicePairing } = await import("../infra/device-pairing.js");
+      const { listNodePairing } = await import("../infra/node-pairing.js");
       const { identity, initial } = await connectSetupCodeBootstrapNode({
         identityPrefix,
         client,
+        caps: IOS_SETUP_NODE_CAPS,
+        commands: IOS_SETUP_NODE_COMMANDS,
+        permissions: { photos: true },
       });
       expect(initial.ok).toBe(true);
       const approvedPayload = initial.payload as
@@ -1384,6 +1417,12 @@ export function registerControlUiAndPairingSuite(): void {
         "operator.talk.secrets",
         "operator.write",
       ]);
+      const nodePairing = await listNodePairing();
+      expect(nodePairing.pending.filter((entry) => entry.nodeId === identity.deviceId)).toEqual([]);
+      const pairedNode = nodePairing.paired.find((entry) => entry.nodeId === identity.deviceId);
+      expect(pairedNode?.caps).toEqual(IOS_SETUP_NODE_CAPS);
+      expect(pairedNode?.commands).toEqual(IOS_SETUP_NODE_COMMANDS);
+      expect(pairedNode?.permissions).toEqual({ photos: true });
     },
   );
 
