@@ -287,6 +287,12 @@ gh search issues --repo openclaw/openclaw --match title,body --limit 50 \
 
 - Never mention release-note bookkeeping in review-only output. It is landing
   or release-generation mechanics, not a correctness finding.
+- After any work lands, send the owning/root orchestrator thread a concise
+  completion summary: behavior landed, key files or surface, linked pull
+  request and exact merge commit, proof, cleanup, and remaining follow-up.
+- After that summary is delivered and owned leases/worktrees are clean,
+  archive the completed sidebar task thread. Do not leave landed worker
+  threads visible as unfinished work.
 - If bot review conversations exist on your PR, address them and resolve them yourself once fixed.
 - Leave a review conversation unresolved only when reviewer or maintainer judgment is still needed.
 - Before landing any PR with non-trivial code changes, run `$autoreview` until no accepted/actionable findings remain, unless equivalent manual review already covered it, the change is trivial/docs-only, or the user opts out.
