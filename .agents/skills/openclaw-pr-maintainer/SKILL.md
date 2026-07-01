@@ -7,6 +7,12 @@ description: Use immediately for any pasted OpenClaw GitHub issue or PR URL/numb
 
 Use this skill for maintainer-facing GitHub workflow, not for ordinary code changes.
 
+## Always link pull request references
+
+- Every pull request reference in chat, plans, summaries, reviews, comments, logs, and final answers must be a clickable Markdown link or full GitHub URL.
+- Never write a bare PR number such as `#12345` or `PR 12345`; write `[PR #12345](https://github.com/openclaw/openclaw/pull/12345)` instead.
+- Apply this rule even when the PR was linked earlier in the same response or conversation.
+
 ## Start issue and PR triage with gitcrawl
 
 - Use `$gitcrawl` first anytime you inspect OpenClaw issues or PRs.
