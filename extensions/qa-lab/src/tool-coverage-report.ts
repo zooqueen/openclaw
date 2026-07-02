@@ -3,6 +3,7 @@ import {
   isRecord,
   normalizeOptionalString as readString,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { escapeMarkdownTableCell } from "./markdown-report.js";
 import {
   isRuntimeParityCellPassable,
   type RuntimeId,
@@ -339,7 +340,7 @@ export function renderQaToolCoverageMarkdownReport(report: QaToolCoverageReport)
       row.qaImpact ?? "",
       row.action ?? "",
       row.tracking ?? "",
-    ].map(escapeTableCell);
+    ].map(escapeMarkdownTableCell);
     lines.push(`| ${cells.join(" | ")} |`);
   }
 
@@ -356,8 +357,4 @@ export function renderQaToolCoverageMarkdownReport(report: QaToolCoverageReport)
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
-}
-
-function escapeTableCell(value: string): string {
-  return value.replace(/\|/gu, "\\|").replace(/\s+/gu, " ").trim();
 }

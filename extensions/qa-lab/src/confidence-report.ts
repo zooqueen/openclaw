@@ -13,6 +13,7 @@ import {
   type HarnessRuntimeParityCell,
   type RuntimeParitySystemPromptReport,
 } from "./harness-parity.js";
+import { escapeMarkdownTableCell } from "./markdown-report.js";
 import {
   runRuntimeParityScenario,
   type RuntimeParityCell,
@@ -389,8 +390,7 @@ function evaluateQaSuiteSummary(payload: unknown): QaConfidenceLaneEvaluation {
   const failedCount = readCount(counts?.failed);
   const explicitSkippedCount = readCount(counts?.skipped);
   if (totalCount !== undefined) {
-    const providedCountSum =
-      (passedCount ?? 0) + (failedCount ?? 0) + (explicitSkippedCount ?? 0);
+    const providedCountSum = (passedCount ?? 0) + (failedCount ?? 0) + (explicitSkippedCount ?? 0);
     if (totalCount < providedCountSum) {
       return {
         passed: false,
@@ -957,10 +957,6 @@ function formatVerdict(lane: QaConfidenceLaneResult): string {
   return lane.verdict ?? "unclassified";
 }
 
-function escapeTableCell(value: string): string {
-  return value.replace(/\|/gu, "\\|").replace(/\s+/gu, " ").trim();
-}
-
 export function renderQaConfidenceMarkdownReport(report: QaConfidenceReport): string {
   const lines = [
     `# OpenClaw QA Confidence Report - ${report.profile}`,
@@ -978,7 +974,7 @@ export function renderQaConfidenceMarkdownReport(report: QaConfidenceReport): st
   ];
   for (const lane of report.lanes) {
     lines.push(
-      `| ${escapeTableCell(lane.id)} | ${lane.status} | ${formatVerdict(lane)} | ${lane.productImpact ?? ""} | ${lane.qaImpact ?? ""} | ${escapeTableCell(lane.details)} |`,
+      `| ${escapeMarkdownTableCell(lane.id)} | ${lane.status} | ${formatVerdict(lane)} | ${lane.productImpact ?? ""} | ${lane.qaImpact ?? ""} | ${escapeMarkdownTableCell(lane.details)} |`,
     );
   }
   if (report.failures.length > 0) {
@@ -1287,7 +1283,7 @@ export function renderQaConfidenceSelfTestMarkdownReport(
   ];
   for (const canary of summary.canaries) {
     lines.push(
-      `| ${canary.id} | ${canary.category} | ${canary.detected ? "yes" : "no"} | ${canary.expectedVerdict} | ${escapeTableCell(canary.details)} |`,
+      `| ${canary.id} | ${canary.category} | ${canary.detected ? "yes" : "no"} | ${canary.expectedVerdict} | ${escapeMarkdownTableCell(canary.details)} |`,
     );
   }
   return `${lines.join("\n")}\n`;
