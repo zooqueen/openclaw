@@ -27,6 +27,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export interface ToolResultImageBlock {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+export function normalizeToolResultBlocks(content: unknown): readonly unknown[] {
+  if (Array.isArray(content)) {
+    return content;
+  }
+  if (content === null || content === undefined) {
+    return [];
+  }
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
+  if (typeof content === "number" || typeof content === "boolean" || typeof content === "bigint") {
+    return [{ type: "text", text: String(content) }];
+  }
+  if (isRecord(content)) {
+    return [content];
+  }
+  return [];
+}
+
+export function extractToolResultImageBlocks(content: unknown): ToolResultImageBlock[] {
+  const blocks = normalizeToolResultBlocks(content);
+  return blocks.filter((block): block is ToolResultImageBlock => {
+    if (!isRecord(block) || block.type !== "image") {
+      return false;
+    }
+    return typeof block.data === "string" && typeof block.mimeType === "string";
+  });
+}
+
 function readMimeType(value: unknown): string | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -123,11 +158,11 @@ function truncateProviderToolText(text: string): string {
   return `${truncateUtf16Safe(text, PROVIDER_TOOL_RESULT_MAX_CHARS)}\n…(truncated)…`;
 }
 
-export function describeToolResultMediaPlaceholder(blocks: readonly unknown[]): string | undefined {
+export function describeToolResultMediaPlaceholder(content: unknown): string | undefined {
   let hasImage = false;
   let hasAudio = false;
 
-  for (const block of blocks) {
+  for (const block of normalizeToolResultBlocks(content)) {
     if (!block || typeof block !== "object") {
       continue;
     }
@@ -177,10 +212,10 @@ export function extractToolResultBlockText(block: unknown): string | undefined {
   return structured ? sanitizeSurrogates(truncateProviderToolText(structured)) : undefined;
 }
 
-export function extractToolResultText(blocks: readonly unknown[]): string {
+export function extractToolResultText(content: unknown): string {
   const explicitTexts: string[] = [];
   const structuredTexts: string[] = [];
-  for (const block of blocks) {
+  for (const block of normalizeToolResultBlocks(content)) {
     const text = extractToolResultBlockText(block);
     if (!text) {
       continue;

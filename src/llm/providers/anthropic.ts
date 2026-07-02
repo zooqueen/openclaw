@@ -70,6 +70,8 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copi
 import { adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.js";
 import {
   describeToolResultMediaPlaceholder,
+  extractToolResultImageBlocks,
+  normalizeToolResultBlocks,
   extractToolResultBlockText,
   extractToolResultText,
 } from "./tool-result-text.js";
@@ -127,7 +129,7 @@ const toClaudeCodeName = (name: string) => ccToolLookup.get(name.toLowerCase()) 
 /**
  * Convert content blocks to Anthropic API format
  */
-function convertContentBlocks(content: readonly unknown[]):
+function convertContentBlocks(content: unknown):
   | string
   | Array<
       | { type: "text"; text: string }
@@ -142,12 +144,8 @@ function convertContentBlocks(content: readonly unknown[]):
     > {
   const text = extractToolResultText(content);
   const mediaPlaceholder = describeToolResultMediaPlaceholder(content);
-  const hasImages =
-    Array.isArray(content) &&
-    content.some(
-      (item) =>
-        item && typeof item === "object" && (item as Record<string, unknown>).type === "image",
-    );
+  const imageBlocks = extractToolResultImageBlocks(content);
+  const hasImages = imageBlocks.length > 0;
 
   if (!hasImages) {
     const sanitized = sanitizeSurrogates(text);
@@ -167,7 +165,7 @@ function convertContentBlocks(content: readonly unknown[]):
   > = [];
   let hasTextBlock = false;
 
-  for (const block of Array.isArray(content) ? content : []) {
+  for (const block of normalizeToolResultBlocks(content)) {
     if (!block || typeof block !== "object") {
       continue;
     }

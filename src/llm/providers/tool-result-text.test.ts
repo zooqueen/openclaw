@@ -1,7 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { describeToolResultMediaPlaceholder, extractToolResultText } from "./tool-result-text.js";
+import {
+  describeToolResultMediaPlaceholder,
+  extractToolResultImageBlocks,
+  extractToolResultText,
+} from "./tool-result-text.js";
 
 describe("extractToolResultText", () => {
+  it("preserves plain string content without iterating characters as blocks", () => {
+    expect(extractToolResultText("plain status output")).toBe("plain status output");
+  });
+
+  it("serializes single structured object content through the redacted fallback", () => {
+    const text = extractToolResultText({
+      type: "json",
+      payload: { ok: true },
+      apiToken: "api-token-value-1234567890",
+    });
+
+    expect(text).toContain('"type":"json"');
+    expect(text).toContain('"ok":true');
+    expect(text).not.toContain("api-token-value-1234567890");
+  });
+
+  it("keeps text-like fields on single object content visible via structured replay", () => {
+    const text = extractToolResultText({ output: "status card text" });
+
+    expect(text).toContain("status card text");
+  });
+
   it("redacts structured secret fields with the shared tool-payload contract", () => {
     const text = extractToolResultText([
       {
@@ -160,6 +186,12 @@ describe("extractToolResultText", () => {
 });
 
 describe("describeToolResultMediaPlaceholder", () => {
+  it("describes single-object image content", () => {
+    expect(
+      describeToolResultMediaPlaceholder({ type: "image", mimeType: "image/png", data: "img" }),
+    ).toBe("(see attached image)");
+  });
+
   it("describes image-only tool result media", () => {
     expect(
       describeToolResultMediaPlaceholder([{ type: "image", mimeType: "image/png", data: "img" }]),
@@ -181,5 +213,19 @@ describe("describeToolResultMediaPlaceholder", () => {
         { type: "audio", mimeType: "audio/mpeg", data: "audio" },
       ]),
     ).toBe("(see attached media)");
+  });
+});
+
+describe("extractToolResultImageBlocks", () => {
+  it("returns validated image blocks from single-object content", () => {
+    expect(
+      extractToolResultImageBlocks({ type: "image", mimeType: "image/png", data: "img" }),
+    ).toStrictEqual([{ type: "image", mimeType: "image/png", data: "img" }]);
+  });
+
+  it("drops malformed image objects before provider payload construction", () => {
+    expect(
+      extractToolResultImageBlocks({ type: "image", mimeType: "image/png", data: 123 }),
+    ).toStrictEqual([]);
   });
 });

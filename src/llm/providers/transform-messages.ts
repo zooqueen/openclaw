@@ -10,6 +10,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "../types.js";
+import { normalizeToolResultBlocks } from "./tool-result-text.js";
 
 const NON_VISION_USER_IMAGE_PLACEHOLDER = "(image omitted: model does not support images)";
 const NON_VISION_TOOL_IMAGE_PLACEHOLDER = "(tool image omitted: model does not support images)";
@@ -37,6 +38,33 @@ function replaceImagesWithPlaceholder(
   return result;
 }
 
+function replaceToolResultImagesWithPlaceholder(
+  content: unknown,
+  placeholder: string,
+): ToolResultMessage["content"] {
+  const result: unknown[] = [];
+  let previousWasPlaceholder = false;
+
+  for (const block of normalizeToolResultBlocks(content)) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    const record = block as Record<string, unknown>;
+    if (record.type === "image") {
+      if (!previousWasPlaceholder) {
+        result.push({ type: "text", text: placeholder });
+      }
+      previousWasPlaceholder = true;
+      continue;
+    }
+
+    result.push(block);
+    previousWasPlaceholder = record.type === "text" && record.text === placeholder;
+  }
+
+  return result as ToolResultMessage["content"];
+}
+
 function downgradeUnsupportedImages<TApi extends Api>(
   messages: Message[],
   model: Model<TApi>,
@@ -56,7 +84,10 @@ function downgradeUnsupportedImages<TApi extends Api>(
     if (msg.role === "toolResult") {
       return {
         ...msg,
-        content: replaceImagesWithPlaceholder(msg.content, NON_VISION_TOOL_IMAGE_PLACEHOLDER),
+        content: replaceToolResultImagesWithPlaceholder(
+          msg.content,
+          NON_VISION_TOOL_IMAGE_PLACEHOLDER,
+        ),
       };
     }
 

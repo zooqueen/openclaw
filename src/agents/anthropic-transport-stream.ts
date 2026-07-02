@@ -15,8 +15,10 @@ import {
 import type { AnthropicOptions, AnthropicThinkingDisplay } from "../llm/providers/anthropic.js";
 import {
   describeToolResultMediaPlaceholder,
+  extractToolResultImageBlocks,
   extractToolResultBlockText,
   extractToolResultText,
+  normalizeToolResultBlocks,
 } from "../llm/providers/tool-result-text.js";
 import type {
   AssistantMessageDiagnostic,
@@ -301,15 +303,11 @@ function toClaudeCodeName(name: string): string {
   return CLAUDE_CODE_TOOL_LOOKUP.get(normalizeLowercaseStringOrEmpty(name)) ?? name;
 }
 
-function convertContentBlocks(content: readonly unknown[]) {
+function convertContentBlocks(content: unknown) {
   const text = extractToolResultText(content);
   const mediaPlaceholder = describeToolResultMediaPlaceholder(content);
-  const hasImages =
-    Array.isArray(content) &&
-    content.some(
-      (item) =>
-        item && typeof item === "object" && (item as Record<string, unknown>).type === "image",
-    );
+  const imageBlocks = extractToolResultImageBlocks(content);
+  const hasImages = imageBlocks.length > 0;
   if (!hasImages) {
     return sanitizeNonEmptyTransportPayloadText(text, mediaPlaceholder ?? "(no output)");
   }
@@ -321,7 +319,7 @@ function convertContentBlocks(content: readonly unknown[]) {
       }
   > = [];
   let hasTextBlock = false;
-  for (const block of Array.isArray(content) ? content : []) {
+  for (const block of normalizeToolResultBlocks(content)) {
     if (!block || typeof block !== "object") {
       continue;
     }
