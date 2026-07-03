@@ -1,0 +1,2678 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-03T18:55:00.000Z",
+  "scope": [
+    "Wave 0 Lane 0A",
+    "Wave 0 Lane 0E"
+  ],
+  "trackingIssue": "https://github.com/openclaw/openclaw/issues/99621",
+  "repository": {
+    "sourceRevision": "df1452799b28782ebfe273b4dcaf779cf34ced38",
+    "originMainRevision": "df1452799b28782ebfe273b4dcaf779cf34ced38",
+    "alignedWithOriginMain": true,
+    "requiredMergeCommit": "8604dbdc93fb8eea3db3891944e60ede6b0625f2",
+    "requiredMergeCommitPresent": true
+  },
+  "dependency": {
+    "package": "@openclaw/crabline",
+    "version": "0.1.8",
+    "publicStartApi": "startOpenClawCrablineAdapter",
+    "bridges": [
+      {
+        "channel": "telegram",
+        "provider": "telegram",
+        "requiredPluginIds": [
+          "telegram"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 25
+      },
+      {
+        "channel": "slack",
+        "provider": "slack",
+        "requiredPluginIds": [
+          "slack"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 9
+      },
+      {
+        "channel": "whatsapp",
+        "provider": "whatsapp",
+        "requiredPluginIds": [
+          "whatsapp"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 2
+      },
+      {
+        "channel": "matrix",
+        "provider": "matrix",
+        "requiredPluginIds": [
+          "matrix"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 2
+      },
+      {
+        "channel": "signal",
+        "provider": "signal",
+        "requiredPluginIds": [
+          "signal"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 2
+      },
+      {
+        "channel": "mattermost",
+        "provider": "mattermost",
+        "requiredPluginIds": [
+          "mattermost"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 2
+      },
+      {
+        "channel": "zalo",
+        "provider": "zalo",
+        "requiredPluginIds": [
+          "zalo"
+        ],
+        "status": "pass",
+        "startAndProbeMs": 1
+      }
+    ]
+  },
+  "coverage": {
+    "scenarioCount": 155,
+    "coverageIdCount": 209,
+    "primaryCoverageIdCount": 137,
+    "secondaryCoverageIdCount": 100,
+    "missingCoverage": [],
+    "overlappingCoverageCount": 64,
+    "executionKindCounts": {
+      "flow": 120,
+      "playwright": 1,
+      "script": 16,
+      "vitest": 18
+    },
+    "scenarios": [
+      {
+        "id": "instruction-followthrough-repo-contract",
+        "title": "Instruction followthrough repo contract",
+        "sourcePath": "qa/scenarios/agents/instruction-followthrough-repo-contract.yaml",
+        "surface": "repo-contract",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.instructions"
+        ],
+        "secondaryCoverage": [
+          "runtime.first-action"
+        ]
+      },
+      {
+        "id": "subagent-completion-direct-fallback",
+        "title": "Subagent completion direct fallback",
+        "sourcePath": "qa/scenarios/agents/subagent-completion-direct-fallback.yaml",
+        "surface": "subagents",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.subagents"
+        ],
+        "secondaryCoverage": [
+          "runtime.delivery",
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "subagent-fanout-synthesis",
+        "title": "Subagent fanout synthesis",
+        "sourcePath": "qa/scenarios/agents/subagent-fanout-synthesis.yaml",
+        "surface": "subagents",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.subagents"
+        ],
+        "secondaryCoverage": [
+          "agents.synthesis"
+        ]
+      },
+      {
+        "id": "subagent-forked-context",
+        "title": "Subagent forked context",
+        "sourcePath": "qa/scenarios/agents/subagent-forked-context.yaml",
+        "surface": "subagents",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.subagents"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "subagent-handoff",
+        "title": "Subagent handoff",
+        "sourcePath": "qa/scenarios/agents/subagent-handoff.yaml",
+        "surface": "subagents",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.subagents"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "subagent-stale-child-links",
+        "title": "Subagent stale child links",
+        "sourcePath": "qa/scenarios/agents/subagent-stale-child-links.yaml",
+        "surface": "subagents",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "agents.subagents"
+        ],
+        "secondaryCoverage": [
+          "gateway.sessions-list"
+        ]
+      },
+      {
+        "id": "channel-chat-baseline",
+        "title": "Channel baseline conversation",
+        "sourcePath": "qa/scenarios/channels/channel-chat-baseline.yaml",
+        "surface": "channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.group-messages"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "channel-message-flows",
+        "title": "Channel streaming message flow",
+        "sourcePath": "qa/scenarios/channels/channel-message-flows.yaml",
+        "surface": "channels",
+        "executionKind": "flow",
+        "channel": "telegram",
+        "primaryCoverage": [
+          "channels.streaming"
+        ],
+        "secondaryCoverage": [
+          "runtime.delivery"
+        ]
+      },
+      {
+        "id": "dm-chat-baseline",
+        "title": "DM baseline conversation",
+        "sourcePath": "qa/scenarios/channels/dm-chat-baseline.yaml",
+        "surface": "dm",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.dm"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "group-message-tool-unavailable-fallback",
+        "title": "Group fallback when message tool is unavailable",
+        "sourcePath": "qa/scenarios/channels/group-message-tool-unavailable-fallback.yaml",
+        "surface": "channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.group-visible-replies"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel",
+          "tools.message"
+        ]
+      },
+      {
+        "id": "group-visible-reply-tool",
+        "title": "Group visible reply via message tool",
+        "sourcePath": "qa/scenarios/channels/group-visible-reply-tool.yaml",
+        "surface": "channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.group-visible-replies"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel",
+          "tools.message"
+        ]
+      },
+      {
+        "id": "message-tool-stranded-final-reply",
+        "title": "Message-tool-only private final reply warning",
+        "sourcePath": "qa/scenarios/channels/message-tool-stranded-final-reply.yaml",
+        "surface": "channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.direct-visible-replies"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel",
+          "tools.message"
+        ]
+      },
+      {
+        "id": "native-command-session-target",
+        "title": "Native command active session target evidence",
+        "sourcePath": "qa/scenarios/channels/native-command-session-target.yaml",
+        "surface": "channel-framework",
+        "executionKind": "flow",
+        "channel": "telegram",
+        "primaryCoverage": [
+          "channels.native-command-session-target"
+        ],
+        "secondaryCoverage": [
+          "channels.native-commands"
+        ]
+      },
+      {
+        "id": "qa-channel-reconnect-dedupe",
+        "title": "QA channel reconnect dedupe",
+        "sourcePath": "qa/scenarios/channels/qa-channel-reconnect-dedupe.yaml",
+        "surface": "channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.reconnect"
+        ],
+        "secondaryCoverage": [
+          "channels.dedup",
+          "runtime.delivery"
+        ]
+      },
+      {
+        "id": "reaction-edit-delete",
+        "title": "Reaction, edit, delete lifecycle",
+        "sourcePath": "qa/scenarios/channels/reaction-edit-delete.yaml",
+        "surface": "message-actions",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.message-actions"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "thread-follow-up",
+        "title": "Threaded follow-up",
+        "sourcePath": "qa/scenarios/channels/thread-follow-up.yaml",
+        "surface": "thread",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.threads",
+          "channels.thread-parent-child-placement"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "webchat-direct-reply-routing",
+        "title": "WebChat direct reply routing",
+        "sourcePath": "qa/scenarios/channels/webchat-direct-reply-routing.yaml",
+        "surface": "qa-channel",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.direct-reply-routing"
+        ],
+        "secondaryCoverage": [
+          "tools.message",
+          "channels.webchat"
+        ]
+      },
+      {
+        "id": "character-vibes-c3po",
+        "title": "Nervous release protocol chat",
+        "sourcePath": "qa/scenarios/character/character-vibes-c3po.yaml",
+        "surface": "character",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "character.persona"
+        ],
+        "secondaryCoverage": [
+          "workspace.artifacts"
+        ]
+      },
+      {
+        "id": "character-vibes-gollum",
+        "title": "Late-night deploy helper chat",
+        "sourcePath": "qa/scenarios/character/character-vibes-gollum.yaml",
+        "surface": "character",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "character.persona"
+        ],
+        "secondaryCoverage": [
+          "workspace.artifacts"
+        ]
+      },
+      {
+        "id": "cli-channel-picker",
+        "title": "CLI channel picker evidence",
+        "sourcePath": "qa/scenarios/config/cli-channel-picker.yaml",
+        "surface": "cli-install-update-onboard-doctor",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "cli.channel-picker"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "config-apply-restart-wakeup",
+        "title": "Config apply restart wake-up",
+        "sourcePath": "qa/scenarios/config/config-apply-restart-wakeup.yaml",
+        "surface": "config",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "config.restart-apply"
+        ],
+        "secondaryCoverage": [
+          "runtime.gateway-restart"
+        ]
+      },
+      {
+        "id": "config-patch-hot-apply",
+        "title": "Config patch skill disable",
+        "sourcePath": "qa/scenarios/config/config-patch-hot-apply.yaml",
+        "surface": "config",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "config.hot-apply"
+        ],
+        "secondaryCoverage": [
+          "plugins.skills"
+        ]
+      },
+      {
+        "id": "config-restart-capability-flip",
+        "title": "Config restart capability flip",
+        "sourcePath": "qa/scenarios/config/config-restart-capability-flip.yaml",
+        "surface": "config",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "config.restart-apply"
+        ],
+        "secondaryCoverage": [
+          "plugins.capabilities"
+        ]
+      },
+      {
+        "id": "crestodian-ring-zero-setup",
+        "title": "Crestodian ring-zero setup",
+        "sourcePath": "qa/scenarios/config/crestodian-ring-zero-setup.yaml",
+        "surface": "config",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "config.crestodian-setup"
+        ],
+        "secondaryCoverage": [
+          "channels.discord-config",
+          "agents.create"
+        ]
+      },
+      {
+        "id": "hosted-image-generation-providers-live",
+        "title": "Hosted image generation providers live",
+        "sourcePath": "qa/scenarios/media/hosted-image-generation-providers-live.yaml",
+        "surface": "long-tail-hosted-providers",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "hosted-providers.image-generation-providers"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "hosted-video-generation-providers-live",
+        "title": "Hosted video generation providers live",
+        "sourcePath": "qa/scenarios/media/hosted-video-generation-providers-live.yaml",
+        "surface": "long-tail-hosted-providers",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "hosted-providers.video-generation-providers",
+          "media.reference-image-video-and-audio-inputs"
+        ],
+        "secondaryCoverage": [
+          "media.video-generation-tool-invocation"
+        ]
+      },
+      {
+        "id": "image-generation-roundtrip",
+        "title": "Image generation roundtrip",
+        "sourcePath": "qa/scenarios/media/image-generation-roundtrip.yaml",
+        "surface": "image-generation",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "media.image-generation",
+          "media.image-generation-delivery"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "image-understanding-attachment",
+        "title": "Image understanding from attachment",
+        "sourcePath": "qa/scenarios/media/image-understanding-attachment.yaml",
+        "surface": "image-understanding",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "media.image-understanding"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "native-image-generation",
+        "title": "Native image generation",
+        "sourcePath": "qa/scenarios/media/native-image-generation.yaml",
+        "surface": "image-generation",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "media.image-generation"
+        ],
+        "secondaryCoverage": [
+          "tools.native-image-generation"
+        ]
+      },
+      {
+        "id": "webchat-auto-tts",
+        "title": "WebChat auto TTS delivery",
+        "sourcePath": "qa/scenarios/media/webchat-auto-tts.yaml",
+        "surface": "media-understanding-and-media-generation",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "media.tts",
+          "media.outbound-voice-audio-delivery"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "active-memory-preprompt-recall",
+        "title": "Active Memory pre-reply recall",
+        "sourcePath": "qa/scenarios/memory/active-memory-preprompt-recall.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.active-recall"
+        ],
+        "secondaryCoverage": [
+          "memory.recall"
+        ]
+      },
+      {
+        "id": "commitments-heartbeat-target-none",
+        "title": "Commitments heartbeat target none",
+        "sourcePath": "qa/scenarios/memory/commitments-heartbeat-target-none.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "commitments.heartbeat-target-none"
+        ],
+        "secondaryCoverage": [
+          "commitments.scope",
+          "runtime.delivery"
+        ]
+      },
+      {
+        "id": "dreaming-shadow-trial-report",
+        "title": "Dreaming shadow trial report",
+        "sourcePath": "qa/scenarios/memory/dreaming-shadow-trial-report.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.dreaming"
+        ],
+        "secondaryCoverage": [
+          "memory.promotion",
+          "qa.artifact-safety"
+        ]
+      },
+      {
+        "id": "memory-dreaming-sweep",
+        "title": "Memory dreaming sweep",
+        "sourcePath": "qa/scenarios/memory/memory-dreaming-sweep.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.dreaming"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "memory-failure-fallback",
+        "title": "Memory failure fallback",
+        "sourcePath": "qa/scenarios/memory/memory-failure-fallback.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.failure-handling"
+        ],
+        "secondaryCoverage": [
+          "runtime.fallbacks"
+        ]
+      },
+      {
+        "id": "memory-recall",
+        "title": "Memory recall after context switch",
+        "sourcePath": "qa/scenarios/memory/memory-recall.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.recall"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "memory-tools-channel-context",
+        "title": "Memory tools in channel context",
+        "sourcePath": "qa/scenarios/memory/memory-tools-channel-context.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.tools"
+        ],
+        "secondaryCoverage": [
+          "channels.group-messages"
+        ]
+      },
+      {
+        "id": "session-memory-ranking",
+        "title": "Session memory ranking",
+        "sourcePath": "qa/scenarios/memory/session-memory-ranking.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.ranking"
+        ],
+        "secondaryCoverage": [
+          "memory.recall"
+        ]
+      },
+      {
+        "id": "thread-memory-isolation",
+        "title": "Thread memory isolation",
+        "sourcePath": "qa/scenarios/memory/thread-memory-isolation.yaml",
+        "surface": "memory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "memory.thread-isolation"
+        ],
+        "secondaryCoverage": [
+          "channels.threads"
+        ]
+      },
+      {
+        "id": "anthropic-opus-api-key-smoke",
+        "title": "Anthropic Opus API key smoke",
+        "sourcePath": "qa/scenarios/models/anthropic-opus-api-key-smoke.yaml",
+        "surface": "model-provider",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.provider-auth"
+        ],
+        "secondaryCoverage": [
+          "models.anthropic"
+        ]
+      },
+      {
+        "id": "anthropic-opus-setup-token-smoke",
+        "title": "Anthropic Opus setup-token smoke",
+        "sourcePath": "qa/scenarios/models/anthropic-opus-setup-token-smoke.yaml",
+        "surface": "model-provider",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.provider-auth"
+        ],
+        "secondaryCoverage": [
+          "models.anthropic"
+        ]
+      },
+      {
+        "id": "claude-cli-provider-capabilities-subscription",
+        "title": "Claude CLI provider capabilities subscription",
+        "sourcePath": "qa/scenarios/models/claude-cli-provider-capabilities-subscription.yaml",
+        "surface": "model-provider",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.provider-capabilities"
+        ],
+        "secondaryCoverage": [
+          "models.claude-cli"
+        ]
+      },
+      {
+        "id": "claude-cli-provider-capabilities",
+        "title": "Claude CLI provider capabilities API key",
+        "sourcePath": "qa/scenarios/models/claude-cli-provider-capabilities.yaml",
+        "surface": "model-provider",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.provider-capabilities"
+        ],
+        "secondaryCoverage": [
+          "models.claude-cli"
+        ]
+      },
+      {
+        "id": "codex-harness-no-meta-leak",
+        "title": "Codex harness no meta leak",
+        "sourcePath": "qa/scenarios/models/codex-harness-no-meta-leak.yaml",
+        "surface": "dm",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.codex-cli"
+        ],
+        "secondaryCoverage": [
+          "runtime.no-meta-leak"
+        ]
+      },
+      {
+        "id": "gpt55-thinking-visibility-switch",
+        "title": "GPT-5.5 thinking visibility switch",
+        "sourcePath": "qa/scenarios/models/gpt55-thinking-visibility-switch.yaml",
+        "surface": "models",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.thinking"
+        ],
+        "secondaryCoverage": [
+          "runtime.reasoning-visibility"
+        ]
+      },
+      {
+        "id": "model-switch-follow-up",
+        "title": "Model switch follow-up",
+        "sourcePath": "qa/scenarios/models/model-switch-follow-up.yaml",
+        "surface": "models",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.switching"
+        ],
+        "secondaryCoverage": [
+          "runtime.session-continuity"
+        ]
+      },
+      {
+        "id": "model-switch-tool-continuity",
+        "title": "Model switch with tool continuity",
+        "sourcePath": "qa/scenarios/models/model-switch-tool-continuity.yaml",
+        "surface": "models",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.switching"
+        ],
+        "secondaryCoverage": [
+          "runtime.tool-continuity"
+        ]
+      },
+      {
+        "id": "openai-native-web-search-live",
+        "title": "OpenAI native web search live",
+        "sourcePath": "qa/scenarios/models/openai-native-web-search-live.yaml",
+        "surface": "model-provider",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.web-search"
+        ],
+        "secondaryCoverage": [
+          "models.openai"
+        ]
+      },
+      {
+        "id": "thinking-slash-model-remap",
+        "title": "Thinking slash model remap",
+        "sourcePath": "qa/scenarios/models/thinking-slash-model-remap.yaml",
+        "surface": "models",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "models.thinking"
+        ],
+        "secondaryCoverage": [
+          "models.switching",
+          "runtime.session-continuity"
+        ]
+      },
+      {
+        "id": "personal-approval-denial-stop",
+        "title": "Personal approval denial stop",
+        "sourcePath": "qa/scenarios/personal/approval-denial-stop.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.approval-denial"
+        ],
+        "secondaryCoverage": [
+          "runtime.approvals",
+          "tools.safety"
+        ]
+      },
+      {
+        "id": "personal-channel-thread-reply",
+        "title": "Personal channel and thread reply correctness",
+        "sourcePath": "qa/scenarios/personal/channel-thread-reply.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.channel-replies"
+        ],
+        "secondaryCoverage": [
+          "channels.dm",
+          "channels.threads",
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "personal-failure-recovery",
+        "title": "Personal failure recovery",
+        "sourcePath": "qa/scenarios/personal/failure-recovery.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.failure-recovery"
+        ],
+        "secondaryCoverage": [
+          "personal.no-fake-progress",
+          "tools.evidence"
+        ]
+      },
+      {
+        "id": "personal-memory-preference-recall",
+        "title": "Personal memory preference recall",
+        "sourcePath": "qa/scenarios/personal/memory-preference-recall.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.memory-recall"
+        ],
+        "secondaryCoverage": [
+          "memory.recall",
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "personal-no-fake-progress",
+        "title": "Personal no-fake-progress",
+        "sourcePath": "qa/scenarios/personal/no-fake-progress.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.no-fake-progress"
+        ],
+        "secondaryCoverage": [
+          "personal.task-followthrough",
+          "tools.evidence"
+        ]
+      },
+      {
+        "id": "personal-redaction-no-secret-leak",
+        "title": "Personal redaction no-secret-leak",
+        "sourcePath": "qa/scenarios/personal/redaction-no-secret-leak.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.redaction"
+        ],
+        "secondaryCoverage": [
+          "security.redaction",
+          "qa.artifact-safety"
+        ]
+      },
+      {
+        "id": "personal-reminder-roundtrip",
+        "title": "Personal reminder roundtrip",
+        "sourcePath": "qa/scenarios/personal/reminder-roundtrip.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.reminders"
+        ],
+        "secondaryCoverage": [
+          "scheduling.cron",
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "personal-share-safe-diagnostics-artifact",
+        "title": "Personal share-safe diagnostics artifact",
+        "sourcePath": "qa/scenarios/personal/share-safe-diagnostics-artifact.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.diagnostics"
+        ],
+        "secondaryCoverage": [
+          "personal.redaction",
+          "qa.artifact-safety"
+        ]
+      },
+      {
+        "id": "personal-task-followthrough-status",
+        "title": "Personal task followthrough status",
+        "sourcePath": "qa/scenarios/personal/task-followthrough-status.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.task-followthrough"
+        ],
+        "secondaryCoverage": [
+          "tools.followthrough",
+          "workspace.artifacts"
+        ]
+      },
+      {
+        "id": "personal-tool-safety-followthrough",
+        "title": "Personal tool safety followthrough",
+        "sourcePath": "qa/scenarios/personal/tool-safety-followthrough.yaml",
+        "surface": "personal",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "personal.tool-safety"
+        ],
+        "secondaryCoverage": [
+          "tools.followthrough",
+          "runtime.approvals"
+        ]
+      },
+      {
+        "id": "bundled-plugin-skill-runtime",
+        "title": "Bundled plugin skill runtime",
+        "sourcePath": "qa/scenarios/plugins/bundled-plugin-skill-runtime.yaml",
+        "surface": "skills",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.skills"
+        ],
+        "secondaryCoverage": [
+          "plugins.runtime"
+        ]
+      },
+      {
+        "id": "clawhub-marketplace-list",
+        "title": "ClawHub marketplace list package lane",
+        "sourcePath": "qa/scenarios/plugins/clawhub-marketplace-list.yaml",
+        "surface": "clawhub-and-external-plugin-distribution",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "clawhub.marketplace-list"
+        ],
+        "secondaryCoverage": [
+          "clawhub.update-by-plugin-id",
+          "clawhub.uninstall-config-index-policy-file-cleanup"
+        ]
+      },
+      {
+        "id": "clawhub-release-candidate-checklist",
+        "title": "ClawHub release candidate package install proof",
+        "sourcePath": "qa/scenarios/plugins/clawhub-release-candidate-checklist.yaml",
+        "surface": "clawhub-and-external-plugin-distribution",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "clawhub.npm-pack-local-release-candidate-installs"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "clawhub-skill-installs",
+        "title": "ClawHub skill install evidence",
+        "sourcePath": "qa/scenarios/plugins/clawhub-skill-installs.yaml",
+        "surface": "clawhub-and-external-plugin-distribution",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "clawhub.skill-installs"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "kitchen-sink-live-openai",
+        "title": "Kitchen Sink live OpenAI plugin gauntlet",
+        "sourcePath": "qa/scenarios/plugins/kitchen-sink-live-openai.yaml",
+        "surface": "plugins",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.kitchen-sink"
+        ],
+        "secondaryCoverage": [
+          "plugins.lifecycle",
+          "plugins.plugin-tools",
+          "models.live-openai",
+          "gateway.performance"
+        ]
+      },
+      {
+        "id": "mcp-plugin-tools-call",
+        "title": "MCP plugin-tools call",
+        "sourcePath": "qa/scenarios/plugins/mcp-plugin-tools-call.yaml",
+        "surface": "mcp",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.mcp-tools"
+        ],
+        "secondaryCoverage": [
+          "tools.invocation"
+        ]
+      },
+      {
+        "id": "packaged-bundled-plugin-install-uninstall",
+        "title": "Packaged bundled plugin install uninstall",
+        "sourcePath": "qa/scenarios/plugins/packaged-bundled-plugin-install-uninstall.yaml",
+        "surface": "plugin-sdk-and-bundled-plugin-architecture",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.packaged-bundled-plugins"
+        ],
+        "secondaryCoverage": [
+          "plugins.bundled-plugin-listing",
+          "clawhub.managed-install-records-that-preserve-source"
+        ]
+      },
+      {
+        "id": "plugin-hook-health-sentinel",
+        "title": "Plugin hook health sentinel",
+        "sourcePath": "qa/scenarios/plugins/plugin-hook-health-sentinel.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.gateway-log-sentinel.plugin-hooks"
+        ],
+        "secondaryCoverage": [
+          "plugins.before-prompt-build",
+          "plugins.before-tool-call"
+        ]
+      },
+      {
+        "id": "plugin-lifecycle-hot-reload",
+        "title": "Plugin lifecycle hot reload",
+        "sourcePath": "qa/scenarios/plugins/plugin-lifecycle-hot-reload.yaml",
+        "surface": "plugins",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.lifecycle"
+        ],
+        "secondaryCoverage": [
+          "plugins.hot-reload",
+          "config.hot-apply"
+        ]
+      },
+      {
+        "id": "plugin-lifecycle-probe",
+        "title": "Plugin lifecycle probe evidence",
+        "sourcePath": "qa/scenarios/plugins/plugin-lifecycle-probe.yaml",
+        "surface": "plugins",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.lifecycle"
+        ],
+        "secondaryCoverage": [
+          "cli.plugin-validation-repair",
+          "plugins.setup-flows"
+        ]
+      },
+      {
+        "id": "plugin-manifest-contract-health",
+        "title": "Plugin manifest contract health",
+        "sourcePath": "qa/scenarios/plugins/plugin-manifest-contract-health.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.gateway-log-sentinel.plugin-contracts"
+        ],
+        "secondaryCoverage": [
+          "plugins.contracts.tools"
+        ]
+      },
+      {
+        "id": "skill-install-hot-availability",
+        "title": "Skill install hot availability",
+        "sourcePath": "qa/scenarios/plugins/skill-install-hot-availability.yaml",
+        "surface": "skills",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.skills"
+        ],
+        "secondaryCoverage": [
+          "plugins.hot-install"
+        ]
+      },
+      {
+        "id": "skill-visibility-invocation",
+        "title": "Skill visibility and invocation",
+        "sourcePath": "qa/scenarios/plugins/skill-visibility-invocation.yaml",
+        "surface": "skills",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "plugins.skills"
+        ],
+        "secondaryCoverage": [
+          "tools.invocation"
+        ]
+      },
+      {
+        "id": "anthropic-thinking-error-recovery-replay-safe-read",
+        "title": "Anthropic thinking error recovery after replay-safe read",
+        "sourcePath": "qa/scenarios/runtime/anthropic-thinking-error-recovery-replay-safe-read.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "anthropic.signed-redacted-thinking-replay"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "approval-turn-tool-followthrough",
+        "title": "Approval turn tool followthrough",
+        "sourcePath": "qa/scenarios/runtime/approval-turn-tool-followthrough.yaml",
+        "surface": "harness",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.approvals"
+        ],
+        "secondaryCoverage": [
+          "tools.followthrough"
+        ]
+      },
+      {
+        "id": "auth-profile-codex-mixed-profiles",
+        "title": "Codex auth profile mixed profiles",
+        "sourcePath": "qa/scenarios/runtime/auth-profile-codex-mixed-profiles.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-plugin.auth"
+        ],
+        "secondaryCoverage": [
+          "auth-profiles.provider-selection"
+        ]
+      },
+      {
+        "id": "auth-profile-doctor-migration-safety",
+        "title": "Codex doctor migration safety matrix",
+        "sourcePath": "qa/scenarios/runtime/auth-profile-doctor-migration-safety.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.doctor-repair"
+        ],
+        "secondaryCoverage": [
+          "runtime.codex-plugin.auth"
+        ]
+      },
+      {
+        "id": "codex-legacy-read-tool-vocabulary",
+        "title": "Codex legacy Read tool vocabulary canary",
+        "sourcePath": "qa/scenarios/runtime/codex-legacy-read-tool-vocabulary.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-native-workspace.read"
+        ],
+        "secondaryCoverage": [
+          "runtime.prompt-compatibility",
+          "tools.fs.read"
+        ]
+      },
+      {
+        "id": "codex-plugin-cold-install",
+        "title": "Codex plugin cold install",
+        "sourcePath": "qa/scenarios/runtime/codex-plugin-cold-install.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-plugin.lifecycle"
+        ],
+        "secondaryCoverage": [
+          "runtime.doctor-repair"
+        ]
+      },
+      {
+        "id": "codex-plugin-install-race",
+        "title": "Codex plugin install race",
+        "sourcePath": "qa/scenarios/runtime/codex-plugin-install-race.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-plugin.lifecycle"
+        ],
+        "secondaryCoverage": [
+          "runtime.turn-ordering"
+        ]
+      },
+      {
+        "id": "codex-plugin-pinned-new",
+        "title": "Codex plugin pinned new",
+        "sourcePath": "qa/scenarios/runtime/codex-plugin-pinned-new.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-plugin.version"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "codex-plugin-pinned-old",
+        "title": "Codex plugin pinned old",
+        "sourcePath": "qa/scenarios/runtime/codex-plugin-pinned-old.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.codex-plugin.version"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "compaction-retry-mutating-tool",
+        "title": "Compaction retry after mutating tool",
+        "sourcePath": "qa/scenarios/runtime/compaction-retry-mutating-tool.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.compaction"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "docker-agent-bundle-mcp-tools",
+        "title": "Docker agent bundle MCP tools",
+        "sourcePath": "qa/scenarios/runtime/docker-agent-bundle-mcp-tools.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.backed-agent-sandbox-support"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-agents-delete-shared-workspace",
+        "title": "Docker agents delete shared workspace",
+        "sourcePath": "qa/scenarios/runtime/docker-agents-delete-shared-workspace.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.backed-agent-sandbox-support"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-compose-setup",
+        "title": "Docker setup and Compose evidence",
+        "sourcePath": "qa/scenarios/runtime/docker-compose-setup.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.compose",
+          "docker.local-image-setup-script",
+          "docker.only-first-run-notes"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-crestodian-first-run",
+        "title": "Docker Crestodian first-run onboarding",
+        "sourcePath": "qa/scenarios/runtime/docker-crestodian-first-run.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.first-run-onboarding"
+        ],
+        "secondaryCoverage": [
+          "raspberry-pi.first-run-verification"
+        ]
+      },
+      {
+        "id": "docker-gateway-network",
+        "title": "Docker gateway network access",
+        "sourcePath": "qa/scenarios/runtime/docker-gateway-network.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.compose-network-access"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-npm-onboard-channel-agent",
+        "title": "Docker npm onboard channel agent",
+        "sourcePath": "qa/scenarios/runtime/docker-npm-onboard-channel-agent.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.backed-agent-sandbox-support"
+        ],
+        "secondaryCoverage": [
+          "docker.first-run-onboarding"
+        ]
+      },
+      {
+        "id": "docker-prometheus-smoke",
+        "title": "Docker Prometheus smoke",
+        "sourcePath": "qa/scenarios/runtime/docker-prometheus-smoke.yaml",
+        "surface": "telemetry",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "telemetry.prometheus",
+          "telemetry.prometheus-authenticated-gateway-export"
+        ],
+        "secondaryCoverage": [
+          "harness.qa-lab",
+          "docker.runtime-validation"
+        ]
+      },
+      {
+        "id": "docker-release-upgrade-user-journey",
+        "title": "Docker release upgrade user journey",
+        "sourcePath": "qa/scenarios/runtime/docker-release-upgrade-user-journey.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.release-workflow",
+          "docker.release-path-install"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-release-user-journey",
+        "title": "Docker release user journey",
+        "sourcePath": "qa/scenarios/runtime/docker-release-user-journey.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.release-path-install"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "docker-update-channel-switch",
+        "title": "Docker update channel switch",
+        "sourcePath": "qa/scenarios/runtime/docker-update-channel-switch.yaml",
+        "surface": "cli-install-update-onboard-doctor",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "cli.install-kind-switching",
+          "cli.update-status-and-rpc"
+        ],
+        "secondaryCoverage": [
+          "cli.update-channels"
+        ]
+      },
+      {
+        "id": "docker-update-migration",
+        "title": "Docker update migration",
+        "sourcePath": "qa/scenarios/runtime/docker-update-migration.yaml",
+        "surface": "cli-install-update-onboard-doctor",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "cli.plugin-convergence"
+        ],
+        "secondaryCoverage": [
+          "cli.update-status-and-rpc"
+        ]
+      },
+      {
+        "id": "docker-update-restart-auth",
+        "title": "Docker update managed restart auth",
+        "sourcePath": "qa/scenarios/runtime/docker-update-restart-auth.yaml",
+        "surface": "cli-install-update-onboard-doctor",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "cli.managed-gateway-restart"
+        ],
+        "secondaryCoverage": [
+          "cli.update-status-and-rpc"
+        ]
+      },
+      {
+        "id": "docker-upgrade-survivor",
+        "title": "Docker upgrade survivor",
+        "sourcePath": "qa/scenarios/runtime/docker-upgrade-survivor.yaml",
+        "surface": "cli-install-update-onboard-doctor",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "cli.update-status-and-rpc"
+        ],
+        "secondaryCoverage": [
+          "docker.release-path-install"
+        ]
+      },
+      {
+        "id": "empty-response-recovery-replay-safe-read",
+        "title": "Empty-response recovery after replay-safe read",
+        "sourcePath": "qa/scenarios/runtime/empty-response-recovery-replay-safe-read.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.empty-response-recovery"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "empty-response-retry-budget-exhausted",
+        "title": "Empty-response retry budget exhausted",
+        "sourcePath": "qa/scenarios/runtime/empty-response-retry-budget-exhausted.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.empty-response-recovery"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "runtime-first-hour-20-turn",
+        "title": "First-hour 20-turn runtime parity",
+        "sourcePath": "qa/scenarios/runtime/first-hour-20-turn.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.multi-turn-continuity"
+        ],
+        "secondaryCoverage": [
+          "runtime.long-context"
+        ]
+      },
+      {
+        "id": "gateway-restart-inflight-run",
+        "title": "Gateway restart in-flight recovery",
+        "sourcePath": "qa/scenarios/runtime/gateway-restart-inflight-run.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.restart-recovery"
+        ],
+        "secondaryCoverage": [
+          "runtime.gateway-restart",
+          "runtime.delivery"
+        ]
+      },
+      {
+        "id": "gateway-smoke",
+        "title": "Gateway smoke evidence",
+        "sourcePath": "qa/scenarios/runtime/gateway-smoke.yaml",
+        "surface": "runtime",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "gateway.websocket-transport"
+        ],
+        "secondaryCoverage": [
+          "gateway.health-apis",
+          "gateway.hello-ok-snapshot"
+        ]
+      },
+      {
+        "id": "runtime-long-context-cache-stability",
+        "title": "Large tool-result prompt cache stability",
+        "sourcePath": "qa/scenarios/runtime/long-context-cache-stability.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.reasoning-and-cache-controls"
+        ],
+        "secondaryCoverage": [
+          "runtime.long-context"
+        ]
+      },
+      {
+        "id": "long-context-progress-watchdog",
+        "title": "Long-context progress watchdog",
+        "sourcePath": "qa/scenarios/runtime/long-context-progress-watchdog.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.gateway-log-sentinel.codex-progress"
+        ],
+        "secondaryCoverage": [
+          "runtime.long-context",
+          "runtime.codex-app-server"
+        ]
+      },
+      {
+        "id": "mcp-gateway-connect-startup-retry",
+        "title": "MCP Gateway connect startup retry",
+        "sourcePath": "qa/scenarios/runtime/mcp-gateway-connect-startup-retry.yaml",
+        "surface": "runtime",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "gateway.connect-request",
+          "gateway.protocol-version-negotiation",
+          "gateway.startup-retry"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "openai-compatible-chat-tools",
+        "title": "OpenAI-compatible chat tools HTTP API",
+        "sourcePath": "qa/scenarios/runtime/openai-compatible-chat-tools.yaml",
+        "surface": "runtime",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "gateway.openai-compatible-apis",
+          "runtime.hosted-tool-use"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "openai-web-search-minimal",
+        "title": "OpenAI web_search minimal reasoning gate",
+        "sourcePath": "qa/scenarios/runtime/openai-web-search-minimal.yaml",
+        "surface": "model-provider",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.reasoning-and-cache-controls"
+        ],
+        "secondaryCoverage": [
+          "web-search.openai-native-web-search",
+          "tools.web-search"
+        ]
+      },
+      {
+        "id": "openai-web-search-native-assertions",
+        "title": "OpenAI native web_search request assertions",
+        "sourcePath": "qa/scenarios/runtime/openai-web-search-native-assertions.yaml",
+        "surface": "model-provider",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "web-search.openai-native-web-search",
+          "plugins.web-search-and-fetch"
+        ],
+        "secondaryCoverage": [
+          "web-search.model-and-filter-routing",
+          "tools.web-search"
+        ]
+      },
+      {
+        "id": "openwebui-openai-compatible",
+        "title": "OpenWebUI OpenAI-compatible API probe",
+        "sourcePath": "qa/scenarios/runtime/openwebui-openai-compatible.yaml",
+        "surface": "runtime",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "gateway.openai-compatible-apis",
+          "runtime.hosted-provider-turns"
+        ],
+        "secondaryCoverage": [
+          "runtime.provider-specific-model-options"
+        ]
+      },
+      {
+        "id": "otel-both-log-smoke",
+        "title": "OTEL dual log exporter smoke",
+        "sourcePath": "qa/scenarios/runtime/otel-both-log-smoke.yaml",
+        "surface": "telemetry",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "telemetry.otel"
+        ],
+        "secondaryCoverage": [
+          "harness.qa-lab"
+        ]
+      },
+      {
+        "id": "otel-stdout-log-smoke",
+        "title": "OTEL stdout log smoke",
+        "sourcePath": "qa/scenarios/runtime/otel-stdout-log-smoke.yaml",
+        "surface": "telemetry",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "telemetry.otel"
+        ],
+        "secondaryCoverage": [
+          "harness.qa-lab"
+        ]
+      },
+      {
+        "id": "otel-trace-smoke",
+        "title": "OTEL trace smoke",
+        "sourcePath": "qa/scenarios/runtime/otel-trace-smoke.yaml",
+        "surface": "telemetry",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "telemetry.otel"
+        ],
+        "secondaryCoverage": [
+          "harness.qa-lab"
+        ]
+      },
+      {
+        "id": "package-openclaw-for-docker",
+        "title": "Docker package artifact QA evidence",
+        "sourcePath": "qa/scenarios/runtime/package-openclaw-for-docker.yaml",
+        "surface": "docker-podman-hosting",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "docker.package-artifact-generation"
+        ],
+        "secondaryCoverage": [
+          "cli.package-manager-installs",
+          "runtime.package-update"
+        ]
+      },
+      {
+        "id": "qa-bus-tool-trace-visibility",
+        "title": "QA bus tool trace visibility",
+        "sourcePath": "qa/scenarios/runtime/qa-bus-tool-trace-visibility.yaml",
+        "surface": "harness",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "harness.tool-trace-visibility"
+        ],
+        "secondaryCoverage": [
+          "runtime.qa-bus",
+          "tools.trace"
+        ]
+      },
+      {
+        "id": "qa-otel-smoke",
+        "title": "QA OTEL smoke evidence",
+        "sourcePath": "qa/scenarios/runtime/qa-otel-smoke.yaml",
+        "surface": "telemetry",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "telemetry.otel"
+        ],
+        "secondaryCoverage": [
+          "harness.qa-lab",
+          "telemetry.plugin-sdk-runtime-exports"
+        ]
+      },
+      {
+        "id": "reasoning-only-no-auto-retry-after-write",
+        "title": "Reasoning-only no-auto-retry after write",
+        "sourcePath": "qa/scenarios/runtime/reasoning-only-no-auto-retry-after-write.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.reasoning-only-recovery"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "reasoning-only-recovery-replay-safe-read",
+        "title": "Reasoning-only recovery after replay-safe read",
+        "sourcePath": "qa/scenarios/runtime/reasoning-only-recovery-replay-safe-read.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.reasoning-only-recovery"
+        ],
+        "secondaryCoverage": [
+          "runtime.retry-policy"
+        ]
+      },
+      {
+        "id": "runtime-inventory-drift-check",
+        "title": "Runtime inventory drift check",
+        "sourcePath": "qa/scenarios/runtime/runtime-inventory-drift-check.yaml",
+        "surface": "inventory",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.inventory"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-soak-100-turn",
+        "title": "100-turn runtime parity soak",
+        "sourcePath": "qa/scenarios/runtime/soak-100-turn.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.long-run-stability"
+        ],
+        "secondaryCoverage": [
+          "runtime.long-context"
+        ]
+      },
+      {
+        "id": "streaming-final-integrity",
+        "title": "Streaming final integrity",
+        "sourcePath": "qa/scenarios/runtime/streaming-final-integrity.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "channels.streaming"
+        ],
+        "secondaryCoverage": [
+          "runtime.fallback-delivery",
+          "runtime.delivery"
+        ]
+      },
+      {
+        "id": "tool-search-gateway-e2e",
+        "title": "Tool Search gateway E2E",
+        "sourcePath": "qa/scenarios/runtime/tool-search-gateway-e2e.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.hosted-tool-use"
+        ],
+        "secondaryCoverage": [
+          "plugins.plugin-tools",
+          "tools.invocation"
+        ]
+      },
+      {
+        "id": "runtime-tool-apply-patch",
+        "title": "Runtime tool fixture — apply-patch",
+        "sourcePath": "qa/scenarios/runtime/tools/apply-patch.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.apply-patch"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-bash",
+        "title": "Runtime tool fixture — bash",
+        "sourcePath": "qa/scenarios/runtime/tools/bash.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.bash"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-edit",
+        "title": "Runtime tool fixture — edit",
+        "sourcePath": "qa/scenarios/runtime/tools/edit.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.edit"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-exec",
+        "title": "Runtime tool fixture — exec",
+        "sourcePath": "qa/scenarios/runtime/tools/exec.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.exec"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-fs-list",
+        "title": "Runtime tool fixture — fs.list",
+        "sourcePath": "qa/scenarios/runtime/tools/fs-list.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.fs.list"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-fs-read",
+        "title": "Runtime tool fixture — fs.read",
+        "sourcePath": "qa/scenarios/runtime/tools/fs-read.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.fs.read"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-fs-write",
+        "title": "Runtime tool fixture — fs.write",
+        "sourcePath": "qa/scenarios/runtime/tools/fs-write.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.fs.write"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-grep",
+        "title": "Runtime tool fixture — grep",
+        "sourcePath": "qa/scenarios/runtime/tools/grep.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.grep"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-image-generate",
+        "title": "Runtime tool fixture — image_generate",
+        "sourcePath": "qa/scenarios/runtime/tools/image-generate.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.image-generate"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-memory-add",
+        "title": "Runtime tool fixture — memory.add",
+        "sourcePath": "qa/scenarios/runtime/tools/memory-add.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.memory.add"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-memory-recall",
+        "title": "Runtime tool fixture — memory.recall",
+        "sourcePath": "qa/scenarios/runtime/tools/memory-recall.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.memory.recall"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-message-tool",
+        "title": "Runtime tool fixture — direct message tool",
+        "sourcePath": "qa/scenarios/runtime/tools/message-tool.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.message-tool"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-session-status",
+        "title": "Runtime tool fixture — session_status",
+        "sourcePath": "qa/scenarios/runtime/tools/session-status.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.session-status"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-sessions-spawn",
+        "title": "Runtime tool fixture — sessions_spawn",
+        "sourcePath": "qa/scenarios/runtime/tools/sessions-spawn.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.sessions-spawn"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-skill-invocation",
+        "title": "Runtime tool fixture — skill invocation",
+        "sourcePath": "qa/scenarios/runtime/tools/skill-invocation.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.skill-invocation"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-tavily-extract",
+        "title": "Runtime tool fixture — tavily_extract",
+        "sourcePath": "qa/scenarios/runtime/tools/tavily-extract.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.tavily-extract"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-tavily-search",
+        "title": "Runtime tool fixture — tavily_search",
+        "sourcePath": "qa/scenarios/runtime/tools/tavily-search.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.tavily-search"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-tts",
+        "title": "Runtime tool fixture — tts",
+        "sourcePath": "qa/scenarios/runtime/tools/tts.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.tts"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-web-fetch",
+        "title": "Runtime tool fixture — web_fetch",
+        "sourcePath": "qa/scenarios/runtime/tools/web-fetch.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.web-fetch"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "runtime-tool-web-search",
+        "title": "Runtime tool fixture — web_search",
+        "sourcePath": "qa/scenarios/runtime/tools/web-search.yaml",
+        "surface": "runtime-tools",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "tools.web-search"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "update-run-package-self-upgrade",
+        "title": "Update run package self-upgrade",
+        "sourcePath": "qa/scenarios/runtime/update-run-package-self-upgrade.yaml",
+        "surface": "runtime",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "runtime.update-run"
+        ],
+        "secondaryCoverage": [
+          "runtime.gateway-restart",
+          "runtime.package-update"
+        ]
+      },
+      {
+        "id": "cron-natural-fire-no-duplicate",
+        "title": "Cron natural fire no duplicate",
+        "sourcePath": "qa/scenarios/scheduling/cron-natural-fire-no-duplicate.yaml",
+        "surface": "cron",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "scheduling.cron"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel",
+          "scheduling.dedup"
+        ]
+      },
+      {
+        "id": "cron-one-minute-ping",
+        "title": "Cron one-minute ping",
+        "sourcePath": "qa/scenarios/scheduling/cron-one-minute-ping.yaml",
+        "surface": "cron",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "scheduling.cron",
+          "scheduling.cron-rpcs",
+          "scheduling.chat-announce-delivery"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "cron-single-run-no-duplicate",
+        "title": "Cron single run no duplicate",
+        "sourcePath": "qa/scenarios/scheduling/cron-single-run-no-duplicate.yaml",
+        "surface": "cron",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "scheduling.cron"
+        ],
+        "secondaryCoverage": [
+          "channels.qa-channel",
+          "scheduling.dedup"
+        ]
+      },
+      {
+        "id": "heartbeat-active-hours",
+        "title": "Heartbeat active-hours scheduling evidence",
+        "sourcePath": "qa/scenarios/scheduling/heartbeat-active-hours.yaml",
+        "surface": "automation-cron-hooks-tasks-polling",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "automation.active-hours",
+          "automation.heartbeat-scheduling"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "secret-redaction-tool-logs",
+        "title": "Secret redaction tool logs",
+        "sourcePath": "qa/scenarios/security/secret-redaction-tool-logs.yaml",
+        "surface": "security",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "security.redaction"
+        ],
+        "secondaryCoverage": [
+          "runtime.tool-policy",
+          "qa.artifact-safety"
+        ]
+      },
+      {
+        "id": "browser-talk-start-stop",
+        "title": "Browser realtime Talk start-stop evidence",
+        "sourcePath": "qa/scenarios/ui/browser-talk-start-stop.yaml",
+        "surface": "browser-control-ui-and-webchat",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "ui.browser-talk-start-stop"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "control-ui-assistant-media-tickets",
+        "title": "Control UI assistant media ticket evidence",
+        "sourcePath": "qa/scenarios/ui/control-ui-assistant-media-tickets.yaml",
+        "surface": "browser-control-ui-and-webchat",
+        "executionKind": "vitest",
+        "channel": null,
+        "primaryCoverage": [
+          "ui.assistant-media-tickets"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "control-ui-chat-flow-playwright",
+        "title": "Control UI chat flow Playwright coverage",
+        "sourcePath": "qa/scenarios/ui/control-ui-chat-flow-playwright.yaml",
+        "surface": "control-ui",
+        "executionKind": "playwright",
+        "channel": null,
+        "primaryCoverage": [
+          "ui.control"
+        ],
+        "secondaryCoverage": []
+      },
+      {
+        "id": "control-ui-qa-channel-image-roundtrip",
+        "title": "Control UI plus qa-channel image roundtrip",
+        "sourcePath": "qa/scenarios/ui/control-ui-qa-channel-image-roundtrip.yaml",
+        "surface": "control-ui",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "ui.control",
+          "ui.dashboard-auth-bootstrap"
+        ],
+        "secondaryCoverage": [
+          "media.image-understanding",
+          "channels.qa-channel"
+        ]
+      },
+      {
+        "id": "ux-matrix-evidence-dashboard",
+        "title": "UX Matrix evidence dashboard",
+        "sourcePath": "qa/scenarios/ui/ux-matrix-evidence-dashboard.yaml",
+        "surface": "control-ui",
+        "executionKind": "script",
+        "channel": null,
+        "primaryCoverage": [
+          "qa.artifact-safety"
+        ],
+        "secondaryCoverage": [
+          "ui.control",
+          "gateway.control-ui-hosting",
+          "cli.entrypoint",
+          "cli.status-snapshots",
+          "tools.evidence",
+          "workspace.artifacts"
+        ]
+      },
+      {
+        "id": "lobster-invaders-build",
+        "title": "Build Lobster Invaders",
+        "sourcePath": "qa/scenarios/workspace/lobster-invaders-build.yaml",
+        "surface": "workspace",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "workspace.artifacts"
+        ],
+        "secondaryCoverage": [
+          "workspace.builds"
+        ]
+      },
+      {
+        "id": "long-running-release-audit",
+        "title": "Long-running release audit",
+        "sourcePath": "qa/scenarios/workspace/long-running-release-audit.yaml",
+        "surface": "workspace",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "workspace.long-running-task"
+        ],
+        "secondaryCoverage": [
+          "workspace.repo-discovery",
+          "workspace.artifacts"
+        ]
+      },
+      {
+        "id": "medium-game-plan-codex-harness",
+        "title": "Medium game plan Codex harness",
+        "sourcePath": "qa/scenarios/workspace/medium-game-plan-codex-harness.yaml",
+        "surface": "workspace",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "workspace.planning"
+        ],
+        "secondaryCoverage": [
+          "models.codex-cli"
+        ]
+      },
+      {
+        "id": "medium-game-plan-openclaw-harness",
+        "title": "Medium game plan OpenClaw harness",
+        "sourcePath": "qa/scenarios/workspace/medium-game-plan-openclaw-harness.yaml",
+        "surface": "workspace",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "workspace.planning"
+        ],
+        "secondaryCoverage": [
+          "agents.openclaw-harness"
+        ]
+      },
+      {
+        "id": "source-docs-discovery-report",
+        "title": "Source and docs discovery report",
+        "sourcePath": "qa/scenarios/workspace/source-docs-discovery-report.yaml",
+        "surface": "discovery",
+        "executionKind": "flow",
+        "channel": null,
+        "primaryCoverage": [
+          "workspace.repo-discovery"
+        ],
+        "secondaryCoverage": [
+          "docs.discovery"
+        ]
+      }
+    ]
+  },
+  "duplicateScenarioIds": {
+    "canonicalYaml": [],
+    "legacyLiveCatalog": [],
+    "crossCatalog": [],
+    "legacyLiveScenarioCount": 82,
+    "legacyLiveScenarioCountsByTransport": {
+      "discord": 6,
+      "slack": 9,
+      "telegram": 16,
+      "whatsapp": 51
+    },
+    "liveCoverageLaneMappedScenarioCount": 20
+  },
+  "realBoundaryRemediationClaims": [
+    {
+      "id": "openai-compatible-chat-tools",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/openai-compatible-chat-tools.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "gateway.openai-compatible-apis",
+        "runtime.hosted-tool-use"
+      ]
+    },
+    {
+      "id": "openai-web-search-minimal",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/openai-web-search-minimal.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "runtime.reasoning-and-cache-controls"
+      ]
+    },
+    {
+      "id": "openai-web-search-native-assertions",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/openai-web-search-native-assertions.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "web-search.openai-native-web-search",
+        "plugins.web-search-and-fetch"
+      ]
+    },
+    {
+      "id": "openwebui-openai-compatible",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/openwebui-openai-compatible.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "gateway.openai-compatible-apis",
+        "runtime.hosted-provider-turns"
+      ]
+    },
+    {
+      "id": "plugin-lifecycle-probe",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/plugins/plugin-lifecycle-probe.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "plugins.lifecycle"
+      ]
+    },
+    {
+      "id": "packaged-bundled-plugin-install-uninstall",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/plugins/packaged-bundled-plugin-install-uninstall.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "plugins.packaged-bundled-plugins"
+      ]
+    },
+    {
+      "id": "docker-compose-setup",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/docker-compose-setup.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "docker.compose",
+        "docker.local-image-setup-script",
+        "docker.only-first-run-notes"
+      ]
+    },
+    {
+      "id": "package-openclaw-for-docker",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/package-openclaw-for-docker.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "docker.package-artifact-generation"
+      ]
+    },
+    {
+      "id": "gateway-smoke",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/gateway-smoke.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "gateway.websocket-transport"
+      ]
+    },
+    {
+      "id": "mcp-gateway-connect-startup-retry",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/mcp-gateway-connect-startup-retry.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "gateway.connect-request",
+        "gateway.protocol-version-negotiation",
+        "gateway.startup-retry"
+      ]
+    },
+    {
+      "id": "mcp-plugin-tools-call",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/plugins/mcp-plugin-tools-call.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "plugins.mcp-tools"
+      ]
+    },
+    {
+      "id": "channel-message-flows",
+      "status": "completed-reference",
+      "sourcePath": "qa/scenarios/channels/channel-message-flows.yaml",
+      "executionKind": "flow",
+      "primaryCoverage": [
+        "channels.streaming"
+      ]
+    },
+    {
+      "id": "cli-channel-picker",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/config/cli-channel-picker.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "cli.channel-picker"
+      ]
+    },
+    {
+      "id": "native-command-session-target",
+      "status": "completed-reference",
+      "sourcePath": "qa/scenarios/channels/native-command-session-target.yaml",
+      "executionKind": "flow",
+      "primaryCoverage": [
+        "channels.native-command-session-target"
+      ]
+    },
+    {
+      "id": "webchat-auto-tts",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/media/webchat-auto-tts.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "media.tts",
+        "media.outbound-voice-audio-delivery"
+      ]
+    },
+    {
+      "id": "browser-talk-start-stop",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/ui/browser-talk-start-stop.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "ui.browser-talk-start-stop"
+      ]
+    },
+    {
+      "id": "active-talk-agent-run-status",
+      "status": "missing-canonical-scenario",
+      "sourcePath": null,
+      "executionKind": null,
+      "primaryCoverage": []
+    },
+    {
+      "id": "voice-call-cli-rpc-agent-tool",
+      "status": "missing-canonical-scenario",
+      "sourcePath": null,
+      "executionKind": null,
+      "primaryCoverage": []
+    },
+    {
+      "id": "telegram-bot-token",
+      "status": "missing-canonical-scenario",
+      "sourcePath": null,
+      "executionKind": null,
+      "primaryCoverage": []
+    },
+    {
+      "id": "heartbeat-active-hours",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/scheduling/heartbeat-active-hours.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "automation.active-hours",
+        "automation.heartbeat-scheduling"
+      ]
+    },
+    {
+      "id": "qa-otel-smoke",
+      "status": "helper-backed-primary",
+      "sourcePath": "qa/scenarios/runtime/qa-otel-smoke.yaml",
+      "executionKind": "vitest",
+      "primaryCoverage": [
+        "telemetry.otel"
+      ]
+    }
+  ],
+  "channelMessageFlowsAlignment": {
+    "status": "completed",
+    "coverage": {
+      "primary": [
+        "channels.streaming"
+      ],
+      "secondary": [
+        "runtime.delivery"
+      ]
+    },
+    "surfaces": [
+      {
+        "contract": "scenario schema",
+        "path": "extensions/qa-lab/src/scenario-catalog.ts"
+      },
+      {
+        "contract": "flow execution",
+        "path": "extensions/qa-lab/src/scenario-flow-runner.ts"
+      },
+      {
+        "contract": "runtime API",
+        "path": "extensions/qa-lab/src/scenario-runtime-api.ts"
+      },
+      {
+        "contract": "QA Channel adapter",
+        "path": "extensions/qa-lab/src/qa-transport.ts"
+      },
+      {
+        "contract": "QA Channel delivery",
+        "path": "extensions/qa-channel/src/inbound.ts"
+      },
+      {
+        "contract": "Crabline Telegram adapter",
+        "path": "extensions/qa-lab/src/crabline-transport.ts"
+      },
+      {
+        "contract": "canonical scenario",
+        "path": "qa/scenarios/channels/channel-message-flows.yaml"
+      },
+      {
+        "contract": "scenario skill",
+        "path": ".agents/skills/channel-message-flows/SKILL.md"
+      }
+    ],
+    "focusedTests": {
+      "testFiles": 9,
+      "tests": 200,
+      "status": "pass",
+      "wallMs": 11690
+    }
+  },
+  "runs": [
+    {
+      "id": "qa-coverage-json",
+      "surface": "inventory",
+      "runner": "host",
+      "status": "pass",
+      "scenarioCount": 155
+    },
+    {
+      "id": "crabline-public-bridge-starts",
+      "surface": "crabline",
+      "runner": "host",
+      "status": "pass",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "id": "channel-message-flows-qa-channel",
+      "surface": "qa-channel",
+      "runner": "host",
+      "status": "pass",
+      "wallMs": 10045,
+      "details": "sent -> edited -> edited -> edited: QA-CHANNEL-STREAMING-PREVIEW-FINAL-OK-1234567890"
+    },
+    {
+      "id": "channel-message-flows-crabline-telegram",
+      "surface": "crabline-telegram",
+      "runner": "host",
+      "status": "pass",
+      "wallMs": 11381,
+      "details": "sent -> edited: QA-CHANNEL-STREAMING-PREVIEW-FINAL-OK-1234567890"
+    },
+    {
+      "id": "wave0-existing-smokes",
+      "surface": "docker-gateway-mcp-media",
+      "runner": "blacksmith-testbox-through-crabbox",
+      "provider": "blacksmith-testbox",
+      "leaseId": "tbx_01kwmn13d2ttf48fq8z555027v",
+      "status": "pass",
+      "commandMs": 44405,
+      "scenarios": [
+        {
+          "id": "docker-compose-setup",
+          "status": "pass",
+          "wallMs": 23469
+        },
+        {
+          "id": "gateway-smoke",
+          "status": "pass",
+          "wallMs": 1052
+        },
+        {
+          "id": "mcp-gateway-connect-startup-retry",
+          "status": "pass",
+          "wallMs": 11709
+        },
+        {
+          "id": "webchat-auto-tts",
+          "status": "pass",
+          "wallMs": 3984
+        }
+      ]
+    },
+    {
+      "id": "hosted-image-generation-providers-live",
+      "surface": "live-media",
+      "runner": "host-script",
+      "status": "pass",
+      "wallMs": 101951,
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "checks": 2
+    },
+    {
+      "id": "matrix-fast",
+      "surface": "matrix",
+      "runner": "blacksmith-testbox-through-crabbox",
+      "provider": "blacksmith-testbox",
+      "leaseId": "tbx_01kwmn13d2ttf48fq8z555027v",
+      "status": "pass",
+      "passed": 15,
+      "failed": 0,
+      "totalMs": 60708,
+      "scenarioIds": [
+        "matrix-thread-follow-up",
+        "matrix-thread-isolation",
+        "matrix-top-level-reply-shape",
+        "matrix-reaction-notification",
+        "matrix-approval-exec-metadata-single-event",
+        "matrix-approval-exec-metadata-chunked",
+        "matrix-restart-resume",
+        "matrix-mention-gating",
+        "matrix-allowbots-default-block",
+        "matrix-allowbots-mentions-mentioned-room",
+        "matrix-allowlist-block",
+        "matrix-e2ee-basic-reply"
+      ]
+    }
+  ],
+  "blockedLiveLanes": {
+    "credentialBrokerAvailable": false,
+    "lanes": {
+      "discord": {
+        "status": "blocked",
+        "missingEnvironmentVariables": [
+          "OPENCLAW_QA_DISCORD_GUILD_ID",
+          "OPENCLAW_QA_DISCORD_CHANNEL_ID",
+          "OPENCLAW_QA_DISCORD_DRIVER_BOT_TOKEN",
+          "OPENCLAW_QA_DISCORD_SUT_BOT_TOKEN",
+          "OPENCLAW_QA_DISCORD_SUT_APPLICATION_ID"
+        ]
+      },
+      "slack": {
+        "status": "blocked",
+        "missingEnvironmentVariables": [
+          "OPENCLAW_QA_SLACK_CHANNEL_ID",
+          "OPENCLAW_QA_SLACK_DRIVER_BOT_TOKEN",
+          "OPENCLAW_QA_SLACK_SUT_BOT_TOKEN",
+          "OPENCLAW_QA_SLACK_SUT_APP_TOKEN"
+        ]
+      },
+      "telegram": {
+        "status": "blocked",
+        "missingEnvironmentVariables": [
+          "OPENCLAW_QA_TELEGRAM_GROUP_ID",
+          "OPENCLAW_QA_TELEGRAM_DRIVER_BOT_TOKEN",
+          "OPENCLAW_QA_TELEGRAM_SUT_BOT_TOKEN"
+        ]
+      },
+      "whatsapp": {
+        "status": "blocked",
+        "missingEnvironmentVariables": [
+          "OPENCLAW_QA_WHATSAPP_DRIVER_PHONE_E164",
+          "OPENCLAW_QA_WHATSAPP_SUT_PHONE_E164",
+          "OPENCLAW_QA_WHATSAPP_DRIVER_AUTH_ARCHIVE_BASE64",
+          "OPENCLAW_QA_WHATSAPP_SUT_AUTH_ARCHIVE_BASE64"
+        ]
+      }
+    }
+  },
+  "remainingGaps": [
+    {
+      "id": "live-channel-credentials",
+      "status": "blocked",
+      "details": "Discord, Slack, Telegram, and WhatsApp env credentials are absent and no Convex credential broker variables are available in this worktree session."
+    },
+    {
+      "id": "openclaw-pr-99374",
+      "status": "outside-assigned-lanes",
+      "details": "Shared script evidence writer PR remains open and is not integrated by Lane 0A or 0E."
+    },
+    {
+      "id": "real-boundary-remediation",
+      "status": "planned-wave-1-plus",
+      "details": "Helper-backed primary claims remain inventory findings; this lane does not implement their later real-boundary conversions."
+    }
+  ],
+  "commands": [
+    "node scripts/run-node.mjs qa coverage --json --output tmp/wave0/qa-coverage.json",
+    "OPENCLAW_BUILD_PRIVATE_QA=1 node scripts/run-node.mjs qa suite --provider-mode mock-openai --scenario channel-message-flows --channel-driver qa-channel",
+    "OPENCLAW_BUILD_PRIVATE_QA=1 node scripts/run-node.mjs qa suite --provider-mode mock-openai --scenario channel-message-flows --channel-driver crabline --channel telegram",
+    "node scripts/run-vitest.mjs extensions/qa-channel/src/channel.test.ts extensions/qa-channel/src/inbound.test.ts extensions/qa-lab/src/crabline-transport.test.ts extensions/qa-lab/src/providers/mock-openai/server.test.ts extensions/qa-lab/src/qa-transport.test.ts extensions/qa-lab/src/scenario-catalog.test.ts extensions/qa-lab/src/scenario-flow-runner.test.ts extensions/qa-lab/src/scenario-runtime-api.test.ts extensions/qa-lab/src/suite-runtime-flow.test.ts",
+    "corepack pnpm openclaw qa suite --provider-mode mock-openai --scenario docker-compose-setup --scenario gateway-smoke --scenario mcp-gateway-connect-startup-retry --scenario webchat-auto-tts --concurrency 1 --fast",
+    "node scripts/run-node.mjs qa suite --provider-mode mock-openai --scenario hosted-image-generation-providers-live --allow-failures --concurrency 1 --fast",
+    "OPENCLAW_QA_MATRIX_NO_REPLY_WINDOW_MS=3000 corepack pnpm openclaw qa matrix --provider-mode mock-openai --profile fast --fail-fast"
+  ]
+}
