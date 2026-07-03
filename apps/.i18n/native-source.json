@@ -10125,9 +10125,9 @@
       "kind": "plist-string",
       "line": 74,
       "path": "apps/ios/Sources/Info.plist",
-      "source": "OpenClaw needs photo library access when you choose existing photos to share with your assistant.",
+      "source": "OpenClaw needs photo library access when you choose existing photos to share with your assistant or allow your Gateway to return recent photos.",
       "surface": "apple",
-      "id": "native.apple.b6c35a14bb309193"
+      "id": "native.apple.cb1f8b07fe11df22"
     },
     {
       "kind": "plist-string",
@@ -11115,7 +11115,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 14,
+      "line": 16,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Privacy & Access",
       "surface": "apple",
@@ -11123,7 +11123,23 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 16,
+      "line": 18,
+      "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
+      "source": "Photos",
+      "surface": "apple",
+      "id": "native.apple.eda8d96e40bcc36a"
+    },
+    {
+      "kind": "ui-named-argument",
+      "line": 21,
+      "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
+      "source": "Allow the Gateway to read photos you grant to OpenClaw.",
+      "surface": "apple",
+      "id": "native.apple.74c1204cac0d231b"
+    },
+    {
+      "kind": "ui-named-argument",
+      "line": 26,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Contacts",
       "surface": "apple",
@@ -11131,7 +11147,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 19,
+      "line": 29,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Search and add contacts from the assistant.",
       "surface": "apple",
@@ -11139,7 +11155,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 24,
+      "line": 34,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Calendar (Add Events)",
       "surface": "apple",
@@ -11147,7 +11163,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 27,
+      "line": 37,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Add events with least privilege.",
       "surface": "apple",
@@ -11155,7 +11171,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 32,
+      "line": 42,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Calendar (View Events)",
       "surface": "apple",
@@ -11163,7 +11179,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 35,
+      "line": 45,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "List and read calendar events.",
       "surface": "apple",
@@ -11171,7 +11187,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 40,
+      "line": 50,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Reminders",
       "surface": "apple",
@@ -11179,7 +11195,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 43,
+      "line": 53,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "List, add, and complete reminders.",
       "surface": "apple",
@@ -11187,7 +11203,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 236,
+      "line": 277,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Allowed",
       "surface": "apple",
@@ -11195,7 +11211,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 238,
+      "line": 279,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Add-Only",
       "surface": "apple",
@@ -11203,7 +11219,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 240,
+      "line": 281,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Not Set",
       "surface": "apple",
@@ -11211,7 +11227,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 242,
+      "line": 283,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Not Allowed",
       "surface": "apple",
@@ -11219,7 +11235,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 244,
+      "line": 285,
       "path": "apps/ios/Sources/Settings/PrivacyAccessSectionView.swift",
       "source": "Unknown",
       "surface": "apple",

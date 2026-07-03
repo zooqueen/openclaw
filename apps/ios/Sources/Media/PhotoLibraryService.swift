@@ -56,7 +56,7 @@ final class PhotoLibraryService: PhotosServicing {
 
     private static func ensureAuthorization() async -> PHAuthorizationStatus {
         // Don’t prompt during node.invoke; prompts block the invoke and lead to timeouts.
-        PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        PhotoLibraryPermission.authorizationStatus()
     }
 
     private static func renderAsset(

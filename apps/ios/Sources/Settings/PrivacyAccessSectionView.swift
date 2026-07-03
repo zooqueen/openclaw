@@ -1,9 +1,11 @@
 import Contacts
 import EventKit
+import Photos
 import SwiftUI
 import UIKit
 
 struct PrivacyAccessSectionView: View {
+    @State private var photosStatus: PHAuthorizationStatus = PhotoLibraryPermission.authorizationStatus()
     @State private var contactsStatus: CNAuthorizationStatus = CNContactStore.authorizationStatus(for: .contacts)
     @State private var calendarStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
     @State private var remindersStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
@@ -12,6 +14,14 @@ struct PrivacyAccessSectionView: View {
 
     var body: some View {
         DisclosureGroup("Privacy & Access") {
+            self.permissionRow(
+                title: "Photos",
+                icon: "photo.on.rectangle",
+                status: self.photosPermissionState.statusText,
+                detail: "Allow the Gateway to read photos you grant to OpenClaw.",
+                actionTitle: self.photosActionTitle,
+                action: self.handlePhotosAction)
+
             self.permissionRow(
                 title: "Contacts",
                 icon: "person.crop.circle",
@@ -82,7 +92,7 @@ struct PrivacyAccessSectionView: View {
 
     private func statusColor(for status: String) -> Color {
         switch status {
-        case "Allowed":
+        case "Allowed", "Limited":
             OpenClawBrand.ok
         case "Not Set":
             OpenClawBrand.warn
@@ -90,6 +100,37 @@ struct PrivacyAccessSectionView: View {
             OpenClawBrand.warn
         default:
             OpenClawBrand.danger
+        }
+    }
+
+    private var photosPermissionState: PhotoLibraryPermission.State {
+        PhotoLibraryPermission.state(for: self.photosStatus)
+    }
+
+    private var photosActionTitle: String? {
+        switch self.photosPermissionState.action {
+        case .requestAccess:
+            "Request Access"
+        case .openSettings:
+            "Open Settings"
+        case nil:
+            nil
+        }
+    }
+
+    private func handlePhotosAction() {
+        switch self.photosPermissionState.action {
+        case .requestAccess:
+            Task {
+                _ = await PhotoLibraryPermission.requestReadWriteAccess()
+                await MainActor.run {
+                    self.refreshAll()
+                }
+            }
+        case .openSettings:
+            self.openSettings()
+        case nil:
+            break
         }
     }
 
@@ -279,6 +320,7 @@ struct PrivacyAccessSectionView: View {
     }
 
     private func refreshAll() {
+        self.photosStatus = PhotoLibraryPermission.authorizationStatus()
         self.contactsStatus = CNContactStore.authorizationStatus(for: .contacts)
         self.calendarStatus = EKEventStore.authorizationStatus(for: .event)
         self.remindersStatus = EKEventStore.authorizationStatus(for: .reminder)
