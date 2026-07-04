@@ -35,6 +35,27 @@ describe("startAppRouter", () => {
 
     expect(onLocation).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    { basePath: "", pathname: "/", expected: "/chat" },
+    { basePath: "/ui", pathname: "/ui", expected: "/ui/chat" },
+  ])("redirects $pathname to the routed chat path", async ({ basePath, pathname, expected }) => {
+    const initialLocation: RouteLocation = { pathname, search: "", hash: "" };
+    const replace = vi.fn();
+    const history: RouterHistory = {
+      location: () => initialLocation,
+      push: vi.fn(),
+      replace,
+      listen: vi.fn(() => vi.fn()),
+    };
+    vi.spyOn(appRouter, "start").mockImplementation(async (resolvedHistory) => {
+      expect(resolvedHistory.location().pathname).toBe(expected);
+    });
+
+    await startAppRouter(history, basePath, {} as RouteLoadContext);
+
+    expect(replace).toHaveBeenCalledWith({ pathname: expected, search: "", hash: "" });
+  });
 });
 
 describe("createApplicationContext", () => {

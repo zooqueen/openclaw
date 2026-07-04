@@ -181,7 +181,8 @@ export function startAppRouter(
   onLocation?: (location: RouteLocation) => void,
 ): Promise<void> {
   const resolveLocation = (location: RouteLocation): RouteLocation => {
-    if (routeIdFromPath(location.pathname, basePath) !== null) {
+    const isBasePath = normalizePath(location.pathname) === normalizePath(basePath);
+    if (!isBasePath && routeIdFromPath(location.pathname, basePath) !== null) {
       return location;
     }
     const fallback = {
