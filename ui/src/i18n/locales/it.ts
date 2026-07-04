@@ -136,7 +136,8 @@ export const it: TranslationMap = {
   nodes: {
     pairing: {
       button: "Associa dispositivo mobile",
-      adminRequired: "È richiesto l'accesso da amministratore per creare codici di configurazione.",
+      adminRequired:
+        "È necessario l'accesso da amministratore per creare codici di configurazione.",
       title: "OpenClaw mobile",
       subtitle: "Scansiona questo codice QR nell'app mobile per connettere un nuovo telefono.",
       generating: "Creazione di un codice di configurazione sicuro…",
@@ -149,8 +150,8 @@ export const it: TranslationMap = {
       pending: "Richieste di dispositivi in attesa di revisione: {count}",
       review: "Revisione",
       waiting:
-        "Le app mobili ufficiali di OpenClaw si connettono automaticamente dopo la scansione.",
-      help: "Guida all'associazione",
+        "Le app mobile ufficiali di OpenClaw si connettono automaticamente dopo la scansione.",
+      help: "Aiuto per l'associazione",
       manageDevices: "Gestisci dispositivi",
     },
     binding: {

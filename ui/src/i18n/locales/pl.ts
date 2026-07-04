@@ -136,7 +136,7 @@ export const pl: TranslationMap = {
   nodes: {
     pairing: {
       button: "Sparuj urządzenie mobilne",
-      adminRequired: "Do tworzenia kodów konfiguracji wymagany jest dostęp administratora.",
+      adminRequired: "Do utworzenia kodów konfiguracji wymagany jest dostęp administratora.",
       title: "OpenClaw mobile",
       subtitle: "Zeskanuj ten kod QR w aplikacji mobilnej, aby połączyć nowy telefon.",
       generating: "Tworzenie bezpiecznego kodu konfiguracji…",
@@ -146,7 +146,7 @@ export const pl: TranslationMap = {
       copySetupCode: "Kopiuj kod konfiguracji",
       newCode: "Nowy kod",
       showSetupCode: "Pokaż kod konfiguracji",
-      pending: "Żądania urządzeń oczekujące na sprawdzenie: {count}",
+      pending: "Prośby o dodanie urządzeń oczekujące na sprawdzenie: {count}",
       review: "Do przeglądu",
       waiting: "Oficjalne aplikacje mobilne OpenClaw łączą się automatycznie po zeskanowaniu.",
       help: "Pomoc dotycząca parowania",

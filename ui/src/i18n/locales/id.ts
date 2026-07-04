@@ -148,7 +148,7 @@ export const id: TranslationMap = {
       showSetupCode: "Tampilkan kode penyiapan",
       pending: "Permintaan perangkat yang menunggu peninjauan: {count}",
       review: "Tinjau",
-      waiting: "Aplikasi seluler OpenClaw resmi terhubung otomatis setelah dipindai.",
+      waiting: "Aplikasi seluler resmi OpenClaw terhubung otomatis setelah dipindai.",
       help: "Bantuan pemasangan",
       manageDevices: "Kelola perangkat",
     },

@@ -135,7 +135,7 @@ export const ko: TranslationMap = {
   nodes: {
     pairing: {
       button: "모바일 기기 페어링",
-      adminRequired: "설정 코드를 생성하려면 관리자 액세스 권한이 필요합니다.",
+      adminRequired: "설정 코드를 생성하려면 관리자 권한이 필요합니다.",
       title: "OpenClaw 모바일",
       subtitle: "새 휴대폰을 연결하려면 모바일 앱에서 이 QR 코드를 스캔하세요.",
       generating: "보안 설정 코드를 생성하는 중…",

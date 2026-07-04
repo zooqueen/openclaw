@@ -147,10 +147,10 @@ export const fr: TranslationMap = {
       copySetupCode: "Copier le code de configuration",
       newCode: "Nouveau code",
       showSetupCode: "Afficher le code de configuration",
-      pending: "Demandes d’appareils en attente de validation : {count}",
+      pending: "Demandes d’appareils en attente d’examen : {count}",
       review: "Révision",
       waiting:
-        "Les applications mobiles officielles OpenClaw se connectent automatiquement après le scan.",
+        "Les applications mobiles officielles OpenClaw se connectent automatiquement après la numérisation.",
       help: "Aide à l’association",
       manageDevices: "Gérer les appareils",
     },
