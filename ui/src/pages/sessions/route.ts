@@ -2,6 +2,7 @@ import type { RouteRenderContext } from "../../app-routes.ts";
 import type { SettingsAppHost } from "../../app/app-host.ts";
 import { hasOperatorWriteAccess } from "../../app/operator-access.ts";
 import { definePage } from "../../router/index.ts";
+import { patchSessionFromSessionsView } from "../../ui/app-render.helpers.ts";
 import type { AppViewState } from "../../ui/app-view-state.ts";
 import { switchChatSession } from "../../ui/chat-session-switch.ts";
 import { clearChatMessagesFromCache } from "../../ui/chat/session-message-cache.ts";
@@ -11,7 +12,6 @@ import {
   deleteSessionsAndRefresh,
   loadSessions,
   parseSessionsFilterInteger,
-  patchSession,
   restoreSessionFromCheckpoint,
   toggleSessionCompactionCheckpoints,
 } from "../../ui/controllers/sessions.ts";
@@ -57,6 +57,7 @@ export const page = definePage({
           includeGlobal: state.sessionsIncludeGlobal,
           includeUnknown: state.sessionsIncludeUnknown,
           showArchived: state.sessionsShowArchived,
+          mainKey: state.agentsList?.mainKey ?? "main",
           filtersCollapsed: state.sessionsFiltersCollapsed,
           basePath: state.basePath,
           searchQuery: state.sessionsSearchQuery,
@@ -101,7 +102,7 @@ export const page = definePage({
             state.sessionsFilterLimit = "";
             state.sessionsIncludeGlobal = true;
             state.sessionsIncludeUnknown = true;
-            state.sessionsShowArchived = true;
+            state.sessionsShowArchived = false;
             state.sessionsSearchQuery = "";
             state.sessionsSelectedKeys = new Set();
             state.sessionsPage = 0;
@@ -110,7 +111,7 @@ export const page = definePage({
               limit: 0,
               includeGlobal: true,
               includeUnknown: true,
-              showArchived: true,
+              showArchived: false,
             });
           },
           onSearchChange: (query) => {
@@ -130,7 +131,7 @@ export const page = definePage({
             state.sessionsPage = 0;
           },
           onRefresh: () => void loadSessions(state),
-          onPatch: (key, patch) => void patchSession(state, key, patch),
+          onPatch: (key, patch) => void patchSessionFromSessionsView(state, key, patch),
           onToggleSelect: (key) => {
             const next = new Set(state.sessionsSelectedKeys);
             if (next.has(key)) {

@@ -6,6 +6,7 @@ import {
   titleForRoute,
 } from "../app-navigation.ts";
 import { pathForRoute, type RouteId } from "../app-routes.ts";
+import { hasOperatorAdminAccess } from "../app/operator-access.ts";
 import { t } from "../i18n/index.ts";
 import {
   createChatSessionsLoadOverrides,
@@ -26,10 +27,13 @@ import {
   resolveSessionOptionGroups,
 } from "./chat/session-controls.ts";
 import { resolveControlUiAuthToken } from "./control-ui-auth.ts";
-import { createSessionAndRefresh } from "./controllers/sessions.ts";
+import { createSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
+import { isGatewayMethodAdvertised } from "./gateway-methods.ts";
 import { icons } from "./icons.ts";
 import { isCronSessionKey, parseSessionKey, resolveSessionDisplayName } from "./session-display.ts";
 import {
+  areUiSessionKeysEquivalent,
+  buildAgentMainSessionKey,
   isSessionKeyTiedToAgent,
   normalizeAgentId,
   parseAgentSessionKey,
@@ -42,6 +46,81 @@ import type { SessionsListResult } from "./types.ts";
 
 export { isCronSessionKey, parseSessionKey, resolveSessionDisplayName, resolveSessionOptionGroups };
 export { switchChatSession, switchChatSessionAndWait };
+
+export function isTerminalAvailable(
+  state: Pick<AppViewState, "connected" | "terminalEnabled" | "hello">,
+): boolean {
+  if (!state.connected || !state.terminalEnabled) {
+    return false;
+  }
+  const auth =
+    (state.hello as { auth?: { role?: string; scopes?: string[] } } | null)?.auth ?? null;
+  return hasOperatorAdminAccess(auth) && isGatewayMethodAdvertised(state, "terminal.open") === true;
+}
+
+export function isCurrentChatSessionArchived(state: AppViewState): boolean {
+  if (state.selectedChatSessionArchived === true) {
+    return true;
+  }
+  return [
+    ...(state.sessionsResult?.sessions ?? []),
+    ...Object.values(state.chatAgentSessionRowsByAgent ?? {}).flat(),
+  ].some((row) => row.archived === true && areUiSessionKeysEquivalent(row.key, state.sessionKey));
+}
+
+export function openCurrentSessionCheckpoints(
+  state: AppViewState,
+  navigate: (routeId: RouteId) => void,
+): void {
+  const showArchived = isCurrentChatSessionArchived(state);
+  state.sessionsExpandedCheckpointKey = state.sessionKey;
+  state.sessionsFilterActive = "";
+  state.sessionsFilterLimit = "";
+  state.sessionsIncludeGlobal = true;
+  state.sessionsIncludeUnknown = true;
+  state.sessionsShowArchived = showArchived;
+  state.sessionsSearchQuery = "";
+  state.sessionsSelectedKeys = new Set();
+  state.sessionsPage = 0;
+  navigate("sessions");
+  void loadSessions(state, {
+    activeMinutes: 0,
+    limit: 0,
+    includeGlobal: true,
+    includeUnknown: true,
+    showArchived,
+    ...scopedAgentListParamsForSession(state, state.sessionKey),
+  });
+}
+
+export async function patchSessionFromSessionsView(
+  state: AppViewState,
+  key: string,
+  patch: { label?: string | null; archived?: boolean; pinned?: boolean },
+): Promise<boolean> {
+  const patched = await patchSession(state, key, patch);
+  if (patched && patch.archived !== undefined && state.sessionsSelectedKeys?.has(key)) {
+    const selectedKeys = new Set(state.sessionsSelectedKeys);
+    selectedKeys.delete(key);
+    state.sessionsSelectedKeys = selectedKeys;
+  }
+  const patchesSelectedArchiveState =
+    patch.archived !== undefined && areUiSessionKeysEquivalent(key, state.sessionKey);
+  if (!patched || !patchesSelectedArchiveState) {
+    return patched;
+  }
+  state.selectedChatSessionArchived = patch.archived;
+  if (!patch.archived) {
+    return true;
+  }
+  const parsed = parseAgentSessionKey(key);
+  const fallbackKey = buildAgentMainSessionKey({
+    agentId: parsed?.agentId ?? state.agentsList?.defaultId ?? "main",
+    mainKey: state.agentsList?.mainKey ?? undefined,
+  });
+  switchChatSession(state, fallbackKey);
+  return true;
+}
 
 type SessionDefaultsSnapshot = {
   mainSessionKey?: string;

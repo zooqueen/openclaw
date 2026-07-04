@@ -1,28 +1,27 @@
 import { guard } from "lit/directives/guard.js";
 import type { RouteRenderContext } from "../../app-routes.ts";
 import type { SettingsAppHost, SettingsHost } from "../../app/app-host.ts";
-import { i18n } from "../../i18n/index.ts";
+import { i18n, t } from "../../i18n/index.ts";
 import { definePage } from "../../router/index.ts";
 import {
   clearChatHistory,
-  createChatSessionsLoadOverrides,
   hasAbortableSessionRun,
   refreshChat,
   refreshChatCommands,
   scopedAgentParamsForSession,
-  scopedAgentListParamsForSession,
 } from "../../ui/app-chat.ts";
 import {
   createChatSession,
   dismissChatError,
   dismissRealtimeTalkError,
+  isCurrentChatSessionArchived,
+  openCurrentSessionCheckpoints,
   renderChatControls,
   resolveAssistantAttachmentAuthToken,
   switchChatSession,
 } from "../../ui/app-render.helpers.ts";
 import { scheduleChatScroll } from "../../ui/app-scroll.ts";
 import type { AppViewState } from "../../ui/app-view-state.ts";
-import { loadSessions } from "../../ui/controllers/sessions.ts";
 import {
   buildAgentMainSessionKey,
   normalizeAgentId,
@@ -130,8 +129,9 @@ export const page = definePage({
   component: () => ({
     shell: "chat" as const,
     header: true,
-    render: ({ state, navigate }: ChatRenderContext) =>
-      renderChat({
+    render: ({ state, navigate }: ChatRenderContext) => {
+      const chatSessionArchived = isCurrentChatSessionArchived(state);
+      return renderChat({
         sessionKey: state.sessionKey,
         onSessionKeyChange: (next) => switchChatSession(state, next),
         thinkingLevel: state.chatThinkingLevel,
@@ -159,8 +159,12 @@ export const page = definePage({
         realtimeTalkOptions: state.realtimeTalkOptions,
         realtimeTalkCatalogProviders: state.realtimeTalkCatalogProviders,
         connected: state.connected,
-        canSend: state.connected,
-        disabledReason: state.connected ? null : "Disconnected",
+        canSend: state.connected && !chatSessionArchived,
+        disabledReason: !state.connected
+          ? t("chat.disconnected")
+          : chatSessionArchived
+            ? t("chat.archivedSessionDisabled")
+            : null,
         error: state.lastError,
         runStatus: state.chatRunStatus,
         onDismissError: () => dismissChatError(state),
@@ -185,14 +189,7 @@ export const page = definePage({
         onAttachmentsChange: (next) => (state.chatAttachments = next),
         onSend: () => void state.handleSendChat(),
         onCompact: () => void state.handleSendChat("/compact", { restoreDraft: true }),
-        onOpenSessionCheckpoints: () => {
-          state.sessionsExpandedCheckpointKey = state.sessionKey;
-          navigate("sessions");
-          void loadSessions(state, {
-            ...createChatSessionsLoadOverrides(state),
-            ...scopedAgentListParamsForSession(state, state.sessionKey),
-          });
-        },
+        onOpenSessionCheckpoints: () => openCurrentSessionCheckpoints(state, navigate),
         onToggleRealtimeTalk: () => void state.toggleRealtimeTalk(),
         onToggleRealtimeTalkOptions: () => {
           state.realtimeTalkOptionsOpen = !state.realtimeTalkOptionsOpen;
@@ -235,7 +232,8 @@ export const page = definePage({
         allowExternalEmbedUrls: state.allowExternalEmbedUrls,
         assistantAttachmentAuthToken: resolveAssistantAttachmentAuthToken(state),
         basePath: state.basePath ?? "",
-      }),
+      });
+    },
     onStateChange: ({ state }: ChatRenderContext, changed: ReadonlyMap<PropertyKey, unknown>) => {
       if (state.chatManualRefreshInFlight) {
         return;

@@ -9,6 +9,7 @@ const flushChatQueueForEventMock = vi.fn();
 const handleChatEventMock = vi.fn((_state?: any) => "idle");
 const handleSessionOperationEventMock = vi.fn();
 const recordFirstAssistantChatTimingMock = vi.fn();
+const switchChatSessionMock = vi.fn();
 const currentRoute = vi.hoisted(() => ({ id: "overview" }));
 
 vi.mock("../app-routes.ts", () => ({
@@ -53,6 +54,9 @@ vi.mock("./app-chat.ts", () => ({
 vi.mock("./app-settings.ts", () => ({
   applySettings: vi.fn(),
   setLastActiveSessionKey: vi.fn(),
+}));
+vi.mock("./chat-session-switch.ts", () => ({
+  switchChatSession: switchChatSessionMock,
 }));
 vi.mock("./app-tool-stream.ts", () => ({
   handleAgentEvent: vi.fn(),
@@ -107,6 +111,7 @@ afterAll(() => {
   vi.doUnmock("../app-routes.ts");
   vi.doUnmock("./app-chat.ts");
   vi.doUnmock("./app-settings.ts");
+  vi.doUnmock("./chat-session-switch.ts");
   vi.doUnmock("./app-tool-stream.ts");
   vi.doUnmock("./controllers/agents.ts");
   vi.doUnmock("./controllers/assistant-identity.ts");
@@ -241,6 +246,48 @@ describe("handleGatewayEvent sessions.changed", () => {
 
     expect(applySessionsChangedEventMock).toHaveBeenCalledWith(host, payload);
     expect(loadSessionsMock).not.toHaveBeenCalled();
+  });
+
+  it("switches to the main session when another client deletes the selected session", () => {
+    loadSessionsMock.mockReset();
+    switchChatSessionMock.mockReset();
+    applySessionsChangedEventMock.mockReset().mockReturnValue({
+      applied: true,
+      change: "deleted",
+      deletedSession: { key: "agent:ops:archived", agentId: "ops", selected: true },
+    });
+    const host = createHost();
+    host.sessionKey = "agent:ops:archived";
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "sessions.changed",
+      payload: { sessionKey: "agent:ops:archived", reason: "delete" },
+      seq: 1,
+    });
+
+    expect(switchChatSessionMock).toHaveBeenCalledWith(host, "agent:ops:main");
+    expect(loadSessionsMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves the selected agent for canonical global deletion events", () => {
+    switchChatSessionMock.mockReset();
+    applySessionsChangedEventMock.mockReset().mockReturnValue({
+      applied: true,
+      change: "deleted",
+      deletedSession: { key: "global", agentId: "work", selected: true },
+    });
+    const host = createHost();
+    host.sessionKey = "global";
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "sessions.changed",
+      payload: { sessionKey: "global", agentId: "work", reason: "delete" },
+      seq: 1,
+    });
+
+    expect(switchChatSessionMock).toHaveBeenCalledWith(host, "agent:work:main");
   });
 
   it("flushes queued chat work when an applied session patch clears the active run", () => {

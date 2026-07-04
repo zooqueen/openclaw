@@ -259,6 +259,7 @@ export class OpenClawApp extends LitElement {
   @state() userAvatar = bootLocalUserIdentity.avatar;
   @state() localMediaPreviewRoots: string[] = [];
   @state() embedSandboxMode: "strict" | "scripts" | "trusted" = "strict";
+  @state() terminalEnabled = true;
   @state() allowExternalEmbedUrls = false;
   @state() chatMessageMaxWidth: string | null = null;
   @state() serverVersion: string | null = null;
@@ -506,6 +507,8 @@ export class OpenClawApp extends LitElement {
 
   @state() sessionsLoading = false;
   @state() sessionsResult: SessionsListResult | null = null;
+  @state() sessionsResultShowArchived = false;
+  @state() selectedChatSessionArchived = false;
   @state() sessionsError: string | null = null;
   @state() sessionsFilterActive = DEFAULT_SESSIONS_FILTERS.activeMinutes;
   @state() sessionsFilterLimit = DEFAULT_SESSIONS_FILTERS.limit;

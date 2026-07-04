@@ -75,6 +75,7 @@ export function resetChatStateForSessionSwitch(state: AppViewState, sessionKey: 
   saveChatQueueForSession(state, previousSessionKey);
   saveChatMessagesForSession(state, previousSessionKey);
   state.sessionKey = sessionKey;
+  state.selectedChatSessionArchived = false;
   if (previousSessionKey !== sessionKey) {
     resetChatSessionPickerState(state);
   }
@@ -143,6 +144,7 @@ function switchChatSessionInternal(
     state.chatSessionPickerResult?.sessions.find((row) => row.key === nextSessionKey);
   const nextSessionLabel = resolveSessionDisplayName(nextSessionKey, nextSessionRow);
   resetChatStateForSessionSwitch(state, nextSessionKey);
+  state.selectedChatSessionArchived = nextSessionRow?.archived === true;
   if (previousSessionKey !== nextSessionKey) {
     state.announceSessionSwitch?.(nextSessionKey, nextSessionLabel);
   }
