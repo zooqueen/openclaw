@@ -89,8 +89,17 @@ class ChatController internal constructor(
   private var lastHealthPollAtMs: Long? = null
   private var commandsAgentId: String? = null
 
+  // Highest transcript seq applied for the active session. Survives disconnects so the
+  // reconnect catch-up can fetch only missed rows; resets wherever messages reset.
+  private var lastAppliedTranscriptSeq: Long? = null
+
+  // Armed on disconnect, consumed on the next healthy transition; keeps routine health
+  // polls from re-running catch-up while connected.
+  private var reconnectCatchUpPending = false
+
   /** Clears transient chat state when the operator gateway session disconnects. */
   fun onDisconnected(message: String) {
+    reconnectCatchUpPending = true
     _healthOk.value = false
     _errorText.value = null
     _commands.value = emptyList()
@@ -240,6 +249,7 @@ class ChatController internal constructor(
     _historyLoading.value = true
     if (clearMessages) {
       _messages.value = emptyList()
+      lastAppliedTranscriptSeq = null
     }
     return generation
   }
@@ -419,7 +429,7 @@ class ChatController internal constructor(
         scope.launch { pollHealthIfNeeded(force = false) }
       }
       "health" -> {
-        _healthOk.value = true
+        markGatewayHealthy()
         refreshCommandsAfterReconnect()
       }
       "seqGap" -> {
@@ -455,22 +465,8 @@ class ChatController internal constructor(
     refreshSessions: Boolean,
   ) {
     try {
-      val historyJson =
-        requestGateway(
-          "chat.history",
-          buildJsonObject { put("sessionKey", JsonPrimitive(sessionKey)) }.toString(),
-        )
-      if (!isCurrentHistoryLoad(sessionKey, _sessionKey.value, generation, historyLoadGeneration.get())) return
-      val history = parseHistory(historyJson, sessionKey = sessionKey, previousMessages = _messages.value)
-      updateSessionFromHistory(history)
-      prunePersistedOptimisticMessages(history.messages)
-      _messages.value = mergeOptimisticMessages(incoming = history.messages, optimistic = optimisticMessagesByRunId.values)
-      _sessionId.value = history.sessionId
+      if (fetchAndApplyCurrentHistory(sessionKey, generation, updateSessionInfo = true) == null) return
       _historyLoading.value = false
-      history.thinkingLevel
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?.let { _thinkingLevel.value = it }
 
       pollHealthIfNeeded(force = forceHealth)
       if (refreshSessions) {
@@ -481,6 +477,47 @@ class ChatController internal constructor(
       _errorText.value = err.message
       _historyLoading.value = false
     }
+  }
+
+  /**
+   * Fetches the full recent history page and applies it as the new message baseline.
+   * Returns null when a newer load superseded this one before the response arrived.
+   */
+  private suspend fun fetchAndApplyCurrentHistory(
+    sessionKey: String,
+    generation: Long,
+    updateSessionInfo: Boolean,
+  ): ChatHistory? {
+    val historyJson =
+      requestGateway(
+        "chat.history",
+        buildJsonObject { put("sessionKey", JsonPrimitive(sessionKey)) }.toString(),
+      )
+    if (!isCurrentHistoryLoad(sessionKey, _sessionKey.value, generation, historyLoadGeneration.get())) return null
+    val history = parseHistory(historyJson, sessionKey = sessionKey, previousMessages = _messages.value)
+    applyWholesaleHistory(history, updateSessionInfo = updateSessionInfo)
+    return history
+  }
+
+  /** Replaces the visible transcript with a full history page and rebases the seq cursor. */
+  private fun applyWholesaleHistory(
+    history: ChatHistory,
+    updateSessionInfo: Boolean,
+  ) {
+    if (updateSessionInfo) {
+      updateSessionFromHistory(history)
+    }
+    prunePersistedOptimisticMessages(history.messages)
+    _messages.value = mergeOptimisticMessages(incoming = history.messages, optimistic = optimisticMessagesByRunId.values)
+    _sessionId.value = history.sessionId
+    history.thinkingLevel
+      ?.trim()
+      ?.takeIf { it.isNotEmpty() }
+      ?.let { _thinkingLevel.value = it }
+    // A full page is the authoritative baseline; a pending reconnect catch-up would only
+    // re-fetch rows this page already delivered. Null seq (legacy gateway) disables catch-up.
+    lastAppliedTranscriptSeq = history.maxTranscriptSeq
+    reconnectCatchUpPending = false
   }
 
   private suspend fun fetchSessions(limit: Int?) {
@@ -531,12 +568,89 @@ class ChatController internal constructor(
     lastHealthPollAtMs = now
     try {
       requestGateway("health", null)
-      _healthOk.value = true
+      markGatewayHealthy()
       if (_commands.value.isEmpty() || commandsAgentId != resolveAgentIdForSessionKey(_sessionKey.value)) {
         fetchCommands()
       }
     } catch (_: Throwable) {
       _healthOk.value = false
+    }
+  }
+
+  private fun markGatewayHealthy() {
+    _healthOk.value = true
+    maybeCatchUpAfterReconnect()
+  }
+
+  private fun maybeCatchUpAfterReconnect() {
+    if (!reconnectCatchUpPending) return
+    reconnectCatchUpPending = false
+    // Fresh sessions and legacy gateways have no baseline; the existing full-fetch
+    // paths (load/refresh/terminal events) stay the only history source for them.
+    val afterSeq = lastAppliedTranscriptSeq ?: return
+    scope.launch { catchUpHistoryAfterReconnect(afterSeq) }
+  }
+
+  /** Fetches only transcript rows missed while disconnected by paging the afterSeq cursor. */
+  private suspend fun catchUpHistoryAfterReconnect(startAfterSeq: Long) {
+    val sessionKey = _sessionKey.value
+    val generation = historyLoadGeneration.get()
+    var afterSeq = startAfterSeq
+    while (true) {
+      val historyJson =
+        try {
+          requestGateway(
+            "chat.history",
+            buildJsonObject {
+              put("sessionKey", JsonPrimitive(sessionKey))
+              put("afterSeq", JsonPrimitive(afterSeq))
+            }.toString(),
+          )
+        } catch (_: Throwable) {
+          // Version-skew fallback: older gateways reject the unknown afterSeq param,
+          // so fall back to the plain full-history refetch.
+          try {
+            fetchAndApplyCurrentHistory(sessionKey, generation, updateSessionInfo = false)
+          } catch (_: Throwable) {
+            // best-effort; a re-disconnect re-arms the catch-up
+          }
+          return
+        }
+      if (!isCurrentHistoryLoad(sessionKey, _sessionKey.value, generation, historyLoadGeneration.get())) return
+      val history = parseHistory(historyJson, sessionKey = sessionKey, previousMessages = _messages.value)
+      val cursor = history.cursor
+      if (cursor == null) {
+        // Version-skew fallback: no afterSeq echo means the gateway ignored the cursor
+        // and returned a legacy full-history page; apply it wholesale.
+        applyWholesaleHistory(history, updateSessionInfo = false)
+        return
+      }
+      applyHistoryDeltaPage(history, cursor)
+      val nextAfterSeq = cursor.nextAfterSeq
+      // Advance-only guard: a non-advancing cursor echo must not loop forever.
+      if (!cursor.hasMore || nextAfterSeq == null || nextAfterSeq <= afterSeq) return
+      afterSeq = nextAfterSeq
+    }
+  }
+
+  /** Appends one catch-up page, deduping rows the client already shows by message identity. */
+  private fun applyHistoryDeltaPage(
+    history: ChatHistory,
+    cursor: ChatHistoryCursor,
+  ) {
+    val delta = history.messages
+    if (delta.isNotEmpty()) {
+      val deltaKeys = delta.mapNotNull(::messageIdentityKey).toSet()
+      val retained = _messages.value.filterNot { messageIdentityKey(it) in deltaKeys }
+      val merged = retained + delta
+      prunePersistedOptimisticMessages(merged)
+      _messages.value = mergeOptimisticMessages(incoming = merged, optimistic = optimisticMessagesByRunId.values)
+    }
+    // The cursor advances over raw transcript rows, so pages whose rows were all
+    // projection-filtered still move the baseline forward.
+    val advancedTo = cursor.nextAfterSeq ?: history.maxTranscriptSeq ?: cursor.afterSeq
+    if (advancedTo > (lastAppliedTranscriptSeq ?: 0L)) {
+      lastAppliedTranscriptSeq = advancedTo
     }
   }
 
@@ -578,37 +692,11 @@ class ChatController internal constructor(
         _streamingAssistantText.value = null
         scope.launch {
           try {
-            val currentSessionKey = _sessionKey.value
-            val currentGeneration = historyLoadGeneration.get()
-            val historyJson =
-              requestGateway(
-                "chat.history",
-                buildJsonObject { put("sessionKey", JsonPrimitive(currentSessionKey)) }.toString(),
-              )
-            if (
-              !isCurrentHistoryLoad(
-                currentSessionKey,
-                _sessionKey.value,
-                currentGeneration,
-                historyLoadGeneration.get(),
-              )
-            ) {
-              return@launch
-            }
-            val history =
-              parseHistory(
-                historyJson,
-                sessionKey = currentSessionKey,
-                previousMessages = _messages.value,
-              )
-            updateSessionFromHistory(history)
-            prunePersistedOptimisticMessages(history.messages)
-            _messages.value = mergeOptimisticMessages(incoming = history.messages, optimistic = optimisticMessagesByRunId.values)
-            _sessionId.value = history.sessionId
-            history.thinkingLevel
-              ?.trim()
-              ?.takeIf { it.isNotEmpty() }
-              ?.let { _thinkingLevel.value = it }
+            fetchAndApplyCurrentHistory(
+              sessionKey = _sessionKey.value,
+              generation = historyLoadGeneration.get(),
+              updateSessionInfo = true,
+            )
           } catch (_: Throwable) {
             // best-effort
           }
@@ -764,36 +852,11 @@ class ChatController internal constructor(
   private fun refreshCurrentHistoryBestEffort() {
     scope.launch {
       try {
-        val currentSessionKey = _sessionKey.value
-        val currentGeneration = historyLoadGeneration.get()
-        val historyJson =
-          requestGateway(
-            "chat.history",
-            buildJsonObject { put("sessionKey", JsonPrimitive(currentSessionKey)) }.toString(),
-          )
-        if (
-          !isCurrentHistoryLoad(
-            currentSessionKey,
-            _sessionKey.value,
-            currentGeneration,
-            historyLoadGeneration.get(),
-          )
-        ) {
-          return@launch
-        }
-        val history =
-          parseHistory(
-            historyJson,
-            sessionKey = currentSessionKey,
-            previousMessages = _messages.value,
-          )
-        prunePersistedOptimisticMessages(history.messages)
-        _messages.value = mergeOptimisticMessages(incoming = history.messages, optimistic = optimisticMessagesByRunId.values)
-        _sessionId.value = history.sessionId
-        history.thinkingLevel
-          ?.trim()
-          ?.takeIf { it.isNotEmpty() }
-          ?.let { _thinkingLevel.value = it }
+        fetchAndApplyCurrentHistory(
+          sessionKey = _sessionKey.value,
+          generation = historyLoadGeneration.get(),
+          updateSessionInfo = false,
+        )
       } catch (_: Throwable) {
         // best-effort
       }
@@ -826,12 +889,30 @@ class ChatController internal constructor(
         )
       }
 
+    // Max over ALL rows (including role-less rows dropped above): the cursor consumes raw
+    // transcript rows, so the baseline must cover rows this page delivered but did not render.
+    val maxTranscriptSeq =
+      array
+        .mapNotNull { item -> item.asObjectOrNull()?.get("__openclaw").asObjectOrNull()?.get("seq").asLongOrNull() }
+        .filter { it > 0L }
+        .maxOrNull()
+    val cursor =
+      root["afterSeq"].asLongOrNull()?.let { echoedAfterSeq ->
+        ChatHistoryCursor(
+          afterSeq = echoedAfterSeq,
+          nextAfterSeq = root["nextAfterSeq"].asLongOrNull(),
+          hasMore = root["hasMore"].asBooleanOrNull() ?: false,
+        )
+      }
+
     return ChatHistory(
       sessionKey = sessionKey,
       sessionId = sid,
       thinkingLevel = thinkingLevel,
       messages = reconcileMessageIds(previous = previousMessages, incoming = messages),
       sessionInfo = sessionInfo,
+      maxTranscriptSeq = maxTranscriptSeq,
+      cursor = cursor,
     )
   }
 

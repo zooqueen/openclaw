@@ -60,6 +60,10 @@ data class ChatCommandEntry(
 
 /**
  * Snapshot of one chat session, including optional thinking level selected on the gateway.
+ *
+ * [maxTranscriptSeq] is the highest `__openclaw.seq` across returned rows; it seeds the
+ * afterSeq reconnect cursor. [cursor] is non-null only when the gateway echoed `afterSeq`,
+ * which is the version-skew discriminator between catch-up pages and legacy full pages.
  */
 data class ChatHistory(
   val sessionKey: String,
@@ -67,6 +71,17 @@ data class ChatHistory(
   val thinkingLevel: String?,
   val messages: List<ChatMessage>,
   val sessionInfo: ChatSessionEntry? = null,
+  val maxTranscriptSeq: Long? = null,
+  val cursor: ChatHistoryCursor? = null,
+)
+
+/**
+ * afterSeq catch-up cursor echoed by gateways that honored the request param.
+ */
+data class ChatHistoryCursor(
+  val afterSeq: Long,
+  val nextAfterSeq: Long?,
+  val hasMore: Boolean,
 )
 
 /**
