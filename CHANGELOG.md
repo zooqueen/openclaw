@@ -6,6 +6,8 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- **Gateway chat reconnect recovery:** add session-scoped `chat.history` sequence cursors so mobile clients can fetch only missed projected transcript rows after reconnecting, with lossless pagination and older-Gateway fallback. (#100197, #100267)
+
 ### Fixes
 
 - **WhatsApp restart recovery:** stop automatic restart loops after logged-out or connection-replaced disconnects until the account reconnects. (#78511) Thanks @openperf.
