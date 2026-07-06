@@ -1,4 +1,5 @@
 // Qa Matrix API module exposes the plugin public contract.
+export { runMatrixQaDifferentialProbe } from "./src/substrate/differential-probe.js";
 export {
   createMatrixQaSubstrate,
   runMatrixQaLifecycleScenarios,
