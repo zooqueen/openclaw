@@ -658,6 +658,50 @@ describe("convertResponsesMessages", () => {
     ]);
   });
 
+  it("replays payload-less image tool results as placeholder text without image parts (#98673)", () => {
+    const input = convertResponsesMessages(
+      { ...nativeOpenAIModel, input: ["text", "image"] },
+      {
+        systemPrompt: "system",
+        messages: [
+          {
+            role: "assistant",
+            api: nativeOpenAIModel.api,
+            provider: nativeOpenAIModel.provider,
+            model: nativeOpenAIModel.id,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: "toolUse",
+            timestamp: 1,
+            content: [
+              { type: "toolCall", id: "call_screenshot", name: "screenshot", arguments: {} },
+            ],
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_screenshot",
+            toolName: "screenshot",
+            content: [{ type: "image", mimeType: "image/png", data: "" }],
+            isError: false,
+            timestamp: 2,
+          },
+        ],
+      } satisfies Context,
+      allowedToolCallProviders,
+      { includeSystemPrompt: false },
+    ) as unknown as Array<{ type?: string; output?: unknown }>;
+
+    const functionOutput = input.find((item) => item.type === "function_call_output");
+    expect(functionOutput?.output).toBe("[image omitted: missing payload]");
+    expect(JSON.stringify(input)).not.toContain("input_image");
+  });
+
   it("uses audio placeholder for audio-only tool results instead of image or no-output text", () => {
     const input = convertResponsesMessages(
       nativeOpenAIModel,

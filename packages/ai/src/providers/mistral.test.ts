@@ -331,6 +331,49 @@ describe("Mistral provider", () => {
     expect(textBlock?.text).not.toContain('{\\"key\\":\\"value\\"}');
   });
 
+  it("replays payload-less image tool results as placeholder text without image parts (#98673)", async () => {
+    const testContext = {
+      messages: [
+        {
+          role: "user",
+          content: "hello",
+          timestamp: 1,
+        },
+        {
+          role: "assistant",
+          provider: "mistral",
+          api: "mistral-conversations",
+          model: "mistral-large-latest",
+          stopReason: "toolUse",
+          timestamp: 0,
+          content: [{ type: "toolCall", id: "tool_1", name: "screenshot", arguments: {} }],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "tool_1",
+          content: [{ type: "image", mimeType: "image/png", data: "" }],
+          isError: false,
+          timestamp: 0,
+        },
+      ],
+    } as unknown as Context;
+
+    const stream = streamMistral({ ...makeMistralModel(), input: ["text", "image"] }, testContext, {
+      apiKey: "sk-mistral-provider",
+    });
+    await stream.result();
+
+    const payload = mistralMockState.payloads[0] as {
+      messages: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>;
+    };
+    const toolMessage = payload.messages.find((message) => message.role === "tool");
+    expect(toolMessage).toBeDefined();
+    const toolContent = Array.isArray(toolMessage!.content) ? toolMessage!.content : [];
+    expect(toolContent.map((block) => block.type)).toEqual(["text"]);
+    expect(toolContent[0]?.text).toBe("[image omitted: missing payload]");
+    expect(JSON.stringify(payload)).not.toContain("data:image/png;base64,");
+  });
+
   it("serializes structured-only tool results instead of empty fallback", async () => {
     const testContext = {
       messages: [

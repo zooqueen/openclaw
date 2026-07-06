@@ -86,6 +86,7 @@ import {
   describeToolResultMediaPlaceholder,
   extractToolResultBlockText,
   extractToolResultText,
+  hasInlineMediaData,
 } from "./tool-result-text.js";
 import { transformMessages } from "./transform-messages.js";
 
@@ -160,7 +161,10 @@ function convertContentBlocks(content: readonly unknown[]):
     Array.isArray(content) &&
     content.some(
       (item) =>
-        item && typeof item === "object" && (item as Record<string, unknown>).type === "image",
+        item &&
+        typeof item === "object" &&
+        (item as Record<string, unknown>).type === "image" &&
+        hasInlineMediaData(item),
     );
 
   if (!hasImages) {
@@ -191,7 +195,9 @@ function convertContentBlocks(content: readonly unknown[]):
       blocks.push({ type: "text" as const, text: sanitizeSurrogates(blockText) });
       hasTextBlock = true;
     }
-    if (record.type !== "image") {
+    // A payload-less image block would produce an empty base64 source the API
+    // rejects; its placeholder text was already emitted above.
+    if (record.type !== "image" || !hasInlineMediaData(record)) {
       continue;
     }
     blocks.push({

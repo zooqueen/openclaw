@@ -727,6 +727,126 @@ describe("Anthropic provider", () => {
     ]);
   });
 
+  it("replays payload-less image tool results as placeholder text without image parts (#98673)", async () => {
+    let capturedPayload: unknown;
+    const stream = streamAnthropic(
+      makeAnthropicModel({ input: ["text", "image"] }),
+      {
+        messages: [
+          {
+            role: "assistant",
+            provider: "anthropic",
+            api: "anthropic-messages",
+            model: "claude-sonnet-4-6",
+            stopReason: "toolUse",
+            timestamp: 0,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            content: [{ type: "toolCall", id: "call_1", name: "screenshot", arguments: {} }],
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_1",
+            toolName: "screenshot",
+            content: [{ type: "image", data: "", mimeType: "image/png" }],
+            isError: false,
+            timestamp: 0,
+          },
+        ],
+      } as unknown as Context,
+      {
+        apiKey: "sk-ant-provider",
+        onPayload: (payload) => {
+          capturedPayload = payload;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    await stream.result();
+
+    const payload = capturedPayload as {
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    const userMessage = payload.messages.find((message) => message.role === "user");
+    const toolResult = userMessage?.content.find((entry) => entry.type === "tool_result") as {
+      content: unknown;
+    };
+    expect(toolResult.content).toBe("[image omitted: missing payload]");
+    expect(JSON.stringify(payload)).not.toContain('"source"');
+  });
+
+  it("excludes non-inlinable wire-shaped image blocks from emission instead of sending empty sources", async () => {
+    // Deliberate asymmetry pin: a genuine wire-shaped block (payload under
+    // source.data, not canonical top-level data) is kept out of replay text
+    // and skipped at emission. Previously it was emitted as an image part
+    // with an empty base64 source, which the API rejects outright.
+    let capturedPayload: unknown;
+    const stream = streamAnthropic(
+      makeAnthropicModel({ input: ["text", "image"] }),
+      {
+        messages: [
+          {
+            role: "assistant",
+            provider: "anthropic",
+            api: "anthropic-messages",
+            model: "claude-sonnet-4-6",
+            stopReason: "toolUse",
+            timestamp: 0,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            content: [{ type: "toolCall", id: "call_1", name: "screenshot", arguments: {} }],
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_1",
+            toolName: "screenshot",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/png", data: "aW1n" },
+              },
+            ],
+            isError: false,
+            timestamp: 0,
+          },
+        ],
+      } as unknown as Context,
+      {
+        apiKey: "sk-ant-provider",
+        onPayload: (payload) => {
+          capturedPayload = payload;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    await stream.result();
+
+    const payload = capturedPayload as {
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    const userMessage = payload.messages.find((message) => message.role === "user");
+    const toolResult = userMessage?.content.find((entry) => entry.type === "tool_result") as {
+      content: unknown;
+    };
+    expect(toolResult.content).toBe("(see attached image)");
+    expect(JSON.stringify(payload)).not.toContain('"data":""');
+    expect(JSON.stringify(payload)).not.toContain("aW1n");
+  });
+
   it("preserves mixed text and image tool-result order", async () => {
     let capturedPayload: unknown;
     const imageData = Buffer.from("image").toString("base64");

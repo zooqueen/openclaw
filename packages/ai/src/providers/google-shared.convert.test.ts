@@ -179,6 +179,37 @@ describe("google-shared convertMessages", () => {
     expect(contents[1].parts).toHaveLength(1);
   }
 
+  it("replays payload-less image tool results as placeholder output without inlineData (#98673)", () => {
+    const model: ReturnType<typeof makeModel> = {
+      ...makeModel("gemini-2.5-pro"),
+      input: ["text", "image"],
+    };
+    const context = {
+      messages: [
+        makeGoogleAssistantMessage(model.id, [
+          { type: "toolCall", id: "call_1", name: "screenshot", arguments: {} },
+        ]),
+        {
+          role: "toolResult",
+          toolCallId: "call_1",
+          toolName: "screenshot",
+          content: [{ type: "image", mimeType: "image/png", data: "" }],
+          isError: false,
+          timestamp: 0,
+        },
+      ],
+    } as unknown as Context;
+
+    const contents = convertMessagesForTest(model, context);
+    const functionResponsePart = contents
+      .flatMap((content) => content.parts ?? [])
+      .map((part) => asRecord(part))
+      .find((part) => part.functionResponse);
+    const response = asRecord(asRecord(functionResponsePart?.functionResponse).response);
+    expect(response.output).toBe("[image omitted: missing payload]");
+    expect(JSON.stringify(contents)).not.toContain("inlineData");
+  });
+
   it("keeps thinking blocks when provider/model match", () => {
     const model = makeModel("gemini-1.5-pro");
     const context = {

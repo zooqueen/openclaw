@@ -374,6 +374,47 @@ describe("OpenAI-compatible completions params", () => {
     expect(capturedPayload?.tools).toEqual([]);
   });
 
+  it("replays payload-less image tool results as placeholder text without image parts (#98673)", async () => {
+    let capturedPayload: Record<string, unknown> | undefined;
+    const stream = streamOpenAICompletions(
+      { ...model, input: ["text", "image"] },
+      {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "toolCall", id: "call_img", name: "screenshot", arguments: {} }],
+          },
+          {
+            role: "toolResult",
+            content: [{ type: "image", mimeType: "image/png", data: "" }],
+            toolCallId: "call_img",
+          },
+          ...context.messages,
+        ],
+      } as never,
+      {
+        apiKey: "sk-test",
+        onPayload(payload) {
+          capturedPayload = payload as Record<string, unknown>;
+          throw new Error("stop before network");
+        },
+      },
+    );
+
+    const result = await stream.result();
+
+    expect(result.stopReason).toBe("error");
+    const messages = (capturedPayload?.messages ?? []) as Array<{
+      role?: string;
+      content?: unknown;
+    }>;
+    const toolMessage = messages.find((message) => message.role === "tool");
+    expect(toolMessage?.content).toBe("[image omitted: missing payload]");
+    const serialized = JSON.stringify(messages);
+    expect(serialized).not.toContain("data:image/png;base64,");
+    expect(serialized).not.toContain("Attached image(s) from tool result:");
+  });
+
   it("replays update_plan-style empty non-image tool results as no output", async () => {
     let capturedMessages:
       | Array<{ role?: string; content?: unknown; tool_call_id?: string }>

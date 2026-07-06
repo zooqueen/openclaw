@@ -58,7 +58,11 @@ import {
   type OpenAIToolProjection,
 } from "./openai-tool-projection.js";
 import { buildBaseOptions } from "./simple-options.js";
-import { describeToolResultMediaPlaceholder, extractToolResultText } from "./tool-result-text.js";
+import {
+  describeToolResultMediaPlaceholder,
+  extractToolResultText,
+  hasInlineMediaData,
+} from "./tool-result-text.js";
 import { transformMessages } from "./transform-messages.js";
 
 /**
@@ -1181,7 +1185,9 @@ export function convertMessages(
 
         if (hasImages && model.input.includes("image")) {
           for (const block of toolMsg.content) {
-            if (isImageContentBlock(block)) {
+            // Skip payload-less image blocks: an empty data URI is an invalid
+            // image part the provider rejects.
+            if (isImageContentBlock(block) && hasInlineMediaData(block)) {
               imageBlocks.push({
                 type: "image_url",
                 image_url: {
