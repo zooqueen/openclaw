@@ -258,4 +258,204 @@ describe("forkSessionEntryFromParent", () => {
       parentTokens: expect.any(Number),
     });
   });
+
+  it("does not reconstruct SQLite parent context from billing buckets when context is unavailable", async () => {
+    const root = makeRoot("openclaw-session-fork-unavailable-context-");
+    const storePath = path.join(root, "sessions.json");
+    const parentEntry = {
+      sessionId: "parent-session",
+      totalTokens: 4_567,
+      totalTokensFresh: false,
+      updatedAt: 1,
+    };
+    await replaceSqliteTranscriptEvents(
+      {
+        agentId: "main",
+        sessionId: parentEntry.sessionId,
+        sessionKey: "agent:main:main",
+        storePath,
+      },
+      [
+        {
+          type: "session",
+          version: 3,
+          id: parentEntry.sessionId,
+          timestamp: "2026-06-27T00:00:00.000Z",
+          cwd: root,
+        },
+        {
+          type: "message",
+          id: "usage",
+          parentId: null,
+          timestamp: "2026-06-27T00:00:01.000Z",
+          message: {
+            role: "assistant",
+            content: "latest",
+            usage: {
+              input: 12,
+              output: 15_104,
+              cacheRead: 819_661,
+              cacheWrite: 93_130,
+              contextUsage: { state: "unavailable" },
+              total: 927_907,
+            },
+          },
+        },
+      ],
+    );
+
+    await expect(resolveParentForkDecision({ parentEntry, storePath })).resolves.toMatchObject({
+      status: "fork",
+      parentTokens: 4_567,
+    });
+  });
+
+  it("uses exact SQLite context usage instead of stale cached totals", async () => {
+    const root = makeRoot("openclaw-session-fork-exact-context-");
+    const storePath = path.join(root, "sessions.json");
+    const parentEntry = {
+      sessionId: "parent-session",
+      totalTokens: 900_000,
+      totalTokensFresh: false,
+      updatedAt: 1,
+    };
+    await replaceSqliteTranscriptEvents(
+      {
+        agentId: "main",
+        sessionId: parentEntry.sessionId,
+        sessionKey: "agent:main:main",
+        storePath,
+      },
+      [
+        {
+          type: "session",
+          version: 3,
+          id: parentEntry.sessionId,
+          timestamp: "2026-06-27T00:00:00.000Z",
+          cwd: root,
+        },
+        {
+          type: "message",
+          id: "usage",
+          parentId: null,
+          timestamp: "2026-06-27T00:00:01.000Z",
+          message: {
+            role: "assistant",
+            content: "latest",
+            usage: {
+              input: 12,
+              output: 15_104,
+              cacheRead: 819_661,
+              cacheWrite: 93_130,
+              contextUsage: {
+                state: "available",
+                promptTokens: 148_874,
+                totalTokens: 163_978,
+              },
+              total: 927_907,
+            },
+          },
+        },
+        {
+          type: "message",
+          id: "side-branch",
+          parentId: "usage",
+          timestamp: "2026-06-27T00:00:02.000Z",
+          message: {
+            role: "assistant",
+            content: `side branch ${"x".repeat(1_100_000)}`,
+            usage: {
+              input: 9_000,
+              output: 1_000,
+              contextUsage: {
+                state: "available",
+                promptTokens: 9_000,
+                totalTokens: 10_000,
+              },
+            },
+          },
+        },
+        {
+          type: "leaf",
+          id: "active-leaf",
+          parentId: "side-branch",
+          timestamp: "2026-06-27T00:00:03.000Z",
+          targetId: "usage",
+        },
+      ],
+    );
+
+    await expect(resolveParentForkDecision({ parentEntry, storePath })).resolves.toMatchObject({
+      status: "skip",
+      reason: "parent-too-large",
+      parentTokens: 163_978,
+    });
+  });
+
+  it("adds only post-usage SQLite transcript pressure to exact context usage", async () => {
+    const root = makeRoot("openclaw-session-fork-post-usage-tail-");
+    const storePath = path.join(root, "sessions.json");
+    const parentEntry = {
+      sessionId: "parent-session",
+      totalTokens: 1,
+      totalTokensFresh: false,
+      updatedAt: 1,
+    };
+    await replaceSqliteTranscriptEvents(
+      {
+        agentId: "main",
+        sessionId: parentEntry.sessionId,
+        sessionKey: "agent:main:main",
+        storePath,
+      },
+      [
+        {
+          type: "session",
+          version: 3,
+          id: parentEntry.sessionId,
+          timestamp: "2026-06-27T00:00:00.000Z",
+          cwd: root,
+        },
+        {
+          type: "message",
+          id: "usage",
+          parentId: null,
+          timestamp: "2026-06-27T00:00:01.000Z",
+          message: {
+            role: "assistant",
+            content: "latest model call",
+            usage: {
+              input: 12,
+              output: 10_000,
+              contextUsage: {
+                state: "available",
+                promptTokens: 70_000,
+                totalTokens: 80_000,
+              },
+            },
+          },
+        },
+        {
+          type: "message",
+          id: "tail",
+          parentId: "usage",
+          timestamp: "2026-06-27T00:00:02.000Z",
+          message: {
+            role: "tool",
+            content: `large appended tool result ${"x".repeat(100_000)}`,
+          },
+        },
+      ],
+    );
+
+    const decision = await resolveParentForkDecision({ parentEntry, storePath });
+
+    expect(decision).toMatchObject({
+      status: "skip",
+      reason: "parent-too-large",
+      parentTokens: expect.any(Number),
+    });
+    expect(decision.parentTokens).toBeGreaterThan(100_000);
+    expect(decision.parentTokens).toBeLessThan(110_000);
+  });
 });

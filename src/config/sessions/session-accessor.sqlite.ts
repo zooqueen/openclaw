@@ -6,7 +6,7 @@ import { uniqueStrings } from "@openclaw/normalization-core/string-normalization
 import { sql, type Selectable } from "kysely";
 import type { AgentMessage } from "../../agents/runtime/index.js";
 import { redactTranscriptMessage } from "../../agents/transcript-redact.js";
-import { deriveSessionTotalTokens, normalizeUsage } from "../../agents/usage.js";
+import { derivePromptTokens, normalizeUsage } from "../../agents/usage.js";
 import { resolveStoredSessionOwnerAgentId } from "../../gateway/session-store-key.js";
 import {
   executeSqliteQuerySync,
@@ -112,6 +112,7 @@ import {
   mergeSessionEntry,
   mergeSessionEntryPreserveActivity,
   resolveFreshSessionTotalTokens,
+  resolveSessionTotalTokens,
 } from "./types.js";
 
 type SessionArchiveRuntime = typeof import("../../gateway/session-archive.runtime.js");
@@ -216,6 +217,11 @@ type SqliteParentForkSourceTranscript = {
   labelsToWrite: Array<{ targetId: string; label: string; timestamp: string }>;
   leafId: string | null;
   preserveLeafControl: boolean;
+};
+
+type SqliteTranscriptParentTokenEstimate = {
+  kind: "exact-context" | "legacy-or-bytes";
+  tokens: number;
 };
 
 /** Result from SQLite compaction checkpoint branch or restore operations. */
@@ -3752,10 +3758,14 @@ function formatParentForkTooLargeMessage(params: {
 
 function resolveSqliteParentForkDecision(
   parentEntry: SessionEntry,
-  transcriptParentTokens?: number,
+  transcriptEstimate?: SqliteTranscriptParentTokenEstimate,
 ): SessionParentForkDecision {
   const maxTokens = DEFAULT_PARENT_FORK_MAX_TOKENS;
-  const parentTokens = resolveFreshSessionTotalTokens(parentEntry) ?? transcriptParentTokens;
+  const parentTokens =
+    resolveFreshSessionTotalTokens(parentEntry) ??
+    (transcriptEstimate?.kind === "exact-context"
+      ? transcriptEstimate.tokens
+      : maxPositiveTokenCount(transcriptEstimate?.tokens, resolveSessionTotalTokens(parentEntry)));
   if (typeof parentTokens === "number" && parentTokens > maxTokens) {
     return {
       status: "skip",
@@ -3797,13 +3807,19 @@ export async function resolveSqliteSessionParentForkDecision(params: {
 
 function estimateSqliteTranscriptPromptTokens(
   events: readonly TranscriptEvent[],
-): number | undefined {
+): SqliteTranscriptParentTokenEstimate | undefined {
   let byteEstimate = 0;
-  let usageEstimate: number | undefined;
-  for (const event of events) {
+  let latestUsageEstimate: number | undefined;
+  let latestUsageEstimateIsExactContext = false;
+  let trailingBytes = 0;
+  for (const event of selectSqliteParentForkTokenEstimateEvents(events)) {
     const serialized = JSON.stringify(event);
-    byteEstimate += Buffer.byteLength(serialized) + 1;
+    const serializedBytes = Buffer.byteLength(serialized) + 1;
+    byteEstimate += serializedBytes;
     if (!isRecord(event)) {
+      if (latestUsageEstimate !== undefined) {
+        trailingBytes += serializedBytes;
+      }
       continue;
     }
     const message = isRecord(event.message) ? event.message : undefined;
@@ -3812,18 +3828,109 @@ function estimateSqliteTranscriptPromptTokens(
       : isRecord(event.usage)
         ? event.usage
         : undefined;
+    if (!usageRaw) {
+      if (latestUsageEstimate !== undefined) {
+        trailingBytes += serializedBytes;
+      }
+      continue;
+    }
+    const contextUsage = readSqliteTranscriptContextUsage(usageRaw);
+    if (contextUsage?.state === "unavailable") {
+      latestUsageEstimate = undefined;
+      latestUsageEstimateIsExactContext = false;
+      trailingBytes = 0;
+      continue;
+    }
+    if (contextUsage?.state === "available") {
+      latestUsageEstimate = normalizePositiveTokenCount(contextUsage.totalTokens);
+      latestUsageEstimateIsExactContext = true;
+      trailingBytes = 0;
+      continue;
+    }
     const usage = normalizeUsage(usageRaw);
-    const totalTokens = deriveSessionTotalTokens({ usage });
+    const promptTokens = normalizePositiveTokenCount(
+      derivePromptTokens({
+        input: usage?.input,
+        cacheRead: usage?.cacheRead,
+        cacheWrite: usage?.cacheWrite,
+      }),
+    );
+    const outputTokens = normalizePositiveTokenCount(usage?.output) ?? 0;
+    const totalTokens =
+      promptTokens === undefined
+        ? undefined
+        : normalizePositiveTokenCount(promptTokens + outputTokens);
     if (typeof totalTokens === "number") {
-      usageEstimate = Math.max(usageEstimate ?? 0, totalTokens);
+      latestUsageEstimate = totalTokens;
+      latestUsageEstimateIsExactContext = false;
+      trailingBytes = 0;
     }
   }
+  if (latestUsageEstimate !== undefined) {
+    const trailingTokens = Math.ceil(trailingBytes / 4);
+    const tokens = normalizePositiveTokenCount(latestUsageEstimate + trailingTokens);
+    return tokens === undefined
+      ? undefined
+      : {
+          kind: latestUsageEstimateIsExactContext ? "exact-context" : "legacy-or-bytes",
+          tokens,
+        };
+  }
   const estimatedFromBytes = Math.ceil(byteEstimate / 4);
-  return Math.max(usageEstimate ?? 0, estimatedFromBytes) || undefined;
+  const tokens = normalizePositiveTokenCount(estimatedFromBytes);
+  return tokens === undefined ? undefined : { kind: "legacy-or-bytes", tokens };
+}
+
+function selectSqliteParentForkTokenEstimateEvents(
+  events: readonly TranscriptEvent[],
+): TranscriptEvent[] {
+  const entries = events.filter((entry) => !(isRecord(entry) && entry.type === "session"));
+  const tree = scanSessionTranscriptTree(entries);
+  const visiblePath = selectSessionTranscriptTreePathNodes(tree, tree.leafId);
+  const appendPath = selectSessionTranscriptTreePathNodes(tree, tree.appendParentId);
+  return mergeSessionTranscriptVisiblePathWithOpaqueAppendPath({
+    visiblePath,
+    appendPath,
+    appendParentId: tree.appendParentId,
+  }).nodes.flatMap((node) => node.entry);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizePositiveTokenCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
+}
+
+function maxPositiveTokenCount(...values: Array<number | undefined>): number | undefined {
+  let max: number | undefined;
+  for (const value of values) {
+    const normalized = normalizePositiveTokenCount(value);
+    if (normalized !== undefined && (max === undefined || normalized > max)) {
+      max = normalized;
+    }
+  }
+  return max;
+}
+
+function readSqliteTranscriptContextUsage(
+  usageRaw: Record<string, unknown>,
+): { state: "available"; totalTokens: number } | { state: "unavailable" } | undefined {
+  const contextUsage = usageRaw.contextUsage;
+  if (!isRecord(contextUsage)) {
+    return undefined;
+  }
+  if (contextUsage.state === "unavailable") {
+    return { state: "unavailable" };
+  }
+  if (contextUsage.state !== "available") {
+    return undefined;
+  }
+  const totalTokens = normalizePositiveTokenCount(contextUsage.totalTokens);
+  return totalTokens === undefined ? undefined : { state: "available", totalTokens };
 }
 
 function generateParentForkEntryId(existingIds: Set<string>): string {
