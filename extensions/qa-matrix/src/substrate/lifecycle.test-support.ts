@@ -1,39 +1,39 @@
-export type MatrixQaSubstrateRuntime = {
+export type MatrixTestSubstrateRuntime = {
   baseUrl: string;
 };
 
-export type MatrixQaSubstrateState<Runtime extends MatrixQaSubstrateRuntime> =
+export type MatrixTestSubstrateState<Runtime extends MatrixTestSubstrateRuntime> =
   | { status: "stopped" }
   | { runtime: Runtime; status: "running" };
 
-export type MatrixQaSubstrate<Runtime extends MatrixQaSubstrateRuntime> = {
+export type MatrixTestSubstrate<Runtime extends MatrixTestSubstrateRuntime> = {
   readonly id: string;
-  readonly state: MatrixQaSubstrateState<Runtime>;
+  readonly state: MatrixTestSubstrateState<Runtime>;
   restart(): Promise<Runtime>;
   start(): Promise<Runtime>;
   stop(): Promise<void>;
 };
 
-export type MatrixQaLifecycleScenarioId =
+export type MatrixLifecycleScenarioId =
   | "cold-start"
   | "idempotent-start"
   | "restart"
   | "stop"
   | "resume";
 
-export type MatrixQaLifecycleScenarioResult = {
+export type MatrixLifecycleScenarioResult = {
   baseUrl: string;
-  id: MatrixQaLifecycleScenarioId;
+  id: MatrixLifecycleScenarioId;
 };
 
-export function createMatrixQaSubstrate<Runtime extends MatrixQaSubstrateRuntime>(params: {
+export function createMatrixTestSubstrate<Runtime extends MatrixTestSubstrateRuntime>(params: {
   id: string;
   start(): Promise<Runtime>;
   stop(runtime: Runtime): Promise<void>;
-}): MatrixQaSubstrate<Runtime> {
-  let state: MatrixQaSubstrateState<Runtime> = { status: "stopped" };
+}): MatrixTestSubstrate<Runtime> {
+  let state: MatrixTestSubstrateState<Runtime> = { status: "stopped" };
 
-  const substrate: MatrixQaSubstrate<Runtime> = {
+  const substrate: MatrixTestSubstrate<Runtime> = {
     id: params.id,
     get state() {
       return state;
@@ -63,7 +63,7 @@ export function createMatrixQaSubstrate<Runtime extends MatrixQaSubstrateRuntime
   return substrate;
 }
 
-async function assertMatrixQaSubstrateUnreachable(baseUrl: string, fetchImpl: typeof fetch) {
+async function assertMatrixTestSubstrateUnreachable(baseUrl: string, fetchImpl: typeof fetch) {
   try {
     const response = await fetchImpl(new URL("_matrix/client/versions", baseUrl), {
       signal: AbortSignal.timeout(1_000),
@@ -75,15 +75,15 @@ async function assertMatrixQaSubstrateUnreachable(baseUrl: string, fetchImpl: ty
   throw new Error(`Matrix substrate remained reachable after stop: ${baseUrl}`);
 }
 
-export async function runMatrixQaLifecycleScenarios<
-  Runtime extends MatrixQaSubstrateRuntime,
+export async function runMatrixLifecycleScenarios<
+  Runtime extends MatrixTestSubstrateRuntime,
 >(params: {
   fetchImpl?: typeof fetch;
   probe(runtime: Runtime): Promise<void>;
-  substrate: MatrixQaSubstrate<Runtime>;
-}): Promise<MatrixQaLifecycleScenarioResult[]> {
+  substrate: MatrixTestSubstrate<Runtime>;
+}): Promise<MatrixLifecycleScenarioResult[]> {
   const fetchImpl = params.fetchImpl ?? fetch;
-  const results: MatrixQaLifecycleScenarioResult[] = [];
+  const results: MatrixLifecycleScenarioResult[] = [];
 
   const coldStart = await params.substrate.start();
   await params.probe(coldStart);
@@ -98,7 +98,7 @@ export async function runMatrixQaLifecycleScenarios<
 
   const restarted = await params.substrate.restart();
   if (restarted.baseUrl !== coldStart.baseUrl) {
-    await assertMatrixQaSubstrateUnreachable(coldStart.baseUrl, fetchImpl);
+    await assertMatrixTestSubstrateUnreachable(coldStart.baseUrl, fetchImpl);
   }
   await params.probe(restarted);
   results.push({ baseUrl: restarted.baseUrl, id: "restart" });
@@ -107,7 +107,7 @@ export async function runMatrixQaLifecycleScenarios<
   if (params.substrate.state.status !== "stopped") {
     throw new Error("Matrix substrate did not enter stopped state");
   }
-  await assertMatrixQaSubstrateUnreachable(restarted.baseUrl, fetchImpl);
+  await assertMatrixTestSubstrateUnreachable(restarted.baseUrl, fetchImpl);
   results.push({ baseUrl: restarted.baseUrl, id: "stop" });
 
   const resumed = await params.substrate.start();

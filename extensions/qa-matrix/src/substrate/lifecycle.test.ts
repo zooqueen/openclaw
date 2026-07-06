@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MatrixQaHarness } from "./harness.runtime.js";
 import {
-  createMatrixQaSubstrate,
-  runMatrixQaLifecycleScenarios,
-  type MatrixQaSubstrateRuntime,
-} from "./lifecycle.js";
-import { createMatrixQaTuwunelSubstrate } from "./tuwunel-lifecycle.runtime.js";
+  createMatrixTestSubstrate,
+  runMatrixLifecycleScenarios,
+  type MatrixTestSubstrateRuntime,
+} from "./lifecycle.test-support.js";
+import { createMatrixTuwunelTestSubstrate } from "./tuwunel-lifecycle.test-support.js";
 
-describe("Matrix QA substrate lifecycle", () => {
+describe("Matrix test substrate lifecycle", () => {
   it("passes the five lifecycle scenarios through the shared interface", async () => {
     let activeBaseUrl: string | undefined;
     let runtimeSequence = 0;
-    const substrate = createMatrixQaSubstrate<MatrixQaSubstrateRuntime>({
+    const substrate = createMatrixTestSubstrate<MatrixTestSubstrateRuntime>({
       id: "test",
       async start() {
         runtimeSequence += 1;
@@ -22,11 +22,11 @@ describe("Matrix QA substrate lifecycle", () => {
         activeBaseUrl = undefined;
       },
     });
-    const probe = vi.fn(async (runtime: MatrixQaSubstrateRuntime) => {
+    const probe = vi.fn(async (runtime: MatrixTestSubstrateRuntime) => {
       expect(runtime.baseUrl).toBe(activeBaseUrl);
     });
 
-    const results = await runMatrixQaLifecycleScenarios({
+    const results = await runMatrixLifecycleScenarios({
       fetchImpl: async (input) => {
         const requestUrl =
           typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -53,7 +53,7 @@ describe("Matrix QA substrate lifecycle", () => {
 
   it("keeps running state when stop fails", async () => {
     const runtime = { baseUrl: "http://127.0.0.1:28008/" };
-    const substrate = createMatrixQaSubstrate({
+    const substrate = createMatrixTestSubstrate({
       id: "test",
       async start() {
         return runtime;
@@ -80,8 +80,8 @@ describe("Matrix QA substrate lifecycle", () => {
         upstreamBaseUrl: "http://127.0.0.1:28008/",
       } as unknown as MatrixQaHarness;
     });
-    const substrate = createMatrixQaTuwunelSubstrate(
-      { outputDir: "/tmp/matrix-qa" },
+    const substrate = createMatrixTuwunelTestSubstrate(
+      { outputDir: "/tmp/matrix-test" },
       { startMatrixQaHarnessImpl: startMatrixQaHarness },
     );
 
