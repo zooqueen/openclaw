@@ -1659,6 +1659,9 @@ describe("agentCliCommand", () => {
       expect(agentCommand).toHaveBeenCalledTimes(1);
       expect(startOneShotDiagnosticsExporters).toHaveBeenCalledTimes(1);
       expect(stop).toHaveBeenCalledTimes(1);
+      const runOrder = requireFirstCallOrder(agentCommand, "embedded agent");
+      const stopOrder = requireFirstCallOrder(stop, "exporter stop");
+      expect(runOrder).toBeLessThan(stopOrder);
     });
   });
 
