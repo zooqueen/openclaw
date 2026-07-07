@@ -1394,6 +1394,9 @@ importers:
       '@openclaw/discord':
         specifier: workspace:*
         version: link:../discord
+      '@openclaw/matrix':
+        specifier: workspace:*
+        version: link:../matrix
       '@openclaw/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
