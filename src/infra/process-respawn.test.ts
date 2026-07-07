@@ -409,7 +409,11 @@ describe("respawnGatewayProcessForUpdate", () => {
     expect(result.child).toBe(child);
     expect(child.on).toHaveBeenCalledWith("error", expect.any(Function));
     const errorListener = child.on.mock.calls.find(([event]) => event === "error")?.[1];
-    expect(() => errorListener?.(new Error("spawn ENOENT"))).not.toThrow();
+    expect(errorListener).toEqual(expect.any(Function));
+    if (typeof errorListener !== "function") {
+      throw new Error("missing detached child error listener");
+    }
+    expect(() => errorListener(new Error("spawn ENOENT"))).not.toThrow();
     expect(child.unref).toHaveBeenCalledOnce();
     const onCallOrder = child.on.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
     const unrefCallOrder = child.unref.mock.invocationCallOrder[0] ?? Number.NEGATIVE_INFINITY;
