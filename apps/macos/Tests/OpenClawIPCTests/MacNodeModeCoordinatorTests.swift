@@ -30,6 +30,7 @@ struct MacNodeModeCoordinatorTests {
         let caps = MacNodeModeCoordinator.resolvedCaps(
             browserControlEnabled: true,
             cameraEnabled: false,
+            computerControlEnabled: false,
             locationMode: .off,
             connectionMode: .remote)
         let commands = MacNodeModeCoordinator.resolvedCommands(caps: caps)
@@ -44,12 +45,36 @@ struct MacNodeModeCoordinatorTests {
         let caps = MacNodeModeCoordinator.resolvedCaps(
             browserControlEnabled: true,
             cameraEnabled: false,
+            computerControlEnabled: false,
             locationMode: .off,
             connectionMode: .local)
         let commands = MacNodeModeCoordinator.resolvedCommands(caps: caps)
 
         #expect(caps.contains(OpenClawCapability.browser.rawValue))
         #expect(commands.contains(OpenClawBrowserCommand.proxy.rawValue))
+    }
+
+    @Test func `computer control cap gates the computer commands`() {
+        let enabledCaps = MacNodeModeCoordinator.resolvedCaps(
+            browserControlEnabled: false,
+            cameraEnabled: false,
+            computerControlEnabled: true,
+            locationMode: .off,
+            connectionMode: .remote)
+        let enabledCommands = MacNodeModeCoordinator.resolvedCommands(caps: enabledCaps)
+        #expect(enabledCaps.contains(OpenClawCapability.computer.rawValue))
+        #expect(enabledCommands.contains(OpenClawComputerCommand.status.rawValue))
+        #expect(enabledCommands.contains(OpenClawComputerCommand.input.rawValue))
+
+        let disabledCaps = MacNodeModeCoordinator.resolvedCaps(
+            browserControlEnabled: false,
+            cameraEnabled: false,
+            computerControlEnabled: false,
+            locationMode: .off,
+            connectionMode: .remote)
+        let disabledCommands = MacNodeModeCoordinator.resolvedCommands(caps: disabledCaps)
+        #expect(!disabledCaps.contains(OpenClawCapability.computer.rawValue))
+        #expect(!disabledCommands.contains(OpenClawComputerCommand.input.rawValue))
     }
 
     @Test func `tls pin store key uses default wss port`() throws {

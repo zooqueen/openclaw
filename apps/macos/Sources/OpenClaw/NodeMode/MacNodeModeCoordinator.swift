@@ -267,6 +267,7 @@ final class MacNodeModeCoordinator: NSObject {
     nonisolated static func resolvedCaps(
         browserControlEnabled: Bool,
         cameraEnabled: Bool,
+        computerControlEnabled: Bool,
         locationMode: OpenClawLocationMode,
         connectionMode: AppState.ConnectionMode) -> [String]
     {
@@ -280,6 +281,9 @@ final class MacNodeModeCoordinator: NSObject {
         if cameraEnabled {
             caps.append(OpenClawCapability.camera.rawValue)
         }
+        if computerControlEnabled {
+            caps.append(OpenClawCapability.computer.rawValue)
+        }
         if locationMode != .off {
             caps.append(OpenClawCapability.location.rawValue)
         }
@@ -288,9 +292,12 @@ final class MacNodeModeCoordinator: NSObject {
 
     private func currentCaps(browserControlEnabled: Bool, cameraEnabled: Bool) -> [String] {
         let rawLocationMode = UserDefaults.standard.string(forKey: locationModeKey) ?? "off"
+        let computerControlEnabled =
+            UserDefaults.standard.object(forKey: computerControlEnabledKey) as? Bool ?? false
         return Self.resolvedCaps(
             browserControlEnabled: browserControlEnabled,
             cameraEnabled: cameraEnabled,
+            computerControlEnabled: computerControlEnabled,
             locationMode: OpenClawLocationMode(rawValue: rawLocationMode) ?? .off,
             connectionMode: AppStateStore.shared.connectionMode)
     }
@@ -330,6 +337,10 @@ final class MacNodeModeCoordinator: NSObject {
         }
         if capsSet.contains(OpenClawCapability.location.rawValue) {
             commands.append(OpenClawLocationCommand.get.rawValue)
+        }
+        if capsSet.contains(OpenClawCapability.computer.rawValue) {
+            commands.append(OpenClawComputerCommand.status.rawValue)
+            commands.append(OpenClawComputerCommand.input.rawValue)
         }
 
         return commands

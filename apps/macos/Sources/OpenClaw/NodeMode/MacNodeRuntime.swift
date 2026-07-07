@@ -84,6 +84,9 @@ actor MacNodeRuntime {
                 return try await self.handleScreenSnapshotInvoke(req)
             case MacNodeScreenCommand.record.rawValue:
                 return try await self.handleScreenRecordInvoke(req)
+            case OpenClawComputerCommand.status.rawValue,
+                 OpenClawComputerCommand.input.rawValue:
+                return try await self.handleComputerInvoke(req)
             case OpenClawSystemCommand.run.rawValue:
                 return try await self.handleSystemRun(req)
             case OpenClawSystemCommand.which.rawValue:
@@ -149,7 +152,9 @@ actor MacNodeRuntime {
             let params = try? Self.decodeParams(OpenClawCanvasSnapshotParams.self, from: req.paramsJSON)
             let format = params?.format ?? .jpeg
             let maxWidth: Int? = {
-                if let raw = params?.maxWidth, raw > 0 { return raw }
+                if let raw = params?.maxWidth, raw > 0 {
+                    return raw
+                }
                 return switch format {
                 case .png: 900
                 case .jpeg: 1600
@@ -446,8 +451,55 @@ actor MacNodeRuntime {
         return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
     }
 
+    private func handleComputerInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
+        guard Self.computerControlEnabled() else {
+            return BridgeInvokeResponse(
+                id: req.id,
+                ok: false,
+                error: OpenClawNodeError(
+                    code: .unavailable,
+                    message: "COMPUTER_DISABLED: enable Computer Control in Settings"))
+        }
+        let services = await self.mainActorServices()
+        if req.command == OpenClawComputerCommand.status.rawValue {
+            let payload = await services.computerStatus()
+            return try BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: Self.encodePayload(payload))
+        }
+        let params: OpenClawComputerInputParams
+        do {
+            guard let paramsJSON = req.paramsJSON else {
+                return Self.errorResponse(
+                    req, code: .invalidRequest, message: "INVALID_REQUEST: missing computer input params")
+            }
+            params = try Self.decodeParams(OpenClawComputerInputParams.self, from: paramsJSON)
+        } catch {
+            return Self.errorResponse(
+                req, code: .invalidRequest, message: "INVALID_REQUEST: invalid computer input params")
+        }
+        do {
+            let result = try await services.performComputerInput(params)
+            return try BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: Self.encodePayload(result))
+        } catch let error as ComputerInputService.ComputerInputError {
+            switch error {
+            case .accessibilityNotTrusted:
+                return Self.errorResponse(
+                    req,
+                    code: .unavailable,
+                    message: "ACCESSIBILITY_REQUIRED: grant Accessibility permission in Settings to control this computer")
+            case .noDisplays, .invalidScreenIndex, .missingCoordinate, .unknownKey, .emptyText:
+                return Self.errorResponse(
+                    req, code: .invalidRequest, message: "INVALID_REQUEST: \(error.localizedDescription)")
+            case .eventCreationFailed:
+                return Self.errorResponse(
+                    req, code: .unavailable, message: "UNAVAILABLE: computer input failed")
+            }
+        }
+    }
+
     private func mainActorServices() async -> any MacNodeRuntimeMainActorServices {
-        if let cachedMainActorServices { return cachedMainActorServices }
+        if let cachedMainActorServices {
+            return cachedMainActorServices
+        }
         let services = await self.makeMainActorServices()
         self.cachedMainActorServices = services
         return services
@@ -504,7 +556,9 @@ actor MacNodeRuntime {
     }
 
     private func ensureA2UIHost() async throws {
-        if await self.isA2UIReady() { return }
+        if await self.isA2UIReady() {
+            return
+        }
         guard let a2uiUrl = await self.resolveA2UIHostUrlWithCapabilityRefresh() else {
             throw NSError(domain: "Canvas", code: 30, userInfo: [
                 NSLocalizedDescriptionKey: "A2UI_HOST_NOT_CONFIGURED: gateway did not advertise canvas host",
@@ -514,12 +568,16 @@ actor MacNodeRuntime {
         _ = try await MainActor.run {
             try CanvasManager.shared.show(sessionKey: sessionKey, path: a2uiUrl)
         }
-        if await self.isA2UIReady(poll: true) { return }
+        if await self.isA2UIReady(poll: true) {
+            return
+        }
         if let refreshedUrl = await self.resolveA2UIHostUrlWithCapabilityRefresh(forceRefresh: true) {
             _ = try await MainActor.run {
                 try CanvasManager.shared.show(sessionKey: sessionKey, path: refreshedUrl)
             }
-            if await self.isA2UIReady(poll: true) { return }
+            if await self.isA2UIReady(poll: true) {
+                return
+            }
         }
         throw NSError(domain: "Canvas", code: 31, userInfo: [
             NSLocalizedDescriptionKey: "A2UI_HOST_UNAVAILABLE: A2UI host not reachable",
@@ -558,7 +616,9 @@ actor MacNodeRuntime {
                 })()
                 """)
                 let trimmed = ready.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed == "true" { return true }
+                if trimmed == "true" {
+                    return true
+                }
             } catch {
                 // Ignore transient eval failures while the page is loading.
             }
@@ -631,7 +691,9 @@ actor MacNodeRuntime {
                 skillAllow: evaluation.skillAllow,
                 sessionKey: sessionKey,
                 runId: runId))
-        if let response = approval.response { return response }
+        if let response = approval.response {
+            return response
+        }
         let approvedByAsk = approval.approvedByAsk
         let persistAllowlist = approval.persistAllowlist
         self.persistAllowlistPatterns(
@@ -1121,13 +1183,19 @@ extension MacNodeRuntime {
         UserDefaults.standard.object(forKey: cameraEnabledKey) as? Bool ?? false
     }
 
+    private nonisolated static func computerControlEnabled() -> Bool {
+        UserDefaults.standard.object(forKey: computerControlEnabledKey) as? Bool ?? false
+    }
+
     private nonisolated static func locationMode() -> OpenClawLocationMode {
         let raw = UserDefaults.standard.string(forKey: locationModeKey) ?? "off"
         return OpenClawLocationMode(rawValue: raw) ?? .off
     }
 
     private nonisolated static func locationPreciseEnabled() -> Bool {
-        if UserDefaults.standard.object(forKey: locationPreciseKey) == nil { return true }
+        if UserDefaults.standard.object(forKey: locationPreciseKey) == nil {
+            return true
+        }
         return UserDefaults.standard.bool(forKey: locationPreciseKey)
     }
 
