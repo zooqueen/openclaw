@@ -1,6 +1,9 @@
 name: OpenClaw NPM Release
 
 on:
+  push:
+    branches:
+      - dev/kevinlin/extended-stable-plugin-preflight-gh-runner
   workflow_dispatch:
     inputs:
       tag:
@@ -53,6 +56,32 @@ env:
   NODE_VERSION: "24.15.0"
 
 jobs:
+  candidate_baselines:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.2
+        with:
+          ref: 850318c9437009603f4577b3cdffc6edbe98e75e
+          fetch-depth: 0
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          install-bun: "true"
+
+      - name: Generate release candidate baselines
+        run: |
+          set -euo pipefail
+          pnpm config:docs:gen
+          pnpm plugin-sdk:api:gen
+          echo "CONFIG_BASELINE_SHA256=$(cat docs/.generated/config-baseline.sha256)"
+          echo "PLUGIN_SDK_API_BASELINE_SHA256=$(cat docs/.generated/plugin-sdk-api-baseline.sha256)"
+
   # PLEASE DON'T ADD LONG-RUNNING OR FLAKY CHECKS TO THE npm RELEASE PATH.
   # KEEP THIS WORKFLOW SHORT AND DETERMINISTIC OR IT CAN GET STUCK AND JEOPARDIZE THE RELEASE.
   # RELEASE-TIME LIVE OR END-TO-END VALIDATION BELONGS IN openclaw-release-checks.yml.
@@ -156,6 +185,17 @@ jobs:
           fi
 
           echo "Publishing openclaw@${PACKAGE_VERSION}"
+
+      # Test-only workflow-ref aid: materialize release-prep hashes so the
+      # exact candidate values can be committed, then rerun without drift.
+      - name: Refresh candidate generated baselines
+        if: ${{ inputs.preflight_only }}
+        run: |
+          set -euo pipefail
+          pnpm config:docs:gen
+          pnpm plugin-sdk:api:gen
+          echo "CONFIG_BASELINE_SHA256=$(cat docs/.generated/config-baseline.sha256)"
+          echo "PLUGIN_SDK_API_BASELINE_SHA256=$(cat docs/.generated/plugin-sdk-api-baseline.sha256)"
 
       - name: Check
         env:
