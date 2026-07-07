@@ -1606,6 +1606,7 @@ describe("agentCliCommand", () => {
 
       expect(callGateway).not.toHaveBeenCalled();
       expect(startOneShotDiagnosticsExporters).toHaveBeenCalledTimes(1);
+      expect(loadRuntimeConfig).toHaveBeenCalledTimes(1);
       expect(agentCommand).toHaveBeenCalledTimes(1);
       expect(stop).toHaveBeenCalledTimes(1);
       const startOrder = requireFirstCallOrder(startOneShotDiagnosticsExporters, "exporter start");
