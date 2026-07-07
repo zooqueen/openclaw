@@ -57,10 +57,11 @@ env:
 
 jobs:
   candidate_baselines:
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[preflight-result]') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: write
+      contents: write
     steps:
       - name: Checkout candidate
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.2
@@ -75,12 +76,56 @@ jobs:
           install-bun: "true"
 
       - name: Generate release candidate baselines
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           pnpm config:docs:gen
           pnpm plugin-sdk:api:gen
           echo "CONFIG_BASELINE_SHA256=$(cat docs/.generated/config-baseline.sha256)"
           echo "PLUGIN_SDK_API_BASELINE_SHA256=$(cat docs/.generated/plugin-sdk-api-baseline.sha256)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/.generated/config-baseline.sha256 docs/.generated/plugin-sdk-api-baseline.sha256
+          git commit -m "chore(release): refresh 2026.6.33 generated baselines"
+          candidate_sha="$(git rev-parse HEAD)"
+          git push origin HEAD:dev/kevinlin/extended-stable-plugin-preflight-2026-6-33
+
+          dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run openclaw-npm-release.yml --repo "${GITHUB_REPOSITORY}" --ref dev/kevinlin/extended-stable-plugin-preflight-gh-runner -f tag="${candidate_sha}" -f preflight_only=true -f npm_dist_tag=extended-stable -f bypass_extended_stable_guard=true
+
+          run_id=""
+          for attempt in $(seq 1 12); do
+            run_id="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow openclaw-npm-release.yml --branch dev/kevinlin/extended-stable-plugin-preflight-gh-runner --event workflow_dispatch --limit 20 --json databaseId,createdAt,headSha | jq -r --arg sha "${GITHUB_SHA}" --arg since "${dispatched_at}" 'map(select(.headSha == $sha and .createdAt >= $since)) | sort_by(.createdAt) | last | .databaseId // empty')"
+            if [[ -n "${run_id}" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "${run_id}" ]]; then
+            echo "Could not correlate dispatched preflight run." >&2
+            exit 1
+          fi
+
+          set +e
+          gh run watch "${run_id}" --repo "${GITHUB_REPOSITORY}" --interval 15 --exit-status
+          watch_status=$?
+          set -e
+          conclusion="$(gh run view "${run_id}" --repo "${GITHUB_REPOSITORY}" --json conclusion --jq .conclusion)"
+          artifact_names="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" --jq '[.artifacts[] | select(.expired != true) | .name]')"
+
+          git fetch --no-tags origin "+refs/heads/dev/kevinlin/extended-stable-plugin-preflight-gh-runner:refs/remotes/origin/preflight-workflow-ref"
+          git switch -C preflight-workflow-result refs/remotes/origin/preflight-workflow-ref
+          mkdir -p release
+          jq -n --arg candidateSha "${candidate_sha}" --arg conclusion "${conclusion}" --argjson runId "${run_id}" --argjson artifactNames "${artifact_names}" '{candidateSha:$candidateSha,runId:$runId,conclusion:$conclusion,artifactNames:$artifactNames}' > release/extended-stable-preflight-e2e-result.json
+          git add release/extended-stable-preflight-e2e-result.json
+          git commit -m "test(release): record preflight result [preflight-result]"
+          git push origin HEAD:dev/kevinlin/extended-stable-plugin-preflight-gh-runner
+
+          if [[ "${watch_status}" != "0" || "${conclusion}" != "success" ]]; then
+            exit 1
+          fi
 
   # PLEASE DON'T ADD LONG-RUNNING OR FLAKY CHECKS TO THE npm RELEASE PATH.
   # KEEP THIS WORKFLOW SHORT AND DETERMINISTIC OR IT CAN GET STUCK AND JEOPARDIZE THE RELEASE.
