@@ -1,0 +1,39 @@
+name: Extended-stable install diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download prepared core and AI tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          github-token: ${{ github.token }}
+          repository: openclaw/openclaw
+          run-id: "28895201497"
+          name: openclaw-npm-preflight-v2026.6.33
+          path: artifact
+
+      - name: Reproduce packed install with complete npm diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          core="$(find artifact -type f -name 'openclaw-2026.6.33.tgz' -print -quit)"
+          ai="$(find artifact -type f -name 'openclaw-ai-2026.6.33.tgz' -print -quit)"
+          test -n "$core"
+          test -n "$ai"
+          mkdir -p install "$RUNNER_TEMP/npm-logs"
+          core="$(realpath "$core")"
+          ai="$(realpath "$ai")"
+          printf '{\n  "private": true,\n  "dependencies": {\n    "@openclaw/ai": "file:%s",\n    "openclaw": "file:%s"\n  }\n}\n' "$ai" "$core" > install/package.json
+          if ! npm install --prefix install --ignore-scripts --no-audit --no-fund --loglevel=silly --logs-dir="$RUNNER_TEMP/npm-logs"; then
+            find "$RUNNER_TEMP/npm-logs" -type f -maxdepth 1 -print -exec sed -n '1,260p' {} \;
+            exit 1
+          fi
+          install/node_modules/.bin/openclaw --version
