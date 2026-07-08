@@ -2575,7 +2575,6 @@ function readNonNegativeInteger(record: JsonObject, key: string): number | undef
   return value !== undefined && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
-
 function readCodexErrorNotificationMessage(record: JsonObject): string | undefined {
   const error = record.error;
   return isJsonObject(error) ? readString(error, "message") : undefined;

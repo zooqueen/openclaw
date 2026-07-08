@@ -1127,13 +1127,21 @@ describe("runCodexAppServerAttempt", () => {
   it("scopes Codex developer reply instructions to message-tool-only delivery", () => {
     const workspaceDir = path.join(tempDir, "workspace");
     const params = createParams(path.join(tempDir, "session.jsonl"), workspaceDir);
+    params.extraSystemPrompt = "Generic channel guidance: use message for image attachments.";
     params.sourceReplyDeliveryMode = "message_tool_only";
 
-    expect(
-      testing.buildDeveloperInstructions(params, {
-        dynamicTools: [createMessageDynamicTool("Message test tool")],
-      }),
-    ).toContain("Visible source replies are not automatically delivered for this run.");
+    const messageToolInstructions = testing.buildDeveloperInstructions(params, {
+      dynamicTools: [createMessageDynamicTool("Message test tool")],
+    });
+    expect(messageToolInstructions).toContain(
+      "Visible source replies are not automatically delivered for this run.",
+    );
+    expect(messageToolInstructions).toContain(
+      "Codex-native image generation is delivered automatically by OpenClaw",
+    );
+    expect(messageToolInstructions.indexOf("Codex-native image generation")).toBeGreaterThan(
+      messageToolInstructions.indexOf(params.extraSystemPrompt),
+    );
 
     const withoutMessageToolInstructions = testing.buildDeveloperInstructions(params, {
       dynamicTools: [],
