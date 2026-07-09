@@ -20,8 +20,8 @@ import {
   evaluateShellAllowlistWithAuthorization,
   hasDurableExecApproval,
   hasExactCommandDurableExecApproval,
-  persistAllowAlwaysDecision,
-  recordAllowlistMatchesUse,
+  persistAllowAlwaysDecisionLocked,
+  recordAllowlistMatchesUseLocked,
   resolveApprovalAuditTrustPath,
   resolveAllowAlwaysPersistenceDecision,
   resolveExecApprovalUnavailableDecisions,
@@ -526,7 +526,7 @@ export async function processGatewayAllowlist(
     }
   }
   const recordMatchedAllowlistUse = (resolvedPath?: string) =>
-    recordAllowlistMatchesUse({
+    recordAllowlistMatchesUseLocked({
       agentId: params.agentId,
       matches: allowlistMatches,
       command: params.command,
@@ -847,7 +847,7 @@ export async function processGatewayAllowlist(
         approvedByAsk = true;
       } else if (decision === "allow-always") {
         approvedByAsk = true;
-        await persistAllowAlwaysDecision({
+        await persistAllowAlwaysDecisionLocked({
           agentId: params.agentId,
           decision: effectiveAllowAlwaysPersistence,
         });
