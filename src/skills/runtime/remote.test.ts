@@ -602,6 +602,55 @@ describe("skills-remote", () => {
     }
   });
 
+  it("uses the approved live command surface after the connect readiness delay", async () => {
+    vi.useFakeTimers();
+    const nodeId = `node-${randomUUID()}`;
+    const bin = `bin-${randomUUID()}`;
+    const { cfg, workspaceDir } = createRemoteSkillWorkspace(bin);
+    let commands: string[] = [];
+    const invoke = vi.fn(async () => ({ ok: true as const, payload: { bins: [bin] } }));
+    try {
+      setSkillsRemoteRegistry({
+        listConnected: () => [],
+        get: () =>
+          ({
+            nodeId,
+            connId: "conn-current",
+            platform: "darwin",
+            commands,
+          }) as unknown as ReturnType<NodeRegistry["get"]>,
+        checkConnectivity: async () => ({ ok: true }),
+        invoke,
+      } as unknown as NodeRegistry);
+      recordRemoteNodeInfo({ nodeId, platform: "darwin", commands: [] });
+
+      const connectRefresh = refreshRemoteNodeBins({
+        nodeId,
+        platform: "darwin",
+        commands: [],
+        cfg,
+        readinessDelayMs: 5_000,
+      });
+      commands = ["system.run", "system.which"];
+      const approvalRefresh = refreshRemoteNodeBins({
+        nodeId,
+        platform: "darwin",
+        commands,
+        cfg,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.all([connectRefresh, approvalRefresh]);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ nodeId, command: "system.which" }),
+      );
+    } finally {
+      removeRemoteNodeInfo(nodeId);
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
   it("records bins from system.which object-map responses", async () => {
     await resetSkillsRefreshForTest();
     const nodeId = `node-${randomUUID()}`;

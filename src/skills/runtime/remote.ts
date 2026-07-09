@@ -429,11 +429,17 @@ async function refreshRemoteNodeBinsUncoalesced(params: {
   if (!remoteRegistry) {
     return;
   }
-  if (!isMacPlatform(params.platform, params.deviceFamily)) {
+  // Pairing can replace the command surface while the connect-time readiness
+  // delay is pending. Probe the live session so that approval refresh is not lost.
+  const liveSession = remoteRegistry.get(params.nodeId);
+  const platform = liveSession?.platform ?? params.platform;
+  const deviceFamily = liveSession?.deviceFamily ?? params.deviceFamily;
+  const commands = liveSession?.commands ?? params.commands;
+  if (!isMacPlatform(platform, deviceFamily)) {
     return;
   }
-  const canWhich = supportsSystemWhich(params.commands);
-  const canRun = supportsSystemRun(params.commands);
+  const canWhich = supportsSystemWhich(commands);
+  const canRun = supportsSystemRun(commands);
   if (!canWhich && !canRun) {
     return;
   }
@@ -455,9 +461,9 @@ async function refreshRemoteNodeBinsUncoalesced(params: {
   const command = canWhich ? "system.which" : "system.run";
   const probeSignature = buildRemoteProbeSignature({
     command,
-    platform: params.platform,
-    deviceFamily: params.deviceFamily,
-    commands: params.commands,
+    platform,
+    deviceFamily,
+    commands,
     bins: binsList,
   });
   const nowMs = Date.now();
