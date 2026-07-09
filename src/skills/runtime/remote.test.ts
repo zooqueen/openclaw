@@ -521,7 +521,8 @@ describe("skills-remote", () => {
     const firstBin = `bin-${randomUUID()}`;
     const secondBin = `bin-${randomUUID()}`;
     const { cfg, workspaceDir } = createRemoteSkillWorkspace(firstBin);
-    const changedWorkspace = createRemoteSkillWorkspace(secondBin).workspaceDir;
+    const { cfg: changedCfg, workspaceDir: changedWorkspace } =
+      createRemoteSkillWorkspace(secondBin);
     vi.spyOn(Date, "now").mockReturnValue(2_000_000);
     let invokeCount = 0;
     try {
@@ -534,23 +535,19 @@ describe("skills-remote", () => {
         },
       } as unknown as NodeRegistry);
       recordRemoteMacWithSystemWhich(nodeId);
-      const refresh = () =>
+      const refresh = (config = cfg) =>
         refreshRemoteNodeBins({
           nodeId,
           platform: "darwin",
           commands: ["system.run", "system.which"],
-          cfg,
+          cfg: config,
         });
 
       await refresh();
       await refresh();
       expect(invokeCount).toBe(1);
 
-      if (!cfg.agents?.defaults) {
-        throw new Error("missing test agent defaults");
-      }
-      cfg.agents.defaults.workspace = changedWorkspace;
-      await refresh();
+      await refresh(changedCfg);
       expect(invokeCount).toBe(2);
     } finally {
       removeRemoteNodeInfo(nodeId);
