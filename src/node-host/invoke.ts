@@ -8,12 +8,12 @@ import { sliceUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { GatewayClient } from "../gateway/client.js";
 import {
   analyzeArgvCommand,
-  ensureExecApprovals,
+  ensureExecApprovalsSnapshot,
   mergeExecApprovalsSocketDefaults,
   normalizeExecApprovals,
   readExecApprovalsSnapshot,
   resolveAllowAlwaysPatternCoverage,
-  saveExecApprovals,
+  updateExecApprovals,
   type ExecAsk,
   type ExecApprovalsFile,
   type ExecApprovalsResolved,
@@ -542,8 +542,7 @@ export async function handleInvoke(
   const command = frame.command ?? "";
   if (command === "system.execApprovals.get") {
     try {
-      ensureExecApprovals();
-      const snapshot = readExecApprovalsSnapshot();
+      const snapshot = await ensureExecApprovalsSnapshot();
       const payload: ExecApprovalsSnapshot = {
         path: snapshot.path,
         exists: snapshot.exists,
@@ -567,13 +566,17 @@ export async function handleInvoke(
       if (!params.file || typeof params.file !== "object") {
         throw new Error("INVALID_REQUEST: exec approvals file required");
       }
-      ensureExecApprovals();
+      await ensureExecApprovalsSnapshot();
       const snapshot = readExecApprovalsSnapshot();
       requireExecApprovalsBaseHash(params, snapshot);
       const normalized = normalizeExecApprovals(params.file);
-      const next = mergeExecApprovalsSocketDefaults({ normalized, current: snapshot.file });
-      saveExecApprovals(next);
-      const nextSnapshot = readExecApprovalsSnapshot();
+      const nextSnapshot = await updateExecApprovals({
+        baseHash: snapshot.hash,
+        update: (current) => mergeExecApprovalsSocketDefaults({ normalized, current }),
+      });
+      if (!nextSnapshot) {
+        throw new Error("INVALID_REQUEST: exec approvals changed; reload and retry");
+      }
       const payload: ExecApprovalsSnapshot = {
         path: nextSnapshot.path,
         exists: nextSnapshot.exists,
@@ -630,7 +633,7 @@ export async function handleInvoke(
         return;
       }
       const { getRuntimeConfig } = await import("../config/config.js");
-      const execPolicy = resolveEffectiveSystemRunExecPolicy({
+      const execPolicy = await resolveEffectiveSystemRunExecPolicy({
         cfg: getRuntimeConfig(),
         agentId: prepared.plan.agentId ?? undefined,
         defaultSecurity: resolveExecSecurity(undefined),
